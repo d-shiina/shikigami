@@ -1200,3 +1200,107 @@ fn within_and_after_nest_only_so_deep() {
             .contains("target.element.after needs id, name or role")
     );
 }
+
+#[test]
+fn steady_title_drops_dates_numbers_and_the_app_name() {
+    use crate::target::steady_title;
+    assert_eq!(
+        steady_title("請求書_2026年11月.xlsx - Excel").as_deref(),
+        Some("請求書")
+    );
+    assert_eq!(
+        steady_title("*売上集計 2026-11-08.csv - メモ帳").as_deref(),
+        Some("売上集計")
+    );
+    assert_eq!(
+        steady_title("注文 No.12345 - 販売管理").as_deref(),
+        Some("注文 No")
+    );
+    assert_eq!(
+        steady_title("見積書（第３版）.docx - Word").as_deref(),
+        Some("見積書")
+    );
+    // No digits: steady as it is.
+    assert_eq!(steady_title("請求 - A社"), None);
+    // Nothing steady left.
+    assert_eq!(steady_title("20261108.xlsx - Excel"), None);
+}
+
+#[test]
+fn app_label_prefers_the_name_in_the_title() {
+    use crate::target::app_label;
+    assert_eq!(app_label("請求書.xlsx - Excel", "EXCEL.EXE"), "Excel");
+    assert_eq!(app_label("販売管理", "hanbai.exe"), "hanbai");
+    assert_eq!(app_label("", "C:\\apps\\billing.exe"), "billing");
+}
+
+#[test]
+fn describe_window_says_how_the_window_is_found() {
+    use crate::target::describe_window;
+    let ja = json!({
+        "any": "{app}（どのウィンドウでも）",
+        "contains": "{app} ・ タイトルに「{title}」を含む",
+        "exact": "{app} ・「{title}」だけ",
+        "nth": "・{n} 番目",
+    });
+    assert_eq!(
+        describe_window(&json!({ "process": "EXCEL.EXE" }), "Excel", &ja),
+        "Excel（どのウィンドウでも）"
+    );
+    assert_eq!(
+        describe_window(
+            &json!({ "process": "EXCEL.EXE", "title": "請求書", "match": "contains" }),
+            "Excel",
+            &ja
+        ),
+        "Excel ・ タイトルに「請求書」を含む"
+    );
+    assert_eq!(
+        describe_window(
+            &json!({ "process": "a.exe", "title": "x", "exact": true, "nth": 1 }),
+            "a",
+            &ja
+        ),
+        "a ・「x」だけ・2 番目"
+    );
+    // No templates: English.
+    assert_eq!(
+        describe_window(&json!({ "process": "a.exe" }), "a", &json!(null)),
+        "a (any of its windows)"
+    );
+}
+
+#[test]
+fn a_dated_title_is_picked_without_its_date() {
+    use crate::target::{Point, picked_target, window_choices};
+    let at = Point { x: 0, y: 0 };
+    let windows = vec![
+        window("請求書_2026年11月.xlsx - Excel", "EXCEL.EXE"),
+        window("売上.xlsx - Excel", "EXCEL.EXE"),
+    ];
+    assert_eq!(
+        picked_target(&windows, 0, &[], None, at).target["window"],
+        json!({ "process": "EXCEL.EXE", "title": "請求書", "match": "contains" })
+    );
+    // Last month's file open too: the steady part finds both, so the whole title.
+    let both = vec![
+        window("請求書_2026年11月.xlsx - Excel", "EXCEL.EXE"),
+        window("請求書_2026年10月.xlsx - Excel", "EXCEL.EXE"),
+    ];
+    assert_eq!(
+        picked_target(&both, 0, &[], None, at).target["window"],
+        json!({ "process": "EXCEL.EXE", "title": "請求書_2026年11月.xlsx - Excel", "match": "contains" })
+    );
+    let choices = window_choices(&windows, 0);
+    let kinds: Vec<&str> = choices
+        .iter()
+        .map(|c| c["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["any", "steady", "contains", "exact"]);
+    assert_eq!(choices[0]["finds"], json!(2));
+    assert_eq!(
+        choices[1]["window"],
+        json!({ "process": "EXCEL.EXE", "title": "請求書", "match": "contains" })
+    );
+    assert_eq!(choices[1]["finds"], json!(1));
+}

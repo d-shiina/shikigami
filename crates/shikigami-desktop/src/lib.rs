@@ -213,11 +213,15 @@ impl Adapter for DesktopAdapter {
                         .get("timeoutMs")
                         .and_then(Value::as_u64)
                         .map_or(PICK_TIMEOUT_MS, |ms| ms.clamp(1_000, 600_000));
+                    let labels = params.get("labels").cloned().unwrap_or(Value::Null);
+                    let window_only = params.get("scope").and_then(Value::as_str) == Some("window");
                     return self
                         .backend
                         .call(Op::Pick {
                             message,
                             timeout_ms,
+                            labels,
+                            window_only,
                         })
                         .await;
                 }

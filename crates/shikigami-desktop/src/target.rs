@@ -184,6 +184,181 @@ pub fn stable_title(title: &str) -> String {
     without.trim().to_owned()
 }
 
+/// The part of a window title that stays when the document in the window
+/// changes its date or number, e.g. `請求書_2026年11月.xlsx - Excel` →
+/// `請求書`: a picked title with a date in it found the window only that
+/// month. `None` when the title has no digits (it is steady as it is) or
+/// nothing steady is left.
+///
+/// The app's name after the last ` - ` and the file's extension are left
+/// out (the window is found by its exe anyway), the rest is cut at every
+/// run of digits, and the longest piece (two characters or more, without
+/// the separators and date units around the digits) is the steady part.
+pub fn steady_title(title: &str) -> Option<String> {
+    let title = stable_title(title);
+    let is_digit = |c: char| c.is_ascii_digit() || ('０'..='９').contains(&c);
+    if !title.chars().any(is_digit) {
+        return None;
+    }
+    let mut doc = title.as_str();
+    for dash in [" - ", " \u{2014} ", " \u{2013} "] {
+        if let Some((head, _app)) = doc.rsplit_once(dash)
+            && !head.trim().is_empty()
+        {
+            doc = head;
+            break;
+        }
+    }
+    if let Some((stem, ext)) = doc.rsplit_once('.')
+        && (1..=5).contains(&ext.len())
+        && ext.chars().all(|c| c.is_ascii_alphanumeric())
+        && ext.chars().any(|c| c.is_ascii_alphabetic())
+        && !stem.trim().is_empty()
+    {
+        doc = stem;
+    }
+    const AROUND: &[char] = &[
+        ' ', '\u{3000}', '_', '-', '.', '/', ':', ',', '(', ')', '（', '）', '[', ']', '【', '】',
+        '#', '＃', '・', '年', '月', '日', '時', '分', '秒', '第', '号', '回', '版', '~', '～',
+        'v', 'V',
+    ];
+    let best = doc
+        .split(is_digit)
+        .map(|piece| piece.trim_matches(AROUND))
+        .filter(|piece| piece.chars().count() >= 2)
+        .max_by_key(|piece| piece.chars().count())?;
+    (best != title).then(|| best.to_owned())
+}
+
+/// The name of the app a window belongs to, for people: the name the
+/// window gives after its last ` - ` (`… - Excel`), else the exe name
+/// without `.exe`.
+pub fn app_label(title: &str, process: &str) -> String {
+    let title = stable_title(title);
+    if let Some((head, app)) = title.rsplit_once(" - ")
+        && !head.trim().is_empty()
+        && !app.trim().is_empty()
+        && app.chars().count() <= 30
+    {
+        return app.trim().to_owned();
+    }
+    let exe = process.rsplit(['\\', '/']).next().unwrap_or(process);
+    let stem = exe
+        .strip_suffix(".exe")
+        .or_else(|| exe.strip_suffix(".EXE"))
+        .unwrap_or(exe);
+    stem.to_owned()
+}
+
+/// How a picked window target finds its window, in words for the picker's
+/// tag: `templates` are `any` (`{app}`), `contains` / `exact` / `prefix` /
+/// `suffix` / `pattern` (`{app}`, `{title}`) and `nth` (`{n}`, counted
+/// from 1, added at the end); missing ones are English.
+pub fn describe_window(window: &Value, app: &str, templates: &Value) -> String {
+    let text = |key: &str, default: &str| {
+        templates
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or(default)
+            .to_owned()
+    };
+    let title = window.get("title").and_then(Value::as_str);
+    let how = if window.get("exact").and_then(Value::as_bool) == Some(true) {
+        "exact"
+    } else {
+        window
+            .get("match")
+            .and_then(Value::as_str)
+            .unwrap_or("contains")
+    };
+    let mut line = match title {
+        None => text("any", "{app} (any of its windows)"),
+        Some(_) => match how {
+            "exact" => text("exact", "{app} \u{b7} titled \u{201c}{title}\u{201d}"),
+            "prefix" => text(
+                "prefix",
+                "{app} \u{b7} title starts with \u{201c}{title}\u{201d}",
+            ),
+            "suffix" => text(
+                "suffix",
+                "{app} \u{b7} title ends with \u{201c}{title}\u{201d}",
+            ),
+            "pattern" => text("pattern", "{app} \u{b7} title matches {title}"),
+            _ => text(
+                "contains",
+                "{app} \u{b7} title contains \u{201c}{title}\u{201d}",
+            ),
+        },
+    };
+    const MAX: usize = 40;
+    let title = title.unwrap_or_default();
+    let title: String = if title.chars().count() > MAX {
+        title.chars().take(MAX - 1).chain(['\u{2026}']).collect()
+    } else {
+        title.to_owned()
+    };
+    line = line.replace("{app}", app).replace("{title}", &title);
+    if let Some(n) = window.get("nth").and_then(Value::as_u64) {
+        line.push_str(&text("nth", " (#{n})").replace("{n}", &(n + 1).to_string()));
+    }
+    line
+}
+
+/// The ways the picker offers to find `windows[window]` again, steadiest
+/// first, for the node's settings to choose from: `any` (its exe only),
+/// `steady` (the title without its date or number, see [`steady_title`]),
+/// `contains` (the title without unsaved marks) and `exact`. Each comes
+/// with the `window` it writes and how many open windows it finds now.
+pub fn window_choices(windows: &[WindowInfo], window: usize) -> Vec<Value> {
+    let w = &windows[window];
+    let count = |q: &WindowQuery| windows.iter().filter(|x| q.matches(x)).count();
+    let mut out = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    let any = WindowQuery {
+        process: Some(w.process.clone()),
+        ..WindowQuery::default()
+    };
+    out.push(json!({ "kind": "any", "window": { "process": w.process }, "finds": count(&any) }));
+    let stable = stable_title(&w.title);
+    for (kind, title, how) in [
+        ("steady", steady_title(&w.title), TitleMatch::Contains),
+        (
+            "contains",
+            (!stable.is_empty()).then(|| stable.clone()),
+            TitleMatch::Contains,
+        ),
+        (
+            "exact",
+            (!w.title.trim().is_empty()).then(|| w.title.clone()),
+            TitleMatch::Exact,
+        ),
+    ] {
+        let Some(title) = title else { continue };
+        let key = format!("{how:?}:{title}");
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        let q = WindowQuery {
+            title: Some(title.clone()),
+            title_match: Some(how),
+            ..any.clone()
+        };
+        let name = if how == TitleMatch::Exact {
+            "exact"
+        } else {
+            "contains"
+        };
+        out.push(json!({
+            "kind": kind,
+            "title": title,
+            "window": { "process": w.process, "title": title, "match": name },
+            "finds": count(&q),
+        }));
+    }
+    out
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ElementQuery {
@@ -704,10 +879,21 @@ pub fn picked_target(
     // default) the title without unsaved marks, so the target still finds
     // the window when the app adds or drops them; exact only when that
     // would also find another of its windows.
+    // The steadiest first: the title without a date or number in it (the
+    // same flow works on next month's file), then the whole title.
     let title = stable_title(&w.title);
     if same_app(&window_query).len() > 1 && !title.is_empty() {
-        window_query.title = Some(title.clone());
-        window_json["title"] = json!(title);
+        let steady = steady_title(&w.title).filter(|steady| {
+            same_app(&WindowQuery {
+                title: Some(steady.clone()),
+                ..window_query.clone()
+            })
+            .len()
+                == 1
+        });
+        let contains = steady.unwrap_or(title);
+        window_query.title = Some(contains.clone());
+        window_json["title"] = json!(contains);
         if same_app(&window_query).len() > 1 && !w.title.trim().is_empty() {
             window_query.title = Some(w.title.clone());
             window_query.title_match = Some(TitleMatch::Exact);

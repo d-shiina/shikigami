@@ -23,7 +23,9 @@ use tokio::sync::oneshot;
 use windows::Win32::Foundation::{
     CloseHandle, E_ACCESSDENIED, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
 };
-use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+use windows::Win32::Graphics::Dwm::{
+    DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
+};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
@@ -45,11 +47,11 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow, GetSystemMetrics,
-    GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsZoomed,
-    PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
-    SWP_NOACTIVATE, SWP_NOZORDER, SendMessageTimeoutW, SetCursorPos, SetForegroundWindow,
-    SetWindowPos, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
+    BM_CLICK, EnumWindows, GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow,
+    GetSystemMetrics, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic,
+    IsWindowVisible, IsZoomed, PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_MAXIMIZE,
+    SW_MINIMIZE, SW_RESTORE, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageTimeoutW, SetCursorPos,
+    SetForegroundWindow, SetWindowPos, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
@@ -73,8 +75,9 @@ use crate::sapgui;
 use crate::snip;
 use crate::table::{self, GRID_ROLES, Grid};
 use crate::target::{
-    ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
-    pick_element, pick_window, picked_target, render_tree,
+    ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, app_label,
+    describe, describe_window, pick_element, pick_window, picked_target, render_tree,
+    window_choices,
 };
 use crate::vision::OcrLine;
 
@@ -385,7 +388,9 @@ impl Uia {
             Op::Pick {
                 message,
                 timeout_ms,
-            } => self.pick(message, timeout_ms),
+                labels,
+                window_only,
+            } => self.pick(message, timeout_ms, &labels, window_only),
             Op::Snip {
                 message,
                 timeout_ms,
@@ -799,8 +804,20 @@ impl Uia {
     /// click or Esc is taken at once. Looked up here, each slow answer held
     /// the click back (the hooks had already taken it from the app), so the
     /// screen seemed frozen.
-    fn pick(&self, message: Option<String>, timeout_ms: u64) -> Result<Value, StepError> {
-        let message = message.unwrap_or_else(|| "Click the part to pick (Esc to cancel)".into());
+    fn pick(
+        &self,
+        message: Option<String>,
+        timeout_ms: u64,
+        labels: &Value,
+        window_only: bool,
+    ) -> Result<Value, StepError> {
+        let message = message.unwrap_or_else(|| {
+            if window_only {
+                "Click the window to pick (Esc to cancel)".into()
+            } else {
+                "Click the part to pick (Esc to cancel)".into()
+            }
+        });
         let overlay = Overlay::pick(message)?;
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         // SAFETY: plain Win32 call.
@@ -812,6 +829,17 @@ impl Uia {
         let looker = Looker::start();
         // A look-up sent and not answered yet: where and when.
         let mut asked: Option<((i32, i32), Instant)> = None;
+        // Where the mouse was last told to the overlay (its banner keeps out of the way).
+        let mut told: Option<(i32, i32)> = None;
+        // How the window under the mouse would be found, by its handle (the
+        // windows open do not change while the user points).
+        let mut phrases: HashMap<isize, String> = HashMap::new();
+        let mut phrase = |w: &TopWindow| -> String {
+            phrases
+                .entry(w.hwnd.0 as isize)
+                .or_insert_with(|| window_phrase(w, labels))
+                .clone()
+        };
         let clicked = loop {
             match overlay.take_input() {
                 Some(Input::Clicked(pt)) => break pt,
@@ -826,27 +854,47 @@ impl Uia {
             {
                 hover.looked(at, started, started.elapsed());
                 if let Some((_, rect, part)) = look.filter(|(pid, _, _)| *pid != own) {
-                    // The window the node will act on: framed too, and
-                    // named on the banner, so it is clear which one it is.
+                    // The window the node will act on: framed too, with a
+                    // tag saying how it will be found next time.
                     let window = top_window_at(POINT { x: at.0, y: at.1 }).filter(|w| w.pid != own);
                     let window_changed = window.as_ref().map(TopWindow::key)
                         != shown_window.as_ref().map(TopWindow::key);
                     if window_changed {
                         overlay.window(window.as_ref().map(|w| w.rect));
+                        overlay.window_tag(window.as_ref().map(|w| (w.rect, phrase(w))));
                         shown_window = window;
                     }
                     let key = rect_key(rect);
                     if shown != Some(key) || window_changed {
                         shown = Some(key);
                         overlay.frame(Some(rect));
-                        let title = shown_window.as_ref().map_or("", |w| w.title.as_str());
-                        overlay.detail(hover::banner_line(title, &part));
+                        overlay.part_tag(Some((rect, part)));
                     }
                 }
             }
             let mut pt = POINT::default();
             // SAFETY: plain Win32 call.
             let moved = unsafe { GetCursorPos(&mut pt) }.is_ok();
+            if moved && told != Some((pt.x, pt.y)) {
+                told = Some((pt.x, pt.y));
+                overlay.mouse(pt);
+                // The window alone: plain Win32 calls that never wait for
+                // the app, so no look-up on the UIA thread.
+                if window_only {
+                    let window = top_window_at(pt).filter(|w| w.pid != own);
+                    if window.as_ref().map(TopWindow::key)
+                        != shown_window.as_ref().map(TopWindow::key)
+                    {
+                        overlay.window(window.as_ref().map(|w| w.rect));
+                        overlay.window_tag(window.as_ref().map(|w| (w.rect, phrase(w))));
+                        shown_window = window;
+                    }
+                }
+            }
+            if window_only {
+                std::thread::sleep(hover::TICK);
+                continue;
+            }
             let now = Instant::now();
             // Ask the app under the mouse only when it moved (or now and
             // then while it rests), never faster than the app answers, and
@@ -864,6 +912,15 @@ impl Uia {
         drop(looker);
         // The frame must not be under the click when it is looked up.
         drop(overlay);
+        if window_only {
+            std::thread::sleep(Duration::from_millis(60));
+            let mut picked = self.window_at(clicked)?;
+            picked["how"] = json!("window");
+            if let Some(title) = picked.pointer("/window/title").cloned() {
+                picked["label"] = title;
+            }
+            return Ok(picked);
+        }
         self.picked_at(clicked)
     }
 
@@ -976,6 +1033,8 @@ impl Uia {
         Ok(json!({
             "target": picked.target,
             "window": { "title": info.title, "process": info.process },
+            "app": app_label(&info.title, &info.process),
+            "windowChoices": window_choices(&infos, index),
         }))
     }
 
@@ -1068,6 +1127,8 @@ impl Uia {
                 "how": picked.how,
                 "label": label,
                 "window": { "title": info.title, "process": info.process },
+                "app": app_label(&info.title, &info.process),
+                "windowChoices": window_choices(&infos, window),
                 "rect": { "x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top },
             });
             if picked.how == "point" {
@@ -2836,6 +2897,78 @@ impl TopWindow {
     fn key(&self) -> (isize, (i32, i32, i32, i32)) {
         (self.hwnd.0 as isize, rect_key(self.rect))
     }
+}
+
+/// How the picked target would find window `w`, in words for the
+/// picker's tag (see [`describe_window`]). The open windows come from plain
+/// Win32 calls (no UI Automation, which a slow app holds up), so this is
+/// what the picked target will be as long as UI Automation lists the same
+/// windows.
+fn window_phrase(w: &TopWindow, labels: &Value) -> String {
+    let windows = open_windows();
+    let process = || process_name(w.pid).unwrap_or_default();
+    let Some(index) = windows
+        .iter()
+        .position(|info| info.handle == w.hwnd.0 as isize)
+    else {
+        return app_label(&w.title, &process());
+    };
+    let info = &windows[index];
+    let picked = picked_target(&windows, index, &[], None, Point { x: 0, y: 0 });
+    let window = picked.target.get("window").cloned().unwrap_or(Value::Null);
+    describe_window(&window, &app_label(&info.title, &info.process), labels)
+}
+
+/// The visible top-level windows, as UI Automation lists them under the
+/// desktop, by plain Win32 calls that never wait for the apps.
+fn open_windows() -> Vec<WindowInfo> {
+    unsafe extern "system" fn each(hwnd: HWND, found: LPARAM) -> windows::core::BOOL {
+        // SAFETY: `found` is the Vec passed to EnumWindows below, alive for the call.
+        let found = unsafe { &mut *(found.0 as *mut Vec<HWND>) };
+        found.push(hwnd);
+        true.into()
+    }
+    let mut handles: Vec<HWND> = Vec::new();
+    // SAFETY: the callback only pushes into `handles`, which outlives the call.
+    let _ = unsafe { EnumWindows(Some(each), LPARAM((&raw mut handles) as isize)) };
+    let mut names: HashMap<u32, String> = HashMap::new();
+    let mut out = Vec::new();
+    for hwnd in handles {
+        // SAFETY: plain Win32 calls with local buffers.
+        unsafe {
+            if !IsWindowVisible(hwnd).as_bool() {
+                continue;
+            }
+            let mut cloaked = 0u32;
+            let _ = DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                (&raw mut cloaked).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+            if cloaked != 0 {
+                continue;
+            }
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let mut buf = [0u16; 256];
+            let n = InternalGetWindowText(hwnd, &mut buf);
+            let title =
+                String::from_utf16_lossy(&buf[..usize::try_from(n).unwrap_or(0).min(buf.len())]);
+            let process = names
+                .entry(pid)
+                .or_insert_with(|| process_name(pid).unwrap_or_default())
+                .clone();
+            out.push(WindowInfo {
+                title,
+                process,
+                pid,
+                class_name: String::new(),
+                handle: hwnd.0 as isize,
+            });
+        }
+    }
+    out
 }
 
 /// The top-level window at `pt`. Only Win32 calls that do not wait for the

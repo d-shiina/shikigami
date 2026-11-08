@@ -21,6 +21,8 @@ import { pageAbove } from "../../lib/loopScope";
 import { credentialFor } from "../../lib/extensions";
 import { fieldLabel as secretFieldLabel } from "../../lib/secretKinds";
 import { FOR_EACH } from "../../lib/stepTypes";
+import { type PickedWindow, pickedWindow } from "../../lib/windowFinder";
+import { WindowFinder } from "./WindowFinder";
 import { type AddChoice, type JsonSchema, inputClass, CommitInput, PathField, Row, AddRow, Section } from "./fields";
 
 type SecretRef = { secret: string; field: SecretField };
@@ -323,6 +325,8 @@ function TargetField({
   const [label, setLabel] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [cut, setCut] = useState<Cut | null>(null);
+  // What the last pick said about the window, for this node only.
+  const [picked, setPicked] = useState<{ stepId?: string; window: PickedWindow } | null>(null);
   const stepTypes = useStudio((s) => s.stepTypes);
   const def = stepTypes.find((d) => d.type === step.type);
   const app = appOf(step.type)!;
@@ -336,6 +340,10 @@ function TargetField({
   const image = imageOf(part);
   const picture = useProjectImage(image?.path);
   const title = `${paramLabel("target")}${required ? " *" : ""}`;
+  // A desktop target with its window set: the window in words, the rest as fields.
+  const finder =
+    app === "desktop" && isRecord(value) && isRecord(value.window) && schema.properties?.window ? (schema.properties.window as JsonSchema) : undefined;
+  const withoutWindow: JsonSchema = { ...schema, properties: Object.fromEntries(Object.entries(schema.properties ?? {}).filter(([k]) => k !== "window")) };
 
   const choose = (name: string) => {
     setNote(null);
@@ -368,6 +376,11 @@ function TargetField({
             context={typeof step.params?.context === "string" ? step.params.context : undefined}
             stepId={step.id}
             onChange={onChange}
+            scope={WINDOW_ONLY.has(step.type) ? "window" : undefined}
+            onPicked={(result) => {
+              const window = pickedWindow(result);
+              setPicked(window ? { stepId: step.id, window } : null);
+            }}
             more={
               snips && (
                 <SnipButton
@@ -430,7 +443,25 @@ function TargetField({
         )
       ) : (
         <>
-          <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} foldEmpty onChange={onChange} />
+          {finder ? (
+            <>
+              <WindowFinder
+                step={step}
+                schema={finder}
+                value={(value as { window: Record<string, unknown> }).window}
+                picked={picked && picked.stepId === step.id ? picked.window : undefined}
+                onChange={(window) => {
+                  const { window: _old, ...rest } = value as Record<string, unknown>;
+                  onChange(window ? { ...rest, window } : Object.keys(rest).length > 0 ? rest : null);
+                }}
+              />
+              {Object.keys(withoutWindow.properties ?? {}).length > 0 && (
+                <ObjectFields schema={withoutWindow} value={value as Record<string, unknown> | undefined} foldEmpty onChange={(next) => onChange(isRecord(next) ? { ...next, window: (value as Record<string, unknown>).window } : { window: (value as Record<string, unknown>).window })} />
+              )}
+            </>
+          ) : (
+            <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} foldEmpty onChange={onChange} />
+          )}
           {isRecord(value) &&
             (making ? (
               <div className="mt-1 flex items-center gap-1">
@@ -475,6 +506,9 @@ function TargetField({
 export const partContext = (uses: readonly Step[]) =>
   uses.map((u) => u.params?.context).find((c): c is string => typeof c === "string" && c !== "");
 
+/** Desktop nodes that act on the window itself: the picker takes the window, not a part of it. */
+const WINDOW_ONLY = new Set(["desktop.closeWindow", "desktop.setWindow"]);
+
 /** The browser Studio opens to pick parts with no run going (the adapter keeps it by this name). */
 const STUDIO_BROWSER = "studio-pick";
 /** The adapters whose targets can be picked on screen from Studio. */
@@ -498,7 +532,13 @@ export function PointTools({
   large = false,
   pick: canPick = true,
   more,
+  scope,
+  onPicked,
 }: {
+  /** "window": the node acts on the window itself, so the window is picked, not a part of it. */
+  scope?: "window";
+  /** What the picker answered (the ways to find the window, for the node's settings). */
+  onPicked?: (result: Record<string, unknown>) => void;
   /** More buttons beside these (画面から切り取る). */
   more?: React.ReactNode;
   adapter: string;
@@ -533,13 +573,18 @@ export function PointTools({
     setBusy(true);
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "pick", message: browser ? t.picker.banner : t.picker.bannerDesktop, ...extra }, session);
+      const desktop = browser
+        ? {}
+        : { labels: t.picker.windowTag, ...(scope ? { scope } : {}) };
+      const message = browser ? t.picker.banner : scope === "window" ? t.picker.bannerWindow : t.picker.bannerDesktop;
+      const result = await api.pointAt(adapter, { action: "pick", message, ...extra, ...desktop }, session);
       if (result.cancelled || result.status === "cancelled") {
         setNote({ text: t.picker.cancelled });
       } else if (result.how === "point" && !canPoint) {
         setNote({ text: t.picker.pointNotAllowed, warn: true });
       } else {
         onChange(result.target);
+        onPicked?.(result);
         const label = String(result.label ?? result.text ?? "");
         setNote(result.how === "point" ? { text: t.picker.byPoint, warn: true } : { text: label ? t.picker.picked(label) : t.picker.pickedPlain });
       }

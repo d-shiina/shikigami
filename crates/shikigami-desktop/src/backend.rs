@@ -222,10 +222,16 @@ pub enum Op {
     /// Lets the user point at an element on screen: follows the mouse with
     /// a frame, takes the next click (the app never gets it) and answers
     /// `{ target, how, rect, window }` (see `target::picked_target`), or
-    /// `{ cancelled: true }` on Esc or after `timeout_ms`.
+    /// `{ cancelled: true }` on Esc or after `timeout_ms`. While the user
+    /// points, a tag at the window's frame says how the window will be found
+    /// (in the words of `labels`, see `target::describe_window`) and one at
+    /// the part's frame names it. With `window_only` the window is picked,
+    /// not a part of it (nodes that act on the window itself).
     Pick {
         message: Option<String>,
         timeout_ms: u64,
+        labels: serde_json::Value,
+        window_only: bool,
     },
     /// 「画面から切り取る」: freezes the screen, dims it and lets the user
     /// drag a rectangle on it. Answers `{ target: { window }, png (base64),

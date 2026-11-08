@@ -21,7 +21,7 @@ export function partRef(value: unknown): string | undefined {
   return keys.length === 1 && typeof name === "string" ? name : undefined;
 }
 
-function* walk(steps: readonly Step[]): Generator<Step> {
+export function* walk(steps: readonly Step[]): Generator<Step> {
   for (const step of steps) {
     yield step;
     for (const children of Object.values(step.blocks ?? {})) yield* walk(children);
