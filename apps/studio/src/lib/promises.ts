@@ -44,19 +44,31 @@ export function promisesOf(
   checked?: { revision: number; at: string; results: CaseResult[] },
 ): Promised[] {
   const fresh = new Map<string, boolean>();
-  const results = new Map<string, { at: string; kept: Kept }>();
+  // When each case was last saved: a result from before that tested other expectations.
+  const savedAt = new Map<string, number>();
+  const results = new Map<string, { at: number; kept: Kept }>();
+  const time = (at: string) => Date.parse(at);
   for (const e of evidence) {
-    if (e.kind === "testCase") fresh.set(e.name, (fresh.get(e.name) ?? false) || Boolean(e.replaced));
+    if (e.kind === "testCase") {
+      fresh.set(e.name, (fresh.get(e.name) ?? false) || Boolean(e.replaced));
+      savedAt.set(e.name, time(e.at));
+    }
     if (e.kind === "testCases") {
       for (const r of e.results) {
-        results.set(r.name, { at: e.at, kept: { passed: r.passed, mismatches: r.mismatches ?? [], by: "ai", stale: e.revision !== revision, runId: r.runId } });
+        results.set(r.name, { at: time(e.at), kept: { passed: r.passed, mismatches: r.mismatches ?? [], by: "ai", stale: e.revision !== revision, runId: r.runId } });
       }
     }
   }
-  for (const r of checked?.results ?? []) {
-    const prior = results.get(r.name);
-    if (prior && prior.at > checked!.at) continue;
-    results.set(r.name, { at: checked!.at, kept: { passed: r.passed, mismatches: r.mismatches, by: "studio", stale: checked!.revision !== revision, runId: r.runId } });
+  if (checked) {
+    for (const r of checked.results) {
+      const prior = results.get(r.name);
+      if (prior && prior.at > time(checked.at)) continue;
+      results.set(r.name, { at: time(checked.at), kept: { passed: r.passed, mismatches: r.mismatches, by: "studio", stale: checked.revision !== revision, runId: r.runId } });
+    }
+  }
+  for (const [name, at] of savedAt) {
+    const result = results.get(name);
+    if (result && result.at < at) results.delete(name);
   }
   const all = cases.map(({ name, case: testCase }) => ({
     name,

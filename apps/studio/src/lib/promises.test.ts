@@ -40,6 +40,24 @@ describe("promisesOf", () => {
   });
 });
 
+describe("promisesOf with a rewritten case", () => {
+  it("drops a result from before the case was saved again", () => {
+    const evidence: Evidence[] = [
+      { revision: 5, at: "2026-11-08T01:00:00Z", actor, kind: "testCases", results: [{ name: "合計", passed: true, runId: "run_1", status: "succeeded" }] },
+      { revision: 5, at: "2026-11-08T01:05:00Z", actor, kind: "testCase", name: "合計", replaced: true },
+    ];
+    const [first] = promisesOf(cases, evidence, 5);
+    expect(first).toMatchObject({ name: "合計", fresh: true, replaced: true, kept: null });
+    // Also a run from the review before the rewrite.
+    const [again] = promisesOf(cases, evidence, 5, {
+      revision: 5,
+      at: "2026-11-08T01:02:00Z",
+      results: [{ name: "合計", passed: true, runId: "run_2", status: "succeeded", mismatches: [], durationMs: 1 }],
+    });
+    expect(again!.kept).toBeNull();
+  });
+});
+
 describe("promiseTerms", () => {
   it("says the input and the expected result in one line each", () => {
     expect(promiseTerms(cases[0]!.case)).toEqual({ given: "folder ＝ 「tests/3支店」", then: "grandTotal ＝ 73050" });
