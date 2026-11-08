@@ -104,8 +104,11 @@ impl Bitmap {
         };
         for y in r.y..r.bottom() {
             let start = (y as usize * self.width as usize + r.x as usize) * 4;
-            for px in self.rgba[start..start + r.width as usize * 4].chunks_exact_mut(4) {
-                px.copy_from_slice(&rgba);
+            for px in self.rgba[start..start + r.width as usize * 4]
+                .as_chunks_mut::<4>()
+                .0
+            {
+                *px = rgba;
             }
         }
     }
