@@ -1061,7 +1061,7 @@ export const ja = {
     none: "まだ使える値がありません。前に表を読むノードなどを置くと、その結果がここに並びます",
     clickTo: (label: string) => `クリックで「${label}」に入ります`,
     pickField: "値を入れたい欄を先にクリックしてください",
-    noResult: "まだ実行していません。「ノードの単体実行」はこのノードだけを、「ここまで実行」は先頭からこのノードまでを実行して、結果をここに出します",
+    noResult: "まだ実行していません",
     pausedAfter: "このノードまで実行して一時停止しています",
     finished: "実行が終わりました",
     failed: "このノードでエラーになりました",
@@ -1136,6 +1136,8 @@ export const ja = {
     header: "ヘッダー",
   } as Record<string, string>,
   props: {
+    expand: "広げる",
+    expandTitle: "画面いっぱいに広げる（使える値・実行結果を横に並べて見る）",
     unregistered: (name: string) => `${name}（未登録）`,
     unset: "（未設定）",
     numberHint: "数値（変数名や計算式も入力できます）",

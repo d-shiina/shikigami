@@ -98,7 +98,7 @@ function Editor({ step }: { step: Step }) {
 }
 
 /** The node's name in the header, plain text until pointed at (n8n, Linear). */
-function NameInput({ step }: { step: Step }) {
+export function NameInput({ step }: { step: Step }) {
   const updateStep = useStudio((s) => s.updateStep);
   const [draft, setDraft] = useState(step.name ?? "");
   useEffect(() => setDraft(step.name ?? ""), [step.name]);
@@ -126,7 +126,7 @@ function NameInput({ step }: { step: Step }) {
   );
 }
 
-function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined }) {
+export function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined }) {
   const run = useStudio((s) => s.run);
   const flow = useStudio((s) => s.flow);
   const trying = useStudio((s) => s.trying);
@@ -289,7 +289,7 @@ function Output({ stepType, value }: { stepType?: string; value: unknown }) {
 }
 
 /** The node's result: its run alone, or else what the last run did there. */
-function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
+export function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
   const stepTest = useStudio((s) => s.stepTest);
   const flow = useStudio((s) => s.flow);
   if (stepTest && stepTest.stepId === stepId && stepTest.flowId === flow?.id) return <TestResult test={stepTest} hasOutput={hasOutput} />;

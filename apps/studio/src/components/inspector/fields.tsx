@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 // The building blocks of the inspector and the node editor: a "項目 | 値" row,
 // a collapsible section, a text field that commits on blur, a path field.
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { CircleHelp, FolderOpen } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectMaybe } from "../../project";
@@ -129,7 +129,13 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
   );
 }
 
-/** One "項目 | 値" row, Blender-style: the label sits left of its value. */
+/**
+ * Rows with the name above the value instead of left of it: in the right
+ * pane (about 420px) a name column would leave the value two thirds of it.
+ */
+export const StackedRows = createContext(false);
+
+/** One "項目 | 値" row, Blender-style: the label sits left of its value (or above it, in StackedRows). */
 export function Row({
   label,
   hint,
@@ -153,35 +159,51 @@ export function Row({
   onRemove?: () => void;
   children: React.ReactNode;
 }) {
+  const stacked = useContext(StackedRows);
+  const helpMark = help && help !== label && (
+    <span title={help} aria-label={help} className="ml-1 shrink-0 cursor-help text-slate-400 hover:text-slate-600">
+      <CircleHelp size={11} strokeWidth={1.75} aria-hidden="true" />
+    </span>
+  );
+  const remove = onRemove && (
+    <button
+      type="button"
+      title={t.props.removeSetting}
+      aria-label={t.props.removeSetting}
+      className="rounded-md px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
+      onClick={(e) => {
+        e.preventDefault();
+        onRemove();
+      }}
+    >
+      ×
+    </button>
+  );
+  if (stacked)
+    return (
+      <label className="block py-1.5">
+        <span className="flex min-h-[18px] items-center pb-1 text-[11.5px] leading-tight text-slate-600" title={title}>
+          {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: socket }} />}
+          {label}
+          {helpMark}
+          {remove && <span className="ml-auto">{remove}</span>}
+        </span>
+        {children}
+        {hint && <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">{hint}</span>}
+      </label>
+    );
   return (
     <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto] [[data-wide]_&]:grid-cols-[132px_1fr_auto]" : "grid-cols-[84px_1fr] [[data-wide]_&]:grid-cols-[132px_1fr]"} items-start gap-x-2 py-1`}>
       <span className="relative flex min-h-[26px] items-center justify-end text-right text-[11px] leading-tight text-slate-500" title={title}>
         {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
         {label}
-        {help && help !== label && (
-          <span title={help} aria-label={help} className="ml-1 shrink-0 cursor-help text-slate-400 hover:text-slate-600">
-            <CircleHelp size={11} strokeWidth={1.75} aria-hidden="true" />
-          </span>
-        )}
+        {helpMark}
       </span>
       <span className="min-w-0">
         {children}
         {hint && <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">{hint}</span>}
       </span>
-      {onRemove && (
-        <button
-          type="button"
-          title={t.props.removeSetting}
-          aria-label={t.props.removeSetting}
-          className="mt-1 rounded-md px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
-          onClick={(e) => {
-            e.preventDefault();
-            onRemove();
-          }}
-        >
-          ×
-        </button>
-      )}
+      {remove && <span className="mt-1">{remove}</span>}
     </label>
   );
 }
@@ -194,6 +216,7 @@ export function Row({
 export type AddChoice = { key: string; label: string; /** The heading it is listed under (設定・出力・実行の設定). */ group?: string };
 
 export function AddRow({ choices, onAdd }: { choices: AddChoice[]; onAdd: (key: string) => void }) {
+  const stacked = useContext(StackedRows);
   if (choices.length === 0) return null;
   const groups = [...new Set(choices.map((c) => c.group ?? ""))];
   const option = (c: AddChoice) => (
@@ -202,12 +225,13 @@ export function AddRow({ choices, onAdd }: { choices: AddChoice[]; onAdd: (key: 
     </option>
   );
   return (
-    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]">
-      <span />
+    <div className={stacked ? "py-1.5" : "grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]"}>
+      {!stacked && <span />}
       <select
         className="w-full cursor-pointer rounded-lg border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
         value=""
         aria-label={t.props.addSetting}
+        data-add-setting
         onChange={(e) => e.target.value && onAdd(e.target.value)}
       >
         <option value="">{t.props.addSetting}</option>

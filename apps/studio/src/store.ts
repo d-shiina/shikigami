@@ -54,6 +54,7 @@ import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
 import { readClipboardText } from "./lib/clipboard";
+import { focusFirstSetting } from "./lib/focusSetting";
 
 export type Selection =
   | { kind: "step"; stepId: string }
@@ -1280,7 +1281,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ selection: { kind: "step", stepId: step.id } });
         // A node with settings it cannot run without opens at once, so they
         // are filled in now instead of turning up later as a problem.
-        if (unsetParams(step, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(step.id);
+        if (unsetParams(step, get().stepTypes.find((d) => d.type === type)).length > 0) focusFirstSetting();
       },
 
       async moveSelected(delta) {
@@ -1323,7 +1324,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const ok = await get().applyOps(ops);
         if (!ok || !wrapper.id || !first) return;
         set({ selection: { kind: "step", stepId: wrapper.id }, range: null });
-        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(wrapper.id);
+        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) focusFirstSetting();
       },
 
       setExtractOpen(open) {
