@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { type BottomTab, isActive, runBreakpoints, trailOf } from "../store";
+import { type BottomTab, type LogEntry, diveChain, findStep, isActive, runBreakpoints, trailOf } from "../store";
+import { plain, sentence } from "../lib/sentence";
 import { PERSON_CODES } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
@@ -112,9 +113,40 @@ export function BottomPanel() {
   );
 }
 
+/**
+ * The node a log line is about, by the name it has on the chart (never its
+ * internal ID): pressing it brings the node up, inside a called flow too.
+ */
+function StepLink({ entry }: { entry: LogEntry & { stepId: string } }) {
+  const flow = useStudio((s) => s.flow);
+  const called = useStudio((s) => s.called);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const goToPlace = useStudio((s) => s.goToPlace);
+  // The run of another flow than the one open: its nodes are not on the chart.
+  const here = useStudio((s) => !s.run?.flowId || s.run.flowId === s.flow?.id);
+  const path = entry.callPath ?? [];
+  const chain = diveChain(flow, called, path);
+  const owner = !here ? null : path.length === 0 ? flow : chain.length === path.length ? chain.at(-1)!.flow : null;
+  const step = owner ? findStep(owner.steps ?? [], entry.stepId) : null;
+  const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
+  const name = step ? step.name?.trim() || plain(sentence(step, def)) : t.evidence.goneStep;
+  const where = path.length > 0 && owner ? `${owner.name} › ` : "";
+  return (
+    <button
+      type="button"
+      disabled={!step}
+      className="ml-auto min-w-0 max-w-[40%] shrink-0 truncate font-sans text-slate-500 enabled:hover:text-brand-600 enabled:hover:underline disabled:text-slate-400"
+      title={step ? `${t.evidence.showInFlow}: ${where}${name}` : undefined}
+      onClick={() => step && goToPlace({ path, stepId: entry.stepId })}
+    >
+      {where}
+      {name}
+    </button>
+  );
+}
+
 function RunLog() {
   const run = useStudio((s) => s.run);
-  const goTo = useStudio((s) => s.goTo);
   const end = useRef<HTMLDivElement>(null);
   const count = run?.logs.length ?? 0;
   useEffect(() => {
@@ -128,11 +160,7 @@ function RunLog() {
         <div key={`${entry.seq}-${entry.message}`} className={`flex gap-2 ${LEVEL_STYLE[entry.level]}`}>
           <span className="shrink-0 text-slate-400">{entry.at.slice(11, 19)}</span>
           <span className="whitespace-pre-wrap">{entry.message}</span>
-          {entry.stepId && (
-            <button type="button" className="ml-auto shrink-0 text-slate-400 hover:text-brand-600" onClick={() => entry.stepId && goTo(entry.stepId)}>
-              {entry.stepId.slice(0, 12)}
-            </button>
-          )}
+          {entry.stepId && <StepLink entry={{ ...entry, stepId: entry.stepId }} />}
         </div>
       ))}
       <div ref={end} />

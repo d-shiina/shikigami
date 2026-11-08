@@ -339,7 +339,7 @@ function RunResult({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }
   const step = flow ? findStep(flow.steps ?? [], stepId) : null;
   const state = run?.flowId === flow?.id ? run?.steps[stepId] : undefined;
   const change = run && run.flowId === flow?.id && step?.saveAs ? [...run.changes].reverse().find((c) => c.stepId === stepId && c.variable === step.saveAs) : undefined;
-  const lines = run && run.flowId === flow?.id ? run.logs.filter((l) => l.stepId === stepId) : [];
+  const lines = run && run.flowId === flow?.id ? run.logs.filter((l) => (l.callPath?.length ? l.callPath[0] === stepId : l.stepId === stepId)) : [];
   if (!run || run.flowId !== flow?.id || (!state && !trying)) return <p className="px-4 py-3 text-[12px] leading-relaxed text-slate-500">{t.editor.noResult}</p>;
   const active = isActive(run);
   const headline =

@@ -9,7 +9,7 @@ import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
 import { fixRequest } from "../lib/fixRequest";
 import { plain, sentence } from "../lib/sentence";
-import { diveChain, findStep, isActive } from "../store";
+import { diveChain, errorPlace, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
 import { HoverPreview } from "./HoverPreview";
@@ -161,13 +161,11 @@ export function RunPausePanel() {
   const run = useStudio((s) => s.run);
   const flow = useStudio((s) => s.flow);
   const called = useStudio((s) => s.called);
-  const leaveCalls = useStudio((s) => s.leaveCalls);
-  const enterCall = useStudio((s) => s.enterCall);
   const stepTypes = useStudio((s) => s.stepTypes);
   const debug = useStudio((s) => s.debug);
   const startRun = useStudio((s) => s.startRun);
   const dismissFailure = useStudio((s) => s.dismissFailure);
-  const goTo = useStudio((s) => s.goTo);
+  const goToPlace = useStudio((s) => s.goToPlace);
   const setReviewing = useStudio((s) => s.setReviewing);
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
@@ -183,18 +181,18 @@ export function RunPausePanel() {
   const failure = !isActive(run) ? run.failure : null;
   if (!pause && !failure) return null;
 
-  const stepId = pause?.stepId ?? failure?.stepId ?? null;
+  // A run that failed inside a called flow ended at the call step; the node
+  // in there is where it went wrong.
+  const failedAt = !pause && failure?.stepId ? errorPlace(flow, called, failure.stepId, failure.details) : null;
+  const stepId = pause?.stepId ?? failedAt?.stepId ?? null;
   // Paused inside a call: the step and its fix belong to the called flow.
-  const inCall = pause?.callPath ?? [];
+  const inCall = pause?.callPath ?? failedAt?.path ?? [];
   const owner = inCall.length > 0 ? (diveChain(flow, called, inCall).at(-1)?.flow ?? flow) : flow;
   const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
   // The paused values are the owner's (a called flow has its own variables).
   const secretNames = new Set((owner.variables ?? []).filter((v) => v.secret).map((v) => v.name));
   const show = () => {
-    if (!stepId) return;
-    if (inCall.length === 0) return goTo(stepId);
-    leaveCalls(0);
-    for (const id of inCall) enterCall(id);
+    if (stepId) goToPlace({ path: inCall, stepId });
   };
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
   const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? t.evidence.goneStep : null;
@@ -249,6 +247,7 @@ export function RunPausePanel() {
             title={t.pause.showStep}
           >
             {kind && <span className="mr-1.5 text-[12px] font-semibold text-slate-500">{kind}</span>}
+            {inCall.length > 0 && owner !== flow && <span className="font-semibold text-slate-500">{owner.name} › </span>}
             {stepLabel}
             {pause && !onError && <span className="ml-1.5 text-[12px] font-normal text-slate-500">{t.pause.before}</span>}
           </button>

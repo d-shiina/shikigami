@@ -101,7 +101,40 @@ export type LogEntry = {
   level: LogLevel;
   message: string;
   stepId?: string | null;
+  /** Inside a called flow: the call steps down to the flow `stepId` is in. */
+  callPath?: string[];
 };
+
+/** A node anywhere a run went: `stepId` in the flow the calls of `path` lead to. */
+export type StepPlace = { path: string[]; stepId: string };
+
+/**
+ * Where an error of the open flow's `stepId` happened: down inside the
+ * called flow when it failed in there (`details.subFlow`, which names the
+ * innermost flow only, so the calls leading to it are found on the chart).
+ */
+export function errorPlace(root: Flow | null, called: Record<string, Flow>, stepId: string, details: unknown): StepPlace {
+  const sub = details && typeof details === "object" ? (details as { subFlow?: { flowId?: unknown; stepId?: unknown } }).subFlow : undefined;
+  const flowId = typeof sub?.flowId === "string" ? sub.flowId : null;
+  const inner = typeof sub?.stepId === "string" ? sub.stepId : null;
+  if (!root || !flowId || !inner) return { path: [], stepId };
+  const calls = (steps: Step[]): string[] =>
+    steps.flatMap((s) => [...(s.type === CALL && s.id ? [s.id] : []), ...Object.values(s.blocks ?? {}).flatMap(calls)]);
+  const search = (path: string[]): string[] | null => {
+    const chain = diveChain(root, called, path);
+    if (chain.length !== path.length) return null;
+    const here = chain.at(-1)!.flow;
+    if (here.id === flowId && findStep(here.steps ?? [], inner)) return path;
+    if (path.length >= 8) return null;
+    for (const id of calls(here.steps ?? [])) {
+      const found = search([...path, id]);
+      if (found) return found;
+    }
+    return null;
+  };
+  const path = search([stepId]);
+  return path ? { path, stepId: inner } : { path: [], stepId };
+}
 
 /**
  * One variable write reported by the Runtime (`variableChanged`). Declared
@@ -262,7 +295,8 @@ export type StudioState = {
   /** The review desk is open instead of the flow list. */
   reviewing: boolean;
   /** A step the canvas should bring into view; `seq` changes on every request. */
-  reveal: { stepId: string; seq: number } | null;
+  /** A node to bring into view; `inside` (a `callKey`) when it is in an entered call. */
+  reveal: { stepId: string; seq: number; inside?: string } | null;
   /** The node open in the full-size editor (double-click on the chart). */
   editing: string | null;
   /** 「ここまで実行」: the run pauses before this node, runs it, and pauses again after. */
@@ -344,6 +378,8 @@ export type StudioState = {
   select(selection: Selection): void;
   /** Selects a step and brings it into view. */
   goTo(stepId: string): void;
+  /** Brings up a node inside called flows too (a log line, a failure there). */
+  goToPlace(place: StepPlace): void;
   /** Moves the selection to the previous / next step in reading order. */
   stepBy(delta: number): void;
   /** Moves to the previous / next step the AI changed (review desk). */
@@ -1158,6 +1194,14 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ selection: { kind: "step", stepId }, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
+      goToPlace({ path, stepId }) {
+        const { flow, called } = get();
+        if (path.length === 0) return get().goTo(stepId);
+        // A call the chart can no longer open: show the call step instead.
+        if (diveChain(flow, called, path).length !== path.length) return get().goTo(path[0]!);
+        set({ dive: path, selection: null, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1, inside: callKey(path) } });
+      },
+
       stepBy(delta) {
         const { flow, stepTypes, selection } = get();
         const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -1665,8 +1709,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           let reveal = s.reveal;
           const run: RunState =
             s.run && s.run.runId === env.runId ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs } : newRun(env.runId);
-          const push = (level: LogLevel, msg: string, stepId?: string | null) => {
-            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
+          const push = (level: LogLevel, msg: string, stepId?: string | null, callPath?: string[]) => {
+            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId, ...(callPath?.length ? { callPath } : {}) }];
           };
           const path = callPathOf(env);
           // Followed, the chart goes where the run is: into a called flow
@@ -1703,10 +1747,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               // A failure reaches the call step itself and is logged there.
               if (human?.stepId === call) human = null;
             }
-            if (env.type === "log") push(env.level, env.message, call);
+            // The line points at the node in there, not just at the call.
+            if (env.type === "log") push(env.level, env.message, env.stepId ?? call, env.stepId ? path : undefined);
             if (env.type === "humanActionRequired") {
               human = { stepId: call, message: env.message };
-              push("warn", `${t.waitingForYou}: ${env.message}`, call);
+              push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId, path);
             }
             run.inner = { ...run.inner, [key]: states };
             return { run, human, secretFix, ...moved };
@@ -1733,7 +1778,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
-                push("error", `${errorLine(env.error, findStep(s.flow?.steps ?? [], env.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
+                // A call that failed inside: the line leads to the node in there.
+                const at = errorPlace(s.flow, s.called, env.stepId, env.error.details);
+                const owner = at.path.length > 0 ? (diveChain(s.flow, s.called, at.path).at(-1)?.flow ?? null) : s.flow;
+                push("error", `${errorLine(env.error, findStep(owner?.steps ?? [], at.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, at.stepId, at.path);
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
@@ -1757,9 +1805,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.evidence = null;
               states[env.stepId] = env.reason === "error" ? "failed" : "paused";
               if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
-              // The log points at what the open flow shows: the call step.
-              const at = path[0] ?? env.stepId;
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, at);
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId, path);
               if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }

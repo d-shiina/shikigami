@@ -472,6 +472,13 @@
             "null"
           ]
         },
+        "stepLabel": {
+          "description": "The node as people know it: its name, else its type's label. Set on\nthe run's final error (report, notifications), so the place can be\ntold without the flow at hand; `stepId` stays the key to the node.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "details": {
           "description": "Adapter-specific evidence: UI element snapshot, screenshot path,\nexpected vs. actual state, etc."
         }

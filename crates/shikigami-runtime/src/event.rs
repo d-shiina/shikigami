@@ -56,6 +56,11 @@ pub struct RunError {
     pub step_id: Option<StepId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_type: Option<String>,
+    /// The node as people know it: its name, else its type's label. Set on
+    /// the run's final error (report, notifications), so the place can be
+    /// told without the flow at hand; `stepId` stays the key to the node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_label: Option<String>,
     /// Adapter-specific evidence: UI element snapshot, screenshot path,
     /// expected vs. actual state, etc.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,6 +74,7 @@ impl RunError {
             message: message.into(),
             step_id: None,
             step_type: None,
+            step_label: None,
             details: None,
         }
     }

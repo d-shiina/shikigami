@@ -1495,6 +1495,11 @@ async fn run(
     json: bool,
     vars: bool,
 ) -> Result<RunStatus> {
+    // Nodes are told by name, with the ID that finds them in the flow file.
+    let names = shikigami_runtime::names::StepNames::new(
+        std::iter::once(&flow).chain(options.subflows.iter().map(|s| &s.flow)),
+        runtime.registry(),
+    );
     let handle = runtime.start(flow, options).map_err(|e| {
         anyhow::anyhow!(
             "{e}\n{}",
@@ -1564,7 +1569,12 @@ async fn run(
                     ..
                 } => {
                     let retry = if *will_retry { " (retrying)" } else { "" };
-                    println!("  ✗ {step_id}: {} {}{retry}", err.code, err.message);
+                    println!(
+                        "  ✗ {}: {} {}{retry}",
+                        node(names.step(step_id), step_id.as_str()),
+                        err.code,
+                        err.message
+                    );
                 }
                 RunEvent::RunFinished {
                     status,
@@ -1585,15 +1595,38 @@ async fn run(
             println!("outputs: {}", serde_json::to_string(&report.outputs)?);
         }
         if let Some(err) = &report.error {
-            eprintln!(
-                "failed at {}: {} {}",
-                err.step_id.as_ref().map(|s| s.as_str()).unwrap_or("-"),
-                err.code,
-                err.message
-            );
+            eprintln!("failed at {}: {} {}", failed_at(err), err.code, err.message);
         }
     }
     Ok(report.status)
+}
+
+/// `請求書の保存 [stp_013_save]`: the name people know, the ID that finds it.
+fn node(name: &str, id: &str) -> String {
+    if name.is_empty() {
+        id.to_owned()
+    } else {
+        format!("{name} [{id}]")
+    }
+}
+
+/// Where a run failed, down into the called flow it failed in.
+fn failed_at(err: &shikigami_runtime::RunError) -> String {
+    let Some(id) = &err.step_id else {
+        return "-".to_owned();
+    };
+    let mut at = node(err.step_label.as_deref().unwrap_or(""), id.as_str());
+    if let Some(sub) = err.details.as_ref().and_then(|d| d.get("subFlow")) {
+        let text = |key: &str| sub.get(key).and_then(Value::as_str).unwrap_or("");
+        if !text("stepId").is_empty() {
+            at.push_str(&format!(
+                " → {} › {}",
+                text("flowName"),
+                node(text("stepLabel"), text("stepId"))
+            ));
+        }
+    }
+    at
 }
 
 fn print_case(result: &testing::CaseResult) {
@@ -1609,8 +1642,12 @@ fn print_case(result: &testing::CaseResult) {
     }
     if !result.passed {
         if let Some(err) = &result.error {
-            let at = err.step_id.as_ref().map(|s| s.as_str()).unwrap_or("-");
-            println!("    error at {at}: {} {}", err.code, err.message);
+            println!(
+                "    error at {}: {} {}",
+                failed_at(err),
+                err.code,
+                err.message
+            );
         }
         println!("    run {}", result.run_id);
     }
