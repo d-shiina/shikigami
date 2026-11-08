@@ -246,8 +246,8 @@ export function RunPausePanel() {
             className="min-w-0 truncate text-[14px] font-bold hover:text-brand-600 hover:underline"
             title={t.pause.showStep}
           >
+            {inCall.length > 0 && owner !== flow && <span className="mr-1.5 font-semibold text-slate-500">{owner.name} ›</span>}
             {kind && <span className="mr-1.5 text-[12px] font-semibold text-slate-500">{kind}</span>}
-            {inCall.length > 0 && owner !== flow && <span className="font-semibold text-slate-500">{owner.name} › </span>}
             {stepLabel}
             {pause && !onError && <span className="ml-1.5 text-[12px] font-normal text-slate-500">{t.pause.before}</span>}
           </button>
