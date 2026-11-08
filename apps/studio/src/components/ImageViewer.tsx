@@ -81,11 +81,11 @@ export function Viewer({ image, onClose }: { image: ImageToOpen; onClose: () => 
   }, [image]);
 
   useEffect(() => {
+    // Every key stays in the viewer: the editor under it must not delete or cut the selected nodes.
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      } else if (e.key === "0") setMode("fit");
+      e.stopImmediatePropagation();
+      if (e.key === "Escape") onClose();
+      else if (e.key === "0") setMode("fit");
       else if (e.key === "1") setMode("actual");
       else if (e.key === "+" || e.key === "=") zoomBy(1.25);
       else if (e.key === "-") zoomBy(0.8);
@@ -124,7 +124,8 @@ export function Viewer({ image, onClose }: { image: ImageToOpen; onClose: () => 
   /** Zooms keeping the point under (cx, cy) in place; the stage's centre by default. */
   const zoomBy = (factor: number, cx?: number, cy?: number) => {
     const box = stage.current?.getBoundingClientRect();
-    if (!box) return;
+    // Before the picture has a place (still loading), there is nothing to zoom; it opens fitted.
+    if (!box || !view) return;
     setMode("free");
     setView((v) => {
       if (!v) return v;
