@@ -82,7 +82,7 @@ args = ["mcp"]
 |  | `import_flow` | Import a bundle or a flow document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along |
 |  | `extract_subflow` | Move consecutive nodes of one block into a new flow and replace them with a single `flow.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subflows.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the flow's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
-|  | `save_test_case` | Save a test case (`tests/<name>.json`: `inputs` and `expect`; `overwrite` to replace). Unknown or secret inputs are refused ([testing.md](testing.md)) |
+|  | `save_test_case` | Save a test case (`tests/<name>.json`: `description`, `inputs` and `expect`; `overwrite` to replace). Write `description` as a promise in business words: Studio's review shows the cases an AI saved as its promises, with their results. Unknown or secret inputs are refused ([testing.md](testing.md)) |
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_flow` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_flow` | Cancel a run |

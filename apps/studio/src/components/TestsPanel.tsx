@@ -16,14 +16,14 @@ type Named = { name: string; case: TestCase };
  * unmounts the component while the cases still run, and results belong to
  * the flow that ran them, not to whichever flow is open when they arrive.
  */
-const useSuite = create<{
+export const useSuite = create<{
   /** Last results here, by flow, then by case name. */
   results: Record<string, Record<string, CaseResult>>;
   /** The flow and the cases running now. */
   running: { flowId: string; names: string[] } | null;
 }>(() => ({ results: {}, running: null }));
 
-const keep = (flowId: string, done: CaseResult[]) =>
+export const keepResults = (flowId: string, done: CaseResult[]) =>
   useSuite.setState((s) => ({
     results: { ...s.results, [flowId]: { ...(s.results[flowId] ?? {}), ...Object.fromEntries(done.map((r) => [r.name, r])) } },
   }));
@@ -81,7 +81,7 @@ export function TestsPanel() {
     useSuite.setState({ running: { flowId: id, names: names ?? cases.map((c) => c.name) } });
     setError(null);
     try {
-      keep(id, await api.runTests(id, names));
+      keepResults(id, await api.runTests(id, names));
     } catch (e) {
       if (current.current === id) setError(message(e));
     } finally {

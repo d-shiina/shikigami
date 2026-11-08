@@ -1217,6 +1217,25 @@ impl FlowService {
         Ok(evidence)
     }
 
+    /// Records an AI's test case work (a saved case, or the results of the
+    /// cases it ran) against `revision`.
+    pub fn record_test_evidence(
+        &self,
+        id: &FlowId,
+        revision: u64,
+        detail: EvidenceDetail,
+        actor: Actor,
+    ) -> CoreResult<Evidence> {
+        let evidence = Evidence {
+            revision,
+            at: now(),
+            actor,
+            detail,
+        };
+        self.store.append_evidence(id, &evidence)?;
+        Ok(evidence)
+    }
+
     /// Records a human's verdict on the current revision. Sending a flow
     /// back (`rejected`) needs a reason or at least one step note; the AI
     /// reads it with get_review / get_flow.
