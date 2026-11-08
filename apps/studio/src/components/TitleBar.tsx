@@ -1,7 +1,7 @@
 // The window's title bar, right of the sidebar (which holds the workspace),
 // read left to right like the rest of Studio: what is open, then what to do
-// with it, ending with Run (the AI is opened from the sidebar; the window
-// buttons sit above, on the window's ground). The window holds one flow at a time, so the bar that names the
+// with it, ending with Run (the app's name, the search, the AI and the window
+// buttons sit above, in the window's bar). The window holds one flow at a time, so the bar that names the
 // window names the flow too, as an editor names its document. Everything
 // left between controls is room to drag the window; double-click maximizes.
 import { useStudio } from "../context";
