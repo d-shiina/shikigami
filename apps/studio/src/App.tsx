@@ -355,7 +355,10 @@ function Shell() {
   // On the review desk the report fills the editor; the chart opened from it works as in the editor.
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
-  const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
+  // The 手順書 is read as sheets with nothing beside them; editing its outline brings the pane back.
+  const manualEditing = useStudio((s) => s.manualEditing);
+  const rightOpen =
+    shownView !== "report" && shownView !== "variables" && (shownView !== "story" || manualEditing) && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);

@@ -2,7 +2,20 @@
 // pictures cut to the marked part and what is hidden burned in, so the file
 // can be opened, printed or turned into a PDF anywhere.
 import { locale, t } from "./i18n";
-import { type Chapter, cropOf, type ManualDoc, type ManualItem, type ManualShot, type ManualStep, type Mask, type Rect, type Scene } from "./manual";
+import {
+  type Container,
+  cropOf,
+  type Leaf,
+  type ManualDoc,
+  type ManualItem,
+  type ManualShot,
+  type ManualStep,
+  type Mask,
+  type PageBlock,
+  pagesOf,
+  type Rect,
+  type Scene,
+} from "./manual";
 import type { Part } from "./sentence";
 
 export type ExportOptions = {
@@ -136,93 +149,106 @@ export async function burnShot(
 }
 
 function step(s: ManualStep): string {
-  return `<li><span class="n">${s.number}</span><div>${esc(s.text)}${s.how ? `<span class="how">${parts(s.how)}</span>` : ""}</div></li>`;
+  return `<li><span class="n">${s.number}</span><div class="t">${esc(s.text)}${s.how ? `<span class="how">${parts(s.how)}</span>` : ""}</div><span class="ok">${esc(t.manual.asExpected)}<i></i></span></li>`;
 }
 
 type Pictures = ReadonlyMap<Scene, string>;
 
-function items(list: ManualItem[], pictures: Pictures): string {
-  return list
-    .map((item) => {
-      switch (item.kind) {
-        case "scene": {
-          const src = pictures.get(item);
-          const cap =
-            esc(t.manual.screenOf(item.title, item.app === "desktop")) + (src && item.shot?.draft ? ` <span class="draft">${esc(t.manual.draft)}</span>` : "");
-          return `<section class="scene"><div class="cap">${cap}</div><div class="body${src ? "" : " words"}">${
-            src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""
-          }<ol class="steps">${[...item.steps, null].map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">⏱ ${esc(w.text)}</li>`).join("") + (s ? step(s) : "")).join("")}</ol></div></section>`;
-        }
-        case "action":
-          return `<ol class="steps loose">${step(item.step)}</ol>`;
-        case "quiet":
-          return `<p class="quiet"><b>${esc(t.manual.quiet)}</b>　${item.texts.map(esc).join("・")}</p>`;
-        case "branch":
-          return `<div class="cond">◆ ${esc(item.label)}${item.taken === null ? "" : `<span class="took${item.taken ? "" : " not"}">${esc(item.taken ? t.manual.took : t.manual.notTaken)}</span>`}</div><div class="inner">${items(item.items, pictures)}</div>`;
-        case "loop":
-          return `<div class="loop"><div class="lh">↻ ${esc(item.label)}${item.times === null ? "" : ` <span>${esc(t.manual.loopTimes(item.times))}</span>`}</div>${items(item.items, pictures)}</div>`;
-        case "group":
-          return `<div class="group"><div class="gh">${esc(item.label)}</div>${items(item.items, pictures)}</div>`;
-      }
-    })
-    .join("");
+function label(item: Container, continued: boolean): string {
+  const more = continued ? esc(t.manual.continued) : "";
+  switch (item.kind) {
+    case "branch":
+      return `<div class="cond${item.taken === false ? " off" : ""}">◆ ${esc(item.label)}${more}${
+        item.taken === null ? "" : `<span class="took${item.taken ? "" : " not"}">${esc(item.taken ? t.manual.took : t.manual.notTaken)}</span>`
+      }</div>`;
+    case "loop":
+      return `<div class="lh">↻ ${esc(item.label)}${more}${item.times === null ? "" : ` <span>${esc(t.manual.loopTimes(item.times))}</span>`}</div>`;
+    case "group":
+      return `<div class="gh">${esc(item.label)}${more}</div>`;
+  }
 }
 
-function chapter(c: Chapter, pictures: Pictures): string {
-  const note = c.alongside.length > 0 ? `<p class="sub">${esc(t.manual.alongsideNote(c.alongside))}</p>` : "";
-  return `<h2 id="c${c.number}"><span class="n">${c.number}</span>${esc(c.title)}</h2>${note}<div class="chapter">${items(c.items, pictures)}</div>`;
+function leaf(item: Leaf, pictures: Pictures): string {
+  switch (item.kind) {
+    case "scene": {
+      const src = pictures.get(item);
+      const cap =
+        esc(t.manual.screenOf(item.title, item.app === "desktop")) + (src && item.shot?.draft ? ` <span class="draft">${esc(t.manual.draft)}</span>` : "");
+      const rows = [...item.steps, null]
+        .map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">⏱ ${esc(w.text)}</li>`).join("") + (s ? step(s) : ""))
+        .join("");
+      return `<section class="scene"><div class="cap">◎ ${cap}</div>${src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""}<ol class="steps">${rows}</ol></section>`;
+    }
+    case "action":
+      return `<ol class="steps">${step(item.step)}</ol>`;
+    case "quiet":
+      return `<p class="quiet"><b>${esc(t.manual.quiet)}</b>　${item.texts.map(esc).join("・")}</p>`;
+  }
+}
+
+function block(b: PageBlock, pictures: Pictures): string {
+  const inner = b.kind === "label" ? label(b.item, b.continued) : leaf(b.item, pictures);
+  return `<div class="blk${b.depth > 0 ? " in" : ""}" style="margin-left:${b.depth * 18}px">${inner}</div>`;
 }
 
 const STYLE = `
+@page{size:A4;margin:0}
 *{box-sizing:border-box}
-body{margin:0;background:#eceef1;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
-article{max-width:940px;margin:24px auto;background:#fff;border:1px solid #e1e4e8;border-radius:8px;padding:36px 44px 40px}
-h1{font-size:24px;margin:0 0 4px}
-.made{color:#50555e;font-size:12.5px;margin:0 0 18px}
+body{margin:0;background:#e6e8ec;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
+.sheet{position:relative;width:210mm;min-height:297mm;margin:24px auto;background:#fff;padding:15mm 16mm 20mm;box-shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.08);break-after:page}
+.sheet>header{display:flex;justify-content:space-between;gap:16px;border-bottom:1.5px solid #1b1d22;padding-bottom:5px;margin-bottom:18px;font-size:12px;color:#50555e}
+.sheet>header b{color:#1b1d22}
+.sheet>footer{position:absolute;left:16mm;right:16mm;bottom:8mm;display:flex;justify-content:space-between;font-size:11px;color:#8a8f98}
+.kicker{margin:40px 0 2px;color:#50555e;font-size:12.5px}
+h1{font-size:26px;line-height:1.4;margin:0 0 6px}
+.made{color:#50555e;font-size:12.5px;margin:0 0 20px}
 .draft{border:1px solid #c9ced6;border-radius:4px;padding:0 5px;font-size:11px;font-weight:400;color:#50555e}
-.lead{font-size:15px;color:#3a3e45;margin:0 0 16px}
+.lead{font-size:14.5px;line-height:1.85;color:#3a3e45;margin:0 0 20px}
 dl{display:grid;grid-template-columns:120px 1fr;margin:0;border-top:1px solid #e1e4e8}
 dt,dd{margin:0;padding:8px 0;border-bottom:1px solid #e1e4e8}
 dt{color:#50555e}
-.toc{list-style:none;padding:0;margin:22px 0 0}
-.toc li{display:flex;gap:10px;padding:4px 0}
+h3{font-size:14px;margin:32px 0 6px}
+.toc{list-style:none;padding:0;margin:0}
+.toc li{display:flex;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px dotted #c9ced6}
 .toc a{color:inherit;text-decoration:none}
+.toc .pg{margin-left:auto;color:#50555e;font-size:12.5px}
+.hint{color:#50555e;font-size:12.5px;margin:20px 0 0}
 .n{display:inline-grid;place-items:center;flex:none;width:22px;height:22px;border-radius:5px;background:#1b1d22;color:#fff;font-size:12px;font-weight:700}
-h2{display:flex;gap:10px;align-items:center;font-size:19px;margin:36px 0 4px;break-after:avoid}
+h2{display:flex;gap:12px;align-items:center;font-size:20px;margin:0 0 4px}
 h2 .n{width:28px;height:28px;font-size:14px}
-.sub{margin:0 0 10px 38px;color:#50555e;font-size:13px}
-.chapter{margin-left:38px}
-.scene{border:1px solid #e1e4e8;border-radius:8px;overflow:hidden;margin:0 0 14px;break-inside:avoid}
-.cap{padding:7px 12px;border-bottom:1px solid #e1e4e8;background:#f4f5f7;font-size:12.5px;color:#3a3e45;font-weight:600}
-.body{display:grid;grid-template-columns:1.45fr 1fr}
-.body.words{display:block}
-.shot{border-right:1px solid #e1e4e8;line-height:0}
+.sub{margin:0 0 14px 40px;color:#50555e;font-size:12.5px}
+.cont{margin:0 0 14px;color:#50555e;font-size:12.5px}
+.blk.in>*{border-left:2px solid #e1e4e8;padding-left:12px}
+.scene{margin:0 0 18px}
+.cap{font-size:12.5px;font-weight:600;margin:0 0 6px}
+.shot{border:1px solid #c9ced6;line-height:0}
 .shot img{width:100%;display:block}
-.steps{list-style:none;margin:0;padding:8px 14px}
-.steps li{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed #e1e4e8}
-.steps li:last-child{border-bottom:0}
+.steps{list-style:none;margin:8px 0 12px;padding:0;border-top:1px solid #e1e4e8}
+.steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #e1e4e8;break-inside:avoid}
+.steps .t{flex:1}
 .steps .n{width:21px;height:21px;border-radius:20px;background:#0a6fa8;margin-top:2px}
-.steps.loose{padding:0 0 6px}
-.steps li.wait{color:#50555e;font-size:12.5px;padding:4px 0;border:0}
+.ok{display:flex;gap:6px;align-items:flex-start;flex:none;font-size:12px;color:#50555e;padding-top:3px}
+.ok i{display:inline-block;width:14px;height:14px;border:1.5px solid #8a8f98;border-radius:2px;margin-top:2px}
+.steps li.wait{color:#50555e;font-size:12.5px;padding:5px 0}
 .how{display:block;color:#50555e;font-size:12.5px}
 .v{background:#e8f3fb;color:#0f3a66;border-radius:4px;padding:0 4px}
 .cond{display:inline-flex;gap:8px;align-items:center;margin:2px 0 10px;font-size:13px;background:#fff6d1;border:1px solid #d4a514;color:#5c4500;border-radius:6px;padding:3px 10px}
+.cond.off{opacity:.7}
 .took{background:#fff;border:1px solid #2f8a4c;color:#2f8a4c;border-radius:20px;padding:0 8px;font-size:11.5px}
 .took.not{border-color:#b9bec6;color:#50555e}
-.inner{margin:0 0 6px}
-.loop{border-left:3px solid #b9bec6;padding:2px 0 2px 16px;margin:0 0 14px}
-.lh{font-weight:600;margin-bottom:8px}
+.lh,.gh{font-weight:600;margin:0 0 10px}
 .lh span{font-weight:400;color:#50555e;font-size:12.5px}
-.group{margin:0 0 12px}
-.gh{font-weight:600;margin:6px 0}
 .quiet{color:#50555e;font-size:13px;margin:0 0 12px}
 .quiet b{color:#3a3e45}
-footer{max-width:940px;margin:0 auto 24px;color:#6b7079;font-size:12px;text-align:right}
-@media print{body{background:#fff}article{border:0;margin:0;padding:0}footer{margin:12px 0}}
+.privacy{color:#8a8f98;font-size:11.5px;margin-top:28px}
+@media print{body{background:#fff}.sheet{margin:0;box-shadow:none}}
 `;
 
-/** One HTML file of `doc`. `images` holds each scene's burned picture. */
+/** One HTML file of `doc`: the same A4 sheets ManualView shows. `pictures` holds each scene's burned picture. */
 export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOptions): string {
+  const shown: Pictures = options.noPictures ? new Map() : pictures;
+  const pages = pagesOf(doc, !options.noPictures);
+  const total = pages.length;
   const facts: [string, string[]][] = [
     [t.manual.uses, doc.uses],
     [t.manual.inputs, doc.inputs],
@@ -232,20 +258,40 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
   const dl = facts
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v.length > 0 ? v.map(esc).join("、") : esc(t.manual.none)}</dd>`)
     .join("");
+  const firstPage = (n: number) => pages.find((p) => p.kind === "body" && p.chapter.number === n && p.first)?.number ?? "";
   const toc = doc.chapters
-    .map((c) => `<li><span class="n">${c.number}</span><a href="#c${c.number}">${esc(c.title)}</a></li>`)
+    .map((c) => `<li><span class="n">${c.number}</span><a href="#p${firstPage(c.number)}">${esc(c.title)}</a><span class="pg">${firstPage(c.number)}</span></li>`)
     .join("");
+  const made = options.made ?? (doc.drafts > 0 && !options.noPictures ? t.manual.draftsOnly : null);
+  const foot = (n: number) => `<footer><span>${esc(t.manual.madeWith)}</span><span>${esc(t.manual.pageOf(n, total))}</span></footer>`;
+  const sheets = pages.map((page) => {
+    if (page.kind === "cover") {
+      return `<section class="sheet" id="p1">
+<p class="kicker">${esc(t.manual.title)}</p>
+<h1>${esc(doc.title)}</h1>
+${made ? `<p class="made">${esc(made)}</p>` : ""}
+${doc.description ? `<p class="lead">${esc(doc.description)}</p>` : ""}
+<dl>${dl}</dl>
+<h3>${esc(t.manual.contents)}</h3>
+<ol class="toc">${toc}</ol>
+<p class="hint">✎ ${esc(t.manual.checkHint)}</p>
+<p class="privacy">${esc(t.manual.footer(options.date))}</p>
+${foot(page.number)}</section>`;
+    }
+    const c = page.chapter;
+    const head = page.first
+      ? `<h2><span class="n">${c.number}</span>${esc(c.title)}</h2>${c.alongside.length > 0 ? `<p class="sub">${esc(t.manual.alongsideNote(c.alongside))}</p>` : `<div class="sub"></div>`}`
+      : `<p class="cont">${c.number}. ${esc(c.title)}${esc(t.manual.continued)}</p>`;
+    return `<section class="sheet" id="p${page.number}"><header><b>${esc(doc.title)}</b>${options.made ? `<span>${esc(options.made)}</span>` : ""}</header>
+${head}${page.blocks.map((b) => block(b, shown)).join("")}
+${foot(page.number)}</section>`;
+  });
   return `<!doctype html>
 <html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(doc.title)}</title><style>${STYLE}</style></head>
-<body><article>
-<h1>${esc(doc.title)}</h1>
-${options.made ? `<p class="made">${esc(options.made)}</p>` : doc.drafts > 0 && !options.noPictures ? `<p class="made">${esc(t.manual.draftsOnly)}</p>` : ""}
-${doc.description ? `<p class="lead">${esc(doc.description)}</p>` : ""}
-<dl>${dl}</dl>
-<ol class="toc">${toc}</ol>
-${doc.chapters.map((c) => chapter(c, options.noPictures ? new Map() : pictures)).join("\n")}
-</article><footer>${esc(t.manual.footer(options.date))}</footer></body></html>`;
+<body>
+${sheets.join("\n")}
+</body></html>`;
 }
 
 /** Every scene with a picture, in order. */
