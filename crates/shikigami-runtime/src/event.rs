@@ -162,6 +162,32 @@ pub enum RunEvent {
     /// A step waits for a person (e.g. to log in or approve MFA on the
     /// screen). Studio shows `message` until the step finishes.
     HumanActionRequired { step_id: StepId, message: String },
+    /// A picture of the screen a browser or desktop step works on, kept
+    /// for the flow's 手順書 (runs given `RunOptions::screens_dir`). Taken
+    /// the first time each step runs: before it acts, or after it for
+    /// steps that open, read or wait. `file` is its name in that folder.
+    /// `mark` is where the step's element is in the picture (pixels);
+    /// `regions` are the input fields and table cells there, which the
+    /// 手順書 can blur. Fields the run typed into are already covered in
+    /// the picture, password fields blacked out.
+    ScreenCaptured {
+        step_id: StepId,
+        file: String,
+        width: u32,
+        height: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mark: Option<ScreenRect>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        regions: Vec<ScreenRect>,
+        /// The page's or window's title, secrets masked.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// Equal for two pictures of the same view (the same address
+        /// scrolled to the same place): their marks share one picture.
+        /// An opaque digest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view: Option<String>,
+    },
     /// An interactive run stopped before `stepId` (breakpoint, step
     /// command, pause request) or after it failed (`reason: "error"`, with
     /// `error`). Nothing runs until it is resumed.
@@ -191,6 +217,15 @@ pub enum RunEvent {
         error: Option<RunError>,
         duration_ms: u64,
     },
+}
+
+/// A rectangle in a picture's pixels, from its top-left corner.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ScreenRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 fn is_false(b: &bool) -> bool {

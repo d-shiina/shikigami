@@ -183,6 +183,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 ## Steps
 
 - A step is { "type": "<step type>", "name": "<short label>", "params": { … } }, plus "saveAs": "<variable>" to keep its output. Control steps (control.if, control.forEach, control.try, …) hold child steps in "blocks", e.g. { "then": [ … ], "else": [ … ] } or { "body": [ … ] }.
+- Write node names and the flow's summary in the person's business words ("注文番号を入力", not "browser.fill #3"): Studio's 手順書 uses them as its headings.
 - Use only step types and params listed in the reference. Set every required param.
 - Params listed as "expression" take a bare expression without {{ }}: "condition": "count > 3". Every other text param is a template: "合計 {{ total }} 円"; a text that is exactly one {{ expr }} keeps the value's type.
 - Work on text, numbers, dates and lists with expression functions inside variable.set, not with extra steps: "expression": "sum(map(rows, r => num(r.金額)))".

@@ -45,6 +45,7 @@ export type StepTestResult = {
 };
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { ManualManifest, Mask } from "./manual";
 
 /** Why a pasted answer could not be read, written for the AI that wrote it. */
 export type AnswerProblem = {
@@ -266,6 +267,17 @@ export const extensionsApi = {
   restart: () => call<void>("restart_for_extensions"),
   /** A zip file picked in the file dialog, or null. */
   pickZip: () => call<string | null>("runner_pick", { kind: "file", start: null }),
+};
+
+/** The pictures behind a flow's 手順書 (src-tauri/src/manual.rs). */
+export const manualApi = {
+  /** The last completed run's pictures (none yet: no manifest) and what is hidden on them. */
+  get: (id: string) => call<{ manifest?: ManualManifest; masks: Record<string, Mask> }>("get_manual", { id }),
+  /** One picture as a data URL. */
+  image: (id: string, file: string) => call<string>("manual_image", { id, file }),
+  saveMasks: (id: string, masks: Record<string, Mask>) => call<void>("save_manual_masks", { id, masks }),
+  /** Writes the exported HTML to the Downloads folder; returns its path. */
+  saveExport: (name: string, html: string) => call<string>("save_manual_export", { name, html }),
 };
 
 export const api = {

@@ -31,6 +31,7 @@ use crate::event::{
 };
 use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 use crate::runlog::RunLog;
+use crate::screens::Moment;
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
@@ -67,6 +68,8 @@ struct EmitterInner {
     /// them, in whichever flow it ran (a called flow's variables are gone
     /// by the time the failure reaches the top).
     failed: Mutex<Option<(StepId, Value)>>,
+    /// Where the pictures for the 手順書 go, and which steps have one.
+    screens: Option<crate::screens::Screens>,
 }
 
 impl Emitter {
@@ -85,8 +88,34 @@ impl Emitter {
                 snapshot,
                 log: Mutex::new(log),
                 failed: Mutex::new(None),
+                screens: None,
             }),
             call_path: Arc::from([]),
+        }
+    }
+
+    /// Keeps pictures of the screens for the 手順書 in `dir` (see
+    /// [`crate::screens`]). Call before the emitter is shared.
+    pub(crate) fn with_screens(mut self, dir: PathBuf) -> Self {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.screens = Some(crate::screens::Screens::new(dir));
+        }
+        self
+    }
+
+    /// The next picture's path for `step`, unless it has one already (in
+    /// this called flow) or the run keeps none.
+    pub(crate) fn screen_path(&self, step: &StepId, extension: &str) -> Option<(PathBuf, String)> {
+        self.inner
+            .screens
+            .as_ref()?
+            .claim(&self.call_path, step, extension)
+    }
+
+    /// Gives back a claimed picture that was not taken.
+    pub(crate) fn release_screen(&self, step: &StepId) {
+        if let Some(screens) = self.inner.screens.as_ref() {
+            screens.release(&self.call_path, step);
         }
     }
 
@@ -1746,6 +1775,7 @@ impl Executor {
             .or_else(|| self.default_timeouts.get(&step.step_type).copied())
             .unwrap_or(self.default_timeout_ms);
 
+        self.capture_screen(step, &params, Moment::Before).await;
         let mut attempt = 1;
         loop {
             self.check_cancel()?;
@@ -1823,6 +1853,7 @@ impl Executor {
                         error: None,
                         will_retry: false,
                     });
+                    self.capture_screen(step, &params, Moment::After).await;
                     if let Some(name) = &step.save_as {
                         self.set_var(name, value, Some(&step.id));
                     }

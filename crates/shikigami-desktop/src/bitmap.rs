@@ -91,6 +91,28 @@ impl Rect {
 }
 
 impl Bitmap {
+    /// Paints `rect` (clipped to the picture) in one colour.
+    pub fn fill(&mut self, rect: Rect, rgba: [u8; 4]) {
+        let whole = Rect {
+            x: 0,
+            y: 0,
+            width: self.width,
+            height: self.height,
+        };
+        let Some(r) = rect.intersect(&whole) else {
+            return;
+        };
+        for y in r.y..r.bottom() {
+            let start = (y as usize * self.width as usize + r.x as usize) * 4;
+            for px in self.rgba[start..start + r.width as usize * 4]
+                .as_chunks_mut::<4>()
+                .0
+            {
+                *px = rgba;
+            }
+        }
+    }
+
     pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Self {
         debug_assert_eq!(rgba.len(), width as usize * height as usize * 4);
         Self {

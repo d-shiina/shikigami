@@ -37,6 +37,33 @@ async function failure(p: Promise<unknown>): Promise<AdapterError> {
 }
 
 describe("browser adapter", () => {
+  it("takes a picture for the 手順書 with the marked element and the fields to blur", async () => {
+    const r = { runId: "run_manual_shot" };
+    await adapter.call("open", { ...r, url: `${base}orders.html` });
+    await adapter.call("fill", { ...r, target: { label: "ユーザー名" }, value: "demo" });
+    await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "shikigami" });
+    const path = join(mkdtempSync(join(tmpdir(), "shikigami-manual-")), "001.jpg");
+    const shot = (await adapter.call("screenshot", {
+      ...r,
+      path,
+      report: true,
+      mark: { role: "button", name: "ログイン" },
+    })) as { path: string; width: number; height: number; mark: { x: number; width: number } | null; regions: unknown[]; title: string };
+    expect(existsSync(path)).toBe(true);
+    expect(readFileSync(path).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(shot.width).toBeGreaterThan(0);
+    expect(shot.mark?.width).toBeGreaterThan(0);
+    // The two input fields.
+    expect(shot.regions.length).toBeGreaterThanOrEqual(2);
+    expect(shot.title).toContain("ログイン");
+
+    const missing = (await adapter.call("screenshot", { ...r, path, report: true, mark: { role: "button", name: "ない" } })) as {
+      mark: unknown;
+    };
+    expect(missing.mark).toBeNull();
+    await adapter.call("close", r);
+  });
+
   it("logs in, reads the order table and ships an order", async () => {
     const opened = (await adapter.call("open", { ...run, url: base })) as { title: string };
     expect(opened.title).toContain("ログイン");

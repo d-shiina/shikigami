@@ -254,6 +254,69 @@
           ]
         },
         {
+          "description": "A picture of the screen a browser or desktop step works on, kept\nfor the flow's 手順書 (runs given `RunOptions::screens_dir`). Taken\nthe first time each step runs: before it acts, or after it for\nsteps that open, read or wait. `file` is its name in that folder.\n`mark` is where the step's element is in the picture (pixels);\n`regions` are the input fields and table cells there, which the\n手順書 can blur. Fields the run typed into are already covered in\nthe picture, password fields blacked out.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "screenCaptured"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "file": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "mark": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ScreenRect"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "regions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ScreenRect"
+              }
+            },
+            "title": {
+              "description": "The page's or window's title, secrets masked.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "view": {
+              "description": "Equal for two pictures of the same view (the same address\nscrolled to the same place): their marks share one picture.\nAn opaque digest.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "file",
+            "width",
+            "height"
+          ]
+        },
+        {
           "description": "An interactive run stopped before `stepId` (breakpoint, step\ncommand, pause request) or after it failed (`reason: \"error\"`, with\n`error`). Nothing runs until it is resumed.\n\n`variables` holds every variable's value at that point, masked and\ncut like `variableChanged` values. `revision` is the flow\nrevision the run is executing.",
           "type": "object",
           "properties": {
@@ -495,6 +558,36 @@
         "info",
         "warn",
         "error"
+      ]
+    },
+    "ScreenRect": {
+      "description": "A rectangle in a picture's pixels, from its top-left corner.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "width": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "height": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
       ]
     },
     "PauseReason": {
