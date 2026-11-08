@@ -2,12 +2,14 @@
 // first tab is the schedules, with the agent that fires them; past runs will
 // be the next tab. Studio edits `schedules.json` and the agent, a separate
 // process, picks the change up (docs/schedules.md).
-import { CalendarClock, Play, Square } from "lucide-react";
+import { CalendarClock, CirclePause, CirclePlay, Pencil, Play, Square, Trash2, TriangleAlert, Workflow } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen, type ScreenLock } from "../lib/api";
+import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
+import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, RowMenuButton, SearchBox, SelectionBar, StatusBadge, Switch, type Tone, toneDot, useTableView, ViewMenu } from "./DataTable";
 
 const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-primary focus:outline-none";
 
@@ -339,7 +341,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
   const setKind = (kind: WhenKind) => setDraft((d) => ({ ...d, when: d.when.kind === kind ? d.when : blankWhen(kind) }));
   return (
     <form
-      className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet"
+      className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4"
       onSubmit={async (e) => {
         e.preventDefault();
         const problem = whenProblem(draft.when);
@@ -475,68 +477,6 @@ function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | un
   );
 }
 
-function ScheduleRow({
-  item,
-  status,
-  screenLock,
-  onEdit,
-  onList,
-}: {
-  item: ScheduleView;
-  status: AgentStatus | null | undefined;
-  screenLock: ScreenLock | undefined;
-  onEdit: () => void;
-  onList: (list: ScheduleList) => void;
-}) {
-  const [confirm, setConfirm] = useState(false);
-  const r = t.runs;
-  const live = status?.schedules.find((s) => s.id === item.id);
-  const { flowName, published, usesScreen, ...schedule } = item;
-  const warn = !flowName ? r.flowMissing : !published ? r.notPublished : null;
-  // Said before the night it stops (docs/design/locked-runs.md).
-  const locks =
-    item.enabled && usesScreen && screenLock ? r.locksScreen(Math.max(1, Math.round(screenLock.afterSecs / 60)), screenLock.by === "inactivityLimit") : null;
-  return (
-    <li className={`rounded-lg border border-slate-200 bg-sheet p-3 shadow-sheet ${item.enabled ? "" : "opacity-70"}`}>
-      <div className="flex items-center gap-2">
-        <CalendarClock size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
-        <span className="min-w-0 truncate font-medium">{item.name}</span>
-        <label className="ml-auto flex items-center gap-1 text-xs text-slate-600">
-          <input
-            type="checkbox"
-            checked={item.enabled}
-            onChange={async (e) => onList(await api.saveSchedule({ ...schedule, enabled: e.target.checked }))}
-          />
-          {r.enabled}
-        </label>
-        <button type="button" className="text-xs text-brand-600 hover:underline" onClick={onEdit}>
-          {r.edit}
-        </button>
-        <button
-          type="button"
-          className={`text-xs ${confirm ? "font-semibold text-shu-600" : "text-slate-500 hover:text-shu-600"}`}
-          onBlur={() => setConfirm(false)}
-          onClick={async () => (confirm ? onList(await api.deleteSchedule(item.id)) : setConfirm(true))}
-        >
-          {confirm ? r.confirmDelete : r.delete}
-        </button>
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-slate-600">
-        <span>{describeWhen(item.when)}</span>
-        {flowName && flowName !== item.name && <span className="text-slate-500">{flowName}</span>}
-        {!item.enabled ? (
-          <span className="text-slate-500">{r.paused}</span>
-        ) : (
-          live?.next && <span className="text-slate-500">{r.next(shortTime(live.next))}</span>
-        )}
-        {live?.last && <span className="text-slate-500">{r.last(shortTime(live.last))}</span>}
-      </div>
-      {warn && <p className="mt-1 pl-6 text-xs text-shu-600">{warn}</p>}
-      {locks && <p className="mt-1 pl-6 text-xs leading-5 text-amber-700">{locks}</p>}
-    </li>
-  );
-}
-
 /**
  * Shown in a Remote Desktop session: closing the window locks the screen
  * and desktop flows stop, so offer to leave without locking (tscon).
@@ -639,59 +579,276 @@ export function RunsPage() {
     setTimeout(() => void poll(), 1500);
   };
   const blank: Schedule = { id: "", name: "", flowId: openId ?? "", enabled: true, when: blankWhen("daily") };
+  const schedules = list?.schedules ?? [];
+  const [query, setQuery] = useState("");
+  const [states, setStates] = useState<Set<State>>(new Set());
+  const [kinds, setKinds] = useState<Set<WhenKind>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const facts = (item: ScheduleView) => factsOf(item, status, list?.screenLock);
+  const q = query.trim().toLowerCase();
+  // Each filter's counts are over the rows the others keep.
+  const keep = (item: ScheduleView, skip?: "state" | "kind") =>
+    (skip === "state" || !states.size || states.has(facts(item).state)) &&
+    (skip === "kind" || !kinds.size || kinds.has(item.when.kind)) &&
+    (!q || [item.name, item.flowName ?? "", describeWhen(item.when)].join(" ").toLowerCase().includes(q));
+  const rows = schedules.filter((item) => keep(item));
+  const stateOptions = STATES.map((value) => ({ value, label: stateLabel(value), dot: toneDot(STATE_TONE[value]), count: schedules.filter((i) => keep(i, "state") && facts(i).state === value).length }));
+  const kindOptions = KINDS.map((value) => ({ value, label: r.kinds[value], count: schedules.filter((i) => keep(i, "kind") && i.when.kind === value).length })).filter(
+    (o) => o.count > 0 || kinds.has(o.value),
+  );
+  // Picked rows the list no longer shows drop out, so bulk actions only touch rows on screen.
+  const picked = rows.filter((item) => selected.has(item.id));
+  const plain = ({ flowName: _n, published: _p, usesScreen: _u, ...schedule }: ScheduleView): Schedule => schedule;
+  const changed = (next: ScheduleList) => {
+    setList(next);
+    setTimeout(() => void poll(), 1500);
+  };
+  const setEnabled = async (items: ScheduleView[], enabled: boolean) => {
+    try {
+      let next: ScheduleList | null = null;
+      for (const item of items) if (item.enabled !== enabled) next = await api.saveSchedule({ ...plain(item), enabled });
+      if (next) changed(next);
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+  const remove = async (items: ScheduleView[]) => {
+    try {
+      let next: ScheduleList | null = null;
+      for (const item of items) next = await api.deleteSchedule(item.id);
+      if (next) changed(next);
+      setSelected(new Set());
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+  const menu = (item: ScheduleView): MenuSpec[] => [
+    { label: r.edit, icon: Pencil, run: () => setEditing(plain(item)) },
+    { label: item.enabled ? r.disable : r.enable, icon: item.enabled ? CirclePause : CirclePlay, run: () => void setEnabled([item], !item.enabled) },
+    "-",
+    { label: r.delete, icon: Trash2, danger: true, confirm: r.confirmDelete, run: () => void remove([item]) },
+  ];
+  const columns = useColumns(facts, (item, on) => void setEnabled([item], on));
+  const view = useTableView(columns, { storageKey: "shikigami.studio.schedules.sort", initialSort: { column: "next", descending: false } });
+  const filtered = states.size + kinds.size > 0;
+  const lockNote = schedules.map((item) => facts(item).locks).find(Boolean);
   return (
-    <div className="h-full overflow-y-auto bg-paper">
-      <div className="mx-auto max-w-[680px] px-6 py-6">
-        <div className="mb-3 flex items-end gap-4 border-b border-slate-200">
-          <h2 className="pb-2 text-lg font-bold">{r.place}</h2>
-          <div role="tablist" className="flex">
-            <button type="button" role="tab" aria-selected="true" className="-mb-px border-b-2 border-ink px-2 pb-2 text-sm font-semibold">
-              {r.schedules}
-            </button>
-          </div>
-          {!editing && (
-            <button
-              type="button"
-              className="mb-2 ml-auto rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover"
-              onClick={() => setEditing(blank)}
-            >
-              {r.add}
-            </button>
-          )}
-        </div>
-        <p className="mb-4 text-xs text-slate-600">{r.intro}</p>
-        <AgentCard status={status} onChange={setStatus} idle={(list?.schedules.length ?? 0) === 0} />
+    <div className="@container h-full overflow-y-auto bg-paper">
+      <div className="mx-auto max-w-[1280px] px-6 pt-5 pb-3">
+        <AgentCard status={status} onChange={setStatus} idle={schedules.length === 0} />
         {list?.remote && <RemoteCard />}
         {error && <p className="mb-3 text-xs text-shu-600">{error}</p>}
+        {/* Finding and narrowing on the left; adding one, the filled button, at the end. */}
+        <div className="mb-3 flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {schedules.length > 0 && (
+              <>
+                <SearchBox value={query} onChange={setQuery} placeholder={r.search} hits={rows.length} />
+                <FacetFilter label={r.stateColumn} value={states} onChange={setStates} options={stateOptions} />
+                <FacetFilter label={r.kindColumn} value={kinds} onChange={setKinds} options={kindOptions} />
+                {filtered && (
+                  <ClearFilters
+                    onClear={() => {
+                      setStates(new Set());
+                      setKinds(new Set());
+                    }}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          {schedules.length > 0 && <ViewMenu view={view} />}
+          <button
+            type="button"
+            hidden={!!editing}
+            onClick={() => setEditing(blank)}
+            className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
+          >
+            ＋ {r.add}
+          </button>
+        </div>
         {editing && (
-          <div className="mb-4">
+          <div className="mb-4 max-w-[680px]">
+            <h3 className="mb-2 text-[13px] font-semibold">{editing.id ? r.editTitle : r.add}</h3>
             <ScheduleForm key={editing.id || "new"} initial={editing} onSaved={saved} onCancel={() => setEditing(null)} />
           </div>
         )}
-        {list && (
-          <>
-            <ul className="space-y-2">
-              {list.schedules.length === 0 && !editing && <li className="text-sm text-slate-500">{r.none}</li>}
-              {list.schedules.map((item) => {
-                const { flowName: _n, published: _p, usesScreen: _u, ...schedule } = item;
-                return (
-                  <ScheduleRow
-                    key={item.id}
-                    item={item}
-                    status={status}
-                    screenLock={list.screenLock}
-                    onEdit={() => setEditing(schedule)}
-                    onList={(next) => {
-                      setList(next);
-                      setTimeout(() => void poll(), 1500);
-                    }}
-                  />
-                );
-              })}
-            </ul>
-          </>
-        )}
+        {list &&
+          (schedules.length === 0 ? (
+            !editing && (
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center text-[13px] text-slate-600">
+                <CalendarClock size={22} strokeWidth={1.5} className="text-slate-400" aria-hidden="true" />
+                {r.none}
+              </div>
+            )
+          ) : (
+            <>
+              {/* The screen-lock warning is the same for every row it applies to: said once, marked on the rows. */}
+              {lockNote && (
+                <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-[12px] leading-5 text-amber-700">
+                  <TriangleAlert size={14} strokeWidth={1.75} className="mt-[3px] shrink-0 text-amber-600" aria-hidden="true" />
+                  {lockNote}
+                </p>
+              )}
+              <DataTable
+                columns={columns}
+                view={view}
+                rows={rows}
+                total={schedules.length}
+                rowKey={(item) => item.id}
+                onOpen={(item) => setEditing(plain(item))}
+                selected={new Set(picked.map((i) => i.id))}
+                onSelect={setSelected}
+                empty={t.list.notFound}
+                actionsWidth={44}
+                rowActions={(item) => <RowMenuButton items={() => menu(item)} />}
+                rowProps={(item) => ({ onContextMenu: menuFor(() => menu(item)) })}
+              />
+              <SelectionBar count={picked.length} onClear={() => setSelected(new Set())}>
+                <BulkButton icon={CirclePlay} label={r.enable} onClick={() => setEnabled(picked, true)} />
+                <BulkButton icon={CirclePause} label={r.disable} onClick={() => setEnabled(picked, false)} />
+                <BulkButton icon={Trash2} danger label={r.delete} confirmLabel={r.confirmDeleteMany(picked.length)} onClick={() => remove(picked)} />
+              </SelectionBar>
+            </>
+          ))}
+        {/* What this place does, said once under the list. */}
+        <p className="mt-3 text-[12px] leading-relaxed text-slate-500">{r.intro}</p>
       </div>
     </div>
   );
+}
+
+type State = "running" | "on" | "blocked" | "off";
+const STATES: State[] = ["running", "on", "blocked", "off"];
+const STATE_TONE: Record<State, Tone> = { running: "blue", on: "green", blocked: "red", off: "slate" };
+const stateLabel = (s: State) => (s === "running" ? t.runs.running : s === "on" ? t.runs.stateOn : s === "blocked" ? t.runs.stateBlocked : t.runs.stateOff);
+
+/** What a row says besides its schedule: the agent's times and what keeps it from running. */
+function factsOf(item: ScheduleView, status: AgentStatus | null | undefined, screenLock: ScreenLock | undefined) {
+  const r = t.runs;
+  const live = status?.schedules.find((s) => s.id === item.id);
+  const running = !!status?.running.some((run) => run.scheduleId === item.id);
+  const warn = !item.flowName ? r.flowMissing : !item.published ? r.notPublished : null;
+  const state: State = !item.enabled ? "off" : warn ? "blocked" : running ? "running" : "on";
+  // Said before the night it stops (docs/design/locked-runs.md).
+  const locks =
+    item.enabled && item.usesScreen && screenLock ? r.locksScreen(Math.max(1, Math.round(screenLock.afterSecs / 60)), screenLock.by === "inactivityLimit") : null;
+  return { state, warn, locks, next: item.enabled ? live?.next : undefined, last: live?.last };
+}
+
+function TimeCell({ at }: { at: string | undefined }) {
+  return (
+    <span className="text-[12.5px] whitespace-nowrap text-slate-600 tabular-nums" title={at ? new Date(at).toLocaleString("ja-JP") : undefined}>
+      {at ? shortTime(at) : "—"}
+    </span>
+  );
+}
+
+function useColumns(facts: (item: ScheduleView) => ReturnType<typeof factsOf>, onEnabled: (item: ScheduleView, on: boolean) => void): Column<ScheduleView>[] {
+  const r = t.runs;
+  return [
+    {
+      id: "name",
+      header: r.name,
+      sortValue: (item) => item.name,
+      cell: (item) => {
+        const { locks } = facts(item);
+        return (
+          <span className="flex min-w-0 items-center gap-2.5">
+            <CalendarClock size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+            <span className="min-w-0">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate font-medium">{item.name || item.flowName}</span>
+                {locks && (
+                  <span className="shrink-0 text-amber-600" role="img" aria-label={r.locksShort} title={locks}>
+                    <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </span>
+                )}
+              </span>
+              {/* The flow it runs, under the name (as a secret's user name): its own column is for grouping. */}
+              {item.flowName ? (
+                <span className="flex min-w-0 items-center gap-1 text-[12px] text-slate-500">
+                  <Workflow size={12} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                  <span className="truncate">{item.flowName}</span>
+                </span>
+              ) : (
+                <span className="block text-[12px] text-shu-600">{r.flowMissing}</span>
+              )}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      id: "flow",
+      header: r.flow,
+      width: "w-[200px]",
+      hideBelow: 860,
+      hiddenByDefault: true,
+      sortValue: (item) => item.flowName ?? "",
+      group: (item) => ({ key: item.flowId, label: item.flowName ?? r.flowMissing }),
+      cell: (item) =>
+        item.flowName ? (
+          <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-slate-700">
+            <Workflow size={13} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+            <span className="truncate">{item.flowName}</span>
+          </span>
+        ) : (
+          <span className="text-[12.5px] text-shu-600">{r.flowMissing}</span>
+        ),
+    },
+    {
+      id: "when",
+      header: r.when,
+      width: "w-[230px]",
+      sortValue: (item) => `${KINDS.indexOf(item.when.kind)}${describeWhen(item.when)}`,
+      group: (item) => ({ key: item.when.kind, order: KINDS.indexOf(item.when.kind), label: r.kinds[item.when.kind] }),
+      cell: (item) => {
+        const text = describeWhen(item.when);
+        return (
+          <span className="block truncate text-[12.5px] text-slate-700" title={text}>
+            {text}
+          </span>
+        );
+      },
+    },
+    {
+      id: "state",
+      header: r.stateColumn,
+      width: "w-[132px]",
+      sortValue: (item) => STATES.indexOf(facts(item).state),
+      group: (item) => {
+        const { state } = facts(item);
+        return { key: state, order: STATES.indexOf(state), label: <StatusBadge tone={STATE_TONE[state]} label={stateLabel(state)} /> };
+      },
+      cell: (item) => {
+        const { state, warn } = facts(item);
+        return <StatusBadge tone={STATE_TONE[state]} label={stateLabel(state)} title={warn ?? undefined} />;
+      },
+    },
+    {
+      id: "next",
+      header: r.nextColumn,
+      width: "w-[108px]",
+      // Off and never-run rows go last either way.
+      sortValue: (item) => facts(item).next ?? "9999",
+      cell: (item) => <TimeCell at={facts(item).next} />,
+    },
+    {
+      id: "last",
+      header: r.lastColumn,
+      width: "w-[108px]",
+      hideBelow: 1000,
+      sortValue: (item) => facts(item).last ?? "",
+      cell: (item) => <TimeCell at={facts(item).last} />,
+    },
+    {
+      id: "enabled",
+      header: r.enabled,
+      width: "w-[88px]",
+      hideable: false,
+      sortValue: (item) => (item.enabled ? 0 : 1),
+      cell: (item) => <Switch checked={item.enabled} label={item.enabled ? r.disable : r.enable} onChange={(on) => onEnabled(item, on)} />,
+    },
+  ];
 }
