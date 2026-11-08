@@ -86,6 +86,61 @@ pub fn frame_sides(
     ]
 }
 
+/// A rectangle on screen: left, top, right, bottom.
+pub type Rect = (i32, i32, i32, i32);
+
+/// Where the picker's tag naming the window goes: just above the window's
+/// top-left corner, outside it, so it hides nothing of the app; inside the
+/// corner (past the frame, `inset`) when the window reaches the top of the
+/// screen (maximised). `size` is the tag's width and height.
+pub fn window_tag_at(window: Rect, size: (i32, i32), screen: Rect, inset: i32) -> (i32, i32) {
+    let (w, h) = size;
+    let (x, y) = if window.1 - h >= screen.1 {
+        (window.0, window.1 - h)
+    } else {
+        (window.0 + inset, window.1 + inset)
+    };
+    (clamp_x(x, w, screen), y)
+}
+
+/// Where the tag naming the part under the mouse goes: just below the part,
+/// else just above it (at the bottom of the screen), else inside its
+/// bottom edge (a part as tall as the screen).
+pub fn part_tag_at(part: Rect, size: (i32, i32), screen: Rect, gap: i32) -> (i32, i32) {
+    let (w, h) = size;
+    let y = if part.3 + gap + h <= screen.3 {
+        part.3 + gap
+    } else if part.1 - gap - h >= screen.1 {
+        part.1 - gap - h
+    } else {
+        (part.3 - h).max(screen.1)
+    };
+    (clamp_x(part.0, w, screen), y)
+}
+
+/// Where the picker's small banner (how to stop) goes on the screen the
+/// mouse is on: at the bottom in the middle, out of the way of the app's
+/// title and menus; at the top while the mouse is near the bottom spot,
+/// so it never sits on what the user wants to point at.
+pub fn pick_banner_at(
+    screen: Rect,
+    size: (i32, i32),
+    mouse: (i32, i32),
+    margin: i32,
+) -> (i32, i32) {
+    let (w, h) = size;
+    let x = screen.0 + (screen.2 - screen.0 - w) / 2;
+    let bottom = screen.3 - h - margin;
+    // Near: within a banner's height of it, all round.
+    let near =
+        mouse.0 >= x - h && mouse.0 < x + w + h && mouse.1 >= bottom - 2 * h && mouse.1 < screen.3;
+    (x, if near { screen.1 + margin } else { bottom })
+}
+
+fn clamp_x(x: i32, width: i32, screen: Rect) -> i32 {
+    x.min(screen.2 - width).max(screen.0)
+}
+
 /// The banner's second line while picking: which window, then which part,
 /// e.g. `［請求書 - Excel］ button「保存」`. A long title is cut so the part
 /// still shows.
@@ -204,5 +259,52 @@ mod tests {
         assert!(line.contains('…'));
         assert!(line.ends_with(" edit"));
         assert_eq!(line.chars().count(), 40 + 2 + 5);
+    }
+
+    #[test]
+    fn the_window_tag_sits_outside_unless_the_window_is_at_the_top() {
+        let screen = (0, 0, 1920, 1040);
+        assert_eq!(
+            window_tag_at((100, 200, 900, 700), (240, 24), screen, 4),
+            (100, 176)
+        );
+        // Maximised: inside the corner, past the frame.
+        assert_eq!(
+            window_tag_at((0, 0, 1920, 1040), (240, 24), screen, 4),
+            (4, 4)
+        );
+        // Off the right edge: pulled back onto the screen.
+        assert_eq!(
+            window_tag_at((1800, 300, 2400, 900), (240, 24), screen, 4).0,
+            1680
+        );
+    }
+
+    #[test]
+    fn the_part_tag_goes_below_else_above_else_inside() {
+        let screen = (0, 0, 1920, 1040);
+        assert_eq!(
+            part_tag_at((50, 100, 150, 130), (120, 24), screen, 4),
+            (50, 134)
+        );
+        assert_eq!(
+            part_tag_at((50, 1000, 150, 1030), (120, 24), screen, 4),
+            (50, 972)
+        );
+        assert_eq!(
+            part_tag_at((0, 0, 1920, 1040), (120, 24), screen, 4),
+            (0, 1016)
+        );
+    }
+
+    #[test]
+    fn the_pick_banner_moves_out_of_the_way() {
+        let screen = (0, 0, 1920, 1040);
+        let (x, y) = pick_banner_at(screen, (320, 36), (100, 100), 16);
+        assert_eq!((x, y), (800, 988));
+        assert_eq!(
+            pick_banner_at(screen, (320, 36), (900, 1000), 16),
+            (800, 16)
+        );
     }
 }
