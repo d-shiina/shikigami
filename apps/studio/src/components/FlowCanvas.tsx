@@ -1728,6 +1728,8 @@ export function FlowCanvas() {
       // Pointing anywhere inside a frame points at its step, as its head does: a branch
       // lights its ways out and a loop sends its line round wherever in it the pointer is.
       onPaneMouseMove={(event) => {
+        // The pane hears moves over the nodes and lines on it too: those keep their own focus.
+        if ((event.target as Element).closest(".react-flow__node, .react-flow__edge, .react-flow__edgelabel-renderer")) return;
         const at = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
         const frame = at ? frameAt(layout.frames, at.x, at.y) : null;
         if (frame) focus.set(frame.id);
