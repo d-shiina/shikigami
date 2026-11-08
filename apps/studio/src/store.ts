@@ -110,30 +110,39 @@ export type StepPlace = { path: string[]; stepId: string };
 
 /**
  * Where an error of the open flow's `stepId` happened: down inside the
- * called flow when it failed in there (`details.subFlow`, which names the
- * innermost flow only, so the calls leading to it are found on the chart).
+ * called flow when it failed in there. `details.subFlow` names that flow and
+ * (`callPath`) the calls below `stepId` that led to it. A record without the
+ * calls is searched on the chart, and only a single route counts: one flow
+ * called from two places could be either.
  */
 export function errorPlace(root: Flow | null, called: Record<string, Flow>, stepId: string, details: unknown): StepPlace {
-  const sub = details && typeof details === "object" ? (details as { subFlow?: { flowId?: unknown; stepId?: unknown } }).subFlow : undefined;
+  const sub = details && typeof details === "object" ? (details as { subFlow?: { flowId?: unknown; stepId?: unknown; callPath?: unknown } }).subFlow : undefined;
   const flowId = typeof sub?.flowId === "string" ? sub.flowId : null;
   const inner = typeof sub?.stepId === "string" ? sub.stepId : null;
-  if (!root || !flowId || !inner) return { path: [], stepId };
+  const outer: StepPlace = { path: [], stepId };
+  if (!root || !flowId || !inner) return outer;
+  const leadsThere = (path: string[]) => {
+    const chain = diveChain(root, called, path);
+    const here = chain.length === path.length ? chain.at(-1)?.flow : undefined;
+    return here?.id === flowId && findStep(here.steps ?? [], inner) !== null;
+  };
+  if (Array.isArray(sub?.callPath)) {
+    const path = [stepId, ...sub.callPath.filter((id): id is string => typeof id === "string")];
+    return leadsThere(path) ? { path, stepId: inner } : outer;
+  }
   const calls = (steps: Step[]): string[] =>
     steps.flatMap((s) => [...(s.type === CALL && s.id ? [s.id] : []), ...Object.values(s.blocks ?? {}).flatMap(calls)]);
-  const search = (path: string[]): string[] | null => {
+  const found: string[][] = [];
+  const search = (path: string[]) => {
+    if (found.length > 1) return;
     const chain = diveChain(root, called, path);
-    if (chain.length !== path.length) return null;
-    const here = chain.at(-1)!.flow;
-    if (here.id === flowId && findStep(here.steps ?? [], inner)) return path;
-    if (path.length >= 8) return null;
-    for (const id of calls(here.steps ?? [])) {
-      const found = search([...path, id]);
-      if (found) return found;
-    }
-    return null;
+    if (chain.length !== path.length) return;
+    if (leadsThere(path)) found.push(path);
+    if (path.length >= 8) return;
+    for (const id of calls(chain.at(-1)!.flow.steps ?? [])) search([...path, id]);
   };
-  const path = search([stepId]);
-  return path ? { path, stepId: inner } : { path: [], stepId };
+  search([stepId]);
+  return found.length === 1 ? { path: found[0]!, stepId: inner } : outer;
 }
 
 /**
@@ -447,8 +456,8 @@ export type StudioState = {
   clearBreakpoints(): void;
   /** Folds a frame to its head on the chart, or opens it again. */
   toggleFold(stepId: string, flowId?: string): void;
-  /** Opens the folded frames around a step of the open flow, so it can be shown. */
-  unfoldTo(stepId: string): void;
+  /** Opens the folded frames around a step of the open flow (or of `inFlow`, a called one), so it can be shown. */
+  unfoldTo(stepId: string, inFlow?: Flow): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -1199,6 +1208,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (path.length === 0) return get().goTo(stepId);
         // A call the chart can no longer open: show the call step instead.
         if (diveChain(flow, called, path).length !== path.length) return get().goTo(path[0]!);
+        // Folded frames around it in the called flow open, as `goTo` does in the open flow.
+        get().unfoldTo(stepId, diveChain(flow, called, path).at(-1)!.flow);
         set({ dive: path, selection: null, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1, inside: callKey(path) } });
       },
 
@@ -1650,8 +1661,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ folded });
       },
 
-      unfoldTo(stepId) {
-        const flow = get().flow;
+      unfoldTo(stepId, inFlow) {
+        const flow = inFlow ?? get().flow;
         const current = flow ? get().folded[flow.id] : undefined;
         if (!flow || !current) return;
         const around = new Set(ancestorsOf(flow.steps ?? [], stepId));

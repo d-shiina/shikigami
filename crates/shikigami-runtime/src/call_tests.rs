@@ -167,6 +167,29 @@ async fn the_called_flow_cannot_see_the_callers_variables() {
 }
 
 #[tokio::test]
+async fn a_failure_deep_inside_says_which_calls_led_there() {
+    let mut leak = Flow::new("覗く");
+    leak.id = "scn_leak".into();
+    leak.steps = vec![Step::new("log.message").with_param("message", "{{ nope }}")];
+    let leak = with_ids(leak, "l");
+    let mut middle = Flow::new("中");
+    middle.id = "scn_middle".into();
+    // The same flow called from two places; the first call is off.
+    let mut first = call("scn_leak", json!({}), json!({}));
+    first.disabled = true;
+    middle.steps = vec![first, call("scn_leak", json!({}), json!({}))];
+    let middle = with_ids(middle, "c");
+    let main = caller(vec![call("scn_middle", json!({}), json!({}))], vec![]);
+    let (report, _) = run_with(&Runtime::new(), main, vec![middle, leak]).await;
+    let error = report.error.expect("error");
+    assert_eq!(error.step_id.as_ref().map(StepId::as_str), Some("m1"));
+    let sub = &error.details.expect("details")["subFlow"];
+    assert_eq!(sub["flowId"], json!("scn_leak"));
+    assert_eq!(sub["stepId"], json!("l1"));
+    assert_eq!(sub["callPath"], json!(["c2"]));
+}
+
+#[tokio::test]
 async fn failures_inside_are_caught_by_the_caller() {
     let mut boom = Flow::new("失敗する");
     boom.id = "scn_boom".into();
