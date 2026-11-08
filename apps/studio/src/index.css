@@ -255,6 +255,10 @@ textarea,
 .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
 }
+/* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
+.react-flow__edgelabel-renderer {
+  z-index: 2;
+}
 /* A loop's foot: the bottom edge of its frame, a band like its head, that says where the loop ends. */
 .flow-foot {
   border-color: var(--color-slate-300);

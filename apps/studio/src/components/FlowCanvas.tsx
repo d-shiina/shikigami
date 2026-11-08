@@ -530,8 +530,8 @@ function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sou
       <>
         <BaseEdge id={id} path={path} style={style} />
         <EdgeLabelRenderer>
-          {/* The answer beside the line where it leaves the decision, as the "はい" going down: the line stays whole. */}
-          {label && <AnswerLabel x={x0 + 6} y={y0 - 18} text={label} />}
+          {/* The answer on the line just where it leaves the decision, as the "はい" going down. */}
+          {label && <AnswerLabel x={x0 + 8} y={y0} text={label} from="left" />}
           {/* When it leaves, beside the line where it turns into the foot (as 「次の 1 件へ」 on the line back). */}
           {edge.exit && (
             <span
@@ -555,7 +555,7 @@ function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sou
   const offset = centerY === undefined ? 20 : Math.max(0, Math.min(12, centerY - sourceY - 1));
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset, borderRadius: 4 });
   const straight = Math.abs(sourceX - targetX) <= 1;
-  // An answer out of a decision ("はい", "いいえ"): beside the line just after it leaves, not on it.
+  // An answer out of a decision ("はい", "いいえ"): on the line just after it leaves, not down by the next step.
   const answer = label && source.endsWith(":decide");
   return (
     <>
@@ -563,7 +563,7 @@ function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sou
       <EdgeLabelRenderer>
         {answer ? (
           <>
-            <AnswerLabel x={targetX + 6} y={(straight || centerY === undefined ? sourceY : centerY) + 3} text={label} />
+            <AnswerLabel x={targetX} y={(straight || centerY === undefined ? sourceY : centerY) + 18} text={label} />
             <InsertButton edgeId={id} data={edge} x={targetX} y={straight ? (sourceY + targetY) / 2 + 6 : targetY - 8} />
           </>
         ) : label ? (
@@ -590,15 +590,16 @@ function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sou
 }
 
 /**
- * The answer a line out of a decision takes ("はい", "いいえ"), written
- * beside the line just where it leaves, the way a flowchart labels it: the
- * line runs on whole, its colour unbroken when a run took it.
+ * The answer a line out of a decision takes ("はい", "いいえ"), on the line
+ * just where it leaves the decision, the way a flowchart labels it. Above
+ * every line, a run's coloured one too, so the line never crosses it.
  */
-function AnswerLabel({ x, y, text }: { x: number; y: number; text: React.ReactNode }) {
+function AnswerLabel({ x, y, text, from = "center" }: { x: number; y: number; text: React.ReactNode; from?: "center" | "left" }) {
+  // Centred on the point, or (on a line going right) starting at it; above the lines, a run's too (see index.css).
   return (
     <span
-      style={{ transform: `translate(${x}px, ${y}px)` }}
-      className="pointer-events-none absolute top-0 left-0 text-[11.5px] leading-4 font-semibold whitespace-nowrap text-ink"
+      style={{ transform: `translate(${x}px, ${y}px) translate(${from === "center" ? "-50%" : "0"}, -50%)` }}
+      className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
     >
       {text}
     </span>
