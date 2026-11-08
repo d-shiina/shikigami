@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TERMINAL_H } from "./layout";
+import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TAIL_W, TERMINAL_H } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -330,7 +330,7 @@ describe("layoutFlow", () => {
     // Under the last node of its block, on its line.
     expect(pos["end:if:then"]!.y).toBeGreaterThan(pos.t!.y);
     expect(pos["end:if:else"]!.y).toBeGreaterThan(pos.e2!.y);
-    expect(pos["end:if:then"]!.x + 12).toBe(pos.t!.x + NODE_W / 2);
+    expect(pos["end:if:then"]!.x + TAIL_W / 2).toBe(pos.t!.x + NODE_W / 2);
     // The branches run through their "+" into the end of the loop's body, and that back to the start of the body.
     const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
     expect(into("end:if:then")).toEqual(["t"]);
