@@ -7,7 +7,8 @@
 // from the end of its body back to where its body starts, inside its frame.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
+import { headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
+import { typeTitle } from "../lib/sentence";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -24,13 +25,13 @@ const END_GAP = 24;
 export const TAIL_SIZE = 24;
 const TAIL_GAP = 16;
 /**
- * Room beside a step for its variable chips: the ones it reads sit off its
- * left edge (up to two side by side), the ones it writes off its right (one
- * per row). A chip is at most 80px, after a 16px lead.
+ * Room beside a step: its sockets (where a variable's line starts or ends) sit
+ * on its edges, and the curve of a lit variable line swings out a little past
+ * them. Variable chips sit inside the step's rows, so nothing else needs room.
  */
-export const READ_ROOM = 16 + 80 + 4 + 80;
-export const WRITE_ROOM = 16 + 80;
-/** Between side-by-side lanes: one lane's write chips, then the next one's read chips. */
+export const READ_ROOM = 20;
+export const WRITE_ROOM = 20;
+/** Between side-by-side lanes. */
 const GAP_X = READ_ROOM + WRITE_ROOM + 32;
 /**
  * Every step with blocks (a loop, if, try, …) is drawn as a frame that holds
@@ -168,6 +169,8 @@ export type LayoutEdge = {
   intoDecide?: boolean;
   /** For a loop's "いいえ": the x it runs down at, on the right of the frame. */
   railX?: number;
+  /** A wait's line back: the answer it takes ("いいえ"), on the line beside its decision; its label says what happens. */
+  answer?: string;
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -280,6 +283,29 @@ function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
   return { w: NODE_W, h: nodeHeight(step, defs.get(step.type), extra.get(step.id ?? "") ?? 0) };
 }
 
+/**
+ * Roughly how wide a frame's head needs to be to show its title, name and
+ * summary without cutting them (see FrameHead): a frame is at least this wide,
+ * up to HEAD_MAX, past which the name and summary are cut and the whole
+ * sentence is in the head's tooltip.
+ */
+const HEAD_MAX = 520;
+function textWidth(s: string, px: number): number {
+  let w = 0;
+  for (const ch of s) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? px : px * 0.6;
+  return w;
+}
+function headWidth(step: Step, defs: Defs): number {
+  const name = step.name ?? "";
+  const summary = headSummary(step);
+  let w = 12 + 15 + 8 + textWidth(typeTitle(step, defs.get(step.type)), 12.5) + 8 + 22 + 12;
+  if (name) w += 8 + textWidth(name, 12.5);
+  if (summary) w += 8 + 12 + textWidth(summary, 11.5);
+  if (step.type === SWITCH) w += 8 + 80;
+  if (OPTIONAL_BLOCKS[step.type] && !step.blocks?.[OPTIONAL_BLOCKS[step.type]!]?.length) w += 8 + 110;
+  return Math.ceil(Math.min(w, HEAD_MAX));
+}
+
 function measureList(steps: Step[], defs: Defs, extra: Extra, collapsed: Collapsed, tail = false): Size {
   if (steps.length === 0) return SLOT;
   let w = 0;
@@ -330,7 +356,10 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
       : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM;
   const room = (circling ? 32 : BLOCK_ROOM) * 2;
-  return { w: Math.max(own.w, w + room), h };
+  // The frame is drawn wider than this by its sides (less the room counted here).
+  const side = circling ? LOOP_FRAME : BLOCK_FRAME;
+  const overhang = side.left + side.right - room;
+  return { w: Math.max(own.w, w + room, headWidth(step, defs) - overhang), h };
 }
 
 class Builder {
@@ -353,7 +382,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -470,8 +499,14 @@ class Builder {
     let laneX = x + (span - total) / 2;
     const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
     const inW = Math.max(total, afterSize?.w ?? 0);
-    const left = Math.min(cx - inW / 2, cx - own.w / 2) - side.left;
-    const right = Math.max(cx + inW / 2, cx + own.w / 2) + side.right;
+    let left = Math.min(cx - inW / 2, cx - own.w / 2) - side.left;
+    let right = Math.max(cx + inW / 2, cx + own.w / 2) + side.right;
+    // Wide enough for the head to show its title, name and summary.
+    const short = headWidth(step, this.defs) - (right - left);
+    if (short > 0) {
+      left -= short / 2;
+      right += short / 2;
+    }
     const height = measure(step, this.defs, this.extra, this.collapsed).h;
     this.nodes.push({
       id,
@@ -559,7 +594,7 @@ class Builder {
       // A wait: its block, then the decision; "いいえ" back up to the block, "はい" on out.
       this.edge(id, placed.entry, undefined, undefined, true);
       for (const e of placed.exits) this.edge(e, decide);
-      this.edge(decide, placed.entry, `${no}：${loopBackLabel(step)}`, undefined, undefined, { ...back, fromDecide: true });
+      this.edge(decide, placed.entry, loopBackLabel(step), undefined, undefined, { ...back, fromDecide: true, answer: no });
       this.edge(decide, join, yes);
     } else {
       // Decide first: "はい" into the body, its end back into the decision, "いいえ" down the right and out.

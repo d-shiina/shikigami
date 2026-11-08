@@ -361,8 +361,17 @@ describe("layoutFlow", () => {
     // A wait asks after its block: "いいえ" back up to the block, "はい" on out.
     expect(layout.edges.find((e) => e.source === "end:w:check")?.target).toBe("join:w:decide");
     expect(layout.nodes.find((n) => n.id === "join:w:decide")?.data).toMatchObject({ question: "ok？" });
-    expect(layout.edges.find((e) => e.source === "join:w:decide" && e.target === "c")).toMatchObject({ loop: true, fromDecide: true, label: "いいえ：もう一度確かめる" });
+    expect(layout.edges.find((e) => e.source === "join:w:decide" && e.target === "c")).toMatchObject({ loop: true, fromDecide: true, answer: "いいえ", label: "もう一度確かめる" });
     expect(layout.edges.find((e) => e.source === "join:w:decide" && e.target === "join:w")?.label).toBe("はい");
     expect(layout.edges.find((e) => e.source === "join:w")?.label).toBe("条件を満たしたら");
+  });
+
+  it("keeps a frame close around its steps, but wide enough for its head", () => {
+    const frame = (steps: Step[], id: string) => layoutFlow(steps, defs).frames.find((f) => f.id === id)!;
+    const short = frame([{ id: "r", type: "control.repeat", params: { count: 3 }, blocks: { body: [log("a")] } }], "r");
+    expect(short.width).toBeLessThan(NODE_W + 160);
+    const named = frame([{ id: "r", type: "control.repeat", name: "受注データを一件ずつ取り込んで登録する", params: { count: 3 }, blocks: { body: [log("a")] } }], "r");
+    expect(named.width).toBeGreaterThan(short.width);
+    expect(named.width).toBeLessThanOrEqual(520);
   });
 });

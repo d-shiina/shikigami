@@ -255,6 +255,8 @@ type BlockEdgeData = {
   intoDecide?: boolean;
   /** A loop's "いいえ": the x it runs down at. */
   railX?: number;
+  /** A wait's line back: the answer it takes, on the line beside its decision. */
+  answer?: string;
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -324,7 +326,21 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
     return (
       <>
         <BaseEdge id={id} path={`${start} ${end}`} style={style} markerEnd={markerEnd} />
-        {sideLabel(detourX + 8, turnY - 20)}
+        {edge.fromDecide && !edge.intoDecide
+          ? // A wait: its answer on the line beside the decision, and what it does
+            // over the line back in at the top, clear of the steps in between.
+            sideLabel(detourX + 8, targetY - 28 - 18)
+          : sideLabel(detourX + 8, turnY - 20)}
+        {edge.answer && (
+          <EdgeLabelRenderer>
+            <span
+              style={{ transform: `translate(${sourceX - half - 8}px, ${turnY - 9}px) translateX(-100%)` }}
+              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+            >
+              {edge.answer}
+            </span>
+          </EdgeLabelRenderer>
+        )}
       </>
     );
   }
@@ -1476,6 +1492,7 @@ export function FlowCanvas() {
         fromDecide: e.fromDecide,
         intoDecide: e.intoDecide,
         railX: e.railX,
+        answer: e.answer,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
