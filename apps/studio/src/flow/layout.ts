@@ -225,6 +225,16 @@ export type LayoutFrame = {
   branches?: BranchPlace[];
 };
 
+/** The innermost frame around a point on the chart, or null outside every frame. */
+export function frameAt(frames: readonly LayoutFrame[], x: number, y: number): LayoutFrame | null {
+  let best: LayoutFrame | null = null;
+  for (const f of frames) {
+    if (x < f.x || x > f.x + f.width || y < f.y || y > f.y + f.height) continue;
+    if (!best || f.depth > best.depth) best = f;
+  }
+  return best;
+}
+
 export type Layout = { nodes: LayoutNode[]; edges: LayoutEdge[]; frames: LayoutFrame[]; width: number; height: number };
 
 type Defs = ReadonlyMap<string, StepTypeDef>;
