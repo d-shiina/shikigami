@@ -18,7 +18,7 @@ import { Sentence } from "../StoryView";
 import { ActorMark, usePendingReview } from "../Timeline";
 import { VarIcon } from "../VarIcon";
 import { inputClass, CommitInput, Row, AddRow, Section } from "./fields";
-import { ParamsEditor } from "./params";
+import { ParamsEditor, STEP_KEY } from "./params";
 import { CallEditor } from "./CallEditor";
 import { FlowInspector } from "./FlowInspector";
 
@@ -154,7 +154,6 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const update = (patch: StepPatch) => updateStep(id, patch);
   const issues = validation?.issues.filter((i) => i.stepId === id) ?? [];
   const StepIcon = nodeIcon(step.type, def?.category ?? step.type.split(".")[0] ?? "other");
-  const outs = outputs(step);
   const isCall = step.type === CALL;
 
   return (
@@ -207,52 +206,12 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
         )}
       </div>
       {inEditor ? (
-        <>
-          <Section title={t.props.basics}>
-            <Row label={t.stepName}>
-              <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
-            </Row>
-            <Row label={t.memo}>
-              <CommitInput
-                multiline
-                value={step.description ?? ""}
-                placeholder={t.memoPlaceholder}
-                onCommit={(description) => update({ description: description.trim() })}
-              />
-            </Row>
-          </Section>
-          {isCall ? (
-            <CallEditor step={step} vars={vars} update={update} />
-          ) : (
-            <ParamsEditor step={step} def={def} vars={vars} update={update} />
-          )}
-          {!isCall && (outs.length > 0 || def?.hasOutput) && (
-            <Section title={t.props.output}>
-              {def?.hasOutput && (
-                <Row label={t.saveAs} socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}>
-                  <CommitInput
-                    mono
-                    value={step.saveAs ?? ""}
-                    placeholder={t.props.variableName}
-                    onCommit={(v) => update({ saveAs: v.trim() === "" ? null : v.trim() })}
-                  />
-                </Row>
-              )}
-              {outs
-                .filter((o) => o.variable !== step.saveAs)
-                .map((o) => (
-                  <Row key={o.variable} label={o.label} socket={TYPE_COLOR[vars.get(o.variable) ?? "any"]}>
-                    <span className="block pt-1 font-mono text-xs font-semibold">{o.variable}</span>
-                  </Row>
-                ))}
-            </Section>
-          )}
-          <ExecutionSection step={step} isCall={isCall} update={update} />
-        </>
+        <EditorForm step={step} def={def} vars={vars} isCall={isCall} update={update} />
       ) : (
         <StepSummary step={step} def={def} vars={vars} isCall={isCall} />
       )}
-      <Connections stepId={id} links={links} vars={vars} />
+      {/* Where the values come from is on the left of the opened node (使える値). */}
+      {!inEditor && <Connections stepId={id} links={links} vars={vars} />}
     </div>
   );
 }
@@ -315,20 +274,40 @@ function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef
 }
 
 /**
- * 無効化・タイムアウト・再試行・エラー時: a row only once it is set, so a
- * node's pane is not four rows of things nobody changes.
+ * The settings of the node opened full size, as one list: the settings it
+ * needs and those in use, then one 「＋ 設定を追加」 for everything else —
+ * its optional settings, the variable for its result, how it runs
+ * (無効化・タイムアウト・再試行・エラー時) and a memo. A node starts with the
+ * one or two rows it needs (docs/design/ui-principles.md §2).
  */
-function ExecutionSection({ step, isCall, update }: { step: Step; isCall: boolean; update: (p: StepPatch) => void }) {
+function EditorForm({
+  step,
+  def,
+  vars,
+  isCall,
+  update,
+}: {
+  step: Step;
+  def: StepTypeDef | undefined;
+  vars: Map<string, string | undefined>;
+  isCall: boolean;
+  update: (p: StepPatch) => void;
+}) {
+  // Rows opened with 「＋ 設定を追加」 but still empty.
   const [added, setAdded] = useState<Set<string>>(new Set());
   useEffect(() => setAdded(new Set()), [step.id]);
   const control = step.type.startsWith("control.");
-  const all: { key: string; label: string; set: boolean; hide?: boolean }[] = [
-    { key: "disabled", label: t.disabled, set: step.disabled === true },
-    { key: "timeoutMs", label: t.timeoutMs, set: step.timeoutMs != null, hide: control },
-    { key: "retry", label: t.retry, set: step.retry != null, hide: (control && step.type !== GROUP) || isCall },
-    { key: "onError", label: t.onError, set: step.onError != null, hide: control },
+  const others: { key: string; label: string; group: string; set: boolean; hide?: boolean }[] = [
+    { key: "saveAs", label: t.saveAs, group: t.props.output, set: Boolean(step.saveAs), hide: isCall || !def?.hasOutput },
+    { key: "disabled", label: t.disabled, group: t.props.execution, set: step.disabled === true },
+    { key: "timeoutMs", label: t.timeoutMs, group: t.props.execution, set: step.timeoutMs != null, hide: control },
+    { key: "retry", label: t.retry, group: t.props.execution, set: step.retry != null, hide: (control && step.type !== GROUP) || isCall },
+    { key: "onError", label: t.onError, group: t.props.execution, set: step.onError != null, hide: control },
+    { key: "description", label: t.memo, group: t.memo, set: Boolean(step.description) },
   ].filter((r) => !r.hide);
-  const shown = (key: string) => (all.find((r) => r.key === key)?.set ?? false) || added.has(key);
+  const shown = (key: string) => (others.find((r) => r.key === key)?.set ?? false) || added.has(key);
+  const more = others.filter((r) => !shown(r.key)).map(({ key, label, group }) => ({ key: `${STEP_KEY}${key}`, label, group }));
+  const add = (key: string) => setAdded((prev) => new Set(prev).add(key.startsWith(STEP_KEY) ? key.slice(STEP_KEY.length) : key));
   const drop = (key: string, patch: StepPatch) => {
     setAdded((prev) => {
       const next = new Set(prev);
@@ -337,8 +316,17 @@ function ExecutionSection({ step, isCall, update }: { step: Step; isCall: boolea
     });
     update(patch);
   };
-  return (
-    <Section title={t.props.execution}>
+  const rows = (
+    <>
+      {shown("saveAs") && (
+        <Row
+          label={t.saveAs}
+          socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}
+          onRemove={() => drop("saveAs", { saveAs: null })}
+        >
+          <CommitInput mono value={step.saveAs ?? ""} placeholder={t.props.variableName} onCommit={(v) => update({ saveAs: v.trim() === "" ? null : v.trim() })} />
+        </Row>
+      )}
       {shown("disabled") && (
         <Row label={t.disabled} onRemove={() => drop("disabled", { disabled: false })}>
           <input type="checkbox" className="mt-1.5" checked={step.disabled ?? false} onChange={(e) => update({ disabled: e.target.checked })} />
@@ -367,19 +355,29 @@ function ExecutionSection({ step, isCall, update }: { step: Step; isCall: boolea
       )}
       {shown("onError") && (
         <Row label={t.onError} onRemove={() => drop("onError", { onError: null })}>
-          <select
-            className={inputClass}
-            value={step.onError ?? ""}
-            onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}
-          >
+          <select className={inputClass} value={step.onError ?? ""} onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}>
             <option value="">{t.props.followFlow}</option>
             <option value="fail">{t.onErrorFail}</option>
             <option value="continue">{t.onErrorContinue}</option>
           </select>
         </Row>
       )}
-      <AddRow choices={all.filter((r) => !shown(r.key))} onAdd={(key) => setAdded((prev) => new Set(prev).add(key))} />
-    </Section>
+      {shown("description") && (
+        <Row label={t.memo} onRemove={() => drop("description", { description: "" })}>
+          <CommitInput multiline value={step.description ?? ""} placeholder={t.memoPlaceholder} onCommit={(description) => update({ description: description.trim() })} />
+        </Row>
+      )}
+    </>
   );
+  if (isCall)
+    return (
+      <>
+        <CallEditor step={step} vars={vars} update={update} />
+        <div className="px-4 py-2.5">
+          {rows}
+          <AddRow choices={more} onAdd={add} />
+        </div>
+      </>
+    );
+  return <ParamsEditor flat step={step} def={def} vars={vars} update={update} more={more} onMore={add} after={rows} />;
 }
-

@@ -1036,6 +1036,9 @@ export const en: Dict = {
       "How: add desktop.waitFor where the screen changes; fold repeated actions into control.forEach; make inputs that will differ each time input variables; put parts used in two places or more into parts. Fields with password: true have no recorded value: use a secret. A drag cannot be a node: tell the person if it matters. The recorded actions:",
   },
   editor: {
+    nothingToSet: "This node has nothing to set",
+    namePlaceholder: "Name this node",
+    renameTitle: "Click to rename (the name on the chart)",
     back: "Back to the chart",
     usable: "Values to use",
     settings: "Settings",

@@ -1035,6 +1035,9 @@ export const ja = {
       "整え方：画面が切り替わるところには desktop.waitFor を入れる。同じ操作の繰り返しは control.forEach にまとめる。毎回変わりそうな入力値は入力変数にする。2 か所以上で使う部品は parts にまとめる。password: true の欄は値を記録していないので、シークレットを使う。drag はノードにできないので、必要なら人に伝える。記録した操作は次のとおり：",
   },
   editor: {
+    nothingToSet: "このノードに決めることはありません",
+    namePlaceholder: "表示名を付ける",
+    renameTitle: "押して表示名を変える（フロー図に出る名前）",
     back: "フロー図に戻る",
     usable: "使える値",
     settings: "設定",
