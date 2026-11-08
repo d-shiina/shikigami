@@ -59,4 +59,20 @@ describe("trailLines", () => {
     expect(went.get("t->end:then")).toBe("done");
     expect(went.get("end:then->after")).toBe("done");
   });
+
+  it("does not take a wait's way round again while its first check is still running", () => {
+    // wait w: w -> c (check) -> end (its "+") -> d (decision after the check); d -> c back, d -> j out.
+    const lines = [line("w", "c"), line("c", "end"), line("end", "d"), { ...line("d", "c"), loop: true }, line("d", "j")];
+    // Its way out (j) is not passed through: it is reached only when the wait succeeded.
+    const through = new Set(["end", "d"]);
+    const running = trailLines(lines, { w: "running", c: "running" }, through);
+    expect(running.has("d->c")).toBe(false);
+    expect(running.has("end->d")).toBe(false);
+    const checked = trailLines(lines, { w: "running", c: "succeeded" }, through);
+    expect(checked.get("end->d")).toBe("done");
+    // The check ran but the condition is not met yet: "はい" is not taken.
+    expect(checked.has("d->j")).toBe(false);
+    const met = trailLines(lines, { w: "succeeded", c: "succeeded", j: "succeeded" }, through);
+    expect(met.get("d->j")).toBe("done");
+  });
 });

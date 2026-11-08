@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, CASE_H, decideWidth, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -153,26 +153,29 @@ describe("layoutFlow", () => {
     expect(layout.width).toBeGreaterThanOrEqual(NODE_W * 2);
   });
 
-  it("draws a loop's line back to where its body starts, and leaves it from outside its frame", () => {
+  it("asks at the top of a loop, goes round into the question, and leaves from the frame's edge", () => {
     const steps: Step[] = [
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
     ];
     const layout = layoutFlow(steps, defs);
     expect(layout.edges.some((e) => e.source === "x" && e.target === "end:loop:body")).toBe(true);
-    // Back from the end of the body into its first node, not into the head.
+    // The head leads to the question; "はい" runs the body, whose end comes back into the question.
+    expect(layout.edges.find((e) => e.source === "loop")?.target).toBe("join:loop:decide");
+    expect(layout.nodes.find((n) => n.id === "join:loop:decide")?.data).toMatchObject({ question: "まだ回数が残っている？" });
+    expect(layout.edges.find((e) => e.source === "join:loop:decide" && e.target === "x")?.label).toBe("はい");
     const back = layout.edges.find((e) => e.source === "end:loop:body")!;
-    expect([back.target, back.loop, back.label]).toEqual(["x", true, "次の回へ"]);
-    expect(layout.edges.some((e) => e.target === "loop" && e.source !== "loop")).toBe(false);
+    expect([back.target, back.loop, back.intoDecide, back.label]).toEqual(["join:loop:decide", true, true, "次の回へ"]);
     const frame = layout.frames.find((f) => f.id === "loop")!;
     expect(back.detourX).toBe(frame.x + LOOP_LINE_X);
+    // "いいえ" runs down the right of the frame to where it is left.
+    const no = layout.edges.find((e) => e.source === "join:loop:decide" && e.target === "join:loop")!;
+    expect([no.label, no.railX]).toEqual(["いいえ", frame.x + frame.width - LOOP_LINE_X]);
     // The line out starts on the frame's bottom edge.
     const join = layout.nodes.find((n) => n.id === "join:loop")!;
     expect(join.position.y + 8).toBe(frame.y + frame.height);
     const tail = layout.nodes.find((n) => n.id === "end:loop:body")!;
     expect(tail.position.y + 24 + 14).toBeLessThan(frame.y + frame.height);
-    // Out of the frame's bottom; a hidden line from the head carries a run's trail there.
-    expect(layout.edges.find((e) => e.source === "loop" && e.target === "join:loop")?.hidden).toBe(true);
     expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBe("回数を終えたら");
     expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ shown: false });
   });
@@ -212,7 +215,9 @@ describe("layoutFlow", () => {
 
   it("draws no line back up an empty loop", () => {
     const layout = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }], defs);
-    expect(layout.edges.filter((e) => !e.hidden).map((e) => `${e.source}->${e.target}`)).toEqual(["loop->slot:loop:body"]);
+    expect(layout.edges.map((e) => `${e.source}->${e.target}`).sort()).toEqual(
+      ["join:loop:decide->join:loop", "join:loop:decide->slot:loop:body", "loop->join:loop:decide"].sort(),
+    );
     // Into the "+" at the flow's end there is no line, so nothing says when it leaves.
     const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
     expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
@@ -249,7 +254,7 @@ describe("layoutFlow", () => {
     expect(inner.bottom).toBeLessThan(outer.bottom);
     // The line back runs inside the outer frame, left of the inner one.
     const back = layout.edges.find((e) => e.source === "end:outer:body")!;
-    expect(back.target).toBe("x");
+    expect(back.target).toBe("join:outer:decide");
     expect(back.detourX).toBe(outer.x + LOOP_LINE_X);
     expect(back.detourX! + 12).toBeLessThan(inner.x);
     // It is left from the bottom of the frame, after everything in it.
@@ -304,7 +309,7 @@ describe("layoutFlow", () => {
     expect(into("end:if:else")).toEqual(["e2"]);
     expect(into("join:if")).toEqual(["end:if:else", "end:if:then"]);
     expect(into("end:loop:body")).toEqual(["join:if"]);
-    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("if");
+    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("join:loop:decide");
     // Inside the frames: the branches' in the if's, the body's below it but in the loop's.
     const frame = (id: string) => layout.frames.find((f) => f.id === id)!;
     const inside = (id: string, n: string) => {
@@ -353,7 +358,61 @@ describe("layoutFlow", () => {
 
   it("draws a wait's check going round like a loop", () => {
     const layout = layoutFlow([{ id: "w", type: "wait.until", params: { condition: "{{ ok }}" }, blocks: { check: [log("c")] } }, log("after")], defs);
-    expect(layout.edges.find((e) => e.source === "end:w:check")).toMatchObject({ target: "c", loop: true, label: "もう一度確かめる" });
+    // A wait asks after its block: "いいえ" back up to the block, "はい" on out.
+    expect(layout.edges.find((e) => e.source === "end:w:check")?.target).toBe("join:w:decide");
+    expect(layout.nodes.find((n) => n.id === "join:w:decide")?.data).toMatchObject({ question: "ok？" });
+    expect(layout.edges.find((e) => e.source === "join:w:decide" && e.target === "c")).toMatchObject({ loop: true, fromDecide: true, answer: "いいえ", label: "もう一度確かめる" });
+    expect(layout.edges.find((e) => e.source === "join:w:decide" && e.target === "join:w")?.label).toBe("はい");
     expect(layout.edges.find((e) => e.source === "join:w")?.label).toBe("条件を満たしたら");
+  });
+
+  it("keeps a frame close around its steps, but wide enough for its head", () => {
+    const frame = (steps: Step[], id: string) => layoutFlow(steps, defs).frames.find((f) => f.id === id)!;
+    const short = frame([{ id: "r", type: "control.repeat", params: { count: 3 }, blocks: { body: [log("a")] } }], "r");
+    expect(short.width).toBeLessThan(NODE_W + 160);
+    const named = frame([{ id: "r", type: "control.repeat", name: "受注データを一件ずつ取り込んで登録する", params: { count: 3 }, blocks: { body: [log("a")] } }], "r");
+    expect(named.width).toBeGreaterThan(short.width);
+    expect(named.width).toBeLessThanOrEqual(520);
+  });
+
+  it("sizes a loop's decision to its question, and joins its side lines at its points", () => {
+    expect(decideWidth("まだ回数が残っている？")).toBeGreaterThan(decideWidth("ok？"));
+    expect(decideWidth("x".repeat(200))).toBeLessThan(NODE_W);
+    const layout = layoutFlow([{ id: "r", type: "control.repeat", params: { count: 3 }, blocks: { body: [log("a")] } }], defs);
+    const decide = layout.nodes.find((n) => n.id === "join:r:decide")!;
+    const width = (decide.data as { width?: number }).width!;
+    expect(width).toBe(decideWidth("まだ回数が残っている？"));
+    const head = layout.nodes.find((n) => n.id === "r")!;
+    const lineX = head.position.x + (head.data as StepNodeData).head!.lineX;
+    expect(decide.position.x + width / 2).toBe(lineX);
+    for (const e of layout.edges.filter((e) => e.fromDecide || e.intoDecide)) expect(e.half).toBe(width / 2);
+  });
+
+  it("asks an if's question in a decision under its head, and splits its columns from there", () => {
+    const layout = layoutFlow([{ id: "i", type: "control.if", params: { condition: "{{ amount > 10000 }}" }, blocks: { then: [log("a")], else: [log("b")] } }], defs);
+    const decide = layout.nodes.find((n) => n.id === "join:i:decide")!;
+    expect(decide.data).toMatchObject({ question: "amount > 10000？" });
+    expect(layout.edges.find((e) => e.source === "i")?.target).toBe("join:i:decide");
+    expect(layout.edges.filter((e) => e.source === "join:i:decide").map((e) => [e.target, e.label])).toEqual([["a", "はい"], ["b", "いいえ"]]);
+    const head = layout.nodes.find((n) => n.id === "i")!;
+    const a = layout.nodes.find((n) => n.id === "a")!;
+    expect(decide.position.y).toBeGreaterThan(head.position.y + HEAD_H);
+    expect(a.position.y).toBeGreaterThan(decide.position.y);
+  });
+
+  it("reaches a try's \"失敗したとき\" from the side of its \"実行\", not from its head", () => {
+    const layout = layoutFlow([{ id: "t", type: "control.try", blocks: { try: [log("a"), log("c")], catch: [log("b")] } }], defs);
+    // Not a choice at the head: the head goes into "実行" only, and "失敗したとき" is reached from its steps' side.
+    expect(layout.edges.filter((e) => e.source === "t").map((e) => e.target)).toEqual(["a"]);
+    const into = layout.edges.find((e) => e.target === "b")!;
+    expect(into).toMatchObject({ source: "join:t:fail", failure: true });
+    const pos = (id: string) => layout.nodes.find((n) => n.id === id)!.position;
+    expect(into.bracket!.ticks.map((t) => t.y)).toEqual([pos("a").y + 19, pos("c").y + 19]);
+    expect(into.bracket!.ticks.every((t) => t.x === pos("a").x + NODE_W)).toBe(true);
+    expect(into.bracket!.x).toBeGreaterThan(pos("a").x + NODE_W);
+    expect(into.bracket!.x).toBeLessThan(pos("b").x);
+    // "失敗したとき" starts lower than "実行", so the line can come across into it.
+    expect(pos("b").y).toBeGreaterThan(pos("a").y);
+    expect(layout.nodes.find((n) => n.id === "join:t:fail")?.data).toMatchObject({ failTo: "b" });
   });
 });

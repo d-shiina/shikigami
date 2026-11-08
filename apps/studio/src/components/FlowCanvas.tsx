@@ -1,4 +1,4 @@
-import { CASE, PARALLEL, SWITCH } from "../lib/stepTypes";
+import { CASE, IF, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
   Background,
   BaseEdge,
@@ -28,9 +28,12 @@ import {
   CASE_H,
   type FrameKind,
   HEAD_H,
+  DECIDE_H,
+  DECIDE_POINT,
   ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
+  type Layout,
   layoutFlow,
   NODE_W,
   READ_ROOM,
@@ -249,6 +252,21 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
 type BlockEdgeData = {
   /** A loop's line back: the x it runs up at. */
   detourX?: number;
+  fromDecide?: boolean;
+  intoDecide?: boolean;
+  /** A loop's "いいえ": the x it runs down at. */
+  railX?: number;
+  /** A wait's line back: the answer it takes, on the line beside its decision. */
+  answer?: string;
+  half?: number;
+  /** Into a try's "失敗したとき". */
+  failure?: boolean;
+  /** The loop it belongs to (see LayoutEdge). */
+  owner?: string;
+  /** The step picked in the chart: pointing at or picking a loop moves its line back. */
+  selectedId?: string | null;
+  /** Into a try's "失敗したとき": where its failures come from (see FAIL_X). */
+  bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -288,29 +306,165 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
   return button;
 }
 
+/** Nothing on the chart moves for someone who asked for less motion. */
+const reducedMotion = (): boolean => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** Which of a branch's n ways out is lit now, while `on`: each in turn, as only one of them is taken. */
+const ALT_MS = 900;
+function useTurn(n: number, on: boolean): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on || reducedMotion()) return;
+    // Tick on the turn's boundary, so every line and node that lights in turn changes together.
+    let timer = 0;
+    const tick = () => {
+      setNow(Date.now());
+      timer = window.setTimeout(tick, ALT_MS - (Date.now() % ALT_MS) + 5);
+    };
+    tick();
+    return () => window.clearTimeout(timer);
+  }, [on]);
+  if (!on || reducedMotion()) return null;
+  return Math.floor(now / ALT_MS) % Math.max(n, 1);
+}
+
+/**
+ * While an if or a switch is pointed at, the columns it does not take this turn
+ * (their nodes and lines) are dimmed, in turn, so its ways out read as one or the other. Only while
+ * pointed at: a branch that is picked to edit its settings stays still.
+ * Done with a style sheet keyed on node ids, so nothing on the chart re-renders.
+ */
+function BranchLight({ layout }: { layout: Layout }) {
+  const pointed = useFocus();
+  const owners = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const e of layout.edges) if (e.owner && e.alt) out.set(e.owner, e.alt.n);
+    return out;
+  }, [layout]);
+  const owner = pointed && owners.has(pointed) ? pointed : null;
+  const turn = useTurn(owner ? owners.get(owner)! : 1, owner !== null);
+  if (owner === null || turn === null) return null;
+  const off = (places?: { owner: string; i: number }[]) => !!places?.some((p) => p.owner === owner && p.i !== turn);
+  const nodes = layout.nodes.filter((n) => off(n.branches)).map((n) => n.id);
+  const frames = layout.frames.filter((f) => off(f.branches)).map((f) => `frame:${f.id}`);
+  const dim = new Set(nodes);
+  // The lines among them, and the line down into each of them from the decision. Only dimmed:
+  // a line's colour says where a run went (see TRAIL_STROKE), so pointing at one never recolours it.
+  const edges = layout.edges
+    .filter((e) => (dim.has(e.source) && dim.has(e.target)) || (e.owner === owner && e.alt !== undefined && e.alt.i !== turn))
+    .map((e) => e.id);
+  const selectors = [
+    ...[...nodes, ...frames].map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"]`),
+    ...edges.map((id) => `[data-testid="rf__edge-${CSS.escape(id)}"]`),
+  ];
+  if (selectors.length === 0) return null;
+  return <style>{`${selectors.join(",")}{opacity:.28;transition:opacity .25s}`}</style>;
+}
+
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
+  const r = 4;
+  // Pointing at (or picking) a loop sends its line back round (a branch's ways out are lit in turn by BranchLight).
+  const pointed = useFocus();
+  const active = !!edge.owner && (pointed === edge.owner || edge.selectedId === edge.owner);
+  const sideLabel = (x: number, y: number) =>
+    label && (
+      <EdgeLabelRenderer>
+        <span
+          style={{ transform: `translate(${x}px, ${y}px)` }}
+          className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+        >
+          {label}
+        </span>
+      </EdgeLabelRenderer>
+    );
   if (detourX !== undefined) {
-    // A loop's line back: out of the end of its body, along to the left of its
-    // frame, up, and back into the line that enters the body's first node.
-    const r = 4;
-    const outY = sourceY + 14;
-    const mergeY = targetY - 28;
+    // A loop's line back, up the left of its frame: from the end of its body
+    // into the side of its decision, or (a wait) from the side of its decision
+    // back into the line that enters its block.
+    const half = edge.half ?? 0;
+    const start = edge.fromDecide
+      ? `M ${sourceX - half} ${sourceY - DECIDE_H / 2} H ${detourX + r} Q ${detourX} ${sourceY - DECIDE_H / 2} ${detourX} ${sourceY - DECIDE_H / 2 - r}`
+      : `M ${sourceX} ${sourceY} V ${sourceY + 14 - r} Q ${sourceX} ${sourceY + 14} ${sourceX - r} ${sourceY + 14} H ${detourX + r} Q ${detourX} ${sourceY + 14} ${detourX} ${sourceY + 14 - r}`;
+    const turnY = edge.fromDecide ? sourceY - DECIDE_H / 2 : sourceY + 14;
+    const end = edge.intoDecide
+      ? `V ${targetY + DECIDE_H / 2 + r} Q ${detourX} ${targetY + DECIDE_H / 2} ${detourX + r} ${targetY + DECIDE_H / 2} H ${targetX - half}`
+      : `V ${targetY - 28 + r} Q ${detourX} ${targetY - 28} ${detourX + r} ${targetY - 28} H ${targetX - r} Q ${targetX} ${targetY - 28} ${targetX} ${targetY - 28 + r} V ${targetY}`;
+    return (
+      <>
+        <BaseEdge id={id} path={`${start} ${end}`} style={active ? { ...style, animation: "flow-round 0.7s linear infinite" } : style} markerEnd={markerEnd} />
+        {edge.fromDecide && !edge.intoDecide
+          ? // A wait: its answer on the line beside the decision, and what it does
+            // over the line back in at the top, clear of the steps in between.
+            sideLabel(detourX + 8, targetY - 28 - 18)
+          : sideLabel(detourX + 8, turnY - 20)}
+        {edge.answer && (
+          <EdgeLabelRenderer>
+            <span
+              style={{ transform: `translate(${sourceX - half - 8}px, ${turnY - 9}px) translateX(-100%)` }}
+              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+            >
+              {edge.answer}
+            </span>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
+  if (edge.bracket) {
+    // A try's way into "失敗したとき": from the side of each step of "実行"
+    // (any of them can fail), down their right, and from the top across into it.
+    const { x: bx, ticks } = edge.bracket;
+    const top = ticks[0]?.y ?? sourceY;
+    const bottom = ticks.at(-1)?.y ?? top;
+    const parts = [
+      ...ticks.map((t) => `M ${t.x} ${t.y} H ${bx}`),
+      bottom > top ? `M ${bx} ${bottom} V ${top}` : "",
+      `M ${bx} ${top} H ${targetX - r} Q ${targetX} ${top} ${targetX} ${top + r} V ${targetY}`,
+    ];
+    const failStyle = { ...style, strokeDasharray: "5 4" };
+    return (
+      <>
+        <BaseEdge id={id} path={parts.filter(Boolean).join(" ")} style={failStyle} markerEnd={markerEnd} />
+        {label && (
+          <EdgeLabelRenderer>
+            <div
+              style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
+              className="pointer-events-none absolute flex items-center"
+            >
+              {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
+              <span className="max-w-[300px] truncate rounded-md border border-[color-mix(in_srgb,var(--color-shu-500)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-shu-500)_7%,var(--color-sheet))] px-2 text-[11.5px] leading-[18px] font-medium text-shu-600">
+                {label}
+              </span>
+              <InsertButton edgeId={id} data={edge} inline />
+            </div>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
+  if (edge.railX !== undefined) {
+    // A loop's "いいえ": out of the right of its decision, down the right of
+    // its frame, and into where the frame is left, on its bottom edge.
+    const x0 = sourceX + (edge.half ?? 0);
+    const y0 = sourceY - DECIDE_H / 2;
+    const rail = edge.railX;
+    const lowY = targetY - 14;
     const path = [
-      `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX - r} ${outY}`,
-      `H ${detourX + r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
-      `V ${mergeY + r} Q ${detourX} ${mergeY} ${detourX + r} ${mergeY}`,
-      `H ${targetX - r} Q ${targetX} ${mergeY} ${targetX} ${mergeY + r} V ${targetY}`,
+      `M ${x0} ${y0} H ${rail - r} Q ${rail} ${y0} ${rail} ${y0 + r}`,
+      `V ${lowY - r} Q ${rail} ${lowY} ${rail - r} ${lowY}`,
+      `H ${targetX + r} Q ${targetX} ${lowY} ${targetX} ${lowY + r} V ${targetY}`,
     ].join(" ");
     return (
       <>
-        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+        <BaseEdge id={id} path={path} style={style} />
         {label && (
+          // On the line, like the "はい" going down: the two answers read alike.
           <EdgeLabelRenderer>
             <span
-              style={{ transform: `translate(${detourX + 8}px, ${outY - 20}px)` }}
-              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+              style={{ transform: `translate(${x0 + 12}px, ${y0 - 9}px)` }}
+              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
             >
               {label}
             </span>
@@ -340,7 +494,11 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium text-ink">{label}</span>
+            <span
+              className={`max-w-[300px] truncate rounded-md border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium border-slate-200 text-ink`}
+            >
+              {label}
+            </span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -767,7 +925,14 @@ function StepNode({ data }: StepNodeProps) {
       ) : (
       <>
       <div style={{ height: NODE_HEAD_H }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
-        <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+        <Icon
+          size={15}
+          strokeWidth={1.75}
+          className="shrink-0 text-slate-500"
+          // In the colour of its group, as in the node palette.
+          style={{ color: CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other }}
+          aria-hidden="true"
+        />
         <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
         {data.step.name ? (
           <span className="min-w-0 truncate text-[12px] text-slate-500">{data.step.name}</span>
@@ -807,7 +972,9 @@ function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; Icon: R
   const addStep = useStudio((s) => s.addStep);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const id = data.step.id ?? "";
-  const summary = headSummary(data.step);
+  const branch = data.step.type === IF || data.step.type === SWITCH;
+  // An if or a switch asks in its decision under the head, unless it is folded.
+  const summary = branch && !head.collapsed ? "" : headSummary(data.step);
   const editable = !data.readOnly;
   const Fold = head.collapsed ? ChevronRight : ChevronDown;
   return (
@@ -897,6 +1064,29 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
 
 /** Where the columns of a frame meet again, on its bottom edge (a dot). A single column's line passes through; a loop's only lets its line out. */
 function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
+  if (data.question) {
+    // A loop's decision: where it asks whether to go round again.
+    // A hexagon, the shape of a yes/no question, with the question inside;
+    // its lines go in and out at its points.
+    const w = data.width ?? 160;
+    const h = DECIDE_H;
+    const p = DECIDE_POINT;
+    return (
+      <div style={{ width: w, height: h }} title={data.question} className="relative flex items-center justify-center px-[22px]">
+        <svg className="absolute inset-0 overflow-visible" width={w} height={h} aria-hidden="true">
+          <polygon
+            points={`0.75,${h / 2} ${p},0.75 ${w - p},0.75 ${w - 0.75},${h / 2} ${w - p},${h - 0.75} ${p},${h - 0.75}`}
+            fill="var(--flow-decide-fill)"
+            stroke="var(--flow-decide-line)"
+            strokeWidth={1.25}
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="relative truncate text-[12px] font-medium text-ink">{data.question}</span>
+        <FlowHandles />
+      </div>
+    );
+  }
   return (
     <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={`relative ${data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}`}>
       {/* A single line across the frame's edge: drawn through, so it does not break off there. */}
@@ -1270,7 +1460,13 @@ export function FlowCanvas() {
   });
   // Points a run only passes through: the "+" at the end of a block, where a frame's columns meet.
   const tails = useMemo(
-    () => new Set(layout.nodes.filter((n) => (n.data.kind === "slot" && n.data.tail) || n.data.kind === "join").map((n) => n.id)),
+    // A wait's decision comes after its check: it is passed once the check is, not as soon as the wait starts.
+    () =>
+      new Set(
+        layout.nodes
+          .filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && !n.data.met && (!n.data.question || n.data.after)))
+          .map((n) => n.id),
+      ),
     [layout],
   );
   // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
@@ -1399,7 +1595,23 @@ export function FlowCanvas() {
     }));
 
   // The lines the run took stay coloured after it ends, as the way it went.
-  const taken = trailLines(layout.edges, states, tails, continues);
+  // A loop's decision runs as long as its loop does (a wait's only once its check is through, see `tails`).
+  const trailStates = useMemo(() => {
+    const out: Record<string, StepRunState> = { ...states };
+    for (const n of layout.nodes) {
+      if (n.data.kind !== "join") continue;
+      // A try's way into "失敗したとき" was taken when that block ran.
+      const state = n.data.question && !n.data.after ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
+      if (state) out[n.id] = state;
+      // A wait goes out only when its condition was met: when the wait succeeded, not each time its check ran.
+      // Its decision was reached then too, even with nothing in its check to say so.
+      if (n.data.met && states[n.data.parentId] === "succeeded") out[n.id] = out[`${n.id}:decide`] = "succeeded";
+    }
+    return out;
+  }, [states, layout.nodes]);
+  const taken = trailLines(layout.edges, trailStates, tails, continues);
+  // Lines into a join end in it (or pass through); a loop's decision takes an arrow like a node.
+  const plainJoins = new Set(layout.nodes.filter((n) => n.data.kind === "join" && !n.data.question).map((n) => n.id));
   const edges: Edge[] = layout.edges.map((e) => {
     const trail = taken.get(e.id);
     return {
@@ -1409,6 +1621,15 @@ export function FlowCanvas() {
       type: "block",
       data: {
         detourX: e.detourX,
+        fromDecide: e.fromDecide,
+        intoDecide: e.intoDecide,
+        railX: e.railX,
+        answer: e.answer,
+        half: e.half,
+        failure: e.failure,
+        bracket: e.bracket,
+        owner: e.owner,
+        selectedId,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
@@ -1421,7 +1642,7 @@ export function FlowCanvas() {
         ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
-      markerEnd: e.target.startsWith("join:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
+      markerEnd: plainJoins.has(e.target) ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, the way into a loop's body).
       zIndex: trail ? 1 : 0,
     };
@@ -1538,10 +1759,17 @@ export function FlowCanvas() {
       zoomOnDoubleClick={false}
       // Dragging the view during a run means the person wants to look elsewhere.
       onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
-      onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
+      onNodeMouseEnter={(_, node) =>
+        node.type === "step"
+          ? focus.set(node.id)
+          : (node.data as JoinNodeData).question
+            ? focus.set((node.data as JoinNodeData).parentId)
+            : undefined
+      }
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />
+      <BranchLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         <Panel position="top-center">
