@@ -1424,7 +1424,13 @@ export function FlowCanvas() {
   });
   // Points a run only passes through: the "+" at the end of a block, where a frame's columns meet.
   const tails = useMemo(
-    () => new Set(layout.nodes.filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && !n.data.question)).map((n) => n.id)),
+    // A wait's decision comes after its check: it is passed once the check is, not as soon as the wait starts.
+    () =>
+      new Set(
+        layout.nodes
+          .filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && (!n.data.question || n.data.after)))
+          .map((n) => n.id),
+      ),
     [layout],
   );
   // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
@@ -1553,13 +1559,13 @@ export function FlowCanvas() {
     }));
 
   // The lines the run took stay coloured after it ends, as the way it went.
-  // A loop's decision runs as long as its loop does.
+  // A loop's decision runs as long as its loop does (a wait's only once its check is through, see `tails`).
   const trailStates = useMemo(() => {
     const out: Record<string, StepRunState> = { ...states };
     for (const n of layout.nodes) {
       if (n.data.kind !== "join") continue;
       // A try's way into "失敗したとき" was taken when that block ran.
-      const state = n.data.question ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
+      const state = n.data.question && !n.data.after ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
       if (state) out[n.id] = state;
     }
     return out;
