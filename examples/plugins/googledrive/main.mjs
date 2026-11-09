@@ -258,6 +258,18 @@ const actions = {
     const keep = matcher(pattern);
     const where = await item(token, folder, "folder", signal);
     const files = (await children(token, where.id, signal)).filter((e) => downloadable(e) && keep(e.name));
+    // Google Drive lets two files share a name, and a spreadsheet "Report" is saved as Report.xlsx:
+    // two files that would land on one name (Windows ignores case) stop the download before anything is saved.
+    const seen = new Map();
+    for (const e of files) {
+      const key = localName(e).toLowerCase();
+      if (seen.has(key)) {
+        throw new StepError("GDRIVE_NAME_CLASH", `'${seen.get(key)}' and '${e.name}' would both be saved as ${localName(e)}`, {
+          hint: "Rename one of them in Google Drive, or narrow the files with pattern.",
+        });
+      }
+      seen.set(key, e.name);
+    }
     if (!overwrite) await refuseExisting(files.map((e) => join(to, localName(e))));
     const saved = [];
     for (const e of files) {
