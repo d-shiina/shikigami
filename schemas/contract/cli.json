@@ -1504,6 +1504,18 @@
           "repeatable": true,
           "global": false,
           "long": "allow"
+        },
+        {
+          "id": "writer_chat",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "writer-chat",
+          "values": [
+            "true",
+            "false"
+          ]
         }
       ]
     }

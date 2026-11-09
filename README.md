@@ -47,7 +47,7 @@ Writer's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
 | [docs/adapters.md](docs/adapters.md) | Where each node type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
-| [docs/extensions.md](docs/extensions.md) | Extensions: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
+| [docs/extensions.md](docs/extensions.md) | Custom nodes: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding SpellSheet (manifest + separate process) |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Writer's layout rules: where each button goes and how it looks, and why |
 | [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the flow format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |

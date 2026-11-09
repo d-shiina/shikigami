@@ -949,6 +949,9 @@ pub struct DebugSettings {
     /// The variables' values there, from the last run.
     #[serde(default)]
     start_values: Map<String, Value>,
+    /// Whether Writer steps aside for the run (`run_band`).
+    #[serde(default)]
+    band: crate::run_band::BandSettings,
 }
 
 /// Starts a run of the stored flow. Events are emitted as `run-event`
@@ -967,6 +970,10 @@ pub async fn run_flow(
     let flow = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&flow).ok().flatten();
     let subflows = state.service.subflows(&flow)?;
+    // Writer steps aside for a run that works on the screen, unless it
+    // pauses before its first node anyway.
+    let band =
+        debug.band.shrink && !debug.step && crate::run_band::works_on_screen(&flow, &subflows);
     let project_dir = Some(state.service.project_dir(&id)?);
     // A run of the whole flow keeps the pictures for its 手順書.
     let run_id = RunId::generate();
@@ -976,7 +983,11 @@ pub async fn run_flow(
         .then(|| crate::manual::screens_dir(state.service.store().local_root(), &id, &run_id))
         .flatten();
     let manual = screens_dir.clone().map(crate::manual::Collector::new);
-    let handle = state
+    // Known to the band before the run's first event.
+    if band {
+        crate::run_band::prepare(run_id.clone(), id.clone(), debug.band);
+    }
+    let started = state
         .runtime
         .start(
             flow,
@@ -984,7 +995,7 @@ pub async fn run_flow(
                 project_dir,
                 full_run: true,
                 inputs: inputs.unwrap_or_default(),
-                run_id: Some(run_id),
+                run_id: Some(run_id.clone()),
                 screens_dir,
                 version,
                 debug: Some(DebugOptions {
@@ -1003,8 +1014,20 @@ pub async fn run_flow(
             code: e.code,
             message: e.message,
             details: e.details,
-        })?;
-    track_run(app, &state, id, handle, RUN_EVENT, manual)
+        })
+        .and_then(|handle| track_run(app.clone(), &state, id, handle, RUN_EVENT, manual));
+    match started {
+        Ok(run_id) => {
+            if band {
+                crate::run_band::begin(&app, &run_id);
+            }
+            Ok(run_id)
+        }
+        Err(e) => {
+            crate::run_band::forget(&run_id);
+            Err(e)
+        }
+    }
 }
 
 /// A test case with its name (`tests/<name>.json`).
@@ -1341,6 +1364,7 @@ pub(crate) fn track_run(
                 if let Err(e) = emit_app.emit(event_name, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
                 }
+                crate::run_band::on_event(&emit_app, event);
                 if let RunEvent::Paused {
                     reason: shikigami_runtime::PauseReason::Error,
                     step_id,

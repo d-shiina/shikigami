@@ -29,7 +29,7 @@ use crate::handler::ActionInput;
 /// How long a picture may take before the step goes on without it.
 const SHOT_LIMIT: Duration = Duration::from_secs(5);
 /// At most this many fields and cells are reported per picture.
-const MAX_REGIONS: usize = 400;
+const MAX_REGIONS: usize = 800;
 
 /// When a step's picture is taken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

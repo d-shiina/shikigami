@@ -1,5 +1,5 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
-import { MessageSquareText, Search, Sparkles } from "lucide-react";
+import { MessageSquareText, Plus, Search, Sparkles } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
@@ -115,6 +115,7 @@ export function CommandPalette() {
   const at = useStudio((s) => s.paletteAt);
   const anchor = useStudio((s) => s.paletteAnchor);
   const addStep = useStudio((s) => s.addStep);
+  const setPlace = useStudio((s) => s.setPlace);
   const summaries = useStudio((s) => s.summaries);
   const agent = useAgentApi();
   const [query, setQuery] = useState("");
@@ -316,6 +317,22 @@ export function CommandPalette() {
                 </div>
               );
             })}
+            {/* Nodes this PC does not have yet: custom nodes, managed from Settings. */}
+            <div className="sticky -bottom-1.5 mt-1.5 border-t border-slate-200 bg-slate-50 pt-1.5 pb-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setPlace("extensions");
+                }}
+                className="flex h-[26px] w-full items-center gap-2 rounded-md px-1.5 text-left text-[12px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+              >
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                  <Plus size={14} strokeWidth={1.75} aria-hidden={true} />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{t.extensions.addFromPalette}</span>
+              </button>
+            </div>
           </nav>
           <div className="flex min-w-0 flex-1 flex-col">
             <ul ref={list} className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5" aria-label={t.addStep}>

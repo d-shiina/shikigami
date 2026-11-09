@@ -9,13 +9,18 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentChoice, AgentEvent, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentChoice, AgentEvent, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
   | { kind: "text"; text: string }
   | { kind: "tool"; name: string; detail: string | null }
-  | { kind: "toolFailed"; message: string };
+  | { kind: "toolFailed"; message: string }
+  /**
+   * The AI asks the person to choose. `answer` is what they pressed or
+   * wrote next; until then the card offers the options.
+   */
+  | { kind: "choice"; question: string; options: ChoiceOption[]; recommended: number | null; reason: string | null; answer: string | null };
 
 export type ChatItem =
   | {
@@ -27,6 +32,8 @@ export type ChatItem =
       flow: AgentRequest["flow"] | null;
       /** What the agent is told, when it differs from what the person wrote. */
       prompt?: string;
+      /** Answers the AI's card above, which shows it, so it is not drawn again. */
+      answers?: boolean;
     }
   | {
       role: "ai";
@@ -181,6 +188,18 @@ function save(chats: Chat[]) {
   } catch {
     // As above.
   }
+}
+
+/** The person's next message answers every card still waiting in the conversation. */
+export const waitsForChoice = (items: ChatItem[]): boolean =>
+  items.some((i) => i.role === "ai" && i.parts.some((p) => p.kind === "choice" && p.answer === null));
+
+export function answerChoices(items: ChatItem[], answer: string): ChatItem[] {
+  return items.map((i) =>
+    i.role === "ai" && i.parts.some((p) => p.kind === "choice" && p.answer === null)
+      ? { ...i, parts: i.parts.map((p) => (p.kind === "choice" && p.answer === null ? { ...p, answer } : p)) }
+      : i,
+  );
 }
 
 let seq = 0;
@@ -375,13 +394,13 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         if (isBusy(target)) {
           // A correction mid-turn: stop the turn, then send this in the same
           // conversation so the agent keeps what it has done and heard.
-          const person = { role: "person" as const, id: nextId("item"), text, context, flow, prompt: `${INTERRUPT_NOTE}\n\n${text}` };
-          update(chatId, (c) => ({ ...c, interrupting: person, items: [...c.items, person] }));
+          const person = { role: "person" as const, id: nextId("item"), text, context, flow, prompt: `${INTERRUPT_NOTE}\n\n${text}`, answers: waitsForChoice(target.items) };
+          update(chatId, (c) => ({ ...c, interrupting: person, items: [...answerChoices(c.items, text), person] }));
           if (target.turnId) await api.stop(target.turnId).catch(() => undefined);
           return true;
         }
-        const person: ChatItem = { role: "person", id: nextId("item"), text, context, flow };
-        update(chatId, (c) => ({ ...c, title: c.title || titleOf(text), items: [...c.items, person] }));
+        const person: ChatItem = { role: "person", id: nextId("item"), text, context, flow, answers: waitsForChoice(target.items) };
+        update(chatId, (c) => ({ ...c, title: c.title || titleOf(text), items: [...answerChoices(c.items, text), person] }));
         return dispatch(chatId, text, flow);
       },
 
@@ -531,6 +550,16 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               ...i,
               preparing: null,
               parts: [...i.parts, { kind: "tool", name: event.name, detail: event.detail }],
+            }));
+            return;
+          case "choice":
+            updateTurn(event.turnId, (i) => ({
+              ...i,
+              preparing: null,
+              parts: [
+                ...i.parts,
+                { kind: "choice", question: event.question, options: event.options, recommended: event.recommended, reason: event.reason, answer: null },
+              ],
             }));
             return;
           case "toolFailed":

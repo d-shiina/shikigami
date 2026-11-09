@@ -165,6 +165,31 @@ function useActivePage(desk: React.RefObject<HTMLDivElement | null>, count: numb
   return active;
 }
 
+/** A4 sheet width in CSS pixels, and the desk's side padding (px-6). */
+const SHEET_WIDTH = 794;
+const DESK_PADDING = 24;
+
+/**
+ * How much to shrink the sheets so a whole page width fits the desk, like a PDF viewer's
+ * "fit to width". Never enlarges: at full size the sheet keeps its print proportions.
+ */
+function useSheetFit(desk: React.RefObject<HTMLDivElement | null>, count: number): number {
+  const [fit, setFit] = useState(1);
+  useEffect(() => {
+    const root = desk.current;
+    if (!root) return;
+    const measure = () => {
+      const room = root.clientWidth - DESK_PADDING * 2;
+      if (room > 0) setFit(Math.min(1, Math.round((room / SHEET_WIDTH) * 1000) / 1000));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [desk, count]);
+  return fit;
+}
+
 export function ManualView({ onView }: { onView: (view: View) => void }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -217,6 +242,7 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const pages = useMemo(() => (doc ? pagesOf(doc) : []), [doc]);
   const desk = useRef<HTMLDivElement>(null);
   const active = useActivePage(desk, editing ? 0 : pages.length);
+  const fit = useSheetFit(desk, editing ? 0 : pages.length);
   const { checks, onCheck } = useChecks(flowId);
 
   if (!flow || !doc) return <StoryView />;
@@ -268,68 +294,82 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const when = schedules.map((s) => describeWhen(s.when));
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[196px_minmax(0,1fr)]">
-      <PageList pages={pages} active={active} ctx={ctx} />
-      <div ref={desk} className="relative min-h-0 overflow-y-auto bg-[var(--manual-desk)] px-6 pb-16" data-manual>
-        <div className="sticky top-0 z-10 -mx-6 mb-2 flex items-center gap-2.5 bg-[var(--manual-desk)]/95 px-6 py-2.5 text-[12.5px] text-slate-500 backdrop-blur-sm">
-          {made ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-moegi-500" />
-              <span>{made}</span>
-            </>
-          ) : doc.drafts > 0 ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-slate-400" />
-              <span>{t.manual.draftsOnly}</span>
-            </>
-          ) : (
-            <span>{t.manual.noRun}</span>
-          )}
-          <span className="ml-auto flex shrink-0 gap-2">
-            <ToolButton icon={made ? RotateCw : Play} label={made ? t.manual.retake : t.manual.runNow} title={t.manual.retakeTitle} disabled={running} onClick={() => void startRun()} />
-            <ToolButton icon={Download} label={t.manual.export} onClick={() => setExporting(true)} />
-            <ToolButton icon={Pencil} label={t.manual.edit} title={t.manual.editTitle} onClick={() => setEditing(true)} />
-          </span>
+    <div className="@container/manual h-full min-h-0">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] @[40rem]/manual:grid-cols-[196px_minmax(0,1fr)]">
+        <div className="hidden @[40rem]/manual:contents">
+          <PageList pages={pages} active={active} ctx={ctx} />
         </div>
-        {pages.map((page) => (
-          <Sheet key={page.number} page={page} total={pages.length} title={doc.title} made={made}>
-            {page.kind === "cover" ? (
-              <Cover doc={doc} made={made} when={when} pages={pages} showMissing={doc.missing > 0 && (manifest !== null || doc.drafts > 0)} />
-            ) : (
-              <BodyPage page={page} ctx={ctx} />
-            )}
-          </Sheet>
-        ))}
+        <div ref={desk} className="relative min-h-0 overflow-y-auto bg-[var(--manual-desk)] px-6 pb-16" data-manual>
+          <div className="@container/bar sticky top-0 z-10 -mx-6 mb-2 bg-[var(--manual-desk)]/95 px-6 py-2.5 text-[12.5px] text-slate-500 backdrop-blur-sm">
+            <div className="flex items-center gap-2.5">
+              {made ? (
+                <BarNote dot="bg-moegi-500" text={made} />
+              ) : doc.drafts > 0 ? (
+                <BarNote dot="bg-slate-400" text={t.manual.draftsOnly} />
+              ) : (
+                <BarNote text={t.manual.noRun} />
+              )}
+              <span className="ml-auto flex shrink-0 gap-2">
+                <ToolButton icon={made ? RotateCw : Play} label={made ? t.manual.retake : t.manual.runNow} title={t.manual.retakeTitle} disabled={running} onClick={() => void startRun()} />
+                <ToolButton icon={Download} label={t.manual.export} onClick={() => setExporting(true)} />
+                <ToolButton icon={Pencil} label={t.manual.edit} title={t.manual.editTitle} onClick={() => setEditing(true)} />
+              </span>
+            </div>
+          </div>
+          <div style={{ zoom: fit }}>
+            {pages.map((page) => (
+              <Sheet key={page.number} page={page} total={pages.length} title={doc.title} made={made}>
+                {page.kind === "cover" ? (
+                  <Cover doc={doc} made={made} when={when} pages={pages} showMissing={doc.missing > 0 && (manifest !== null || doc.drafts > 0)} />
+                ) : (
+                  <BodyPage page={page} ctx={ctx} />
+                )}
+              </Sheet>
+            ))}
+          </div>
+        </div>
+        {masking && (
+          <MaskEditor
+            shot={masking}
+            url={urls[masking.file]}
+            mask={masks[masking.key]}
+            onCancel={() => setMasking(null)}
+            onSave={(mask) => {
+              saveMasks({ ...masks, [masking.key]: mask });
+              setMasking(null);
+            }}
+          />
+        )}
+        {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
+        {exporting && <ExportDialog doc={doc} flowId={flow.id} made={made} when={when} masks={masks} onClose={() => setExporting(false)} />}
       </div>
-      {masking && (
-        <MaskEditor
-          shot={masking}
-          url={urls[masking.file]}
-          mask={masks[masking.key]}
-          onCancel={() => setMasking(null)}
-          onSave={(mask) => {
-            saveMasks({ ...masks, [masking.key]: mask });
-            setMasking(null);
-          }}
-        />
-      )}
-      {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
-      {exporting && <ExportDialog doc={doc} flowId={flow.id} made={made} when={when} masks={masks} onClose={() => setExporting(false)} />}
     </div>
   );
 }
 
+/** What the screens on the desk came from. Wraps to two lines at most; the whole text is on hover. */
+function BarNote({ dot, text }: { dot?: string; text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2.5" title={text}>
+      {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
+      <span className="line-clamp-2 min-w-0 break-words">{text}</span>
+    </span>
+  );
+}
+
+/** A button on the bar above the sheets. When the bar is narrow only the icon stays; the name moves to the hover text. */
 function ToolButton({ icon: Icon, label, title, disabled, onClick }: { icon: typeof Play; label: string; title?: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
-      title={title}
+      title={title ? `${label}\n${title}` : label}
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-2.5 py-1 text-[13px] text-ink enabled:hover:bg-paper disabled:opacity-50"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] whitespace-nowrap text-ink enabled:hover:bg-paper disabled:opacity-50 @[36rem]/bar:px-2.5"
     >
-      <Icon size={14} strokeWidth={1.75} />
-      {label}
+      <Icon size={14} strokeWidth={1.75} className="shrink-0" />
+      <span className="hidden @[36rem]/bar:inline">{label}</span>
     </button>
   );
 }
@@ -662,11 +702,17 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
   );
 }
 
-/** Boxes over a picture: what is hidden (blurred or black). */
-function MaskBoxes({ boxes, crop, k }: { boxes: MaskBox[]; crop: Rect; k: number }) {
+/**
+ * Boxes over a picture: what is hidden (blurred or black). The values the
+ * page showed (`regions`: fields, cells, "label  value" rows) are blurred
+ * here too, as the 書き出し does by default, so what is on the screen is
+ * what goes out and a screen shared from here does not show them either.
+ */
+function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Rect[]; crop: Rect; k: number }) {
+  const all: MaskBox[] = [...(regions ?? []).map((r) => ({ ...r, kind: "blur" as const })), ...boxes];
   return (
     <>
-      {boxes.map((b, i) => (
+      {all.map((b, i) => (
         <span
           key={i}
           className={`absolute ${b.kind === "black" ? "bg-slate-900" : "bg-slate-200/50 backdrop-blur-[6px]"}`}
@@ -705,7 +751,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             className="absolute max-w-none"
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
-          <MaskBoxes boxes={mask?.boxes ?? []} crop={crop} k={k} />
+          <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={crop} k={k} />
           {marks.map((m, i) => (
             <span
               key={m.number ?? `wait-${i}`}
@@ -769,7 +815,7 @@ function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string
     <Overlay onClose={onClose} label={t.manual.whole}>
       <div className="relative" style={{ width: shot.width * k, height: shot.height * k }}>
         {url && <img src={url} alt="" className="absolute inset-0 h-full w-full" />}
-        <MaskBoxes boxes={mask?.boxes ?? []} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+        <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
       </div>
     </Overlay>
   );
@@ -835,7 +881,7 @@ function MaskEditor({
           }}
         >
           {url && <img src={url} alt="" draggable={false} className={`absolute inset-0 h-full w-full ${hidden ? "opacity-30" : ""}`} />}
-          <MaskBoxes boxes={boxes} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+          <MaskBoxes boxes={boxes} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
           {boxes.map((b, i) => (
             <button
               key={i}

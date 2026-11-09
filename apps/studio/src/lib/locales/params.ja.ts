@@ -179,6 +179,7 @@ export const paramsJa = {
     "browser.fill": { value: "入力する文字" },
     "browser.select": { value: "選ぶ項目" },
     "browser.getAttribute": { name: "属性" },
+    "browser.runScript": { script: "スクリプト", args: "渡す値", frame: "フレーム" },
     "browser.attach": { title: "タブのタイトル" },
     "browser.switchTab": { title: "タブのタイトル" },
     "browser.scroll": { to: "スクロール先" },

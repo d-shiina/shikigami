@@ -17,6 +17,7 @@
         "minWidth": 960,
         "minHeight": 600,
         "decorations": false,
+        "visible": false,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,ElasticOverscroll"
       }
     ],

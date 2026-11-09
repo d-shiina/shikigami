@@ -64,6 +64,61 @@ describe("browser adapter", () => {
     await adapter.call("close", r);
   });
 
+  it("blurs the values of a confirmation page built from <div>s, but not its labels or menu", async () => {
+    // A 申込内容の確認 screen like many sites make: no <table>, each row a
+    // flex box of a label and a value. Made-up data.
+    const css =
+      "body{margin:0;font:14px sans-serif}header{display:flex;gap:24px;padding:8px}.row{display:flex;padding:8px;border-bottom:1px solid #ddd}.label{width:160px}.grid{display:grid;grid-template-columns:120px 1fr}";
+    const row = (label: string, value: string) => `<div class="row"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+    const html = `<meta charset="utf-8"><title>確認</title><style>${css}</style>
+      <header><span class="logo">見本サポート</span><a href="#n">お知らせ</a><a href="#q">お問い合わせ</a></header>
+      <h2 id="heading">お申込内容のご確認</h2>
+      <div class="rows">${row("申込", "新規・お試し契約")}${row("貴社名", "見本商事株式会社")}${row("住所", "〒000-0000 架空県見本市1-2-3")}${row(
+        "担当者",
+        '<span>見本 太郎</span> <span>taro@example.com</span> <span>00-0000-0000</span>',
+      )}</div>
+      <div class="card" style="display:flex;flex-direction:column"><h3>手順</h3><div class="note">申込ボタンを押します</div></div>
+      <div class="card" style="display:flex;flex-direction:column"><h3>注意</h3><div class="note">内容を確かめます</div></div>
+      <dl class="grid"><dt>電話</dt><dd id="dd">00-1111-2222</dd><dt>メール</dt><dd>hanako@example.com</dd></dl>
+      <iframe style="width:400px;height:120px;border:12px solid #ccc;padding:6px;transform:scale(0.8);transform-origin:0 0" srcdoc="${`<meta charset=utf-8><style>${css}</style>${row("氏名", "見本 花子")}${row("生年月日", "2000年1月1日")}`.replace(/"/g, "&quot;")}"></iframe>`;
+    const r = { runId: "run_manual_regions" };
+    await adapter.call("open", { ...r, url: `data:text/html;charset=utf-8,${encodeURIComponent(html)}` });
+    const page = adapter["session"]({ runId: r.runId }).page;
+    const rectOf = async (selector: string, frame = false) => {
+      const target = frame ? page.frameLocator("iframe").locator(selector) : page.locator(selector);
+      const all = [];
+      for (const el of await target.all()) all.push(await el.boundingBox());
+      return all.filter((b): b is NonNullable<typeof b> => b !== null);
+    };
+    const path = join(mkdtempSync(join(tmpdir(), "shikigami-manual-")), "001.jpg");
+    const shot = (await adapter.call("screenshot", { ...r, path, report: true })) as {
+      regions: { x: number; y: number; width: number; height: number }[];
+    };
+    const centre = (b: { x: number; y: number; width: number; height: number }) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    const covered = (b: { x: number; y: number; width: number; height: number }) => {
+      const c = centre(b);
+      return shot.regions.some((g) => c.x >= g.x && c.x <= g.x + g.width && c.y >= g.y && c.y <= g.y + g.height);
+    };
+    const values = [...(await rectOf(".rows .value")), ...(await rectOf("dd")), ...(await rectOf(".value", true))];
+    expect(values).toHaveLength(8);
+    for (const v of values) expect(covered(v)).toBe(true);
+    // Inside the bordered, scaled frame the blur sits on the value itself.
+    const fit = (b: { x: number; y: number; width: number; height: number }) =>
+      Math.max(
+        ...shot.regions.map((g) => {
+          const w = Math.min(b.x + b.width, g.x + g.width) - Math.max(b.x, g.x);
+          const h = Math.min(b.y + b.height, g.y + g.height) - Math.max(b.y, g.y);
+          const both = Math.max(0, w) * Math.max(0, h);
+          return both / (b.width * b.height + g.width * g.height - both);
+        }),
+      );
+    for (const v of await rectOf(".value", true)) expect(fit(v)).toBeGreaterThan(0.8);
+    const labels = [...(await rectOf(".rows .label")), ...(await rectOf("dt")), ...(await rectOf("#heading")), ...(await rectOf("header > *")), ...(await rectOf(".card > *"))];
+    expect(labels.length).toBeGreaterThan(8);
+    for (const l of labels) expect(covered(l)).toBe(false);
+    await adapter.call("close", r);
+  });
+
   it("logs in, reads the order table and ships an order", async () => {
     const opened = (await adapter.call("open", { ...run, url: base })) as { title: string };
     expect(opened.title).toContain("ログイン");
