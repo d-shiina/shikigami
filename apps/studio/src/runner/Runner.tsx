@@ -2,11 +2,12 @@
 // in the form made from its inputs, run it, and see what came out. Nothing
 // here edits a flow; that stays in Studio.
 import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@shikigami/schema";
-import { Check, Circle, FileText, FolderOpen, Loader2, Play, Search, Square, X } from "lucide-react";
+import { Check, Circle, FileText, FolderOpen, Hand, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HoverPreview } from "../components/HoverPreview";
 import { WindowControls } from "../components/WindowControls";
 import { ApiError, api } from "../lib/api";
+import { useAttention } from "../lib/attention";
 import { relativeTime } from "../lib/changes";
 import { explainError } from "../lib/errorText";
 import { t } from "../lib/i18n";
@@ -242,6 +243,12 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   };
 
   const running = !!run && !finished;
+  const waiting = running ? (state?.waiting ?? null) : null;
+  useAttention(
+    waiting && run?.runId && item && !waiting.dialog
+      ? { tag: `human:${run.runId}:${waiting.stepId}`, title: t.attention.waiting(item.flow.name), body: waiting.message }
+      : null,
+  );
   const seconds = run ? Math.max(0, Math.round(((finished ? run.startedAt + finished.durationMs : now) - run.startedAt) / 1000)) : 0;
 
   return (
@@ -290,6 +297,16 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
 
               {run && state && !finished && (
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-2">
+                  {waiting && (
+                    <div role="status" className="flex items-center gap-2 rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[13px] font-medium text-shu-600">
+                      <Hand size={15} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                      <span>
+                        {t.waitingForYou}
+                        {t.colon}
+                        {waiting.message}
+                      </span>
+                    </div>
+                  )}
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full bg-brand-500 transition-[width] duration-300"

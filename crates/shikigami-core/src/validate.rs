@@ -15,7 +15,7 @@ use crate::ids::StepId;
 use crate::model::{Flow, SCHEMA_VERSION, Step, VarFormat, VarType, VariableDef};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::requires::{self, PLUGIN_PREFIX};
-use crate::secret::{self, SecretRef};
+use crate::secret::{self, SecretField, SecretRef};
 
 /// Name of the implicit variable holding the last error when `onError: continue`.
 pub const LAST_ERROR_VAR: &str = "lastError";
@@ -97,8 +97,11 @@ impl Validator {
             declared_vars: flow.variables.iter().map(|v| v.name.clone()).collect(),
             requires: flow.requires.clone(),
             parts: flow.parts.clone(),
+            variables: flow.variables.clone(),
+            secret_uses: Vec::new(),
         };
         cx.flow(flow);
+        cx.mixed_accounts();
         for issue in &mut cx.issues {
             if issue.hint.is_none() {
                 issue.hint = generic_hint(&issue.code).map(str::to_owned);
@@ -186,6 +189,9 @@ struct Cx<'a> {
     parts: BTreeMap<String, crate::model::Part>,
     /// The steps being checked are the `cases` of a `control.switch`.
     in_cases: bool,
+    variables: Vec<VariableDef>,
+    /// Every secret reference seen: (step, path, name, field).
+    secret_uses: Vec<(StepId, String, String, SecretField)>,
 }
 
 impl Cx<'_> {
@@ -1051,7 +1057,18 @@ impl Cx<'_> {
                 && let Some(reference) = SecretRef::from_value(value)
             {
                 match reference {
+                    Ok(r) if r.secret.contains("{{") => {
+                        self.secret_from_variable(&r.secret, &format!("{param_path}/secret"), id);
+                        self.secret_uses
+                            .push((step.id.clone(), param_path, r.secret, r.field));
+                    }
                     Ok(r) => {
+                        self.secret_uses.push((
+                            step.id.clone(),
+                            param_path.clone(),
+                            r.secret.clone(),
+                            r.field,
+                        ));
                         if let Err(message) = secret::check_name(&r.secret) {
                             self.error(
                                 "INVALID_SECRET_REF",
@@ -1090,6 +1107,81 @@ impl Cx<'_> {
                     )
                 });
             }
+        }
+    }
+
+    /// A secret name written `{{ variable }}`: the variable must be an input
+    /// whose `choices` are the names it may take, so the run window offers
+    /// them and the flow still lists every secret it may use.
+    fn secret_from_variable(&mut self, name: &str, path: &str, id: Option<&StepId>) {
+        let Some(var) = secret::name_variable(name) else {
+            self.error(
+                "INVALID_SECRET_REF",
+                format!("'{name}' is neither a registered name nor {{{{ variable }}}}"),
+                path.to_owned(),
+                id,
+            );
+            self.hint("Write the registered name as it is (\"受注システム\"), or exactly \"{{ variable }}\" of an input variable whose choices are registered names.");
+            return;
+        };
+        let def = self.variables.iter().find(|v| v.name == var);
+        let ok = def.is_some_and(|d| {
+            d.direction.is_input()
+                && matches!(d.var_type, VarType::String)
+                && !d.choices.is_empty()
+                && d.choices
+                    .iter()
+                    .all(|c| c.as_str().is_some_and(|n| secret::check_name(n).is_ok()))
+        });
+        if !ok {
+            self.error(
+                "INVALID_SECRET_REF",
+                format!("the secret name comes from '{var}', which is not an input with secret names as choices"),
+                path.to_owned(),
+                id,
+            );
+            self.hint(format!("Declare '{var}' as {{ \"name\": \"{var}\", \"type\": \"string\", \"direction\": \"input\", \"choices\": [\"受注システム（経理）\", \"受注システム（申請）\"] }} with the registered names it may take (list_secrets), so the person picks one when the run starts."));
+        }
+    }
+
+    /// The user name of one secret and the password (or one-time code) of
+    /// another in the same flow, while neither is used whole: most likely
+    /// two accounts of one site mixed up.
+    fn mixed_accounts(&mut self) {
+        let has =
+            |name: &str, field: SecretField, uses: &[(StepId, String, String, SecretField)]| {
+                uses.iter().any(|(_, _, n, f)| n == name && *f == field)
+            };
+        let uses = std::mem::take(&mut self.secret_uses);
+        let lone_users: Vec<&str> = uses
+            .iter()
+            .filter(|(_, _, n, f)| {
+                *f == SecretField::Username && !has(n, SecretField::Password, &uses)
+            })
+            .map(|(_, _, n, _)| n.as_str())
+            .collect();
+        if lone_users.is_empty() {
+            return;
+        }
+        let mut warned = BTreeSet::new();
+        for (step, path, name, field) in &uses {
+            if !matches!(field, SecretField::Password | SecretField::Totp)
+                || has(name, SecretField::Username, &uses)
+                || !warned.insert(name.clone())
+            {
+                continue;
+            }
+            let other = lone_users[0];
+            self.warn(
+                "SECRET_ACCOUNTS_MIXED",
+                format!(
+                    "the user name comes from '{other}' but the {} from '{name}'",
+                    field.as_str()
+                ),
+                path.clone(),
+                Some(step),
+            );
+            self.hint(format!("Use the same secret for the user name and the password: either '{other}' or '{name}' for both."));
         }
     }
 
@@ -1528,6 +1620,84 @@ mod tests {
                 .iter()
                 .any(|i| i.step_id.as_ref().is_some_and(|id| id.as_str() == "s0"))
         );
+    }
+
+    #[test]
+    fn a_secret_can_be_picked_from_an_input_with_choices() {
+        let v = Validator::new(typing_registry());
+        let mut s = Flow::new("t");
+        let mut account = VariableDef::new("アカウント", VarType::String);
+        account.direction = crate::model::VarDirection::Input;
+        account.choices = vec![json!("受注（経理）"), json!("受注（申請）")];
+        let mut free = VariableDef::new("free", VarType::String);
+        free.direction = crate::model::VarDirection::Input;
+        s.variables = vec![account, free];
+        let fill = |secret: &str, field: &str| {
+            Step::new("test.type").with_param("value", json!({ "secret": secret, "field": field }))
+        };
+        s.steps = vec![
+            fill("{{ アカウント }}", "username"),
+            fill("{{ アカウント }}", "password"),
+            fill("{{ free }}", "password"),
+            fill("{{ アカウント }}x", "password"),
+        ];
+        for (i, step) in s.steps.iter_mut().enumerate() {
+            step.id = format!("s{i}").into();
+        }
+        let report = v.validate(&s);
+        let found: Vec<(&str, Option<&str>)> = report
+            .issues
+            .iter()
+            .filter(|i| i.code.contains("SECRET"))
+            .map(|i| (i.code.as_str(), i.step_id.as_ref().map(|id| id.as_str())))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("INVALID_SECRET_REF", Some("s2")),
+                ("INVALID_SECRET_REF", Some("s3")),
+            ]
+        );
+        assert!(hint_of(&report, "INVALID_SECRET_REF").contains("choices"));
+        // Every choice counts as a secret the flow uses.
+        assert_eq!(s.secret_names(), ["受注（申請）", "受注（経理）"]);
+    }
+
+    #[test]
+    fn the_user_name_and_password_of_two_accounts_are_flagged() {
+        let v = Validator::new(typing_registry());
+        let fill = |secret: &str, field: &str| {
+            Step::new("test.type").with_param("value", json!({ "secret": secret, "field": field }))
+        };
+        let codes = |steps: Vec<Step>| {
+            let mut s = Flow::new("t");
+            s.steps = steps;
+            for (i, step) in s.steps.iter_mut().enumerate() {
+                step.id = format!("s{i}").into();
+            }
+            v.validate(&s)
+                .issues
+                .into_iter()
+                .filter(|i| i.code == "SECRET_ACCOUNTS_MIXED")
+                .map(|i| i.step_id.map(|id| id.as_str().to_owned()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            codes(vec![fill("経理", "username"), fill("申請", "password")]),
+            [Some("s1".to_owned())]
+        );
+        // Both accounts used whole, one after the other: fine.
+        assert!(
+            codes(vec![
+                fill("経理", "username"),
+                fill("経理", "password"),
+                fill("申請", "username"),
+                fill("申請", "password"),
+            ])
+            .is_empty()
+        );
+        // An API key alone: fine.
+        assert!(codes(vec![fill("API", "password")]).is_empty());
     }
 
     #[test]

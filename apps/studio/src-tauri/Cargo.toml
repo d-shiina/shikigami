@@ -40,6 +40,8 @@ dirs.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5.5"
+# Windows notifications when a run waits for the person (attention.rs).
+windows = { version = "0.62.2", features = ["Data_Xml_Dom", "Foundation", "UI_Notifications"] }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ダウンロード｜SpellSheet</title>
+  <meta name="description" content="SpellSheet Writer（Windows 10・11、64 ビット）の最新版をダウンロードします。インストールの手順と、初回に出る Windows の確認画面の進め方も載せています。">
+  <meta property="og:title" content="SpellSheet をダウンロード">
+  <meta property="og:description" content="Windows 10・11 向けの無料 RPA、SpellSheet Writer の最新版。管理者権限は不要です。">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/writer-og.png">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="band"></div>
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/mark.png" alt="">SpellSheet</a>
+      <nav class="nav" aria-label="サイト">
+        <a class="hide-sm" href="./#points">特長</a>
+        <a class="hide-sm" href="#install">インストール</a>
+        <a class="hide-sm" href="#smartscreen">確認画面が出たら</a>
+        <a data-gh="" href="https://github.com/d-shiina/spellsheet">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="dl-hero">
+      <div class="wrap">
+        <h1>SpellSheet をダウンロード</h1>
+        <p class="sub" style="margin-bottom:28px">無料です。登録やサインインは要りません。</p>
+
+        <div class="dl-card">
+          <img src="assets/mark.png" alt="">
+          <div>
+            <h2>SpellSheet Writer（Windows 版）</h2>
+            <p class="dl-facts">
+              <span data-version-text>最新版</span><span data-date hidden></span><span data-size hidden></span><span>Windows 10・11（64 ビット）</span>
+            </p>
+            <div class="dl-actions">
+              <a class="btn btn-primary btn-lg" data-dl href="https://github.com/d-shiina/spellsheet/releases/latest">
+                <svg class="i"><use href="assets/icons.svg#download"/></svg>ダウンロード
+              </a>
+              <a class="btn" data-release href="https://github.com/d-shiina/spellsheet/releases/latest">この版の変更点<svg class="i i-sm"><use href="assets/icons.svg#external-link"/></svg></a>
+            </div>
+            <p class="dl-file" data-file-line hidden>ファイル名：<code data-file></code></p>
+            <p class="sha" data-sha-line hidden>SHA-256：<code data-sha></code></p>
+          </div>
+        </div>
+        <p class="meta">以前の版は <a data-gh="/releases" href="https://github.com/d-shiina/spellsheet/releases">GitHub のリリース一覧</a> にあります。ソースコードは <a data-gh="" href="https://github.com/d-shiina/spellsheet">GitHub</a> で公開しています（Apache License 2.0）。</p>
+      </div>
+    </section>
+
+    <section style="padding-top:24px">
+      <div class="wrap">
+        <div class="notice">
+          <svg class="i"><use href="assets/icons.svg#triangle-alert"/></svg>
+          <div>
+            <p><b>初めて開くとき、Windows の確認画面が出ます。</b></p>
+            <p>インストーラーにまだコード署名がないためです（署名は準備中です）。このページか GitHub のリリースからダウンロードしたファイルであれば、<a href="#smartscreen">下の手順</a>で進めて問題ありません。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="requirements" style="padding-top:24px">
+      <div class="wrap">
+        <h2>動作環境</h2>
+        <table class="req">
+          <tr><th>OS</th><td>Windows 10・11（64 ビット）</td></tr>
+          <tr><th>権限</th><td>管理者権限は要りません。使う人のユーザーごとにインストールします</td></tr>
+          <tr><th>ディスク</th><td>インストーラーは約 <span data-size-mb>210</span> MB です。ブラウザ操作や OCR の部品も含みます</td></tr>
+          <tr><th>ブラウザ</th><td>Web の操作には Windows に入っている Microsoft Edge をそのまま使います（Chrome も選べます）</td></tr>
+          <tr><th>AI（作るときだけ）</th><td>Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot・Cursor のどれかが使える契約。動かすだけなら AI は要りません</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="install" class="soft">
+      <div class="wrap">
+        <h2>インストールの手順</h2>
+        <p class="sub">数分で終わります。終わるとスタートメニューに「SpellSheet Writer」が並びます。</p>
+        <ol class="howto">
+          <li>
+            <h3>インストーラーをダウンロードする</h3>
+            <p>上の「ダウンロード」を押すと、<code data-file-example>SpellSheet.Writer_<i>版</i>_x64-setup.exe</code> が保存されます。</p>
+            <p>Edge が「一般的にダウンロードされていません」と止めたときは、ダウンロードの一覧でファイルの「…」から「保存」を選び、次の画面で「詳細表示」→「保持する」を選びます。</p>
+          </li>
+          <li id="smartscreen">
+            <h3>Windows の確認画面で「詳細情報」→「実行」を押す</h3>
+            <p>ダウンロードしたファイルを開くと、青い「Windows によって PC が保護されました」の画面が出ることがあります。左下の「詳細情報」を押すと「実行」ボタンが出るので、それを押します。</p>
+            <div class="win" role="img" aria-label="Windows の確認画面の例。詳細情報を押すと、アプリ名と発行元が表示され、実行ボタンが現れる">
+              <p class="win-title">Windows によって PC が保護されました</p>
+              <p>Microsoft Defender SmartScreen は認識されないアプリの起動を停止しました。このアプリを実行すると、PC に問題が起こる可能性があります。</p>
+              <p class="win-link"><span class="mark">詳細情報</span></p>
+              <dl class="win-detail">
+                <dt>アプリ：</dt><dd>SpellSheet.Writer_<span data-version-plain>…</span>_x64-setup.exe</dd>
+                <dt>発行元：</dt><dd>不明な発行元</dd>
+              </dl>
+              <div class="win-buttons"><span class="win-btn mark">実行</span><span class="win-btn">実行しない</span></div>
+            </div>
+            <p class="win-caption">画面の例です。「詳細情報」を押すまで「実行」は表示されません。</p>
+            <p>「発行元：不明な発行元」と出るのは、署名がまだないためです。アプリ名が <code>SpellSheet.Writer_…_x64-setup.exe</code> であることを確かめてから進めてください。</p>
+            <p>会社の PC で「実行」が出ないときは、社内の設定でブロックされています。情報システム部門に相談してください。</p>
+          </li>
+          <li>
+            <h3>インストーラーの案内に沿って進める</h3>
+            <p>「次へ」「インストール」と押して進めます。管理者権限を求める画面は出ません。終わったら「完了」を押します。</p>
+          </li>
+          <li>
+            <h3>SpellSheet Writer を起動する</h3>
+            <p>スタートメニューから「SpellSheet Writer」を開きます。最初の画面の「何を自動化しますか？」に書いて AI に頼むか、「見本を開く」で完成したフローの中身と動きを確かめられます。</p>
+            <p>AI は Writer 右上の「AI チャット」（Ctrl+J）から選んで、その場で導入とサインインができます。ターミナルは要りません。</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="feature" style="padding:0; align-items:start">
+          <div>
+            <h2 style="font-size:24px">更新</h2>
+            <p class="sub" style="margin-bottom:0">新しい版が出ると、Writer が起動したときに見つけて裏でダウンロードします。準備ができたら「再起動して更新」を押すか、Writer を閉じたときに入れ替わります。手で入れ直す必要はありません。</p>
+          </div>
+          <div>
+            <h2 style="font-size:24px">アンインストール</h2>
+            <p class="sub" style="margin-bottom:0">Windows の「設定」→「アプリ」→「インストールされているアプリ」で「SpellSheet Writer」を選び、「アンインストール」を押します。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="soft">
+      <div class="wrap">
+        <h2>ファイルを確かめたいとき</h2>
+        <p class="sub">ダウンロードしたファイルが公開しているものと同じかは、PowerShell で次のように確かめられます。表示された値が、上の「SHA-256」と同じなら同じファイルです。</p>
+        <p><code>Get-FileHash "$env:USERPROFILE\Downloads\SpellSheet.Writer_<span data-version-plain>…</span>_x64-setup.exe"</code></p>
+        <p class="meta" style="text-align:left">ダウンロードは GitHub（github.com）から直接行われます。それ以外の場所で配られている SpellSheet のインストーラーは使わないでください。</p>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap">
+        <h2>次にやること</h2>
+        <p class="sub">見本のファイル付きのチュートリアルで、業務 1 本を最初から最後まで試せます（各 15 分ほど）。</p>
+        <div class="cta">
+          <a class="btn btn-primary" data-gh="/blob/main/docs/ja/tutorials/README.md" href="https://github.com/d-shiina/spellsheet/blob/main/docs/ja/tutorials/README.md"><svg class="i"><use href="assets/icons.svg#book-open"/></svg>チュートリアルを読む</a>
+          <a class="btn" data-gh="/issues" href="https://github.com/d-shiina/spellsheet/issues">不具合・要望を送る<svg class="i i-sm"><use href="assets/icons.svg#external-link"/></svg></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="band"></div>
+  <footer>
+    <div class="wrap">
+      <span>SpellSheet・Apache License 2.0</span>
+      <div class="links">
+        <a href="./">トップ</a>
+        <a data-gh="/blob/main/README.ja.md" href="https://github.com/d-shiina/spellsheet/blob/main/README.ja.md">ドキュメント</a>
+        <a data-gh="/blob/main/CHANGELOG.md" href="https://github.com/d-shiina/spellsheet/blob/main/CHANGELOG.md">変更履歴</a>
+        <a data-gh="/blob/main/SECURITY.md" href="https://github.com/d-shiina/spellsheet/blob/main/SECURITY.md">セキュリティ</a>
+        <a data-gh="" href="https://github.com/d-shiina/spellsheet">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

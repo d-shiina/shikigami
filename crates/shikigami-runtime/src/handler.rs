@@ -121,7 +121,15 @@ impl ActionInput {
     /// Studio while the step runs).
     pub fn request_human(&self, message: impl Into<String>) {
         self.emitter
-            .human_action_required(message.into(), self.step_id.clone());
+            .human_action_required(message.into(), self.step_id.clone(), false);
+    }
+
+    /// [`Self::request_human`] for a step that shows its own window in
+    /// front of the others (a dialog): the screens show the message but
+    /// do not call the person away from what they are doing.
+    pub fn request_human_in_dialog(&self, message: impl Into<String>) {
+        self.emitter
+            .human_action_required(message.into(), self.step_id.clone(), true);
     }
 
     /// Looks up `value` when it is a secret reference

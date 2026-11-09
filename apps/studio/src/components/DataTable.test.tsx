@@ -16,7 +16,7 @@ const COLUMNS: Column<Row>[] = [
   { id: "n", header: "数", width: "w-[80px]", sortValue: (r) => r.n, group: (r) => ({ key: r.n % 2 ? "odd" : "even", label: r.n % 2 ? "奇数" : "偶数" }), cell: (r) => r.n },
 ];
 
-function Harness({ onPicked }: { onPicked?: (s: Set<string>) => void }) {
+function Harness({ onPicked, canPick }: { onPicked?: (s: Set<string>) => void; canPick?: (r: Row) => boolean }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const view = useTableView(COLUMNS, { initialSort: { column: "n", descending: false } });
   return (
@@ -28,6 +28,7 @@ function Harness({ onPicked }: { onPicked?: (s: Set<string>) => void }) {
         rows={ROWS}
         total={10}
         rowKey={(r) => r.id}
+        canPick={canPick}
         selected={picked}
         onSelect={(s) => {
           setPicked(s);
@@ -85,5 +86,16 @@ describe("DataTable", () => {
     fireEvent.click(screen.getByRole("button", { name: /奇数/ }));
     // The odd ones (いちご 3, あんず 1) are folded away; the even ones stay picked.
     expect([...last].sort()).toEqual(["c", "d"]);
+  });
+
+  it("leaves rows that cannot be picked out of pick all, so a second press clears", () => {
+    let last = new Set<string>();
+    render(<Harness canPick={(r) => r.id !== "b"} onPicked={(s) => (last = s)} />);
+    expect(screen.getAllByRole("checkbox", { name: "選択" })).toHaveLength(3);
+    const all = screen.getAllByRole("checkbox")[0]!;
+    fireEvent.click(all);
+    expect([...last].sort()).toEqual(["a", "c", "d"]);
+    fireEvent.click(all);
+    expect(last.size).toBe(0);
   });
 });

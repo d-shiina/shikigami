@@ -181,7 +181,7 @@ describe("studio store", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 0, type: "humanActionRequired", stepId: "s1", message: "スマホで承認してください" });
-    expect(store.getState().human).toEqual({ stepId: "s1", message: "スマホで承認してください" });
+    expect(store.getState().human).toEqual({ stepId: "s1", message: "スマホで承認してください", dialog: false });
     store.getState().onRunEvent({
       ...base,
       seq: 1,

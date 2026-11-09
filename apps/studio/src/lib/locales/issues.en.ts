@@ -21,6 +21,7 @@ export const issuesEn: Record<string, IssueText> = {
   PATH_OUTSIDE_PROJECT: (c) => (c.field ? `"${c.label(c.field)}" cannot be outside the flow's folder` : "Paths cannot be outside the flow's folder"),
   FOREACH_COLLECT_WITHOUT_SAVE_AS: 'To use "Collect results into", also enter "Save result to"',
   INVALID_SECRET_REF: "The secret is not set correctly. Choose it again",
+  SECRET_ACCOUNTS_MIXED: "The user name and the password come from different secrets. Choose the same account for both",
   SECRET_DEFAULT: "Secret variables cannot have an initial value. Register it as a secret instead",
   UNKNOWN_STEP_TYPE: "This kind of node is not available in this Writer",
   DEPRECATED_STEP_TYPE: "This node is an old kind. Replace it with the new one",

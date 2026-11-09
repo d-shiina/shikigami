@@ -8,6 +8,7 @@ import type { AnswerProblem, SecretField } from "./api";
 import { t } from "./i18n";
 import { missingImages } from "./imageParts";
 import { partRef } from "./parts";
+import { nameVariable } from "./secretAccounts";
 import { writtenAt } from "./problemText";
 
 export type Todo =
@@ -83,7 +84,14 @@ export function personTodos(
     for (const step of steps) {
       const found: { name: string; field?: string }[] = [];
       secretsIn(step.params, found);
-      for (const { name, field } of found) {
+      // A name picked each run (`{{ アカウント }}`) stands for each of the input's choices.
+      const named = found.flatMap(({ name, field }) => {
+        const input = nameVariable(name);
+        if (!input) return [{ name, field }];
+        const def = (flow.variables ?? []).find((v) => v.name === input);
+        return (def?.choices ?? []).filter((c): c is string => typeof c === "string").map((choice) => ({ name: choice, field }));
+      });
+      for (const { name, field } of named) {
         if (secrets.has(name)) continue;
         const entry = missing.get(name) ?? { fields: new Set<SecretField>(), steps: [] };
         if (field === "username" || field === "password" || field === "totp") entry.fields.add(field);
