@@ -3,9 +3,11 @@
 // is about, or becomes a new section here (and in SECTIONS), never a button
 // elsewhere. Laid out like Windows 11 / VS Code settings: the sections are
 // listed on the left, the settings fill the width on the right, one row each.
-import { Bot, FolderOpen, Info, type LucideIcon, Monitor, ShieldCheck } from "lucide-react";
+import { Blocks, Bot, FolderOpen, Info, type LucideIcon, Monitor, ShieldCheck } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgent } from "../agent";
+import { useStudio } from "../context";
+import { extensionsApi } from "../lib/api";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
 import { AboutSection, McpSetupRow } from "./AppMenu";
@@ -14,7 +16,7 @@ import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
 import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
 
-const IDS = ["workspace", "display", "policy", "agent", "about"] as const;
+const IDS = ["workspace", "display", "policy", "agent", "extensions", "about"] as const;
 type SectionId = (typeof IDS)[number];
 
 function sections(): { id: SectionId; title: string; icon: LucideIcon; body: () => ReactNode }[] {
@@ -28,6 +30,7 @@ function sections(): { id: SectionId; title: string; icon: LucideIcon; body: () 
     { id: "display", title: t.shell.displaySection, icon: Monitor, body: () => <DisplaySection /> },
     { id: "policy", title: t.policy, icon: ShieldCheck, body: () => <PolicySection /> },
     { id: "agent", title: t.shell.agentSection, icon: Bot, body: () => <AgentSection /> },
+    { id: "extensions", title: t.extensions.place, icon: Blocks, body: () => <CustomNodesSection /> },
     { id: "about", title: t.shell.aboutSection, icon: Info, body: () => <AboutSection /> },
   ];
 }
@@ -43,6 +46,41 @@ function DisplaySection() {
       <SettingsRow label={t.bar.theme}>
         <div className="flex">
           <ThemeSwitch labeled />
+        </div>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
+/**
+ * Custom nodes (code: plugins) are few and seldom changed, so they are a
+ * section here rather than a place in the sidebar; 「管理」 opens their page.
+ */
+function CustomNodesSection() {
+  const setPlace = useStudio((s) => s.setPlace);
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    extensionsApi
+      .list()
+      .then((list) => live && setCount(list.installed.length))
+      .catch(() => live && setCount(null));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return (
+    <SettingsGroup>
+      <SettingsRow label={t.extensions.place} hint={t.extensions.placeTitle}>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] text-slate-600">{count === null ? "" : t.extensions.installed(count)}</span>
+          <button
+            type="button"
+            onClick={() => setPlace("extensions")}
+            className="flex h-7 items-center rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+          >
+            {t.extensions.manage}
+          </button>
         </div>
       </SettingsRow>
     </SettingsGroup>
