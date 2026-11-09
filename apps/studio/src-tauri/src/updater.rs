@@ -185,7 +185,36 @@ pub fn open_cursor_mcp_install() -> CmdResult<()> {
     let Some(cli) = installed_cli() else {
         return Err(err("NOT_FOUND", "SpellSheet のコマンドが見つかりません"));
     };
+    // Without Cursor nothing handles cursor://, and Windows answers the link
+    // by opening Explorer instead; say so and leave the copy below to use.
+    if !cursor_link_handled() {
+        return Err(err(
+            "NOT_FOUND",
+            "この PC に Cursor が見つかりません。Cursor を入れてからもう一度押すか、下の内容を mcp.json に書いてください",
+        ));
+    }
     crate::agent::open_external(&cursor_install_url(&cli))
+}
+
+/// Whether some program (Cursor) is registered for `cursor://` links:
+/// `HKEY_CLASSES_ROOT\cursor` with a "URL Protocol" value, per user or for
+/// the machine.
+#[cfg(windows)]
+fn cursor_link_handled() -> bool {
+    use std::os::windows::process::CommandExt as _;
+    std::process::Command::new("reg")
+        .args(["query", r"HKCR\cursor", "/v", "URL Protocol"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[cfg(not(windows))]
+fn cursor_link_handled() -> bool {
+    true
 }
 
 #[tauri::command]
