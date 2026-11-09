@@ -350,5 +350,8 @@ describe("JavaScript in the page", () => {
   it("never returns what is typed in a password field", async () => {
     await adapter.call("fill", { ...tab, target: { label: "パスワード" }, value: "hunter2-secret" });
     expect(await runScript({ script: "return { pw: document.getElementById('pw').value };" })).toEqual({ pw: "***" });
+    const thrown = await failure(runScript({ script: "throw new Error('pw=' + document.getElementById('pw').value);" }));
+    expect(thrown.message).toContain("pw=***");
+    expect(thrown.message).not.toContain("hunter2");
   });
 });

@@ -680,7 +680,7 @@ export class Adapter {
     try {
       compiled = await frame.evaluateHandle(source);
     } catch (error) {
-      throw this.scriptError(session, error);
+      throw await this.scriptError(session, error);
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -713,7 +713,7 @@ export class Adapter {
           timeout,
         );
       });
-      const value = await Promise.race([running.catch((error: unknown) => Promise.reject(this.scriptError(session, error))), timedOut]);
+      const value = await Promise.race([running.catch(async (error: unknown) => Promise.reject(await this.scriptError(session, error))), timedOut]);
       return await this.redactDeep(session, value);
     } finally {
       clearTimeout(timer);
@@ -723,11 +723,11 @@ export class Adapter {
   }
 
   /** A script's exception or syntax error, as SCRIPT_ERROR with its own message. */
-  private scriptError(session: Session, error: unknown): AdapterError {
+  private async scriptError(session: Session, error: unknown): Promise<AdapterError> {
     if (error instanceof AdapterError) return error;
     const raw = error instanceof Error ? error.message : String(error);
-    // "elementHandle.evaluate: Error: boom\n    at ..." → "Error: boom"
-    const message = this.mask(session, (raw.split("\n")[0] ?? raw).replace(/^[\w.]+: /, ""));
+    // "elementHandle.evaluate: Error: boom\n    at ..." → "Error: boom"; a script may throw what a password field holds.
+    const message = await this.redact(session, (raw.split("\n")[0] ?? raw).replace(/^[\w.]+: /, ""));
     return new AdapterError("SCRIPT_ERROR", `the script failed: ${message}`, {
       details: { hint: "Fix the script. It is the body of an async function: end with `return <value>`; `args` and `element` are in scope." },
     });
@@ -735,10 +735,7 @@ export class Adapter {
 
   /** Masks secrets (and what is typed in password fields) in every text of a value. */
   private async redactDeep(session: Session, value: unknown): Promise<unknown> {
-    const typed = await session.page
-      .locator(PASSWORD_FIELDS)
-      .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
-      .catch(() => [] as string[]);
+    const typed = await this.typedPasswords(session);
     const walk = (v: unknown): unknown => {
       if (typeof v === "string") return this.mask(session, v, typed);
       if (Array.isArray(v)) return v.map(walk);
@@ -1299,11 +1296,15 @@ export class Adapter {
 
   /** Replaces secret values (and whatever is typed in password fields, even by hand) with ***. */
   private async redact(session: Session, text: string): Promise<string> {
-    const typed = await session.page
+    return this.mask(session, text, await this.typedPasswords(session));
+  }
+
+  /** What is typed in the page's password fields now (even by hand). */
+  private async typedPasswords(session: Session): Promise<string[]> {
+    return await session.page
       .locator(PASSWORD_FIELDS)
       .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
       .catch(() => [] as string[]);
-    return this.mask(session, text, typed);
   }
 
   private mask(session: Session, text: string, extra: string[] = []): string {
