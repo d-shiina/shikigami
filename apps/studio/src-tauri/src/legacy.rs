@@ -81,9 +81,9 @@ pub(crate) fn spawn_after_start() {
         let mut files = mcp_setups(&home, dirs::config_dir().as_deref());
         files.extend(project_setups(&home));
         files.extend(plugin_setups(&home.join(".claude").join("plugins")));
-        let all_moved = migrate_mcp_setups(&files);
-        migrate_worker_task(&cli);
-        if all_moved {
+        let setups_moved = migrate_mcp_setups(&files);
+        let task_moved = migrate_worker_task(&cli);
+        if setups_moved && task_moved {
             remove_old_command(&dir);
         }
     });
@@ -162,6 +162,18 @@ fn plugin_setups(root: &Path) -> Vec<PathBuf> {
 /// Rewrites each file that mentions the old server or command. False when
 /// one could not be read or written (the old command is then kept).
 fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
+    // A setup with both names keeps the old server as it is; its tool
+    // permissions (`mcp__<old>__…`) then stay with it.
+    let old = legacy_name();
+    let old_kept = files.iter().any(|file| {
+        std::fs::read_to_string(file).is_ok_and(|text| {
+            if file.extension().is_some_and(|e| e == "toml") {
+                toml_has_both(&text, &old)
+            } else {
+                serde_json::from_str::<Value>(&text).is_ok_and(|v| json_has_both(&v, &old))
+            }
+        })
+    });
     let mut all = true;
     for file in files {
         let Ok(text) = std::fs::read_to_string(file) else {
@@ -170,7 +182,7 @@ fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
         let updated = if file.extension().is_some_and(|e| e == "toml") {
             Some(migrate_toml(&text)).filter(|t| *t != text)
         } else {
-            migrate_json(&text)
+            migrate_json(&text, !old_kept)
         };
         let Some(updated) = updated else { continue };
         match write_replacing(file, &updated) {
@@ -200,9 +212,9 @@ fn write_replacing(file: &Path, text: &str) -> std::io::Result<()> {
 /// The JSON setups: every `mcpServers` / `servers` object (also those of
 /// Claude Code's projects), and tool names in permission lists
 /// (`mcp__<old>__get_flow`). `None` when nothing changes.
-fn migrate_json(text: &str) -> Option<String> {
+fn migrate_json(text: &str, permissions: bool) -> Option<String> {
     let mut value: Value = serde_json::from_str(text).ok()?;
-    if !migrate_value(&mut value, &legacy_name()) {
+    if !migrate_value(&mut value, &legacy_name(), permissions) {
         return None;
     }
     let mut out = serde_json::to_string_pretty(&value).ok()?;
@@ -210,7 +222,33 @@ fn migrate_json(text: &str) -> Option<String> {
     Some(out)
 }
 
-fn migrate_value(value: &mut Value, old: &str) -> bool {
+/// A `mcpServers` / `servers` object somewhere in `value` with both the old
+/// and the new server.
+fn json_has_both(value: &Value, old: &str) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, child)| {
+            ((key == "mcpServers" || key == "servers")
+                && child.get(old).is_some()
+                && child.get(NAME).is_some())
+                || json_has_both(child, old)
+        }),
+        Value::Array(items) => items.iter().any(|item| json_has_both(item, old)),
+        _ => false,
+    }
+}
+
+fn toml_has_both(text: &str, old: &str) -> bool {
+    let has = |name: &str| {
+        text.lines().any(|l| {
+            toml_table(l).is_some_and(|(path, _)| {
+                path.len() >= 2 && path[0] == "mcp_servers" && path[1] == name
+            })
+        })
+    };
+    has(old) && has(NAME)
+}
+
+fn migrate_value(value: &mut Value, old: &str, permissions: bool) -> bool {
     match value {
         Value::Object(map) => {
             let mut changed = false;
@@ -220,15 +258,15 @@ fn migrate_value(value: &mut Value, old: &str) -> bool {
                         changed |= migrate_servers(servers, old);
                     }
                 } else {
-                    changed |= migrate_value(child, old);
+                    changed |= migrate_value(child, old, permissions);
                 }
             }
             changed
         }
-        Value::Array(items) => items
-            .iter_mut()
-            .fold(false, |changed, item| migrate_value(item, old) | changed),
-        Value::String(text) => match text.strip_prefix(&format!("mcp__{old}")) {
+        Value::Array(items) => items.iter_mut().fold(false, |changed, item| {
+            migrate_value(item, old, permissions) | changed
+        }),
+        Value::String(text) if permissions => match text.strip_prefix(&format!("mcp__{old}")) {
             Some(rest) => {
                 *text = format!("mcp__{NAME}{rest}");
                 true
@@ -389,7 +427,9 @@ fn toml_string(rest: &str, quote: char) -> Option<&str> {
 
 /// A worker task made with the old command, or under an old task name,
 /// starts `spellsheet.exe` from the next sign-in.
-fn migrate_worker_task(cli: &Path) {
+/// False when the task could not be moved (the old command is then kept,
+/// since the task may still start it).
+fn migrate_worker_task(cli: &Path) -> bool {
     let mut command = std::process::Command::new(cli);
     command.args(["worker", "migrate"]);
     #[cfg(windows)]
@@ -398,12 +438,18 @@ fn migrate_worker_task(cli: &Path) {
         command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     match command.output() {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => tracing::warn!(
-            stderr = %String::from_utf8_lossy(&out.stderr),
-            "cannot move the worker task to the new command"
-        ),
-        Err(e) => tracing::warn!(error = %e, "cannot move the worker task to the new command"),
+        Ok(out) if out.status.success() => true,
+        Ok(out) => {
+            tracing::warn!(
+                stderr = %String::from_utf8_lossy(&out.stderr),
+                "cannot move the worker task to the new command"
+            );
+            false
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "cannot move the worker task to the new command");
+            false
+        }
     }
 }
 
@@ -453,7 +499,7 @@ mod tests {
             "permissions": { "allow": [format!("mcp__{old}__get_flow"), "Bash"] }
         })
         .to_string();
-        let out: Value = serde_json::from_str(&migrate_json(&text).unwrap()).unwrap();
+        let out: Value = serde_json::from_str(&migrate_json(&text, true).unwrap()).unwrap();
         assert_eq!(
             out["mcpServers"]["spellsheet"]["command"],
             r"C:\Users\a\AppData\Local\SpellSheet Writer\spellsheet.exe"
@@ -474,8 +520,8 @@ mod tests {
     #[test]
     fn json_without_the_old_name_is_left_alone() {
         let text = r#"{"mcpServers":{"spellsheet":{"command":"spellsheet"}}}"#;
-        assert_eq!(migrate_json(text), None);
-        assert_eq!(migrate_json("not json"), None);
+        assert_eq!(migrate_json(text, true), None);
+        assert_eq!(migrate_json("not json", true), None);
     }
 
     #[test]
@@ -486,9 +532,36 @@ mod tests {
             old.clone(): { "command": format!("{old}.EXE") }
         }})
         .to_string();
-        let out: Value = serde_json::from_str(&migrate_json(&text).unwrap()).unwrap();
+        let out: Value = serde_json::from_str(&migrate_json(&text, true).unwrap()).unwrap();
         assert_eq!(out["mcpServers"][&old]["command"], "spellsheet.exe");
         assert_eq!(out["mcpServers"]["spellsheet"]["command"], "spellsheet");
+    }
+
+    #[test]
+    fn permissions_stay_with_an_old_server_that_keeps_its_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = old();
+        let servers = dir.path().join("claude.json");
+        let settings = dir.path().join("settings.json");
+        std::fs::write(
+            &servers,
+            json!({ "mcpServers": {
+                "spellsheet": { "command": "spellsheet" },
+                old.clone(): { "command": format!("{old}.exe") }
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        let rule = format!("mcp__{old}__get_flow");
+        std::fs::write(
+            &settings,
+            json!({ "permissions": { "allow": [rule.clone()] } }).to_string(),
+        )
+        .unwrap();
+        assert!(migrate_mcp_setups(&[servers, settings.clone()]));
+        let out: Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(out["permissions"]["allow"][0], rule.as_str());
     }
 
     #[test]
