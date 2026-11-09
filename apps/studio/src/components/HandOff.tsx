@@ -118,17 +118,21 @@ export function HandOffDialog() {
   const plan = useStudio((s) => s.handOff);
   const close = useStudio((s) => s.closeHandOff);
   const exportPackage = useStudio((s) => s.exportPackage);
-  const [current, setCurrent] = useState(false);
+  const openHandOff = useStudio((s) => s.openHandOff);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    setCurrent(false);
     setPicked(new Set((plan?.files ?? []).filter((f) => f.includedByDefault).map(fileKey)));
   }, [plan]);
   if (!plan) return null;
   const h = t.handOff;
   const published = plan.published ?? null;
-  const fileName = current || !published ? plan.fileName.replace(/ v\d+(?=\.spx$)/, "") : plan.fileName;
+  // The plan is for what is chosen: its files, needs and name follow the choice.
+  const current = plan.current;
+  const fileName = plan.fileName;
+  const setCurrent = (on: boolean) => {
+    if (on !== current) void openHandOff(plan.flowId, on ? "current" : "auto");
+  };
   const byFlow = new Map<string, PackageFileChoice[]>();
   for (const f of plan.files) byFlow.set(f.flowId, [...(byFlow.get(f.flowId) ?? []), f]);
   const toggle = (f: PackageFileChoice) =>
@@ -140,8 +144,9 @@ export function HandOffDialog() {
     });
   const save = async () => {
     setBusy(true);
-    const exclude = plan.files.filter((f) => !picked.has(fileKey(f))).map((f) => ({ flowId: f.flowId, path: f.path }));
-    const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, exclude });
+    // Exactly the files shown and ticked: anything not listed stays out.
+    const only = plan.files.filter((f) => picked.has(fileKey(f))).map((f) => ({ flowId: f.flowId, path: f.path }));
+    const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, only });
     setBusy(false);
     if (out) void api.revealFile(out.path).catch(() => {});
   };

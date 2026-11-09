@@ -1124,6 +1124,7 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
                 },
                 include_input: *with_input,
                 exclude: Vec::new(),
+                only: None,
                 exported_by: std::env::var("USERNAME")
                     .or_else(|_| std::env::var("USER"))
                     .ok(),

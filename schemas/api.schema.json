@@ -2358,6 +2358,10 @@
           "description": "Whether the current content differs from the published version.",
           "type": "boolean"
         },
+        "current": {
+          "description": "The plan is for the current content (not the published version).",
+          "type": "boolean"
+        },
         "subflows": {
           "type": "array",
           "items": {
@@ -2382,6 +2386,7 @@
         "flowId",
         "name",
         "hasUnpublishedChanges",
+        "current",
         "subflows",
         "files",
         "requires",
@@ -2440,6 +2445,16 @@
         "exclude": {
           "description": "Files to leave out (after `include_input`).",
           "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileRef"
+          }
+        },
+        "only": {
+          "description": "Exactly these files, when set (`include_input` and `exclude` are then\nignored). A file not listed, such as one of a sub-flow the person did\nnot see, stays out.",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "$ref": "#/$defs/FileRef"
           }

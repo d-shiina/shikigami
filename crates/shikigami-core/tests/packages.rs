@@ -85,7 +85,7 @@ fn a_package_carries_the_published_version_and_says_what_it_needs() {
     // Work after publishing is not what goes out by default.
     rename(&svc, &flow.id, "まだ確認していない変更");
 
-    let plan = svc.package_plan(&flow.id).unwrap();
+    let plan = svc.package_plan(&flow.id, PackageContent::Auto).unwrap();
     assert_eq!(plan.published.as_ref().unwrap().number, 1);
     assert!(plan.has_unpublished_changes);
     assert_eq!(plan.file_name, "請求書の集計 v1.spx");
@@ -230,4 +230,120 @@ fn old_json_bundles_still_import() {
     let other = service_at(to.path());
     let imported = other.import_file(&json, None, ai()).unwrap();
     assert_eq!(imported.outcome.flow.name, "請求書の集計");
+}
+
+fn plain(svc: &FlowService, name: &str, steps: Vec<Step>) -> shikigami_core::Flow {
+    svc.create(
+        NewFlow {
+            name: name.into(),
+            steps,
+            ..Default::default()
+        },
+        ai(),
+    )
+    .unwrap()
+    .flow
+}
+
+fn calls(target: &shikigami_core::FlowId) -> Step {
+    Step::new("flow.call").with_param("flow", target.as_str())
+}
+
+#[test]
+fn a_published_subflow_brings_what_its_published_version_calls() {
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    let c = plain(
+        &svc,
+        "C",
+        vec![Step::new("log.message").with_param("message", "c")],
+    );
+    svc.publish(&c.id, PublishInput::default(), person())
+        .unwrap();
+    let b = plain(&svc, "B", vec![calls(&c.id)]);
+    svc.publish(&b.id, PublishInput::default(), person())
+        .unwrap();
+    // B no longer calls C now, but its published version does.
+    let step = svc.get(&b.id).unwrap().steps[0].id.clone();
+    svc.edit(
+        &b.id,
+        None,
+        vec![EditOp::RemoveStep { step_id: step }],
+        ai(),
+    )
+    .unwrap();
+    let a = plain(&svc, "A", vec![calls(&b.id)]);
+    svc.publish(&a.id, PublishInput::default(), person())
+        .unwrap();
+
+    let (manifest, _) = svc
+        .export_package(&a.id, &PackageOptions::default())
+        .unwrap();
+    let ids: Vec<_> = manifest.subflows.iter().map(|s| s.id.clone()).collect();
+    assert!(ids.contains(&b.id) && ids.contains(&c.id), "{ids:?}");
+}
+
+#[test]
+fn files_not_listed_stay_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    let sub = plain(
+        &svc,
+        "Sub",
+        vec![Step::new("log.message").with_param("message", "s")],
+    );
+    svc.write_project_file(&sub.id, "input/名簿.xlsx", b"real", false)
+        .unwrap();
+    let main = plain(
+        &svc,
+        "Main",
+        vec![Step::new("log.message").with_param("message", "m")],
+    );
+    svc.write_project_file(&main.id, "templates/ひな形.xlsx", b"t", false)
+        .unwrap();
+    svc.publish(&main.id, PublishInput::default(), person())
+        .unwrap();
+    // Now (not published) it also calls Sub.
+    svc.edit(
+        &main.id,
+        None,
+        vec![EditOp::AddStep {
+            step: calls(&sub.id),
+            position: Default::default(),
+        }],
+        ai(),
+    )
+    .unwrap();
+
+    let published = svc.package_plan(&main.id, PackageContent::Auto).unwrap();
+    assert!(!published.current);
+    assert!(published.files.iter().all(|f| f.flow_id == main.id));
+    let current = svc.package_plan(&main.id, PackageContent::Current).unwrap();
+    assert!(current.current);
+    assert_eq!(current.file_name, "Main.spx");
+    assert!(current.files.iter().any(|f| f.flow_id == sub.id));
+
+    // The dialog sends exactly what it showed and was ticked.
+    let only = vec![shikigami_core::package::FileRef {
+        flow_id: main.id.clone(),
+        path: "templates/ひな形.xlsx".into(),
+    }];
+    let (manifest, _) = svc
+        .export_package(
+            &main.id,
+            &PackageOptions {
+                content: PackageContent::Current,
+                include_input: true,
+                only: Some(only),
+                ..PackageOptions::default()
+            },
+        )
+        .unwrap();
+    assert!(
+        manifest
+            .contents
+            .iter()
+            .any(|e| e.path.ends_with("templates/ひな形.xlsx"))
+    );
+    assert!(!manifest.contents.iter().any(|e| e.path.contains("input/")));
 }

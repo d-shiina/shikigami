@@ -565,7 +565,8 @@ export type StudioState = {
   restoreVersion(number: number): Promise<void>;
   exportFlow(): Promise<void>;
   /** Opens the 「渡す」 dialog for flow `id`. */
-  openHandOff(id: string): Promise<void>;
+  /** Opens (or re-plans) 渡す for the published version ("auto") or the current content. */
+  openHandOff(id: string, content?: "auto" | "current"): Promise<void>;
   closeHandOff(): void;
   /** Writes the flow as a `.spx` file; the path, or null when it failed (said in `error`). */
   exportPackage(id: string, options: PackageOptions): Promise<ExportedPackage | null>;
@@ -2308,9 +2309,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      async openHandOff(id) {
+      async openHandOff(id, content) {
         try {
-          set({ handOff: await api.packagePlan(id), error: null });
+          set({ handOff: await api.packagePlan(id, content), error: null });
         } catch (e) {
           set({ error: message(e) });
         }

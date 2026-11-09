@@ -192,6 +192,11 @@ pub struct PackageOptions {
     /// Files to leave out (after `include_input`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude: Vec<FileRef>,
+    /// Exactly these files, when set (`include_input` and `exclude` are then
+    /// ignored). A file not listed, such as one of a sub-flow the person did
+    /// not see, stays out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only: Option<Vec<FileRef>>,
     /// Shown to the receiver as who wrote the package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exported_by: Option<String>,
@@ -221,6 +226,8 @@ pub struct PackagePlan {
     pub published: Option<PackagedVersion>,
     /// Whether the current content differs from the published version.
     pub has_unpublished_changes: bool,
+    /// The plan is for the current content (not the published version).
+    pub current: bool,
     pub subflows: Vec<PackagedSubflow>,
     pub files: Vec<PackageFileChoice>,
     pub requires: PackageRequires,

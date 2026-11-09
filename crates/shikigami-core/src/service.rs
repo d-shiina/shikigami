@@ -1724,11 +1724,20 @@ impl FlowService {
 
     /// What exporting `id` would put in a package, for choosing files
     /// before exporting.
-    pub fn package_plan(&self, id: &FlowId) -> CoreResult<package::PackagePlan> {
+    pub fn package_plan(
+        &self,
+        id: &FlowId,
+        content: package::PackageContent,
+    ) -> CoreResult<package::PackagePlan> {
         let current = self.get(id)?;
         let published = self.published_version(id)?;
-        let content = published.as_ref().map_or(&current, |v| &v.flow);
-        let subflows = self.package_subflows(content, published.is_some());
+        let use_published =
+            published.is_some() && !matches!(content, package::PackageContent::Current);
+        let content = match (&published, use_published) {
+            (Some(v), true) => &v.flow,
+            _ => &current,
+        };
+        let subflows = self.package_subflows(content, use_published);
         let mut files = Vec::new();
         for (flow_id, flow_name) in std::iter::once((&current.id, &current.name))
             .chain(subflows.iter().map(|s| (&s.id, &s.name)))
@@ -1754,6 +1763,7 @@ impl FlowService {
             has_unpublished_changes: published
                 .as_ref()
                 .is_some_and(|v| !version::same_content(&v.flow, &current)),
+            current: !use_published,
             published: published.as_ref().map(packaged_version),
             requires: package::requirements(&flows, self.registry()),
             subflows: subflows
@@ -1763,24 +1773,41 @@ impl FlowService {
                     name: s.name.clone(),
                 })
                 .collect(),
-            file_name: package::file_name(&current.name, published.as_ref().map(|v| v.number)),
+            file_name: package::file_name(
+                &current.name,
+                published
+                    .as_ref()
+                    .filter(|_| use_published)
+                    .map(|v| v.number),
+            ),
         })
     }
 
     /// Sub-flows `flow` calls, at their published version where they have one
     /// (`published`) or as they are now.
+    /// Each one is resolved before following its own calls, so a published
+    /// sub-flow brings what its published version calls.
     fn package_subflows(&self, flow: &Flow, published: bool) -> Vec<Flow> {
-        let mut subflows = self.called_flows(flow, &[]);
-        if published {
-            for sub in &mut subflows {
-                if let Ok(Some(v)) = self.published_version(&sub.id) {
-                    let id = sub.id.clone();
-                    *sub = v.flow;
-                    sub.id = id;
-                }
+        let mut found: Vec<Flow> = Vec::new();
+        let mut queue: Vec<FlowId> = call::called_ids(flow).into_iter().collect();
+        while let Some(id) = queue.pop() {
+            if id == flow.id || found.iter().any(|s| s.id == id) {
+                continue;
             }
+            let snapshot = if published {
+                self.published_version(&id).ok().flatten().map(|v| v.flow)
+            } else {
+                None
+            };
+            let Some(mut next) = snapshot.or_else(|| self.store.load(&id).ok()) else {
+                continue;
+            };
+            next.id = id;
+            queue.extend(call::called_ids(&next));
+            found.push(next);
         }
-        subflows
+        found.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        found
     }
 
     /// Writes a `.spx` package of `id`. Secret defaults are removed;
@@ -1835,11 +1862,14 @@ impl FlowService {
         let mut files = Vec::new();
         for flow_id in std::iter::once(&flow.id).chain(subflows.iter().map(|s| &s.id)) {
             files.extend(self.bundled_files(flow_id)?.into_iter().filter(|f| {
-                (options.include_input || !is_input(&f.path))
-                    && !options
-                        .exclude
-                        .iter()
-                        .any(|x| x.flow_id == f.flow_id && x.path == f.path)
+                let is = |x: &package::FileRef| x.flow_id == f.flow_id && x.path == f.path;
+                match &options.only {
+                    Some(only) => only.iter().any(is),
+                    None => {
+                        (options.include_input || !is_input(&f.path))
+                            && !options.exclude.iter().any(is)
+                    }
+                }
             }));
         }
         self.write_package(

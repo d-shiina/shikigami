@@ -330,7 +330,7 @@ export const api = {
   /** Writes the flow as a `.spx` file (default choices) to the Downloads folder; returns its path. */
   exportFlow: (id: string) => call<string>("export_flow", { id }),
   /** What handing the flow over would put in the file (「渡す」). */
-  packagePlan: (id: string) => call<PackagePlan>("package_plan", { id }),
+  packagePlan: (id: string, content?: "auto" | "current") => call<PackagePlan>("package_plan", { id, content }),
   /** Writes the flow as a `.spx` file to the Downloads folder. */
   exportPackage: (id: string, options: PackageOptions) => call<ExportedPackage>("export_package", { id, options }),
   /** What a flow file holds and what this PC still needs, before importing it. */

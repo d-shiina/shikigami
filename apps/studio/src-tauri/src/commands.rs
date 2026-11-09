@@ -234,8 +234,14 @@ pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> 
 
 /// What handing over a flow would put in the file, for the 「渡す」 dialog.
 #[tauri::command]
-pub fn package_plan(state: State<'_, AppState>, id: FlowId) -> CmdResult<PackagePlan> {
-    Ok(state.service.package_plan(&id)?)
+pub fn package_plan(
+    state: State<'_, AppState>,
+    id: FlowId,
+    content: Option<shikigami_core::package::PackageContent>,
+) -> CmdResult<PackagePlan> {
+    Ok(state
+        .service
+        .package_plan(&id, content.unwrap_or_default())?)
 }
 
 #[derive(Debug, Serialize)]

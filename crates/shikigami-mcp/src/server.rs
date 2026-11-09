@@ -932,6 +932,7 @@ impl ShikigamiMcp {
             },
             include_input: p.include_input.unwrap_or(false),
             exclude: Vec::new(),
+            only: None,
             exported_by: std::env::var("USERNAME").ok(),
         };
         if !self.inner.can_write {

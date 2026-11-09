@@ -1430,6 +1430,10 @@ export interface PackagePlan {
    * Whether the current content differs from the published version.
    */
   hasUnpublishedChanges: boolean;
+  /**
+   * The plan is for the current content (not the published version).
+   */
+  current: boolean;
   subflows: PackagedSubflow[];
   files: PackageFileChoice[];
   requires: PackageRequires1;
@@ -1511,6 +1515,12 @@ export interface PackageOptions {
    * Files to leave out (after `include_input`).
    */
   exclude?: FileRef[];
+  /**
+   * Exactly these files, when set (`include_input` and `exclude` are then
+   * ignored). A file not listed, such as one of a sub-flow the person did
+   * not see, stays out.
+   */
+  only?: FileRef[] | null;
   /**
    * Shown to the receiver as who wrote the package.
    */
