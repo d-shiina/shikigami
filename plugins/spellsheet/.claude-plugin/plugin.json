@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "description": "SpellSheet: build, edit and run desktop automation flows shared with SpellSheet Writer.",
   "author": { "name": "SpellSheet" },
-  "repository": "https://github.com/d-shiina/spellsheet",
+  "repository": "https://github.com/spellsheet/spellsheet",
   "keywords": ["rpa", "automation", "windows", "mcp"]
 }

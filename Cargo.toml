@@ -24,11 +24,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.20"
+version = "0.1.21"
 edition = "2024"
 rust-version = "1.90"
 license = "Apache-2.0"
-repository = "https://github.com/d-shiina/spellsheet"
+repository = "https://github.com/spellsheet/spellsheet"
 
 [workspace.dependencies]
 spellsheet-core = { path = "crates/spellsheet-core" }

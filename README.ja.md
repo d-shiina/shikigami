@@ -5,8 +5,8 @@
 # SpellSheet
 
 <p align="center">
-  <a href="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/d-shiina/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/d-shiina/spellsheet" alt="Release"></a>
+  <a href="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/spellsheet/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/spellsheet/spellsheet" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4" alt="Platform: Windows 10 | 11">
 </p>
@@ -21,7 +21,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 ## 使い始める
 
-1. [最新のリリース](https://github.com/d-shiina/spellsheet/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
+1. [最新のリリース](https://github.com/spellsheet/spellsheet/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
 2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
 3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「変更を承諾」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
@@ -151,7 +151,7 @@ Writer を開いたまま CLI でフローを編集すると、変更が Writer 
 Claude Code ならプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
 Writer をインストールしている場合は、Writer と同じフォルダーにある `spellsheet.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。

@@ -14,8 +14,8 @@ describe("samples", () => {
   });
 
   it("link the tutorial in Writer's language", () => {
-    expect(tutorialUrl("invoices")).toBe("https://github.com/d-shiina/spellsheet/blob/main/docs/ja/tutorials/invoices.md");
+    expect(tutorialUrl("invoices")).toBe("https://github.com/spellsheet/spellsheet/blob/main/docs/ja/tutorials/invoices.md");
     setLocale("en", false);
-    expect(tutorialUrl()).toBe("https://github.com/d-shiina/spellsheet/blob/main/docs/tutorials/README.md");
+    expect(tutorialUrl()).toBe("https://github.com/spellsheet/spellsheet/blob/main/docs/tutorials/README.md");
   });
 });

@@ -6,18 +6,21 @@
 
 ## 未リリース
 
+## [0.1.21] - 2026-11-10
+
 ### 主な変更
 
-- 製品の中に残っていた以前の名前を、すべて SpellSheet に変えました。リポジトリは `d-shiina/spellsheet` になり、更新もここから届きます。以前の版から更新すると、最初の起動で次のものを自動で引き継ぎます
+- 製品の中に残っていた以前の名前を、すべて SpellSheet に変えました。リポジトリは `spellsheet/spellsheet` になり、更新もここから届きます。以前の版から更新すると、最初の起動で次のものを自動で引き継ぎます
   - AI ツール（Claude Code・Claude Desktop・Codex・Cursor・Gemini CLI・Copilot CLI・VS Code・Windsurf）に登録した MCP サーバー：名前を `spellsheet` に、コマンドを `spellsheet.exe` に書き換えます。書き換える前のファイルは `<ファイル名>.before-spellsheet` として隣に残します。AI ツールは一度起動し直してください
   - 無人実行のタスク（`SpellSheet\Worker`）：`spellsheet.exe` で動くように登録し直します（次のサインインから）
   - Writer の画面の設定（テーマ・言語・最近開いたフロー・AI との会話など）、シークレット、設定ファイル、カスタム ノード
-- Claude Code のプラグインは `/plugin install spellsheet --marketplace d-shiina/spellsheet` で入れ直してください（以前の名前のプラグインは自動では置き換わりません）
+- Claude Code のプラグインは `/plugin install spellsheet --marketplace spellsheet/spellsheet` で入れ直してください（以前の名前のプラグインは自動では置き換わりません）
 - この版で書き出したフロー（`.spx`）と、Writer で保存した設定ファイルは、0.1.20 以前の SpellSheet では開けません。フローを受け取る PC も更新してください
 
 ### 変更
 
 - 業務で使う人向けの製品マニュアルを、製品サイトの「マニュアル」（https://spellsheet.github.io/manual/）に載せました。画面の見方、フローの作り方と確かめ方、実行と直し方、テストケース（フローのフォルダーの `tests/`）、確定とスケジュール、ログイン情報、フローの渡し方、AI と MCP の登録、カスタム ノード、フォルダー構成、困ったときを、日本語で説明しています。検索もできます
+- 画面の絵文字と記号の印（🔑・✋・💬・✓・✕・▶・❚❚・↶ など）を、ほかの場所と同じ線のアイコンに置き換えました。シークレットの鍵、閉じる・削除・元に戻すのボタン、実行の状態の印、開閉の三角などです。Windows のフォントで絵文字の色や大きさが変わって浮いていたのがそろいます
 - カスタム ノードの「一覧」に、SpellSheet 公式の一覧（spellsheet/plugins）が最初から入るようになりました。組織やコミュニティの一覧を複数足せます。一覧からは、載せたときの版と中身（SHA-256）が一致するものだけをインストール・更新し、取り下げられたものはインストールできず、入っている PC には知らせます。`spellsheet plugin install <名前>` で一覧から入れられます
 - 形式の名前を変えました：フローのまとめ `spellsheet.flowBundle`、設定ファイル `spellsheet.config`、AI の答え `spellsheet.answer`、カスタム ノードの `spellsheet-plugin.json`、ファイル名の `.spellsheet.json`、環境変数 `SPELLSHEET_*`、JSON Schema の `$id`（`https://spellsheet.dev/schemas/…`）。以前の名前のものも読めます
 - MCP サーバーの名前を `spellsheet` に、管理サーバーとの通信のヘッダーを `x-spellsheet-*` にしました（以前の Worker からの要求も受け付けます）
@@ -33,7 +36,6 @@
 
 ### 変更
 
-- 画面の絵文字と記号の印（🔑・✋・💬・✓・✕・▶・❚❚・↶ など）を、ほかの場所と同じ線のアイコンに置き換えました。シークレットの鍵、閉じる・削除・元に戻すのボタン、実行の状態の印、開閉の三角などです。Windows のフォントで絵文字の色や大きさが変わって浮いていたのがそろいます
 - 製品の名前を SpellSheet Writer・SpellSheet Runner・SpellSheet Worker・SpellSheet Controller（準備中）にそろえました。Runner の窓の名前も「SpellSheet Runner」になります
 - フローの「公開」を「確定」と呼ぶようにしました。外に出すように聞こえたためです。「公開版」は「確定版」、「公開中／未公開」は「確定済み／未確定」、「公開を停止」は「確定を取り消す」になります。確認パネルの判断のボタンは「変更を承諾」「差し戻す…」「変更を拒否」になりました（承諾するとその内容が確定版になります）。意味と動き（無人実行は確定版だけを動かす）は変わりません。CLI の `version publish`、MCP の `published`、英語の画面の Publish もそのままです
 - 実行イベント `humanActionRequired` に `dialog` が加わりました（その手順が自分のダイアログを最前面に出すとき `true`）
