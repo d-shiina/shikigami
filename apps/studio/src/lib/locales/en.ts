@@ -698,6 +698,13 @@ export const en: Dict = {
       inspect_page: "Inspect web page",
       inspect_ui: "Inspect app window",
       test_step: "Run a single node",
+      ask_user_to_choose: "Show choices",
+    },
+    choice: {
+      recommended: "Recommended",
+      reason: (why: string) => `Why: ${why}`,
+      other: "Have another idea? Write it below and send it.",
+      answered: (question: string) => `${question} `,
     },
     newChat: "New chat",
     newChatAbout: (name: string) => `New chat on "${name}"`,

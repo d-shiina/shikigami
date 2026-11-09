@@ -493,6 +493,8 @@ export type AgentEvent = { turnId: string } & (
   | { kind: "preparing"; name: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
+  /** The agent asks the person to choose (ask_user_to_choose); the answer is the next message. */
+  | { kind: "choice"; question: string; options: ChoiceOption[]; recommended: number | null; reason: string | null }
   | { kind: "created"; flowId: string; name: string }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
@@ -525,6 +527,9 @@ export const agent = {
   onInstall: (handler: (e: InstallEvent) => void): Promise<UnlistenFn> =>
     listen<InstallEvent>("agent-install", (e) => handler(e.payload)),
 };
+
+/** One answer on a card the AI asks the person to choose from. */
+export type ChoiceOption = { label: string; description: string | null };
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
 /** Which AI to set up; the installer is chosen by this. */
