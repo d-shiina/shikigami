@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { blurRegions, buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
+import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
 const contract = JSON.parse(readFileSync(new URL("../../../../schemas/contract/step-types.json", import.meta.url), "utf8")) as {
@@ -130,21 +130,35 @@ describe("the 手順書 of a flow", () => {
     expect(hidden.drafts).toBe(0);
   });
 
-  it("lays the manual out as sheets: a cover, then one screen per page", () => {
+  it("lays the manual out as sheets: a cover, then chapters, screens together while they fit", () => {
     const moved: ManualManifest = { ...manifest, shots: manifest.shots.map((s, i) => ({ ...s, view: `v${i}` })) };
     const pages = pagesOf(buildManual(flow, defs, moved));
     expect(pages[0]?.kind).toBe("cover");
     expect(pages.map((p) => p.number)).toEqual(pages.map((_, i) => i + 1));
     const body = pages.flatMap((p) => (p.kind === "body" ? [p] : []));
-    // Each chapter starts on its own sheet, and no sheet holds two pictures.
+    // Each chapter starts on its own sheet.
     expect(body.filter((p) => p.first).map((p) => p.chapter.number)).toEqual([1, 2, 3, 4, 5]);
-    for (const p of body) expect(p.blocks.filter((b) => b.kind === "item" && b.item.kind === "scene" && b.item.shot).length).toBeLessThanOrEqual(1);
-    // The second login screen goes on the next sheet, under the branch it belongs to.
-    const second = body.find((p) => p.shot?.file === "003.jpg");
+    // Low screens share a sheet.
+    const low: ManualManifest = { ...moved, shots: moved.shots.map((s) => ({ ...s, width: 1100, height: 100, mark: undefined })) };
+    const shared = pagesOf(buildManual(flow, defs, low)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const pictured = (p: (typeof shared)[number]) => p.blocks.filter((b) => b.kind === "item" && b.item.kind === "scene" && b.item.shot).length;
+    expect(shared.map(pictured)).toContain(2);
+    // Tall screens do not fit together: the second goes on the next sheet, under the branch it belongs to.
+    const tall: ManualManifest = { ...moved, shots: moved.shots.map((s) => ({ ...s, width: 400, height: 2000, mark: undefined })) };
+    const sheets = pagesOf(buildManual(flow, defs, tall)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const second = sheets.find((p) => p.shot?.file === "003.jpg");
     expect(second?.first).toBe(false);
     expect(second?.blocks[0]).toMatchObject({ kind: "label", continued: true, item: { kind: "branch" } });
-    // Words only: one run of pages per chapter.
-    expect(pagesOf(buildManual(flow, defs, moved), false).length).toBe(1 + doc.chapters.length);
+    // Words only: no more sheets than with the screens.
+    expect(pagesOf(buildManual(flow, defs, moved), false).length).toBeLessThanOrEqual(pages.length);
+  });
+
+  it("puts a page's blocks in frames by depth", () => {
+    const pages = pagesOf(buildManual(flow, defs, manifest)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const withBranch = pages.find((p) => p.blocks.some((b) => b.kind === "label"));
+    const branch = frameTree(withBranch?.blocks ?? []).find((n) => n.kind === "frame");
+    expect(branch).toMatchObject({ kind: "frame", label: { item: { kind: "branch" } } });
+    expect(branch?.kind === "frame" && branch.children.length).toBeGreaterThan(0);
   });
 
   it("leaves out screens the person hid", () => {

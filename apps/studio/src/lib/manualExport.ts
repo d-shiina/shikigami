@@ -6,13 +6,15 @@ import {
   blurRegions,
   type Container,
   cropOf,
+  type Edition,
+  frameTree,
   type Leaf,
   type ManualDoc,
   type ManualItem,
   type ManualShot,
   type ManualStep,
   type Mask,
-  type PageBlock,
+  type PageNode,
   pagesOf,
   type Rect,
   type Scene,
@@ -26,6 +28,9 @@ export type ExportOptions = {
   noPictures: boolean;
   /** "11月8日 18:20 の実行…" or null. */
   made: string | null;
+  /** 「11月8日 18:20 の実行」: where the screens came from, short. */
+  shotAt: string;
+  edition: Edition;
   /** The schedules of the flow, in words. */
   when: string[];
   date: string;
@@ -54,6 +59,9 @@ const ICONS = {
   split: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
   repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  window: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
   pencil:
     '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
 };
@@ -165,23 +173,35 @@ export async function burnShot(
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+function note(kind: "check" | "caution" | "point", text: string): string {
+  const [name, ic] = kind === "check" ? [t.manual.noteCheck, icon("clock")] : kind === "caution" ? [t.manual.noteCaution, icon("alert")] : [t.manual.notePoint, icon("bulb")];
+  return `<div class="note ${kind}">${ic}<div><b>${esc(name)}</b>${esc(text)}</div></div>`;
+}
+
 function step(s: ManualStep): string {
-  return `<li><span class="n">${s.number}</span><div class="t">${esc(s.text)}${s.how ? `<span class="how">${parts(s.how)}</span>` : ""}</div><span class="ok">${esc(t.manual.asExpected)}<i></i></span></li>`;
+  return `<li><span class="n">${s.number}</span><div class="t">${esc(s.text)}${s.how ? `<span class="how">${parts(s.how)}</span>` : ""}${
+    s.note ? note("point", s.note) : ""
+  }</div><span class="ok">${esc(t.manual.asExpected)}<i></i></span></li>`;
+}
+
+/** 「注意」 for the logins the steps enter, each once. */
+function logins(steps: ManualStep[]): string {
+  return [...new Set(steps.flatMap((s) => (s.login ? [s.login] : [])))].map((name) => note("caution", t.manual.loginCaution(name))).join("");
 }
 
 type Pictures = ReadonlyMap<Scene, string>;
 
-function label(item: Container, continued: boolean): string {
+function frameHead(item: Container, continued: boolean): string {
   const more = continued ? esc(t.manual.continued) : "";
   switch (item.kind) {
     case "branch":
-      return `<div class="cond${item.taken === false ? " off" : ""}">${icon("split")}${esc(item.label)}${more}${
+      return `<div class="fh">${icon("split")}<span>${esc(item.label)}${more}</span>${
         item.taken === null ? "" : `<span class="took${item.taken ? "" : " not"}">${esc(item.taken ? t.manual.took : t.manual.notTaken)}</span>`
       }</div>`;
     case "loop":
-      return `<div class="lh">${icon("repeat")}${esc(item.label)}${more}${item.times === null ? "" : ` <span>${esc(t.manual.loopTimes(item.times))}</span>`}</div>`;
+      return `<div class="fh">${icon("repeat")}<span>${esc(item.label)}${more}</span>${item.times === null ? "" : `<small>${esc(t.manual.loopTimes(item.times))}</small>`}</div>`;
     case "group":
-      return `<div class="gh">${esc(item.label)}${more}</div>`;
+      return `<div class="fh"><span>${esc(item.label)}${more}</span></div>`;
   }
 }
 
@@ -192,78 +212,109 @@ function leaf(item: Leaf, pictures: Pictures): string {
       const cap =
         esc(t.manual.screenOf(item.title, item.app === "desktop")) + (src && item.shot?.draft ? ` <span class="draft">${esc(t.manual.draft)}</span>` : "");
       const rows = [...item.steps, null]
-        .map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">${icon("clock")}${esc(w.text)}</li>`).join("") + (s ? step(s) : ""))
+        .map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="w">${note("check", w.text)}</li>`).join("") + (s ? step(s) : ""))
         .join("");
-      return `<section class="scene"><div class="cap">${icon("camera")}${cap}</div>${src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""}<ol class="steps">${rows}</ol></section>`;
+      return `<section class="scene"><div class="cap">${icon("window")}${cap}</div>${src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""}<ol class="steps">${rows}</ol>${logins(item.steps)}</section>`;
     }
     case "action":
-      return `<ol class="steps">${step(item.step)}</ol>`;
+      return `<ol class="steps">${step(item.step)}</ol>${logins([item.step])}`;
     case "quiet":
       return `<p class="quiet"><b>${esc(t.manual.quiet)}</b>　${item.texts.map(esc).join("・")}</p>`;
   }
 }
 
-function block(b: PageBlock, pictures: Pictures): string {
-  const inner = b.kind === "label" ? label(b.item, b.continued) : leaf(b.item, pictures);
-  return `<div class="blk${b.depth > 0 ? " in" : ""}" style="margin-left:${b.depth * 18}px">${inner}</div>`;
+function node(n: PageNode, pictures: Pictures): string {
+  if (n.kind === "item") return leaf(n.block.item, pictures);
+  const item = n.label.item;
+  const cls = item.kind === "branch" ? `frame if${item.taken === false ? " off" : ""}` : item.kind === "loop" ? "frame loop" : "frame";
+  return `<div class="${cls}">${frameHead(item, n.label.continued)}<div class="fb">${n.children.map((c) => node(c, pictures)).join("")}</div></div>`;
 }
+
+/** The four colours of the swirl, as a thin band: the cover and the top of each sheet. */
+const STRIPE = `<div class="stripe"><i></i><i></i><i></i><i></i></div>`;
 
 const style = (madeWith: string) => `
 @page{size:A4;margin:0}
+:root{--navy:#0f3a66;--blue:#0a6fa8;--teal:#12a7b4;--teal-ink:#0b7680;--green:#3f9a5a;--orange:#f5872a;--red:#e8501f;--ink:#1b1d22;--sub:#50555e;--line:#e1e4e8}
 *{box-sizing:border-box}
-body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#e6e8ec;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
-.sheet{position:relative;width:210mm;min-height:297mm;margin:24px auto;background:#fff;padding:15mm 16mm 20mm;box-shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.08);break-after:page}
-.sheet>header{display:flex;justify-content:space-between;gap:16px;white-space:nowrap;border-bottom:1.5px solid #1b1d22;padding-bottom:5px;margin-bottom:18px;font-size:12px;color:#50555e}
-.sheet>header b{color:#1b1d22;overflow:hidden;text-overflow:ellipsis}
-.ic{display:inline-block;vertical-align:-2px;margin-right:6px;flex:none}
-.sheet>footer{position:absolute;left:16mm;right:16mm;bottom:8mm;display:flex;justify-content:space-between;font-size:11px;color:#8a8f98}
-.kicker{margin:40px 0 2px;color:#50555e;font-size:12.5px}
-h1{font-size:26px;line-height:1.4;margin:0 0 6px}
-.made{color:#50555e;font-size:12.5px;margin:0 0 20px}
-.draft{border:1px solid #c9ced6;border-radius:4px;padding:0 5px;font-size:11px;font-weight:400;color:#50555e}
-.lead{font-size:14.5px;line-height:1.85;color:#3a3e45;margin:0 0 20px}
-dl{display:grid;grid-template-columns:120px 1fr;margin:0;border-top:1px solid #e1e4e8}
-dt,dd{margin:0;padding:8px 0;border-bottom:1px solid #e1e4e8}
-dt{color:#50555e}
-h3{font-size:14px;margin:32px 0 6px}
-.toc{list-style:none;padding:0;margin:0}
-.toc li{display:flex;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px dotted #c9ced6}
+body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#e6e8ec;color:var(--ink);font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
+.ic{display:inline-block;vertical-align:-2px;flex:none}
+.sheet{position:relative;width:210mm;min-height:297mm;margin:24px auto;background:#fff;padding:15mm 16mm 20mm;box-shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.08);break-after:page;overflow:hidden}
+.stripe{display:flex;height:4px;position:absolute;top:0;left:0;right:0}
+.stripe i{flex:1}.stripe i:nth-child(1){background:var(--teal)}.stripe i:nth-child(2){background:var(--blue)}.stripe i:nth-child(3){background:var(--green)}.stripe i:nth-child(4){background:var(--orange)}
+.sheet>header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;white-space:nowrap;border-bottom:1px solid var(--navy);padding-bottom:5px;margin-bottom:22px;font-size:11.5px;color:var(--sub)}
+.sheet>header b{color:var(--navy);overflow:hidden;text-overflow:ellipsis}
+.sheet>footer{position:absolute;left:16mm;right:16mm;bottom:9mm;display:flex;justify-content:space-between;font-size:10.5px;color:#8a8f98;border-top:1px solid var(--line);padding-top:5px}
+.sheet>footer span:first-child{color:var(--navy)}
+#p1{padding-top:0}
+.band{position:relative;margin:0 -16mm 22px;padding:12mm 16mm 9mm;background:var(--navy);color:#fff}
+.band .stripe{top:auto;bottom:-6px;height:6px}
+.kind{font-size:12.5px;color:#a9c4de;letter-spacing:.08em;margin:0}
+h1{font-size:26px;line-height:1.4;margin:10px 0 14px}
+.docinfo{display:flex;flex-wrap:wrap;gap:4px 28px;font-size:12px;color:#a9c4de;padding-top:10px;border-top:1px solid rgba(255,255,255,.35)}
+.docinfo b{display:block;color:#fff;font-size:13px;font-weight:600}
+.since{margin:8px 0 0;font-size:12px;color:#d6e3f0}
+h3{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--navy);margin:18px 0 6px}
+h3:before{content:"";width:4px;height:14px;background:var(--navy)}
+.lead{margin:0;color:#3a3e45;line-height:1.85}
+table{width:100%;border-collapse:collapse}
+.facts{font-size:13px}
+.facts th{width:118px;text-align:left;font-weight:400;color:var(--sub);background:#f5f6f8;padding:6px 10px;border:1px solid var(--line)}
+.facts td{padding:6px 10px;border:1px solid var(--line)}
+.facts tr.in th{box-shadow:inset 3px 0 var(--teal)}
+.facts tr.out th{box-shadow:inset 3px 0 var(--orange)}
+.toc{list-style:none;margin:0;padding:0}
+.toc li{display:flex;align-items:baseline;gap:10px;padding:3px 0;font-size:13.5px}
+.toc .no{font-weight:700;width:18px;color:var(--navy)}
 .toc a{color:inherit;text-decoration:none}
-.toc .pg{margin-left:auto;color:#50555e;font-size:12.5px}
-.hint{color:#50555e;font-size:12.5px;margin:20px 0 0}
-.n{display:inline-grid;place-items:center;flex:none;width:22px;height:22px;border-radius:5px;background:#1b1d22;color:#fff;font-size:12px;font-weight:700}
-h2{display:flex;gap:12px;align-items:center;font-size:20px;margin:0 0 4px}
-h2 .n{width:28px;height:28px;font-size:14px}
-.sub{margin:0 0 14px 40px;color:#50555e;font-size:12.5px}
-.cont{margin:0 0 14px;color:#50555e;font-size:12.5px}
-.blk.in>*{border-left:2px solid #e1e4e8;padding-left:12px}
-.scene{margin:0 0 18px}
-.cap{font-size:12.5px;font-weight:600;margin:0 0 6px}
+.toc .dots{flex:1;border-bottom:1px dotted #b9bec6;transform:translateY(-4px)}
+.toc .pg{color:var(--sub);font-size:12.5px}
+.rev{font-size:12px}
+.rev th{background:#f5f6f8;font-weight:600;color:#3a3e45;text-align:left}
+.rev th,.rev td{border:1px solid var(--line);padding:3px 8px}
+.hint{display:flex;gap:6px;color:var(--sub);font-size:12px;margin:16px 0 0}
+.hint .ic{margin-top:4px}
+.privacy{color:#8a8f98;font-size:11px;margin-top:8px}
+.draft{border:1px solid #c9ced6;border-radius:4px;padding:0 5px;font-size:11px;font-weight:400;color:var(--sub)}
+h2{display:flex;align-items:center;gap:12px;font-size:19px;color:var(--navy);margin:0 0 4px;padding-bottom:8px;border-bottom:2px solid var(--navy)}
+h2 .cn{font-size:12px;font-weight:600;color:#fff;background:var(--navy);border-radius:4px;padding:2px 8px}
+.sub{margin:6px 0 16px;color:var(--sub);font-size:12.5px}
+.cont{margin:0 0 14px;color:var(--sub);font-size:12.5px}
+.scene{margin:0 0 16px;break-inside:avoid}
+.cap{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;margin:14px 0 6px;color:#3a3e45}
 .shot{border:1px solid #c9ced6;line-height:0}
 .shot img{width:100%;max-height:150mm;object-fit:contain;object-position:left top;display:block}
-.steps{list-style:none;margin:8px 0 12px;padding:0;border-top:1px solid #e1e4e8}
-.steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #e1e4e8;break-inside:avoid}
-.steps .t{flex:1}
-.steps .n{width:21px;height:21px;border-radius:20px;background:#0a6fa8;margin-top:2px}
-.ok{display:flex;gap:6px;align-items:flex-start;flex:none;font-size:12px;color:#50555e;padding-top:3px}
-.ok i{display:inline-block;width:14px;height:14px;border:1.5px solid #8a8f98;border-radius:2px;margin-top:2px}
-.steps li.wait{color:#50555e;font-size:12.5px;padding:5px 0}
-.how{display:block;color:#50555e;font-size:12.5px}
-.v{background:#e8f3fb;color:#0f3a66;border-radius:4px;padding:0 4px}
-.cond{display:inline-flex;gap:8px;align-items:center;margin:2px 0 10px;font-size:13px;background:#fff6d1;border:1px solid #d4a514;color:#5c4500;border-radius:6px;padding:3px 10px}
-.cond .ic{margin-right:0}
-.cond.off{opacity:.7}
-.took{background:#fff;border:1px solid #2f8a4c;color:#2f8a4c;border-radius:20px;padding:0 8px;font-size:11.5px}
-.took.not{border-color:#b9bec6;color:#50555e}
-.lh,.gh{font-weight:600;margin:0 0 10px}
-.lh span{font-weight:400;color:#50555e;font-size:12.5px}
-.quiet{color:#50555e;font-size:13px;margin:0 0 12px}
-.quiet b{color:#3a3e45}
-.privacy{color:#8a8f98;font-size:11.5px;margin-top:28px}
+.steps{list-style:none;margin:10px 0 0;padding:0}
+.steps>li{display:grid;grid-template-columns:30px 1fr auto;gap:0 10px;padding:7px 0;border-bottom:1px solid var(--line);break-inside:avoid}
+.steps>li:first-child{border-top:1px solid var(--line)}
+.steps>li.w{display:block;padding:0;border:0}
+.steps .n{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font:700 13px/26px Inter,"Segoe UI",sans-serif;text-align:center}
+.steps .t{font-weight:600;font-size:14.5px;min-width:0}
+.steps .how{display:block;font-weight:400;color:var(--sub);font-size:12.5px}
+.v{background:#e8f3fb;color:#0f3a66;border-radius:4px;padding:0 4px;font-weight:400}
+.ok{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--sub);align-self:start;padding-top:4px}
+.ok i{width:14px;height:14px;border:1.5px solid #8a8f98;border-radius:2px}
+.note{display:flex;gap:10px;margin:8px 0;padding:8px 12px;border-radius:4px;font-size:12.5px;font-weight:400;line-height:1.7;color:#3a3e45;border-left:3px solid;break-inside:avoid}
+.note b{display:block;color:var(--ink);font-size:12.5px}
+.note .ic{margin-top:4px}
+.note.check{background:#eef8f1;border-color:var(--green)}.note.check .ic{color:var(--green)}
+.note.caution{background:#fff3ec;border-color:var(--red)}.note.caution .ic{color:var(--red)}
+.note.point{background:#e9f8f9;border-color:var(--teal)}.note.point .ic{color:var(--teal-ink)}
+.frame{border:1px solid #c9ced6;border-radius:6px;margin:12px 0}
+.frame>.fh{display:flex;align-items:center;gap:8px;padding:7px 14px;background:#f5f6f8;border-bottom:1px solid #c9ced6;border-radius:6px 6px 0 0;font-weight:600;font-size:13px}
+.frame>.fh small{font-weight:400;color:var(--sub);margin-left:auto;font-size:12px}
+.frame>.fb{padding:2px 14px 10px}
+.frame.if{border-color:#e3c76a}.frame.if>.fh{background:#fffbea;border-color:#e3c76a}
+.frame.loop{border-color:#b9cbe0}.frame.loop>.fh{background:#eef3f9;border-color:#b9cbe0;color:var(--navy)}
+.frame.off>.fb{opacity:.7}
+.took{font-weight:400;font-size:11.5px;color:#2f8a4c;border:1px solid #2f8a4c;border-radius:20px;padding:0 8px;background:#fff}
+.took.not{border-color:#b9bec6;color:var(--sub)}
+.quiet{font-size:12.5px;color:var(--sub);margin:10px 0}
+.quiet b{color:#3a3e45;font-weight:600}
 /* On paper the printer numbers the pages: a sheet with many steps may run onto a second page, and the count stays right. */
 @media print{
 @page{size:A4;margin:12mm 0 14mm;@bottom-left{content:${JSON.stringify(madeWith)};margin-left:16mm;font-size:8pt;color:#8a8f98}@bottom-right{content:counter(page) " / " counter(pages);margin-right:16mm;font-size:8pt;color:#8a8f98}}
-body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0 16mm;box-shadow:none}.sheet>footer,.toc .pg{display:none}}
+body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0 16mm;box-shadow:none;overflow:visible}.sheet>footer,.toc .pg,.toc .dots,.sheet>.stripe{display:none}#p1{padding-top:0}}
 `;
 
 /** One HTML file of `doc`: the same A4 sheets ManualView shows. `pictures` holds each scene's burned picture. */
@@ -271,41 +322,60 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
   const shown: Pictures = options.noPictures ? new Map() : pictures;
   const pages = pagesOf(doc, !options.noPictures);
   const total = pages.length;
-  const facts: [string, string[]][] = [
-    [t.manual.uses, doc.uses],
-    [t.manual.inputs, doc.inputs],
-    [t.manual.outputs, doc.outputs],
-    [t.manual.runsWhen, [...options.when, t.manual.byHand]],
+  const { edition } = options;
+  const facts: [string, string[], string][] = [
+    [t.manual.uses, doc.uses, ""],
+    [t.manual.inputs, doc.inputs, "in"],
+    [t.manual.outputs, doc.outputs, "out"],
+    [t.manual.runsWhen, [...options.when, t.manual.byHand], ""],
   ];
-  const dl = facts
-    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v.length > 0 ? v.map(esc).join("、") : esc(t.manual.none)}</dd>`)
+  const rows = facts
+    .map(([k, v, cls]) => `<tr${cls ? ` class="${cls}"` : ""}><th>${esc(k)}</th><td>${v.length > 0 ? v.map(esc).join("、") : esc(t.manual.none)}</td></tr>`)
     .join("");
   const firstPage = (n: number) => pages.find((p) => p.kind === "body" && p.chapter.number === n && p.first)?.number ?? "";
   const toc = doc.chapters
-    .map((c) => `<li><span class="n">${c.number}</span><a href="#p${firstPage(c.number)}">${esc(c.title)}</a><span class="pg">${firstPage(c.number)}</span></li>`)
+    .map(
+      (c) =>
+        `<li><span class="no">${c.number}</span><a href="#p${firstPage(c.number)}">${esc(c.title)}</a><span class="dots"></span><span class="pg">${firstPage(c.number)}</span></li>`,
+    )
     .join("");
-  const made = options.made ?? (doc.drafts > 0 && !options.noPictures ? t.manual.draftsOnly : null);
+  const revisions =
+    edition.revisions.length > 0
+      ? `<h3>${esc(t.manual.revisions)}</h3><table class="rev"><tr><th style="width:84px">${esc(t.manual.edition)}</th><th style="width:120px">${esc(t.manual.revisionDate)}</th><th>${esc(t.manual.revisionText)}</th></tr>${edition.revisions
+          .map((r) => `<tr><td>${esc(r.label)}</td><td>${esc(r.date)}</td><td>${esc(r.text)}</td></tr>`)
+          .join("")}</table>`
+      : "";
+  const info = [
+    [t.manual.edition, edition.label],
+    ...(edition.updated ? [[t.manual.updated, edition.updated]] : []),
+    [t.manual.shotAt, options.noPictures ? t.manual.shotNone : options.shotAt],
+  ]
+    .map(([k, v]) => `<div>${esc(k ?? "")}<b>${esc(v ?? "")}</b></div>`)
+    .join("");
+  const headRight = [edition.label, edition.updated].filter(Boolean).join("　");
   const foot = (n: number) => `<footer><span>${esc(t.manual.madeWith)}</span><span>${esc(t.manual.pageOf(n, total))}</span></footer>`;
   const sheets = pages.map((page) => {
     if (page.kind === "cover") {
       return `<section class="sheet" id="p1">
-<p class="kicker">${esc(t.manual.title)}</p>
-<h1>${esc(doc.title)}</h1>
-${made ? `<p class="made">${esc(made)}</p>` : ""}
-${doc.description ? `<p class="lead">${esc(doc.description)}</p>` : ""}
-<dl>${dl}</dl>
-<h3>${esc(t.manual.contents)}</h3>
-<ol class="toc">${toc}</ol>
-<p class="hint">${icon("pencil")}${esc(t.manual.checkHint)}</p>
+<div class="band"><p class="kind">${esc(t.manual.kind)}</p><h1>${esc(doc.title)}</h1><div class="docinfo">${info}</div>${
+        edition.changedSince !== null ? `<p class="since">${esc(t.manual.changedSince(edition.changedSince))}</p>` : ""
+      }${STRIPE}</div>
+${doc.description ? `<h3>${esc(t.manual.about)}</h3><p class="lead">${esc(doc.description)}</p>` : ""}
+<h3>${esc(t.manual.usesAndValues)}</h3><table class="facts">${rows}</table>
+<h3>${esc(t.manual.contents)}</h3><ol class="toc">${toc}</ol>
+${revisions}
+<p class="hint">${icon("pencil")}<span>${esc(t.manual.checkHint)}</span></p>
 <p class="privacy">${esc(t.manual.footer(options.date))}</p>
 ${foot(page.number)}</section>`;
     }
     const c = page.chapter;
     const head = page.first
-      ? `<h2><span class="n">${c.number}</span>${esc(c.title)}</h2>${c.alongside.length > 0 ? `<p class="sub">${esc(t.manual.alongsideNote(c.alongside))}</p>` : `<div class="sub"></div>`}`
+      ? `<h2><span class="cn">${c.number}</span>${esc(c.title)}</h2>${c.alongside.length > 0 ? `<p class="sub">${esc(t.manual.alongsideNote(c.alongside))}</p>` : `<div class="sub"></div>`}`
       : `<p class="cont">${c.number}. ${esc(c.title)}${esc(t.manual.continued)}</p>`;
-    return `<section class="sheet" id="p${page.number}"><header><b>${esc(doc.title)}</b>${options.made ? `<span>${esc(options.made)}</span>` : ""}</header>
-${head}${page.blocks.map((b) => block(b, shown)).join("")}
+    return `<section class="sheet" id="p${page.number}">${STRIPE}<header><b>${esc(doc.title)}</b><span>${esc(headRight)}</span></header>
+${head}${frameTree(page.blocks)
+      .map((n) => node(n, shown))
+      .join("")}
 ${foot(page.number)}</section>`;
   });
   return `<!doctype html>
