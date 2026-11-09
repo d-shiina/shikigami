@@ -3,7 +3,7 @@
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
 import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
-import { useAgent, useAgentApi } from "../agent";
+import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
@@ -92,41 +92,78 @@ function useReadTutorial() {
 }
 
 /**
- * The first screen of an empty workspace: three equal ways in, so building
- * by hand is as plain a start as asking the AI.
+ * The first screen of an empty workspace. Flows are made by asking the AI
+ * (docs/design/ai-authoring.md, 人の手の役割), so the request box comes first;
+ * the samples and an empty flow to build by hand are smaller ways in below.
  */
-function FirstSteps({ onCreate }: { onCreate: () => void }) {
+function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
   const agentStore = useAgentApi();
-  const askAi = () => {
+  const [text, setText] = useState("");
+  const ask = () => {
+    const request = text.trim();
+    openAsk(agentStore, { fresh: null, draft: request });
     const a = agentStore.getState();
-    a.newChat(null);
-    a.setOpen(true);
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-agent-input]")?.focus());
+    // Not set up yet: the pane shows how, and the request waits in its box.
+    if (request && a.info?.available) {
+      a.setDraft(a.current, "");
+      void a.sendIn(a.current, request, null).then((sent) => !sent && a.setDraft(a.current, request));
+    }
+    setText("");
   };
   const showSamples = () => document.getElementById("samples-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  const ways = [
-    { icon: MousePointerClick, title: t.firstSteps.byHand, body: t.firstSteps.byHandBody, run: onCreate },
-    { icon: MessageSquareText, title: t.firstSteps.withAi, body: t.firstSteps.withAiBody, run: askAi },
-    { icon: BookOpen, title: t.firstSteps.sample, body: t.firstSteps.sampleBody, run: showSamples },
-  ];
   return (
     <section aria-label={t.firstSteps.title} className="rounded-lg border border-slate-200 bg-sheet p-5">
       <h2 className="text-[15px] font-semibold text-ink">{t.firstSteps.title}</h2>
       <p className="mt-1 text-[13px] text-slate-500">{t.firstSteps.lead}</p>
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        {ways.map(({ icon: Icon, title, body, run }) => (
+      <form
+        className="mt-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          ask();
+        }}
+      >
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              ask();
+            }
+          }}
+          rows={3}
+          aria-label={t.firstSteps.title}
+          placeholder={t.firstSteps.placeholder}
+          className="block w-full resize-none rounded-lg border border-slate-300 bg-sheet px-3 py-2 text-[13px] leading-relaxed text-ink placeholder:text-slate-500 focus:border-brand-500 focus:outline-none"
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
-            key={title}
-            type="button"
-            onClick={run}
-            className="flex flex-col items-start gap-1.5 rounded-lg border border-slate-200 p-4 text-left hover:border-slate-300 hover:bg-slate-50"
+            type="submit"
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
           >
-            <Icon size={18} strokeWidth={1.75} className="text-slate-500" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink">{title}</span>
-            <span className="text-[12px] leading-relaxed text-slate-500">{body}</span>
+            <MessageSquareText size={14} strokeWidth={1.75} aria-hidden="true" />
+            {t.firstSteps.withAi}
           </button>
-        ))}
-      </div>
+          <span className="text-[12px] text-slate-500">{t.firstSteps.withAiBody}</span>
+        </div>
+      </form>
+      <p className="mt-4 flex flex-wrap items-center gap-x-1 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
+        {t.firstSteps.otherWays}
+        <button type="button" onClick={showSamples} className="flex items-center gap-1 text-brand-600 hover:underline">
+          <BookOpen size={12} strokeWidth={1.75} aria-hidden="true" />
+          {t.firstSteps.sample}
+        </button>
+        <span aria-hidden="true">・</span>
+        <button type="button" onClick={onCreate} className="flex items-center gap-1 text-brand-600 hover:underline">
+          <MousePointerClick size={12} strokeWidth={1.75} aria-hidden="true" />
+          {t.firstSteps.byHand}
+        </button>
+        <span aria-hidden="true">・</span>
+        <button type="button" onClick={onImport} className="flex items-center gap-1 text-brand-600 hover:underline">
+          <Upload size={12} strokeWidth={1.75} aria-hidden="true" />
+          {t.importFlow}
+        </button>
+      </p>
     </section>
   );
 }
@@ -298,6 +335,7 @@ export function FlowsPage() {
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
   const store = useStudioApi();
+  const agentStore = useAgentApi();
   const open = useOpen();
   const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<Set<Status>>(new Set());
@@ -510,10 +548,13 @@ export function FlowsPage() {
           {summaries.length > 0 && <ViewMenu view={view} />}
           <input ref={picker} type="file" accept=".spx,.json,application/json" className="hidden" onChange={onPick} />
           {/* The one filled button makes a flow; its arrow holds the other ways in (Linear, GitHub). */}
-          <div className="flex shrink-0" hidden={creating}>
+          {/* With no flows yet, the request box below is the way in (one filled button a screen). */}
+          <div className="flex shrink-0" hidden={creating || summaries.length === 0}>
+            {/* Flows are made by asking the AI; an empty flow is under the arrow. */}
             <button
               type="button"
-              onClick={() => setCreating(true)}
+              title={l.newWithAi}
+              onClick={() => openAsk(agentStore, { fresh: null })}
               className="flex h-7 items-center gap-1 rounded-l-lg bg-primary pr-2.5 pl-3 text-[13px] font-medium whitespace-nowrap text-on-primary hover:bg-primary-hover"
             >
               ＋ {t.newFlow}
@@ -525,6 +566,7 @@ export function FlowsPage() {
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 openMenu({ clientX: r.right - 220, clientY: r.bottom + 4, preventDefault: () => {} }, [
+                  { label: l.emptyFlow, icon: MousePointerClick, run: () => setCreating(true) },
                   { label: t.importFlow, icon: Upload, run: () => picker.current?.click() },
                   ...(agentOpen ? [] : [{ label: t.paste.title, icon: ClipboardPaste, run: () => setPasteOpen("new") }]),
                 ]);
@@ -554,7 +596,7 @@ export function FlowsPage() {
           </form>
         )}
         {summaries.length === 0 ? (
-          <FirstSteps onCreate={() => setCreating(true)} />
+          <FirstSteps onCreate={() => setCreating(true)} onImport={() => picker.current?.click()} />
         ) : (
           <>
             <DataTable

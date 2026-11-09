@@ -252,6 +252,7 @@ pub fn run() {
             agent::agent_install_cancel,
             agent::agent_open_url,
             agent::agent_open_link,
+            updater::open_cursor_mcp_install,
             runner::runner_list,
             runner::runner_run,
             runner::open_runner,

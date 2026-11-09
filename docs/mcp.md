@@ -38,6 +38,8 @@ args = ["mcp"]
 
 ### Cursor
 
+In Writer, **Settings → AI → MCP server registration → Cursor → Add to Cursor** opens Cursor's own "add MCP server" prompt with the installed CLI filled in, so nothing is edited by hand. The same place shows the commands for Claude Code, Codex, Gemini CLI and GitHub Copilot. To write the file yourself instead:
+
 `.cursor/mcp.json` (project) or `~/.cursor/mcp.json`:
 
 ```json

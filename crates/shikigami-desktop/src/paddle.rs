@@ -206,14 +206,26 @@ fn ocr_error(e: impl std::fmt::Display) -> StepError {
 impl Paddle {
     /// The lines of text in `image`, in its pixels.
     pub fn recognize(&self, image: &Bitmap) -> Result<Vec<OcrLine>, StepError> {
+        self.recognize_kind(image, None)
+    }
+
+    /// The lines of text in `image`, reading only characters a field of
+    /// `kind` can hold.
+    pub fn recognize_kind(
+        &self,
+        image: &Bitmap,
+        kind: Option<crate::ocr_fit::TextKind>,
+    ) -> Result<Vec<OcrLine>, StepError> {
+        let limited = kind.map(|k| self.vocab.for_kind(k));
+        let vocab = limited.as_ref().unwrap_or(&self.vocab);
         let longest = image.width.max(image.height) as f32;
         if longest * ENLARGE > DET_MAX_SIDE {
-            return self.recognize_as_is(image);
+            return self.recognize_as_is(image, vocab);
         }
         let large = image.scaled(ENLARGE);
         let back = |v: i32| (v as f32 / ENLARGE).round() as i32;
         Ok(self
-            .recognize_as_is(&large)?
+            .recognize_as_is(&large, vocab)?
             .into_iter()
             .map(|mut line| {
                 for word in &mut line.words {
@@ -231,7 +243,7 @@ impl Paddle {
     }
 
     /// The lines of text in `image` at its own size.
-    fn recognize_as_is(&self, image: &Bitmap) -> Result<Vec<OcrLine>, StepError> {
+    fn recognize_as_is(&self, image: &Bitmap, vocab: &Vocab) -> Result<Vec<OcrLine>, StepError> {
         let mut crops: Vec<(Rect, Bitmap)> = self
             .detect(image)?
             .into_iter()
@@ -248,7 +260,7 @@ impl Paddle {
         crops.sort_by(|a, b| aspect(&a.1).total_cmp(&aspect(&b.1)));
         let mut lines = Vec::new();
         for batch in crops.chunks(REC_BATCH) {
-            for ((rect, _), line) in batch.iter().zip(self.read_lines(batch)?) {
+            for ((rect, _), line) in batch.iter().zip(self.read_lines(batch, vocab)?) {
                 if let Some(mut line) = line {
                     let vertical = rect.height as f32 >= rect.width as f32 * VERTICAL_RATIO;
                     if vertical {
@@ -316,7 +328,11 @@ impl Paddle {
 
     /// Reads lines of similar shape at once: each scaled to the model's
     /// height, padded to the widest.
-    fn read_lines(&self, batch: &[(Rect, Bitmap)]) -> Result<Vec<Option<OcrLine>>, StepError> {
+    fn read_lines(
+        &self,
+        batch: &[(Rect, Bitmap)],
+        vocab: &Vocab,
+    ) -> Result<Vec<Option<OcrLine>>, StepError> {
         let widths: Vec<u32> = batch
             .iter()
             .map(|(_, crop)| {
@@ -352,7 +368,7 @@ impl Paddle {
             .enumerate()
             .map(|(i, ((_, crop), &w))| {
                 let item = &scores[i * steps * classes..(i + 1) * steps * classes];
-                let decoded = ctc_decode(item, steps, classes, &self.vocab);
+                let decoded = ctc_decode(item, steps, classes, vocab);
                 if decoded.is_empty() || decoded.score < TEXT_SCORE {
                     return None;
                 }
@@ -564,10 +580,13 @@ pub const KANA_PAIRS: [(char, char); 13] = [
 
 /// Recognition's classes: class 0 is CTC's blank, class `i` is
 /// `chars[i - 1]`, one past the end is a space.
+#[derive(Clone)]
 pub struct Vocab {
     pub chars: Vec<String>,
     /// Classes recognition never chooses (see [`skipped`]).
     skip: Vec<bool>,
+    /// Classes a field cannot hold (see [`Vocab::for_kind`]); empty: all.
+    deny: Vec<bool>,
 }
 
 impl Vocab {
@@ -582,11 +601,40 @@ impl Vocab {
         let skip = std::iter::once(false)
             .chain(chars.iter().map(|c| single(c).is_some_and(skipped)))
             .collect();
-        Vocab { chars, skip }
+        Vocab {
+            chars,
+            skip,
+            deny: Vec::new(),
+        }
+    }
+
+    /// The classes a field of `kind` can hold (blank always).
+    pub fn for_kind(&self, kind: crate::ocr_fit::TextKind) -> Vocab {
+        let deny = (0..=self.chars.len() + 1)
+            .map(|class| {
+                class != 0 && {
+                    let c = self.char(class);
+                    let mut it = c.chars();
+                    match (it.next(), it.next()) {
+                        (Some(ch), None) => !kind.allows(ch),
+                        _ => true,
+                    }
+                }
+            })
+            .collect();
+        Vocab {
+            deny,
+            ..self.clone()
+        }
     }
 
     fn skips(&self, class: usize) -> bool {
         self.skip.get(class).copied().unwrap_or(false)
+    }
+
+    /// Not chosen: a look-alike, or a character the field cannot hold.
+    fn excludes(&self, class: usize) -> bool {
+        self.skips(class) || self.deny.get(class).copied().unwrap_or(false)
     }
 
     fn char(&self, class: usize) -> String {
@@ -634,8 +682,8 @@ pub fn ctc_decode(scores: &[f32], steps: usize, classes: usize, vocab: &Vocab) -
             )
         };
         let (mut best, mut score) = best_of(&|_| true);
-        if vocab.skips(best) {
-            (best, score) = best_of(&|i| i != 0 && !vocab.skips(i));
+        if vocab.excludes(best) {
+            (best, score) = best_of(&|i| i != 0 && !vocab.excludes(i));
         }
         if best != 0 && best != previous {
             out.push((vocab.char(best), t as f32));

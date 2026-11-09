@@ -438,6 +438,8 @@ export interface UpdateProgress {
 // unaware of app updates.
 export const updates = {
   appInfo: () => call<AppInfo>("app_info"),
+  /** Opens Cursor's prompt to add the installed CLI as an MCP server. */
+  addToCursor: () => call<void>("open_cursor_mcp_install"),
   check: () => call<UpdateInfo | null>("check_update"),
   /** Downloads the found update in the background; resolves with its version once ready. */
   download: () => call<string>("download_update"),

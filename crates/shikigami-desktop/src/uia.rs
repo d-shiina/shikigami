@@ -188,7 +188,7 @@ impl Backend for UiaBackend {
             },
         };
         if !windows {
-            return crate::backend::paddle_recognize(image, options.accurate);
+            return crate::backend::paddle_recognize(image, options.accurate, options.kind);
         }
         // Windows OCR needs only the thread's apartment, not UI Automation.
         self.on_thread(move |_| capture::recognize(&image, options.language.as_deref()))

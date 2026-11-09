@@ -202,13 +202,19 @@ function Editor({
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {/* The flow's files float over the left of the chart; the outline sits beside them. */}
+              {/*
+                The flow's files and its outline lie on the desk left of the sheet, one column:
+                the files above, the outline under them taking the rest of the height.
+              */}
               {hasFlow && projectOpen && (
-                <div className="absolute top-3 bottom-3 left-3 z-10">
-                  <ProjectPanel />
+                <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
+                  <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
+                    <ProjectPanel />
+                  </div>
+                  {outlineOpen && <OutlinePanel docked />}
                 </div>
               )}
-              {hasFlow && <OutlinePanel left={outlineLeft} />}
+              {hasFlow && !projectOpen && <OutlinePanel left={12} />}
               {/* The outline unfolds from this corner, so its button sits there. */}
               {hasFlow && !outlineOpen && (
                 <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
@@ -221,7 +227,7 @@ function Editor({
           )}
           {!report && view !== "variables" && hasFlow && <FlowSearch />}
           <FileSheet />
-          {/* Clear of the zoom controls in the bottom-left corner. The 手順書 shows it only while editing. */}
+          {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
           {!report && view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
