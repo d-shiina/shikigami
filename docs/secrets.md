@@ -93,6 +93,31 @@ From scripts, use `--password-stdin` (the first line of standard input).
 - A default value on a `secret: true` variable would stay in the flow as plain text, so it gives the validation error `SECRET_DEFAULT`.
 - In Writer's properties, switch an input's value between "Text / 🔑 Secret" and pick the name and field.
 
+### Several accounts of one site
+
+Register each account under its own name (e.g. 「受注システム（経理）」 and 「受注システム（申請）」 with the same site). A node names one of them, so a flow uses the right one as it is. The list a node's settings pick a secret from shows the user name beside the name, as browsers list saved logins.
+
+To pick the account each run, press "Pick each run" after "N more secrets are registered for the same site" in the node's settings. It makes an input (e.g. `account`) whose choices are the secrets of that site, and every node that uses the secret (user name, password, one-time code, and the saved login of the same name) takes the account from it.
+
+```jsonc
+"variables": [
+  { "name": "account", "type": "string", "direction": "input",
+    "choices": ["受注システム（経理）", "受注システム（申請）"] }
+],
+"steps": [
+  { "type": "browser.open", "params": { "url": "https://orders.example.com/", "session": "{{ account }}" } },
+  { "type": "browser.fill", "params": { "target": { "label": "User name" }, "value": { "secret": "{{ account }}", "field": "username" } } },
+  { "type": "browser.fill", "params": { "target": { "label": "Password" }, "value": { "secret": "{{ account }}", "field": "password" } } }
+]
+```
+
+- A secret name may come from a variable only as exactly `{{ name }}` of an input whose `choices` are registered names; anything else is the validation error `INVALID_SECRET_REF`. A name not in the choices stops the run before it starts (`INVALID_INPUT`).
+- Writer's Run asks for it when it has no default, the Runner offers the list, and a schedule runs with the value it was given. Give it a default for unattended runs.
+- There is no "use the only one" rule: registering a second account later must not stop an unattended flow or make it log in as someone else, so the flow always says which account it uses.
+- Keep one saved login (`session`) per account: with the same name, the second account opens logged in as the first.
+- A user name and password taken from different secrets give the validation warning `SECRET_ACCOUNTS_MIXED`.
+- For AI clients, `list_secrets` groups secrets of the same site under `sameSite` and tells them not to pick one themselves but to ask, or to use the input above.
+
 ### Keeping the sign-in (sessions)
 
 With `session: "<name>"` on `browser.open`, that context starts with the saved cookies and localStorage and saves them again when it closes (at the end of the run). From the second run on the login page can be skipped, so, as above, log in only when `browser.isVisible` says it is needed. Saved states are encrypted with the same key as the secrets.

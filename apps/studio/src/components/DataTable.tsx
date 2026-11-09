@@ -10,7 +10,7 @@
 // - a footer says how many rows are shown and picked.
 // What the viewer chose (sort, columns, widths, row height, grouping) is
 // remembered per table under its storageKey.
-import { ArrowDown, ArrowUp, Check as CheckIcon, ChevronDown, ChevronRight, ChevronsUpDown, PlusCircle, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check as CheckIcon, ChevronDown, ChevronRight, ChevronsUpDown, MoreHorizontal, PlusCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import {
   type HTMLAttributes,
   type MouseEvent,
@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { type MenuSpec, openMenu } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 
 export type Column<T> = {
@@ -208,6 +209,7 @@ export function DataTable<T>({
   rowActions,
   actionsWidth = 84,
   rowProps,
+  canPick,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -231,6 +233,8 @@ export function DataTable<T>({
   actionsWidth?: number;
   /** More attributes and handlers for a row (hover, context menu, data-*). */
   rowProps?: (row: T) => Omit<HTMLAttributes<HTMLTableRowElement>, "className" | "onClick" | "onKeyDown">;
+  /** Rows that can be picked (default all): the others get no check box and stay out of "pick all" and ranges. */
+  canPick?: (row: T) => boolean;
 }) {
   const own = useTableView(columns, { storageKey, initialSort });
   const v = view ?? own;
@@ -263,11 +267,11 @@ export function DataTable<T>({
   const visible = groups ? groups.flatMap((g) => (folded.has(g.key) ? [] : g.rows)) : sorted;
 
   const picking = selected && onSelect ? { selected, onSelect } : null;
-  const keys = visible.map(rowKey);
+  const keys = (canPick ? visible.filter(canPick) : visible).map(rowKey);
   const pickedHere = picking ? keys.filter((k) => picking.selected.has(k)).length : 0;
   /** A click on a check box or with Ctrl: one row; with Shift: the rows from the last one picked. */
   const pick = (key: string, range: boolean) => {
-    if (!picking) return;
+    if (!picking || !keys.includes(key)) return;
     const next = new Set(picking.selected);
     const from = anchor.current ? keys.indexOf(anchor.current) : -1;
     if (range && from >= 0) {
@@ -326,7 +330,7 @@ export function DataTable<T>({
       >
         {picking && (
           <td className={`border-b border-slate-100 pr-1 pl-3 ${cellY}`}>
-            <Check checked={on} label={t.table.select} onPick={(e) => pick(key, e.shiftKey)} />
+            {(!canPick || canPick(row)) && <Check checked={on} label={t.table.select} onPick={(e) => pick(key, e.shiftKey)} />}
           </td>
         )}
         {shown.map((c) => (
@@ -775,6 +779,71 @@ export function BulkButton({
     >
       <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
       {confirming ? (confirmLabel ?? label) : label}
+    </button>
+  );
+}
+
+/** The tones of a StatusBadge: a state of the row, said with a dot and a word. */
+export type Tone = "green" | "amber" | "red" | "blue" | "slate";
+const BADGE: Record<Tone, { pill: string; dot: string }> = {
+  green: { pill: "bg-moegi-100 text-moegi-600", dot: "bg-moegi-500" },
+  amber: { pill: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
+  red: { pill: "bg-shu-50 text-shu-600", dot: "bg-shu-500" },
+  blue: { pill: "bg-brand-50 text-brand-600", dot: "bg-brand-500" },
+  slate: { pill: "bg-slate-100 text-slate-600", dot: "bg-slate-400" },
+};
+/** The dot color of a tone, for a FacetFilter option that names the same state. */
+export const toneDot = (tone: Tone) => BADGE[tone].dot;
+
+/** A row's state in a cell (公開中, 有効, 読み込みエラー…): the same pill in every table. */
+export function StatusBadge({ tone, label, title }: { tone: Tone; label: string; title?: string }) {
+  return (
+    <span className={`inline-flex h-5 max-w-full items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap ${BADGE[tone].pill}`} title={title}>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${BADGE[tone].dot}`} aria-hidden="true" />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * On or off in a row (有効), turned without opening the row: a switch, not a
+ * check box, so it is not mistaken for picking the row.
+ */
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 motion-reduce:transition-none ${checked ? "bg-brand-500" : "bg-slate-300"}`}
+    >
+      <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${checked ? "translate-x-3.5" : "translate-x-0.5"}`} />
+    </button>
+  );
+}
+
+/** The "…" at a row's end: the same menu as a right-click on the row. */
+export function RowMenuButton({ items }: { items: () => readonly MenuSpec[] }) {
+  return (
+    <button
+      type="button"
+      title={t.table.more}
+      aria-label={t.table.more}
+      className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
+      onClick={(e) => {
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        openMenu({ clientX: r.right - 180, clientY: r.bottom + 4, preventDefault: () => {} }, items());
+      }}
+    >
+      <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden="true" />
     </button>
   );
 }

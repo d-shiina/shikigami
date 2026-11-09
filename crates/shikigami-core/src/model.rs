@@ -109,17 +109,41 @@ impl Flow {
     /// (`{ "secret": "<name>", "field": .. }` anywhere in their params),
     /// sorted and without repeats.
     pub fn secret_names(&self) -> Vec<String> {
-        fn visit(value: &Value, names: &mut std::collections::BTreeSet<String>) {
+        // A name written `{{ variable }}` stands for each of the variable's
+        // choices (one is picked when the run starts).
+        let add = |name: &str, names: &mut std::collections::BTreeSet<String>| {
+            match crate::secret::name_variable(name) {
+                Some(var) => {
+                    if let Some(def) = self.variables.iter().find(|v| v.name == var) {
+                        names.extend(
+                            def.choices
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned),
+                        );
+                    }
+                }
+                None if !name.contains("{{") => {
+                    names.insert(name.to_owned());
+                }
+                None => {}
+            }
+        };
+        fn visit(
+            value: &Value,
+            names: &mut std::collections::BTreeSet<String>,
+            add: &dyn Fn(&str, &mut std::collections::BTreeSet<String>),
+        ) {
             match value {
                 Value::Object(map) => {
                     if let Some(Value::String(name)) = map.get("secret")
                         && map.contains_key("field")
                     {
-                        names.insert(name.clone());
+                        add(name, names);
                     }
-                    map.values().for_each(|v| visit(v, names));
+                    map.values().for_each(|v| visit(v, names, add));
                 }
-                Value::Array(items) => items.iter().for_each(|v| visit(v, names)),
+                Value::Array(items) => items.iter().for_each(|v| visit(v, names, add)),
                 _ => {}
             }
         }
@@ -130,13 +154,14 @@ impl Flow {
         const NAMED: [(&str, &str); 2] = [("oauth.signIn", "secret"), ("browser.open", "session")];
         let mut names = std::collections::BTreeSet::new();
         for step in self.walk() {
-            step.params.values().for_each(|v| visit(v, &mut names));
+            step.params
+                .values()
+                .for_each(|v| visit(v, &mut names, &add));
             for (step_type, key) in NAMED {
                 if step.step_type == step_type
                     && let Some(Value::String(name)) = step.params.get(key)
-                    && !name.contains("{{")
                 {
-                    names.insert(name.clone());
+                    add(name, &mut names);
                 }
             }
         }

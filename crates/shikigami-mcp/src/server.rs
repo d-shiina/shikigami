@@ -596,6 +596,22 @@ fn err_hint(code: &str, message: impl Into<String>, hint: &str) -> ErrorPayload 
     }
 }
 
+/// Sites registered with more than one secret (several accounts of one
+/// site), with the names of those secrets.
+fn same_site(secrets: &[shikigami_secrets::SecretSummary]) -> Vec<Value> {
+    let mut by_site: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+    for secret in secrets {
+        for site in &secret.sites {
+            by_site.entry(site).or_default().push(&secret.name);
+        }
+    }
+    by_site
+        .into_iter()
+        .filter(|(_, names)| names.len() > 1)
+        .map(|(site, names)| json!({ "site": site, "secrets": names }))
+        .collect()
+}
+
 fn secret_err(e: shikigami_core::secret::SecretError) -> ErrorPayload {
     ErrorPayload {
         details: e.details(),
@@ -999,7 +1015,11 @@ impl ShikigamiMcp {
 
     /// Secrets the user registered in SpellSheet Writer: names, the sites each may be typed into, and
     /// which fields are set (username, password, totp). Values are never returned. Use a name in
-    /// browser.fill: value { "secret": "<name>", "field": "password" }.
+    /// browser.fill: value { "secret": "<name>", "field": "password" }. Several accounts of one
+    /// site are separate secrets (listed under `sameSite`): never pick one yourself. Ask the user
+    /// which, or let the person pick each run: an input variable whose `choices` are those names,
+    /// and { "secret": "{{ <variable> }}", "field": .. } in every step that logs in (also as
+    /// browser.open `session`, so each account keeps its own login).
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_secrets(&self, peer: Peer<RoleServer>) -> Result<CallToolResult, ErrorData> {
         let outcome = self
@@ -1007,10 +1027,16 @@ impl ShikigamiMcp {
             .vault
             .summaries()
             .map(|secrets| {
-                json!({
+                let same_site = same_site(&secrets);
+                let mut out = json!({
                     "secrets": secrets,
                     "hint": "Missing one? Call request_secret with a name and the site: Writer asks the user to register it. Never ask for the values in chat.",
-                })
+                });
+                if !same_site.is_empty() {
+                    out["sameSite"] = json!(same_site);
+                    out["sameSiteHint"] = json!("These sites have several accounts. Do not choose one yourself: ask the user which one the flow should use, or make an input variable with those names as `choices` and write { \"secret\": \"{{ variable }}\" } so the person picks one each run.");
+                }
+                out
             })
             .map_err(secret_err);
         self.finish("list_secrets", &peer, None, outcome)

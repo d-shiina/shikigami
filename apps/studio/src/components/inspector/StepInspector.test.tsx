@@ -200,3 +200,55 @@ describe("the settings of the node opened full size", () => {
     expect(screen.getByPlaceholderText(/このノードで何をするか/)).toBeTruthy();
   });
 });
+
+describe("several accounts of one site", () => {
+  const fillDef = {
+    type: "browser.fill",
+    category: "browser",
+    label: "文字の入力",
+    description: "",
+    paramsSchema: {
+      type: "object",
+      properties: { value: { oneOf: [{ type: "string" }, { type: "object", properties: { secret: { type: "string" }, field: { enum: ["username", "password", "totp"] } } }] } },
+      required: ["value"],
+    },
+    blocks: [],
+    hasOutput: false,
+    secretParams: ["value"],
+    risk: "safe",
+  } as unknown as StepTypeDef;
+  const login: Flow = {
+    ...flow,
+    variables: [],
+    steps: [
+      { id: "u", type: "browser.fill", params: { value: { secret: "受注（経理）", field: "username" } } },
+      { id: "p", type: "browser.fill", params: { value: { secret: "受注（経理）", field: "password" } } },
+    ],
+  } as unknown as Flow;
+  const secret = (name: string, username: string) => ({ name, kind: "login", username, sites: ["https://orders.example.com"], fields: ["username", "password"], updatedAt: "" });
+
+  it("lists them with their user names, and 「実行のたびに選ぶ」 points every login node at one input", async () => {
+    const edit = vi.fn(async () => ({ flow: login, validation: { valid: true, issues: [] }, canUndo: true, canRedo: false }));
+    const store = await studio({
+      getFlow: vi.fn(async () => login),
+      listStepTypes: vi.fn(async () => [fillDef]),
+      listSecrets: vi.fn(async () => ({ secrets: [secret("受注（経理）", "keiri01"), secret("受注（申請）", "shinsei01")], keyLocation: "test", keyMissing: false })),
+      edit,
+    } as Partial<Api>);
+    store.setState({ stepTypes: [fillDef] });
+    await store.getState().loadSecrets();
+    store.getState().select({ kind: "step", stepId: "p" });
+    render(
+      <StudioContext.Provider value={store}>
+        <StepInspector />
+      </StudioContext.Provider>,
+    );
+    await waitFor(() => expect(screen.getByRole("option", { name: "受注（申請）（shinsei01）" })).toBeTruthy());
+    expect(screen.getByText(/同じサイトのシークレットがほかに 1 件あります/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "実行のたびに選ぶ" }));
+    await waitFor(() => expect(edit).toHaveBeenCalled());
+    const ops = (edit.mock.calls[0] as unknown[])[2] as { op: string; stepId?: string; variable?: { name: string; choices: string[] } }[];
+    expect(ops[0]).toMatchObject({ op: "setVariable", variable: { name: "アカウント", choices: ["受注（経理）", "受注（申請）"] } });
+    expect(ops.slice(1).map((o) => o.stepId)).toEqual(["u", "p"]);
+  });
+});
