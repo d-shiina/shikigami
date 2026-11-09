@@ -417,4 +417,6 @@ footer a { color: var(--fg-muted); }
 .cmp-sub { margin-bottom: 20px; }
 .cmp-2 { min-width: 0; table-layout: fixed; }
 .cmp-2 td { width: auto; }
+.cmp-2 thead th:first-child, .cmp-2 tbody th { width: 132px; }
+@media (max-width: 560px) { .cmp-2 thead th:first-child, .cmp-2 tbody th { width: 76px; } }
 .cmp-note { margin-top: 16px; font-size: 13px; color: var(--fg-muted); max-width: 52em; }
