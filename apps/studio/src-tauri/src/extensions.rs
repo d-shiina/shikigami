@@ -99,6 +99,49 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
     Ok(keep(&ext, &root, staged))
 }
 
+/// The custom nodes the installer ships in `plugins\` next to Writer (from
+/// `examples/plugins`, staged by `scripts/bundle-node.mjs`), so a feature
+/// that needs one (reading a file from Box) can offer it on a PC that
+/// cannot reach a registry. A development build reads the repository's
+/// `examples/plugins`.
+fn shipped_extension(name: &str) -> Option<PathBuf> {
+    if !spellsheet_plugins::manifest::is_plugin_name(name) {
+        return None;
+    }
+    let shipped = spellsheet_runtime::node::exe_dir().map(|dir| dir.join("plugins").join(name));
+    let dev = cfg!(debug_assertions).then(|| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../examples/plugins")
+            .join(name)
+    });
+    [shipped, dev]
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.join("spellsheet-plugin.json").is_file())
+}
+
+/// Stages the custom node `name` that came with Writer, as
+/// [`stage_extension`] does; the person still confirms what it is.
+#[tauri::command]
+pub async fn stage_shipped_extension(ext: State<'_, Extensions>, name: String) -> CmdResult<Value> {
+    let root = root()?;
+    let dir = shipped_extension(&name).ok_or_else(|| {
+        err(
+            "EXTENSION_NOT_SHIPPED",
+            format!("カスタム ノード「{name}」は Writer に入っていません"),
+        )
+    })?;
+    let names = builtin_names();
+    let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+    let source = Source::File {
+        path: dir.display().to_string(),
+    };
+    let staged = install::stage(&root, source, &taken)
+        .await
+        .map_err(install_err)?;
+    Ok(keep(&ext, &root, staged))
+}
+
 /// Stages the extension `name` from the registry `registry` (the one the
 /// catalog row came from), as [`stage_extension`] does. Only that registry
 /// is read, so the row shown is the one installed.

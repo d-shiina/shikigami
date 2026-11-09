@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "label": "Box",
   "description": "Box のフォルダーの一覧・ファイルのダウンロード・アップロードを、Box Drive を入れていない PC でも Box API で行います。",
-  "publisher": "SpellSheet 見本",
+  "publisher": "SpellSheet",
   "homepage": "https://github.com/spellsheet/spellsheet/tree/main/examples/plugins/box",
   "tag": "Box",
   "icon": "cloud",

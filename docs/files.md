@@ -58,7 +58,7 @@ Types are `text`, `number`, `boolean`, `date`, `list` and `folder`. `config.read
 
 A `folder` is a folder's full path. `%USERPROFILE%` and other `%NAME%` parts are replaced with the PC's environment variables when read: Box Drive and OneDrive folders sit in each user's profile, so `%USERPROFILE%\Box\Accounts` works on everyone's PC.
 
-### Files on a file server or in Box
+### Files on a file server or in cloud storage
 
 File params take full paths too: a file server (`\\fs01\accounts\orders.xlsx`) and folders synced with cloud storage (Box Drive, OneDrive, Google Drive, Dropbox) are read and written where they are. Unattended runs (the worker) run as the signed-in user, so whatever that person can open works. For Box Drive, sign in to Box Drive on that PC.
 
@@ -72,11 +72,40 @@ and write `{{ settings.ordersFolder }}/orders.xlsx` in the node.
 
 In Writer:
 
-- When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** and **Read from cloud storage** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`). Folders inside the user's profile are kept as `%USERPROFILE%\…`
-- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the folder you pick
+- When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`) and **Read from cloud storage** (below). Folders inside the user's profile are kept as `%USERPROFILE%\…`
+- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the file server folder you pick; cloud storage uploads each file once written (below)
 - **Browse…** in a node's settings asks, for a file outside the flow's folder, whether to read it where it is or copy it in
 - A `.spx` lists the full paths and the settings' folders under what the receiving PC needs; on import, Writer checks whether this PC opens them
 - The AI's `list_project_files` returns the missing input files as `needed`
+
+### Cloud storage (API)
+
+On PCs without the sync app (Box Drive and the like), and for unattended runs, the flow reaches the storage through its API. Box is supported now (Google Drive and OneDrive / SharePoint come next).
+
+**Read from cloud storage** asks for:
+
+| Field | What |
+|---|---|
+| Secret to sign in with | An OAuth app secret. A new one takes the client ID and client secret of an app made in the Box developer console (user authentication, OAuth 2.0); `https://api.box.com` and `plugin:box` are added to its sites |
+| Redirect URL | The one registered with the app ([oauth.md](oauth.md)) |
+| File | A path from All Files (`Accounting/Orders/orders.xlsx`), or the address Box shows for it (kept as its ID) |
+
+The flow then has:
+
+```jsonc
+{ "type": "config.read", "params": { "path": "config/settings.json" }, "saveAs": "settings" },
+{ "type": "oauth.signIn", "name": "Sign in to Box", "params": { "secret": "Box", "authorizeUrl": "…", "tokenUrl": "…", "redirectUrl": "…" } },
+{ "type": "box.download", "name": "Download orders.xlsx", "params": {
+    "account": { "secret": "Box", "field": "accessToken" },
+    "file": "{{ settings.orders_box }}", "to": "work/orders.xlsx", "overwrite": true } },
+{ "type": "excel.readRows", "params": { "path": "work/orders.xlsx" } }
+```
+
+Where the file is in Box is the setting `orders_box` (`text`), so the receiver of the flow changes the setting only. The first run opens the Box sign-in page; later runs stay signed in ([oauth.md](oauth.md)).
+
+**Write to cloud storage** sends each file written into `output/` with `box.upload` (a new version when the name is taken), after the last node that writes it. A file written inside a loop is sent once after the loop unless its path has `{{ }}`. The files stay in `output/` too.
+
+The Box custom node (`box.list`, `box.download`, `box.upload`) comes with Writer; when it is not installed yet, the dialog installs it and Writer restarts.
 
 Keep `work/` in the flow's folder: it is emptied at every run, and in a synced folder the sync lags behind (locked files) and others see half-made files.
 

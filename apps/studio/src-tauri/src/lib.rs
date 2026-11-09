@@ -166,6 +166,7 @@ pub fn run() {
             commands::workspace_info,
             extensions::list_extensions,
             extensions::stage_extension,
+            extensions::stage_shipped_extension,
             extensions::stage_extension_update,
             extensions::install_extension,
             extensions::discard_extension,

@@ -1,6 +1,7 @@
-// Stages Node.js and the browser adapter where `tauri.release.conf.json`
-// expects them (`bundle.resources`), so the installer puts them in `node\`
-// and `browser-adapter\` next to Studio and `spellsheet.exe`. Browser steps
+// Stages Node.js, the browser adapter and the shipped custom nodes where
+// `tauri.release.conf.json` expects them (`bundle.resources`), so the
+// installer puts them in `node\`, `browser-adapter\` and `plugins\` next to
+// Studio and `spellsheet.exe`. Browser steps
 // and Node plugins then work on PCs without Node.js (see docs/browser.md).
 //
 // Node.js comes from nodejs.org, pinned to a version and checked against the
@@ -20,6 +21,9 @@ const NODE_SHA256 = {
   arm64: "a0c807319fede24c4a0d8f84564c82a619bd313b16b10c007c383c2609e99171",
 };
 
+// The custom nodes shipped with Writer (examples/plugins/<name>).
+const SHIPPED_PLUGINS = ["box"];
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const outDir = join(root, "apps/studio/src-tauri/bundled");
 
@@ -30,6 +34,7 @@ if (!NODE_SHA256[arch]) throw new Error(`no pinned Node.js for arch '${arch}'`);
 rmSync(outDir, { recursive: true, force: true });
 await stageNode();
 stageAdapter();
+stagePlugins();
 if (process.platform === "win32") checkAdapterStarts();
 
 async function stageNode() {
@@ -85,6 +90,24 @@ function stageAdapter() {
     cpSync(src, join(dest, "node_modules", dep), { recursive: true, dereference: true });
   }
   console.log(`bundled browser adapter: ${dest}`);
+}
+
+/**
+ * The custom nodes Writer offers itself (reading a file from Box through its
+ * API), in `plugins\<name>\` next to Writer. Each is a plain Node.js
+ * program without dependencies; its tests stay out.
+ */
+function stagePlugins() {
+  for (const name of SHIPPED_PLUGINS) {
+    const src = join(root, "examples/plugins", name);
+    const dest = join(outDir, "plugins", name);
+    mkdirSync(dest, { recursive: true });
+    for (const file of readdirSync(src)) {
+      if (file === "test.mjs" || file.startsWith(".")) continue;
+      cpSync(join(src, file), join(dest, file), { recursive: true });
+    }
+    console.log(`bundled custom node ${name}: ${dest}`);
+  }
 }
 
 /** Starts the staged adapter with the staged Node.js, as the installed app will. */

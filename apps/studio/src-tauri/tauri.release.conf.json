@@ -6,7 +6,8 @@
     "resources": {
       "bundled/node": "node",
       "bundled/browser-adapter": "browser-adapter",
-      "bundled/ocr": "ocr"
+      "bundled/ocr": "ocr",
+      "bundled/plugins": "plugins"
     },
     "windows": {
       "nsis": {
