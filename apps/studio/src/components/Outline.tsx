@@ -18,7 +18,8 @@ const RUN_DOT: Record<string, string> = {
 };
 
 /** `left`: clear of the project panel when it is open. */
-export function OutlinePanel({ left = 12 }: { left?: number }) {
+/** `docked`: under the project panel in its column, filling the height left; otherwise floating at `left`. */
+export function OutlinePanel({ left = 12, docked = false }: { left?: number; docked?: boolean }) {
   const open = useStudio((s) => s.outlineOpen);
   const setOpen = useStudio((s) => s.setOutlineOpen);
   const flow = useStudio((s) => s.flow);
@@ -45,7 +46,10 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
   if (!open || !flow) return null;
 
   return (
-    <nav style={{ left }} className="absolute top-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
+    <nav
+      style={docked ? undefined : { left }}
+      className={`${docked ? "min-h-0 flex-[1_1_45%]" : "absolute top-3 z-10 max-h-[calc(100%-6rem)] w-[264px]"} flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur`}
+    >
       <div className="flex items-center gap-2 border-b border-slate-100 py-1 pr-1 pl-3 text-[11px] text-slate-500">
         <span className="font-bold text-ink">{t.outline.steps}</span>
         <span>{items.length}</span>
