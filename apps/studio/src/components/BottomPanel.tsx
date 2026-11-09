@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -95,7 +96,7 @@ export function BottomPanel() {
           </button>
         )}
         <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={() => setTab(null)} title={t.shell.closePanel} aria-label={t.shell.closePanel}>
-          ✕
+          <X size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
       {tab === "log" ? (

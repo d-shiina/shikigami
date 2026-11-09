@@ -252,7 +252,7 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
         setPlace("flows");
         void open(f.id);
       };
-      out.push({ id: `flow:${f.id}`, group: "flows", icon: Workflow, label: f.name, note: flow?.id === f.id ? "●" : undefined, run: go });
+      out.push({ id: `flow:${f.id}`, group: "flows", icon: Workflow, label: f.name, note: flow?.id === f.id ? t.shell.openNow : undefined, run: go });
     }
     for (const [place, icon, label] of PLACES) if (hit(label())) out.push({ id: `place:${place}`, group: "places", icon, label: label(), run: () => setPlace(place) });
     const actions: Command[] = [

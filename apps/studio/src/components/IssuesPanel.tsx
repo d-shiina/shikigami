@@ -23,7 +23,12 @@ export function IssuesPanel() {
   const issues = validation?.issues ?? [];
   const forAi = authorIssues(validation);
   const rest = issues.filter((i) => i.severity !== "error" && !PERSON_CODES.has(i.code) && !forAi.includes(i));
-  if (todos.length === 0 && forAi.length === 0 && rest.length === 0) return <p className="p-4 text-sm text-moegi-500">✓ {t.noIssues}</p>;
+  if (todos.length === 0 && forAi.length === 0 && rest.length === 0) return (
+      <p className="flex items-center gap-1.5 p-4 text-sm text-moegi-500">
+        <Check size={14} strokeWidth={2} aria-hidden="true" />
+        {t.noIssues}
+      </p>
+    );
   return (
     <div className="divide-y divide-slate-100">
       {todos.length > 0 && <TodoList todos={todos} />}

@@ -2866,7 +2866,7 @@ impl ShikigamiMcp {
                     "status": "waiting",
                     "request": request,
                     "missing": missing,
-                    "hint": "Writer now asks the user to register this login (🔑). Tell the user in chat to open SpellSheet Writer and enter it there, never in chat. Then call request_secret again with waitMs, or list_secrets.",
+                    "hint": "Writer now asks the user to register this login in its own dialog. Tell the user in chat to open SpellSheet Writer and enter it there, never in chat. Then call request_secret again with waitMs, or list_secrets.",
                 }));
             }
             tokio::time::sleep(SECRET_POLL.min(deadline - tokio::time::Instant::now())).await;

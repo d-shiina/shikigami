@@ -993,6 +993,7 @@ export const ja = {
     open: "開く",
     moreSteps: (n: number) => `…ほか ${n} ノード（「開く」で全体を見る）`,
     stoppedHere: "ここでエラーが発生しました",
+    secretMark: "シークレット",
     pausedHere: "ここで一時停止中",
     note: "指摘",
     /** The tag on the frame around a loop, if, … and its blocks. */
@@ -1288,7 +1289,7 @@ export const ja = {
   recording: {
     record: "記録",
     recordTitle: "デスクトップアプリかブラウザでの操作を記録します",
-    bannerTitle: "● 記録中（{n} 件）　ここをクリックして終了",
+    bannerTitle: "記録中（{n} 件）　ここをクリックして終了",
     bannerHint: "クリック・入力欄の文字・キー操作を記録しています（ブラウザの操作は「ブラウザ」で記録します）",
     browserBannerHint: "クリック・入力・選択・チェック・Enter を記録しています",
     where: "記録する場所",
@@ -1596,6 +1597,7 @@ export const ja = {
     unanswered: (n: number) => `（未確認 ${n}）`,
     whatChanges: "変更内容",
     seen: (seen: number, total: number) => `${total} 件中 ${seen} 件を確認済み`,
+    seenMark: "確認済み",
     before: "前",
     after: "後",
     showInFlow: "フロー図で見る",
@@ -1965,6 +1967,7 @@ export const ja = {
     restoreHint: "オフにすると、完了したときは帯に結果を出したまま Writer は小さいままにします。エラーや中止のときは必ず戻します",
   },
   shell: {
+    openNow: "表示中",
     aiChat: "AI チャット",
     recentFlows: "最近のフロー",
     pin: "上に固定",

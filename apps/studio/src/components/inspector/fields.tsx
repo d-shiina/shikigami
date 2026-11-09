@@ -1,8 +1,7 @@
-import { ChevronRight } from "lucide-react";
 // The building blocks of the inspector and the node editor: a "項目 | 値" row,
 // a collapsible section, a text field that commits on blur, a path field.
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { CircleHelp, FolderOpen } from "lucide-react";
+import { ChevronRight, CircleHelp, FolderOpen, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectMaybe } from "../../project";
 import { t } from "../../lib/i18n";
@@ -170,13 +169,13 @@ export function Row({
       type="button"
       title={t.props.removeSetting}
       aria-label={t.props.removeSetting}
-      className="rounded-md px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
+      className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-ink"
       onClick={(e) => {
         e.preventDefault();
         onRemove();
       }}
     >
-      ×
+      <X size={12} />
     </button>
   );
   if (stacked)

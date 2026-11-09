@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, FolderOutput, History, PanelRight, Search, Send } from "lucide-react";
+import { CircleCheck, CircleDashed, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Redo2, Search, Send, StepForward, Undo2 } from "lucide-react";
 
 const CHIP = "flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px]";
 import { useStudio } from "../context";
@@ -249,7 +249,8 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
               title={t.toolbar.pauseTitle}
               className="flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] text-slate-600 hover:bg-slate-50"
             >
-              ❚❚ {t.runMsg.paused}
+              <Pause size={12} strokeWidth={2.25} aria-hidden="true" />
+              {t.runMsg.paused}
             </button>
           )}
           <button
@@ -258,7 +259,8 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
             title={followRun ? t.toolbar.followingTitle : t.toolbar.followTitle}
             className={`flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] ${followRun ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
           >
-            {followRun ? "◉" : "○"} {t.toolbar.follow}
+            {followRun ? <LocateFixed size={13} aria-hidden="true" /> : <Locate size={13} aria-hidden="true" />}
+            {t.toolbar.follow}
           </button>
           <button
             type="button"
@@ -280,9 +282,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
             className="flex h-7 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
             <span className="@max-[920px]/title:hidden">{t.toolbar.stepRun}</span>
-            <span className="hidden @max-[920px]/title:inline" aria-hidden="true">
-              ⇥
-            </span>
+            <StepForward size={14} className="hidden @max-[920px]/title:inline" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -332,10 +332,10 @@ export function CanvasDock() {
       <RecordButton />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       <DockButton label={`${t.undo} (Ctrl+Z)`} onClick={() => undo()} disabled={!canUndo}>
-        ↶
+        <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
       </DockButton>
       <DockButton label={`${t.redo} (Ctrl+Y)`} onClick={() => redo()} disabled={!canRedo}>
-        ↷
+        <Redo2 size={16} strokeWidth={1.75} aria-hidden="true" />
       </DockButton>
     </div>
   );

@@ -6,21 +6,7 @@
 // quieter. Colour says only the state (ui-principles.md): green done, 朱
 // failed, orange running, and the selection's blue.
 import type { StepTypeDef } from "@shikigami/schema";
-import {
-  Check,
-  ChevronRight,
-  Copy,
-  CircleAlert,
-  CircleCheck,
-  CircleMinus,
-  CirclePause,
-  CircleX,
-  LoaderCircle,
-  MessageSquareText,
-  Play,
-  RotateCw,
-  TriangleAlert,
-} from "lucide-react";
+import { ArrowDown, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CirclePause, CircleX, Copy, LoaderCircle, MessageSquareText, Play, RotateCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -330,7 +316,12 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
                 {n.title || n.name}
               </button>
               {n.title && n.name && <span className="truncate text-[13px] text-slate-600">{n.name}</span>}
-              {sub && <span className="truncate text-xs text-slate-500">→ {sub}</span>}
+              {sub && (
+                <span className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
+                  <ArrowRight size={12} className="shrink-0" aria-hidden="true" />
+                  <span className="truncate">{sub}</span>
+                </span>
+              )}
             </span>
           </>
         )}
@@ -394,7 +385,7 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
           // A 「ログ出力」 node's line is drawn on the node's row.
           if (line.node !== null && byKey.get(line.node)?.stepType === FLOW_LOG) return [];
           if (line.mark === "start" || line.mark === "end") {
-            const text = line.message.replace(/^[▶■]\s*/, "");
+            const text = line.message;
             return [
               <Row
                 key={`l${line.seq}${line.mark}`}
@@ -439,7 +430,7 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
                   error ? "text-shu-600" : warn ? "text-amber-700" : line.level === "debug" ? "text-slate-400" : "text-slate-600"
                 }`}
               >
-                {line.message.replace(/^(❚❚|▶)\s*/, "")}
+                {line.message}
               </span>
             </Row>,
           ];
@@ -448,10 +439,11 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
       {!stuck && (
         <button
           type="button"
-          className="absolute right-4 bottom-3 rounded-md border border-slate-200 bg-sheet px-2 py-0.5 text-xs text-slate-600 shadow-node hover:text-ink"
+          className="absolute right-4 bottom-3 flex items-center gap-1 rounded-md border border-slate-200 bg-sheet px-2 py-0.5 text-xs text-slate-600 shadow-node hover:text-ink"
           onClick={() => setStuck(true)}
         >
-          ↓ {t.runLog.toLatest}
+          <ArrowDown size={12} aria-hidden="true" />
+          {t.runLog.toLatest}
         </button>
       )}
     </div>
@@ -464,7 +456,7 @@ function logText(run: RunState, names: Names): string {
   const span = runSpan(run, 0);
   const lines = treeLines(run);
   const byKey = new Map(run.trace.nodes.map((n) => [n.key, n] as const));
-  const mark = { succeeded: "✓", failed: "×", skipped: "-" } as const;
+  const mark = { succeeded: "✓", failed: "×", skipped: "-" } as const; // plain text for pasting, not a screen
   return traceRows(run.trace.nodes, lines, () => true)
     .map((row) => {
       const pad = "  ".repeat(row.depth);

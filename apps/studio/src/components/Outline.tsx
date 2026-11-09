@@ -1,5 +1,6 @@
 // The flow's steps as a table of contents beside the flow chart: click
 // one (or use ↑↓) and the chart brings it into view.
+import { X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useStudio } from "../context";
 import { outline } from "../lib/outline";
@@ -67,7 +68,7 @@ export function OutlinePanel() {
           title={`${t.close} (O)`}
           className="grid h-6 w-6 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
         >
-          ✕
+          <X size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
       <ol ref={list} className="flex-1 overflow-y-auto py-1">
