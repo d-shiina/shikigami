@@ -4,6 +4,13 @@
 
 # SpellSheet
 
+<p align="center">
+  <a href="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/d-shiina/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/d-shiina/spellsheet" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4" alt="Platform: Windows 10 | 11">
+</p>
+
 [English](README.md) | 日本語
 
 > 名前は「式（spell）を書いた紙（sheet）」から来ています。以前の名前で出していた版から更新すると、設定・データのフォルダー、シークレット、自動実行のタスク、Writer の画面の設定、AI ツールの MCP 登録（名前は `spellsheet` になります。AI ツールを一度起動し直してください）まで、自動で引き継ぎます。
@@ -23,7 +30,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 ## 現在の状態
 
-**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Flow Core / Runtime / CLI / Writer（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）も動作します（[docs/browser.md](docs/ja/browser.md)、`pnpm demo:browser` でデモ）。Windows のデスクトップアプリ操作（Phase 4）は UI Automation で動作します（[docs/desktop.md](docs/ja/desktop.md)）。Excel のブックは Excel なしで直接読み書きできます（[docs/office.md](docs/ja/office.md)）。詳細は [アーキテクチャ設計 §13](docs/ja/architecture.md#13-実装状況と制約)。
+Flow Core、Runtime、CLI、Writer と Runner（Tauri 2 + React）、MCP サーバー、Worker が動作します。組み込みのノードで、ブラウザ（[docs/browser.md](docs/ja/browser.md)、`pnpm demo:browser` でデモ）、UI Automation による Windows のデスクトップアプリ（[docs/desktop.md](docs/ja/desktop.md)）、Excel なしでの Excel ブックの読み書き（[docs/office.md](docs/ja/office.md)）、Word、メール、ファイル、PDF、データベース、OCR を扱えます。1.0 より前の版です。フローの形式と MCP のツールは [docs/compatibility.md](docs/ja/compatibility.md) に従い、分かっている制約は [アーキテクチャ設計 §13](docs/ja/architecture.md#13-実装状況と制約) にあります。
 
 | ドキュメント | 内容 |
 |---|---|
@@ -46,16 +53,35 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 ## 構成
 
 ```text
-crates/spellsheet-core      Flow Core（唯一の正規データ層）
-crates/spellsheet-runtime   RPA Runtime（AI・GUI なしで実行）
-crates/spellsheet-cli       CLI（spellsheet コマンド。`spellsheet mcp` で MCP サーバー）
-crates/spellsheet-mcp       MCP サーバー（rmcp）
-apps/studio                SpellSheet Writer（Tauri 2 + React + React Flow）
-packages/schema            Rust から生成した TypeScript 型
-plugins/spellsheet          Claude Code プラグイン（MCP 設定＋スキル）
-schemas/                   生成された JSON Schema
-examples/                  サンプルフロー
+crates/
+  spellsheet-core       Flow Core：フローのモデル・検証・編集・履歴・保存（フローのデータの唯一の正規層）
+  spellsheet-runtime    AI・GUI なしでフローを実行
+  spellsheet-cli        spellsheet コマンド（`spellsheet mcp` で MCP サーバー）
+  spellsheet-mcp        MCP サーバー（rmcp）
+  spellsheet-agent      Worker：各 PC での無人実行（スケジュール、ファイルトリガー、管理サーバー）
+  spellsheet-manager    Worker 用の小さな参照実装の管理サーバー
+  spellsheet-adapters   組み込みノードの一覧（登録は 1 か所）
+  spellsheet-browser    browser.*（packages/browser-adapter の Node.js＋Playwright を動かす）
+  spellsheet-desktop    desktop.*（Windows UI Automation、Java Access Bridge、OCR）
+  spellsheet-excel      excel.*（.xlsx を Excel なしで直接読み書き）
+  spellsheet-word       word.*
+  spellsheet-mail       mail.*（Outlook、Microsoft 365、SMTP）
+  spellsheet-files      file.*
+  spellsheet-pdf        pdf.*
+  spellsheet-db         db.*（ODBC）
+  spellsheet-system     http.*、process.*、clipboard.*、dialog.*
+  spellsheet-com        Office 向けの COM 呼び出し（遅延バインドの IDispatch）
+  spellsheet-secrets    ログイン情報の保管庫（鍵は Windows 資格情報マネージャー）
+  spellsheet-plugins    ノードプラグイン：外部プログラムが提供するノード
+apps/studio             SpellSheet Writer と Runner（Tauri 2 + React + React Flow）
+packages/schema         Rust の型から生成した TypeScript 型
+packages/browser-adapter  ブラウザ操作のプロセス（Playwright）
+plugins/spellsheet      Claude Code プラグイン（MCP 設定＋スキル）
+schemas/                生成された JSON Schema（公開している約束）
+examples/               サンプルフロー、チュートリアル、カスタム ノードの例
 ```
+
+`spellsheet-core` はワークスペース内のどのクレートにも依存せず、入口（Writer・CLI・MCP サーバー・Worker）はすべてこれを通してフローを編集します。`unsafe` は Windows API を呼ぶモジュールだけに許し、それ以外はワークスペースの lint で禁止しています。設計の全体は [docs/architecture.md](docs/ja/architecture.md) を参照してください。
 
 ## 開発環境
 

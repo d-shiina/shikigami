@@ -4984,7 +4984,6 @@ dependencies = [
  "spellsheet-runtime",
  "tempfile",
  "tokio",
- "tokio-util",
  "tracing",
  "windows 0.62.2",
 ]
@@ -4993,7 +4992,6 @@ dependencies = [
 name = "spellsheet-excel"
 version = "0.1.20"
 dependencies = [
- "serde",
  "serde_json",
  "spellsheet-com",
  "spellsheet-core",
@@ -5074,7 +5072,6 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 
@@ -5202,7 +5199,6 @@ dependencies = [
  "spellsheet-runtime",
  "tempfile",
  "tokio",
- "tokio-util",
  "tracing",
  "win32job",
 ]

@@ -4,6 +4,13 @@
 
 # SpellSheet
 
+<p align="center">
+  <a href="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/d-shiina/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/d-shiina/spellsheet" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4" alt="Platform: Windows 10 | 11">
+</p>
+
 English | [日本語](README.ja.md)
 
 > The name comes from a spell written on a sheet. Updating from a build released under the product's earlier name carries everything over by itself: the settings and data folders, secrets, scheduled tasks, Writer's screen settings, and the MCP setup of your AI clients (renamed to `spellsheet`; restart the AI client once).
@@ -25,9 +32,9 @@ To try one task from start to finish, see the [tutorials](docs/tutorials/README.
 
 ## Status
 
-**Phase 1 (foundation) and Phase 2 (MCP server) are done.** Flow Core, Runtime, CLI, Writer (Tauri 2 + React) and the MCP server work. Browser automation (Phase 3) works too ([docs/browser.md](docs/browser.md); try `pnpm demo:browser`). Windows desktop apps (Phase 4) are automated through UI Automation ([docs/desktop.md](docs/desktop.md)). Excel workbooks are read and written directly, without Excel ([docs/office.md](docs/office.md)). Details: [architecture §13](docs/architecture.md#13-implementation-status-and-limits).
+Flow Core, the Runtime, the CLI, Writer and Runner (Tauri 2 + React), the MCP server and the Worker all work. Built-in nodes cover browsers ([docs/browser.md](docs/browser.md); try `pnpm demo:browser`), Windows desktop apps through UI Automation ([docs/desktop.md](docs/desktop.md)), Excel workbooks read and written without Excel ([docs/office.md](docs/office.md)), Word, mail, files, PDF, databases and OCR. SpellSheet is pre-1.0: the flow format and the MCP tools follow [docs/compatibility.md](docs/compatibility.md), and the known limits are in [architecture §13](docs/architecture.md#13-implementation-status-and-limits).
 
-Writer's UI is available in English and Japanese (JA / EN switch in the status bar; it follows the OS language until you choose).
+Writer's UI is available in English and Japanese (the language menu under "SpellSheet Writer" at the top left, or Settings; it follows the OS language until you choose).
 
 | Document | Contents |
 |---|---|
@@ -58,16 +65,35 @@ The design notes under `docs/design/` and `docs/research.md` are in Japanese. Ja
 ## Layout
 
 ```text
-crates/spellsheet-core      Flow Core (the only source of truth for flow data)
-crates/spellsheet-runtime   RPA Runtime (runs without AI or GUI)
-crates/spellsheet-cli       CLI (the `spellsheet` command; `spellsheet mcp` is the MCP server)
-crates/spellsheet-mcp       MCP server (rmcp)
-apps/studio                SpellSheet Writer (Tauri 2 + React + React Flow)
-packages/schema            TypeScript types generated from Rust
-plugins/spellsheet          Claude Code plugin (MCP settings + skill)
-schemas/                   Generated JSON Schema
-examples/                  Sample flows
+crates/
+  spellsheet-core       Flow Core: the flow model, validation, editing, history and storage (the only source of truth for flow data)
+  spellsheet-runtime    Runs flows without AI or a GUI
+  spellsheet-cli        The `spellsheet` command (`spellsheet mcp` is the MCP server)
+  spellsheet-mcp        MCP server (rmcp)
+  spellsheet-agent      Worker: unattended runs on each PC (schedules, file triggers, management server)
+  spellsheet-manager    A small reference management server for Workers
+  spellsheet-adapters   The list of built-in node families, registered in one place
+  spellsheet-browser    browser.*  (drives the Node.js + Playwright adapter in packages/browser-adapter)
+  spellsheet-desktop    desktop.*  (Windows UI Automation, Java Access Bridge, OCR)
+  spellsheet-excel      excel.*    (.xlsx read and written directly, without Excel)
+  spellsheet-word       word.*
+  spellsheet-mail       mail.*     (Outlook, Microsoft 365, SMTP)
+  spellsheet-files      file.*
+  spellsheet-pdf        pdf.*
+  spellsheet-db         db.*       (ODBC)
+  spellsheet-system     http.*, process.*, clipboard.*, dialog.*
+  spellsheet-com        COM automation helpers for Office (late-bound IDispatch)
+  spellsheet-secrets    Secret vault (key held by Windows Credential Manager)
+  spellsheet-plugins    Node plugins: node types provided by external programs
+apps/studio             SpellSheet Writer and Runner (Tauri 2 + React + React Flow)
+packages/schema         TypeScript types generated from the Rust types
+packages/browser-adapter  Browser automation process (Playwright)
+plugins/spellsheet      Claude Code plugin (MCP settings + skill)
+schemas/                Generated JSON Schema (public contract)
+examples/               Sample flows, tutorials and example custom nodes
 ```
+
+`spellsheet-core` depends on no other crate in the workspace; every entry point (Writer, CLI, MCP server, Worker) edits flows through it. The crates that touch Windows APIs keep `unsafe` to the modules that call them; everywhere else it is forbidden by the workspace lints. See [docs/architecture.md](docs/architecture.md) for the full design.
 
 ## Development
 
