@@ -245,6 +245,8 @@ export type RunState = {
   loops: Record<string, LoopRun>;
   /** When each step's latest attempt began and what it waits for, by `clockKey`: the clock on a running node. */
   clocks: Record<string, StepClock>;
+  /** When the run paused (ms since the epoch): a resume moves the clocks on by the pause, as the runtime's timeouts do. */
+  pausedAt: number | null;
   /** The flow revision it runs (a resume can move it to a newer one). */
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
@@ -764,6 +766,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   innerLatest: {},
   loops: {},
   clocks: {},
+  pausedAt: null,
   revision: null,
   trailHidden: false,
   stopping: false,
@@ -1892,6 +1895,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const edited = asVariableChange(env);
           if (edited && run.pause && edited.iteration == null && callKey(path) === callKey(run.pause.callPath)) {
             run.pause = { ...run.pause, variables: { ...run.pause.variables, [edited.variable]: edited.value } };
+          }
+          if (env.type === "paused") run.pausedAt = Date.parse(env.at) || Date.now();
+          if (env.type === "resumed" && run.pausedAt !== null) {
+            const paused = Math.max(0, (Date.parse(env.at) || Date.now()) - run.pausedAt);
+            run.clocks = Object.fromEntries(Object.entries(run.clocks).map(([key, clock]) => [key, { ...clock, since: clock.since + paused }]));
+            run.pausedAt = null;
           }
           if (env.type === "stepStarted") {
             const since = Date.parse(env.at);
