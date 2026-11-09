@@ -45,7 +45,7 @@ const PAGES: Record<string, string> = {
     <script>window.app = { orders: [{ code: "A-1" }, { code: "B-2" }] }</script>
     <table aria-label="受注"><tr data-code="A-1" class="selected"><td>A-1</td></tr><tr data-code="B-2"><td>B-2</td></tr></table>
     <label>パスワード <input type="password" id="pw"></label>
-    <iframe name="side" srcdoc="<script>window.where = 'side'</script><p>横</p>"></iframe>`,
+    <iframe name="side" srcdoc="<script>window.where = 'side'</script><p>横</p><label>暗証番号 <input type='password' id='pin'></label>"></iframe>`,
   "/inner": `<button onclick="this.textContent = '押しました'">奥のボタン</button>`,
 };
 
@@ -353,5 +353,7 @@ describe("JavaScript in the page", () => {
     const thrown = await failure(runScript({ script: "throw new Error('pw=' + document.getElementById('pw').value);" }));
     expect(thrown.message).toContain("pw=***");
     expect(thrown.message).not.toContain("hunter2");
+    await adapter.call("fill", { ...tab, target: { label: "暗証番号", frame: { name: "side" } }, value: "9876-pin" });
+    expect(await runScript({ script: "return document.getElementById('pin').value;", frame: { name: "side" } })).toBe("***");
   });
 });

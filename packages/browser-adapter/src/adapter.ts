@@ -1299,12 +1299,17 @@ export class Adapter {
     return this.mask(session, text, await this.typedPasswords(session));
   }
 
-  /** What is typed in the page's password fields now (even by hand). */
+  /** What is typed in the password fields of the page and all its frames now (even by hand). */
   private async typedPasswords(session: Session): Promise<string[]> {
-    return await session.page
-      .locator(PASSWORD_FIELDS)
-      .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
-      .catch(() => [] as string[]);
+    const perFrame = await Promise.all(
+      session.page.frames().map((frame) =>
+        frame
+          .locator(PASSWORD_FIELDS)
+          .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
+          .catch(() => [] as string[]),
+      ),
+    );
+    return perFrame.flat();
   }
 
   private mask(session: Session, text: string, extra: string[] = []): string {
