@@ -18,6 +18,7 @@ import { AiPasteDialog } from "./components/AiPasteDialog";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
+
 import { FileSheet } from "./components/FileSheet";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
@@ -59,6 +60,9 @@ function Attention() {
   useAttention(tag ? writerAsk(store.getState()) : null);
   return null;
 }
+
+/** The desk's left gutter, the files column and the gap after it. */
+const OUTLINE_BESIDE_FILES = 12 + 264 + 12;
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -195,7 +199,6 @@ function Editor({
   const hasFlow = useStudio((s) => s.flow !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   const projectOpen = useProject((s) => s.panelOpen);
-  const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
       {/* A node opened full size covers the chart and the right pane. */}
@@ -221,14 +224,26 @@ function Editor({
                   <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
                     <ProjectPanel />
                   </div>
-                  {outlineOpen && <OutlinePanel docked />}
+                  {outlineOpen && <OutlinePanel />}
                 </div>
               )}
-              {hasFlow && !projectOpen && <OutlinePanel left={12} />}
-              {/* The outline unfolds from this corner, so its button sits there. */}
-              {hasFlow && !outlineOpen && (
-                <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
-                  {!projectOpen && <ProjectButton />}
+              {/*
+                With the files folded away their button keeps its place at the top of the column,
+                and the outline, when open, hangs under it; nothing one panel does hides the other's button.
+              */}
+              {hasFlow && !projectOpen && (
+                <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
+                  <div className="flex w-max gap-2">
+                    <ProjectButton />
+                    {!outlineOpen && <OutlineButton />}
+                    {!outlineOpen && <SearchButton />}
+                  </div>
+                  {outlineOpen && <OutlinePanel />}
+                </div>
+              )}
+              {/* The outline unfolds under the files, so its button waits beside them. */}
+              {hasFlow && projectOpen && !outlineOpen && (
+                <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
                   <OutlineButton />
                   <SearchButton />
                 </div>

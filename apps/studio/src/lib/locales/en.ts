@@ -583,6 +583,7 @@ export const en: Dict = {
     update: "Import as an update",
     updateNote: (published: string | null) =>
       published ? `Added as a version. The published ${published} keeps running until you review and publish the new one.` : "Replaces the content of the flow on this PC. You can undo it.",
+    keptInputs: (names: string) => `${names} in input/ stay as they are on this PC (the received files do not overwrite them).`,
     copy: "Add as another flow",
     copyNote: (name: string) => `Listed separately, as “${name} (2)”.`,
     import: "Import",

@@ -444,7 +444,7 @@ impl FlowService {
         let outcome = self.insert_new(copy, actor, "duplicate flow", Remarks::default())?;
         // The copy brings the files it works with, not what runs made.
         let files = self.bundled_files(id)?;
-        self.write_bundled_files(id, &outcome.flow.id, &files)?;
+        self.write_bundled_files(id, &outcome.flow.id, &files, false)?;
         Ok(outcome)
     }
 
@@ -1593,14 +1593,16 @@ impl FlowService {
     }
 
     /// Writes the bundle's files of flow `from` into the folder of `to`
-    /// (the same flow, or its copy), replacing files of the same name.
+    /// (the same flow, or its copy), replacing files of the same name. On
+    /// an update (`keep_input`) the files already under `input/` stay.
     fn write_bundled_files(
         &self,
         from: &FlowId,
         to: &FlowId,
         files: &[BundledFile],
+        keep_input: bool,
     ) -> CoreResult<()> {
-        project::unpack(files, from, &self.project_dir(to)?)
+        project::unpack(files, from, &self.project_dir(to)?, keep_input)
     }
 
     // -- sharing ----------------------------------------------------------
@@ -1672,7 +1674,8 @@ impl FlowService {
                 SubflowImport::Kept
             };
             if mode != SubflowImport::Kept {
-                self.write_bundled_files(&id, &id, &files)?;
+                let keep_input = mode == SubflowImport::Updated;
+                self.write_bundled_files(&id, &id, &files, keep_input)?;
             }
             subflows.push(ImportedSubflow { id, name, mode });
         }
@@ -1706,7 +1709,8 @@ impl FlowService {
                 (ImportMode::Created, self.insert_imported(flow, actor)?)
             }
         };
-        self.write_bundled_files(&original_id, &outcome.flow.id, &files)?;
+        let keep_input = mode == ImportMode::Updated;
+        self.write_bundled_files(&original_id, &outcome.flow.id, &files, keep_input)?;
         let versions_added = self.add_versions(&outcome.flow.id, bundle.versions)?;
         // Validated before the sub-flows existed when it was created.
         let outcome = EditOutcome {
@@ -2158,6 +2162,7 @@ impl FlowService {
                     (&current, version::side(None, &current)),
                     (&bundle.flow, incoming),
                 ),
+                kept_inputs: project::kept_inputs(&bundle.files, id, &self.project_dir(id)?),
             })
         } else {
             None

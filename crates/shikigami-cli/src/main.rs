@@ -1569,7 +1569,7 @@ fn project_dirs(
         }
         let dir = root.join(id.as_str());
         std::fs::create_dir_all(&dir)?;
-        shikigami_core::project::unpack(&bundle.files, id, &dir)?;
+        shikigami_core::project::unpack(&bundle.files, id, &dir, false)?;
         Ok(dir)
     };
     let main = unpack(&flow.id)?;
