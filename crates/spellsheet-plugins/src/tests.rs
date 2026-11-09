@@ -532,8 +532,8 @@ fn plugins_from_before_the_rename_load_from_a_read_only_folder() {
 }
 
 #[test]
-fn the_box_example_takes_an_oauth_access_token() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/box");
+fn the_google_drive_example_takes_an_oauth_access_token() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/googledrive");
     let plugin = Plugin::load(&dir, &[]).unwrap();
     let types: Vec<_> = plugin
         .step_defs()
@@ -543,10 +543,10 @@ fn the_box_example_takes_an_oauth_access_token() {
     assert_eq!(
         types,
         [
-            "box.list",
-            "box.download",
-            "box.downloadFolder",
-            "box.upload"
+            "googledrive.list",
+            "googledrive.download",
+            "googledrive.downloadFolder",
+            "googledrive.upload"
         ]
     );
     let download = &plugin.step_defs()[1];

@@ -1084,6 +1084,8 @@ export const ja = {
       } as Record<string, { label: string; secret: string; appHint: string; targetHint: string }>,
       shared: "会社で 1 つ作れば、みんなで使えます。",
       needPlugin: (label: string) => `${label} とのやり取りは、プラグイン「${label}」を追加して使います。まだ追加されていません。`,
+      needOwnPlugin: (label: string) => `${label} とのやり取りは、プラグイン「${label}」を追加して使います。このプラグインは Writer に入っていないので、受け取ったプラグインを「プラグイン」のページで追加してください。`,
+      openPlugins: "プラグインのページを開く",
       install: "追加",
       installed: (label: string) => `プラグイン「${label}」を追加しました。Writer を再起動すると使えます。`,
       usesPlugin: (label: string) => `プラグイン「${label}」を使います`,

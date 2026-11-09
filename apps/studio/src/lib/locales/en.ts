@@ -1084,6 +1084,9 @@ export const en: Dict = {
       } as Record<string, { label: string; secret: string; appHint: string; targetHint: string }>,
       shared: "One app per company is enough.",
       needPlugin: (label: string) => `${label} is reached with the ${label} plugin, which is not added yet.`,
+      needOwnPlugin: (label: string) =>
+        `${label} is reached with the ${label} plugin, which is not added yet. It does not come with Writer: add the plugin you received on the Plugins page.`,
+      openPlugins: "Open the Plugins page",
       install: "Add",
       installed: (label: string) => `The ${label} plugin is added. Restart Writer to use it.`,
       usesPlugin: (label: string) => `Uses the ${label} plugin`,

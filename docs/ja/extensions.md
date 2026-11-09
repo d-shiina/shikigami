@@ -121,12 +121,12 @@ azureocr/
 
 配るときは、このフォルダーを zip にします（フォルダーごと zip にしても、中身だけを zip にしても構いません）。GitHub のリリースに zip を添付すれば、リポジトリの URL でインストールできます。
 
-見本は 2 つあります。
+見本は次のとおりです。
 
 | 見本 | 内容 |
 |---|---|
 | [examples/plugins/azure-ocr](../../examples/plugins/azure-ocr) | クラウド型 AI-OCR（Azure AI Document Intelligence）。外部送信・API キー・ファイルの設定・設定欄の名前の付け方の例 |
-| [examples/plugins/box](../../examples/plugins/box) | Box のフォルダーの一覧・ダウンロード・アップロード。OAuth のアクセストークンを受け取る例。Writer に入っていて（`plugins\box\`）、「クラウドストレージから読む」からその場で入れられます |
+| [examples/plugins/googledrive](../../examples/plugins/googledrive)・[onedrive](../../examples/plugins/onedrive) | Google ドライブ・OneDrive／SharePoint のフォルダーの一覧・ダウンロード・アップロード。OAuth のアクセストークンを受け取る例。Writer に入っていて（`plugins\googledrive\` など）、「クラウドストレージから読む」からその場で入れられます |
 | [examples/plugins/hello](../../examples/plugins/hello) | 最小の例。ファイルの排他（`resources`） |
 
 ### マニフェスト

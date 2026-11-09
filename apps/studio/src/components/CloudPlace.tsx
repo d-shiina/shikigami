@@ -59,6 +59,7 @@ export function CloudPlaceDialog({
   const project = useContext(ProjectContext);
   const flow = useStudio((s) => s.flow);
   const types = useStudio((s) => s.stepTypes);
+  const setPlace = useStudio((s) => s.setPlace);
   const secrets = useStudio((s) => s.secrets);
   const loadSecrets = useStudio((s) => s.loadSecrets);
   const saveSecretAdding = useStudio((s) => s.saveSecretAdding);
@@ -120,6 +121,12 @@ export function CloudPlaceDialog({
     } finally {
       setInstalling(false);
     }
+  };
+
+  // A plugin that does not come with Writer is added on the Plugins page (from a folder or a list).
+  const openPlugins = () => {
+    onClose();
+    setPlace("extensions");
   };
 
   const save = async (text: string | null, notice: string) => {
@@ -250,15 +257,15 @@ export function CloudPlaceDialog({
 
         {plugin !== "installed" ? (
           <div className="mt-4 rounded-md bg-slate-50 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-700 dark:bg-white/5">
-            {c.needPlugin(words.label)}
+            {service.shipped ? c.needPlugin(words.label) : c.needOwnPlugin(words.label)}
             <div className="mt-2 flex justify-end">
               <button
                 type="button"
                 disabled={plugin === "installing"}
-                onClick={() => void install()}
+                onClick={() => (service.shipped ? void install() : openPlugins())}
                 className="h-7 rounded-md bg-primary px-3 text-[12.5px] font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
               >
-                {c.install}
+                {service.shipped ? c.install : c.openPlugins}
               </button>
             </div>
           </div>

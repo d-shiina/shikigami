@@ -31,6 +31,8 @@ export interface CloudService {
   sites: string[];
   /** Where people make the app that gives the client ID. */
   console: string;
+  /** The plugin comes with Writer, so the dialog can add it there and then; otherwise it is added on the Plugins page. */
+  shipped: boolean;
 }
 
 export const BOX: CloudService = {
@@ -41,6 +43,7 @@ export const BOX: CloudService = {
   tokenUrl: "https://api.box.com/oauth2/token",
   sites: ["https://api.box.com", "plugin:box"],
   console: "https://app.box.com/developers/console",
+  shipped: false,
   target: (text) => boxTarget(text),
 };
 
@@ -56,6 +59,7 @@ export const GOOGLE_DRIVE: CloudService = {
   sites: ["https://oauth2.googleapis.com", "https://www.googleapis.com", "plugin:googledrive"],
   console: "https://console.cloud.google.com/apis/credentials",
   target: (text) => googleTarget(text),
+  shipped: true,
 };
 
 export const ONE_DRIVE: CloudService = {
@@ -70,6 +74,7 @@ export const ONE_DRIVE: CloudService = {
   console: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
   // A link (sharing link, SharePoint address) is kept whole: Graph finds the item from it.
   target: (text) => (/^https?:\/\//i.test(text.trim()) ? text.trim() : pathTarget(text)),
+  shipped: true,
 };
 
 export const CLOUD_SERVICES: CloudService[] = [BOX, GOOGLE_DRIVE, ONE_DRIVE];

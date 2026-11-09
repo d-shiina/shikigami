@@ -126,7 +126,7 @@ Two samples:
 | Sample | Shows |
 |---|---|
 | [examples/plugins/azure-ocr](../examples/plugins/azure-ocr) | Cloud AI-OCR (Azure AI Document Intelligence): sending outside, an API key, a file setting, naming settings |
-| [examples/plugins/box](../examples/plugins/box) | Box: list a folder, download, upload; taking an OAuth access token. It comes with Writer (`plugins\box\`) and **Read from cloud storage** installs it on the spot |
+| [examples/plugins/googledrive](../examples/plugins/googledrive), [onedrive](../examples/plugins/onedrive) | Google Drive and OneDrive / SharePoint: list a folder, download, upload; taking an OAuth access token. They come with Writer (`plugins\googledrive\` and so on) and **Read from cloud storage** installs them on the spot |
 | [examples/plugins/hello](../examples/plugins/hello) | The smallest one; file locking (`resources`) |
 
 ### Manifest

@@ -22,7 +22,7 @@ const NODE_SHA256 = {
 };
 
 // The custom nodes shipped with Writer (examples/plugins/<name>).
-const SHIPPED_PLUGINS = ["box", "googledrive", "onedrive"];
+const SHIPPED_PLUGINS = ["googledrive", "onedrive"];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const outDir = join(root, "apps/studio/src-tauri/bundled");
@@ -93,7 +93,7 @@ function stageAdapter() {
 }
 
 /**
- * The custom nodes Writer offers itself (reading a file from Box through its
+ * The plugins Writer offers itself (reading a file from Google Drive through its
  * API), in `plugins\<name>\` next to Writer. Each is a plain Node.js
  * program without dependencies; its tests stay out.
  */
