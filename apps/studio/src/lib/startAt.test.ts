@@ -1,4 +1,4 @@
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import type { RunState } from "../store";
 import { canStartAt, valuesBefore } from "./startAt";

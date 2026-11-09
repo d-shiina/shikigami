@@ -136,13 +136,13 @@ function debuggerUrl(port: number, timeout: number): Promise<string> {
 }
 
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
-  const headlessEnv = env.SHIKIGAMI_BROWSER_HEADLESS;
+  const headlessEnv = env.SPELLSHEET_BROWSER_HEADLESS;
   const noDisplay = process.platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY;
   return {
-    channel: env.SHIKIGAMI_BROWSER_CHANNEL || (process.platform === "win32" ? "msedge" : undefined),
-    executablePath: env.SHIKIGAMI_BROWSER_PATH || undefined,
+    channel: env.SPELLSHEET_BROWSER_CHANNEL || (process.platform === "win32" ? "msedge" : undefined),
+    executablePath: env.SPELLSHEET_BROWSER_PATH || undefined,
     forceHeadless: headlessEnv === "1" || headlessEnv === "true" || noDisplay,
-    slowMo: env.SHIKIGAMI_BROWSER_SLOWMO ? Number(env.SHIKIGAMI_BROWSER_SLOWMO) : undefined,
+    slowMo: env.SPELLSHEET_BROWSER_SLOWMO ? Number(env.SPELLSHEET_BROWSER_SLOWMO) : undefined,
   };
 }
 
@@ -269,7 +269,7 @@ export class Adapter {
         throw new AdapterError("BROWSER_LAUNCH_FAILED", `could not start the browser: ${error.message}`, {
           details: {
             channel: this.options.channel ?? "chromium",
-            hint: "Install Microsoft Edge / Google Chrome, or set SHIKIGAMI_BROWSER_CHANNEL (msedge, chrome) or SHIKIGAMI_BROWSER_PATH.",
+            hint: "Install Microsoft Edge / Google Chrome, or set SPELLSHEET_BROWSER_CHANNEL (msedge, chrome) or SPELLSHEET_BROWSER_PATH.",
           },
         });
       });
@@ -1104,7 +1104,7 @@ export class Adapter {
     if (session.headless) {
       throw new AdapterError("HUMAN_REQUIRED", "this step needs a person, but the browser runs without a window", {
         details: {
-          hint: "Run with a visible browser (no `headless`, SHIKIGAMI_BROWSER_HEADLESS unset), or keep the login with browser.open `session` so unattended runs skip it.",
+          hint: "Run with a visible browser (no `headless`, SPELLSHEET_BROWSER_HEADLESS unset), or keep the login with browser.open `session` so unattended runs skip it.",
         },
       });
     }
@@ -1137,7 +1137,7 @@ export class Adapter {
     if (session.headless && !this.options.scriptedHuman) {
       throw new AdapterError("HUMAN_REQUIRED", "pointing needs a person, but the browser runs without a window", {
         details: {
-          hint: "Open the page with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset), or ask the user in chat to describe the element.",
+          hint: "Open the page with a visible browser (SPELLSHEET_BROWSER_HEADLESS unset), or ask the user in chat to describe the element.",
         },
       });
     }
@@ -1164,7 +1164,7 @@ export class Adapter {
     const session = await this.sessionOrOpen(params);
     if (session.headless && !this.options.scriptedHuman) {
       throw new AdapterError("HUMAN_REQUIRED", "recording needs a person, but the browser runs without a window", {
-        details: { hint: "Open the page with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset)." },
+        details: { hint: "Open the page with a visible browser (SPELLSHEET_BROWSER_HEADLESS unset)." },
       });
     }
     return await record(session.page, {
@@ -1228,7 +1228,7 @@ export class Adapter {
     if (session.headless && !this.options.scriptedHuman) {
       throw new AdapterError("HUMAN_REQUIRED", "signing in needs a person, but the browser runs without a window", {
         details: {
-          hint: "Run once with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset) so the person can sign in. The tokens are kept, so later unattended runs need nobody.",
+          hint: "Run once with a visible browser (SPELLSHEET_BROWSER_HEADLESS unset) so the person can sign in. The tokens are kept, so later unattended runs need nobody.",
         },
       });
     }

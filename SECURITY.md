@@ -2,13 +2,13 @@
 
 ## 報告のしかた
 
-脆弱性は公開の Issue・Pull Request・Discussions には書かず、GitHub の [Report a vulnerability](https://github.com/d-shiina/shikigami/security/advisories/new)（非公開の報告）から送ってください。
+脆弱性は公開の Issue・Pull Request・Discussions には書かず、GitHub の [Report a vulnerability](https://github.com/d-shiina/spellsheet/security/advisories/new)（非公開の報告）から送ってください。
 
-*English: Please report vulnerabilities privately through [GitHub's private vulnerability reporting](https://github.com/d-shiina/shikigami/security/advisories/new), not in public issues. Japanese or English is fine.*
+*English: Please report vulnerabilities privately through [GitHub's private vulnerability reporting](https://github.com/d-shiina/spellsheet/security/advisories/new), not in public issues. Japanese or English is fine.*
 
 書いていただきたいこと：
 
-- 影響を受けるバージョン（Writer の右上、または `shikigami --version`）
+- 影響を受けるバージョン（Writer の右上、または `spellsheet --version`）
 - 再現手順と、何ができてしまうか
 - 回避策があればその内容
 

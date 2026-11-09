@@ -21,10 +21,10 @@ async function compileFile(file, name, withBanner) {
 }
 
 export async function generate() {
-  const core = await compileFile("api.schema.json", "ShikigamiApi", true);
+  const core = await compileFile("api.schema.json", "SpellSheetApi", true);
   // Run types reference core types (ids, errors); json-schema-to-typescript
   // inlines them, so drop exact duplicates of already-declared names.
-  const run = await compileFile("run-api.schema.json", "ShikigamiRunApi", false);
+  const run = await compileFile("run-api.schema.json", "SpellSheetRunApi", false);
   const declared = new Set([...core.matchAll(/^export (?:type|interface) (\w+)/gm)].map((m) => m[1]));
   const blocks = run.split(/\n(?=\/\*\*|export )/);
   const kept = [];

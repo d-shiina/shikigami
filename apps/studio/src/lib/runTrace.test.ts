@@ -1,4 +1,4 @@
-import type { RunEventEnvelope } from "@shikigami/schema";
+import type { RunEventEnvelope } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { emptyTrace, enclosing, type RunTrace, sinceText, spanText, type TraceLine, traceEvent, traceRows, withError } from "./runTrace";
 

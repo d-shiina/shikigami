@@ -11,14 +11,10 @@ const host = execFileSync("rustc", ["-vV"], { encoding: "utf8" }).match(/^host: 
 if (!host) throw new Error("cannot read the Rust host triple from `rustc -vV`");
 const ext = host.includes("windows") ? ".exe" : "";
 
-execFileSync("cargo", ["build", "--release", "-p", "shikigami-cli"], { cwd: root, stdio: "inherit" });
+execFileSync("cargo", ["build", "--release", "-p", "spellsheet-cli"], { cwd: root, stdio: "inherit" });
 
-// The same program under the product's name and its old one: MCP clients
-// and scheduled tasks set up before the rename keep starting `shikigami.exe`.
 const outDir = join(root, "apps/studio/src-tauri/binaries");
 mkdirSync(outDir, { recursive: true });
-for (const name of ["spellsheet", "shikigami"]) {
-  const target = join(outDir, `${name}-${host}${ext}`);
-  copyFileSync(join(root, "target/release", `shikigami${ext}`), target);
-  console.log(`bundled CLI: ${target}`);
-}
+const target = join(outDir, `spellsheet-${host}${ext}`);
+copyFileSync(join(root, "target/release", `spellsheet${ext}`), target);
+console.log(`bundled CLI: ${target}`);

@@ -5,7 +5,7 @@
 // button that takes it in (through the same sheet as any received file:
 // what changed, what this PC needs, nothing published until a person here
 // publishes it).
-import type { DistributedFlow, DistributionFolder, DistributionView } from "@shikigami/schema";
+import type { DistributedFlow, DistributionFolder, DistributionView } from "@spellsheet/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, FolderSync, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";

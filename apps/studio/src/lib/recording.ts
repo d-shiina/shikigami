@@ -6,7 +6,7 @@
 // `app: "browser"`). Here they become one node each, and a target used more
 // than once becomes a named part. "AI に整えてもらう" hands the same
 // recording to the AI.
-import type { EditOp, Part, Step } from "@shikigami/schema";
+import type { EditOp, Part, Step } from "@spellsheet/schema";
 import { t } from "./i18n";
 import { newPartName } from "./parts";
 

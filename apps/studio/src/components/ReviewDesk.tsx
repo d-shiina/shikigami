@@ -2,7 +2,7 @@
 // Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
 import { CloudUpload } from "lucide-react";
-import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Step, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { useStudio } from "../context";

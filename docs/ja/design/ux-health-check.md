@@ -6,7 +6,7 @@
 
 照らした決まりは [ui-principles.md](../../design/ui-principles.md)、[wording.md](../../design/wording.md)、灰色は濃いめ・ダークはスレート、日本語字形。直すのはこの文書の範囲外で、ただし Studio が落ちる不具合 1 件だけは同じ PR で直した（下の U1）。
 
-スクショ：プロジェクトのファイルの `shikigami/ux-health-check/`（以下の `[12]` は `12-palette.png` などの番号）。
+スクショ：プロジェクトのファイルの `spellsheet/ux-health-check/`（以下の `[12]` は `12-palette.png` などの番号）。
 
 ## 歩いた流れ
 

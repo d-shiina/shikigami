@@ -5,22 +5,22 @@
 インストール版の Writer は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Writer が開き直す）か、Writer を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
-- 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
+- 確認先：`https://github.com/d-shiina/spellsheet/releases/latest/download/latest.json`
 - 改ざん防止：インストーラーは専用の署名鍵で署名し、Writer はリリース時に埋め込んだ公開鍵で検証してから入れ替える
 - インストーラー：NSIS（ユーザー単位、管理者権限不要）
 - 開発版（`pnpm studio:dev`）は確認しない
 
 ## CLI（MCP サーバー）も一緒に更新される
 
-リリース版のインストーラーには `shikigami.exe`（CLI・MCP サーバー）が Writer と同じフォルダーに入ります。Claude Code にはこの `shikigami.exe` を登録しておけば、Writer を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Writer 右下のバージョン表示を開くとコピーできます。
+リリース版のインストーラーには `spellsheet.exe`（CLI・MCP サーバー）が Writer と同じフォルダーに入ります。Claude Code にはこの `spellsheet.exe` を登録しておけば、Writer を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Writer 右下のバージョン表示を開くとコピーできます。
 
 ```powershell
-claude mcp add --scope user shikigami -- "<インストール先>\shikigami.exe" mcp
+claude mcp add --scope user spellsheet -- "<インストール先>\spellsheet.exe" mcp
 ```
 
-Claude Code が MCP サーバーを動かしている最中でも更新できます。Windows は実行中の exe を上書きできませんが名前の変更はできるので、Writer はインストーラーを起動する直前に `shikigami.exe` を `shikigami-<旧バージョン>.exe.old` に移します（同梱の `node\node.exe` も同じく `node-<旧バージョン>.exe.old` へ）。動いているサーバーは古いファイルのまま動き続け、次に起動したときから新しい版になります（Claude Code では `/mcp` から再接続）。残った `.old` は次回の Writer 起動時に消します。インストールが取り消された場合は元に戻します。
+Claude Code が MCP サーバーを動かしている最中でも更新できます。Windows は実行中の exe を上書きできませんが名前の変更はできるので、Writer はインストーラーを起動する直前に `spellsheet.exe` を `spellsheet-<旧バージョン>.exe.old` に移します（同梱の `node\node.exe` も同じく `node-<旧バージョン>.exe.old` へ）。動いているサーバーは古いファイルのまま動き続け、次に起動したときから新しい版になります（Claude Code では `/mcp` から再接続）。残った `.old` は次回の Writer 起動時に消します。インストールが取り消された場合は元に戻します。
 
-リポジトリから開発していて `target\debug\shikigami.exe` を登録している場合は、これまでどおり `cargo build -p shikigami-cli` で更新されます。
+リポジトリから開発していて `target\debug\spellsheet.exe` を登録している場合は、これまでどおり `cargo build -p spellsheet-cli` で更新されます。
 
 ## 最初の準備（1 回だけ）
 
@@ -30,14 +30,14 @@ Claude Code が MCP サーバーを動かしている最中でも更新できま
 pnpm release:setup
 ```
 
-署名鍵（パスワードなし）を `~\.tauri\shikigami.key` に作り、GitHub に登録します。
+署名鍵（パスワードなし）を `~\.tauri\spellsheet.key` に作り、GitHub に登録します。
 
 - 秘密鍵 → Actions Secret `TAURI_SIGNING_PRIVATE_KEY`
 - 公開鍵 → Actions Variable `TAURI_UPDATER_PUBKEY`（リリースのワークフローがアプリに埋め込みます）
 
 GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` がなければ、値をクリップボードに入れて登録ページを開くので、貼り付けて保存するだけです（2 回）。
 
-**秘密鍵をなくすと、インストール済みの Writer に更新を届けられなくなります。** `shikigami.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
+**秘密鍵をなくすと、インストール済みの Writer に更新を届けられなくなります。** `spellsheet.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
 
 ## リリースの手順
 
@@ -63,11 +63,11 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
 ## 手元でリリース版を作る
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw $HOME\.tauri\shikigami.key
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw $HOME\.tauri\spellsheet.key
 pnpm studio:release
 ```
 
-公開鍵は `~\.tauri\shikigami.key.pub` から読みます。
+公開鍵は `~\.tauri\spellsheet.key.pub` から読みます。
 
 `pnpm studio:build` は CLI・Node.js を同梱せず署名もしない、試し用のビルドです。
 
@@ -83,7 +83,7 @@ pnpm studio:release
 - `pnpm studio:bundle-node`（`apps/studio/scripts/bundle-node.mjs`）が nodejs.org から公式の Windows 版 zip を取り、スクリプトに書いた SHA-256 と照合してから `apps/studio/src-tauri/bundled/` に置きます。ダウンロードは `target/node-dist/` にキャッシュします。Windows では置いた Node.js でアダプターが起動することまで確かめます
 - Node.js の版は LTS に固定しています（今は 24.22.1）。上げるときはスクリプトの `NODE_VERSION` と `NODE_SHA256`（その版の `SHASUMS256.txt` の `win-x64.zip` / `win-arm64.zip`）を一緒に書き換えます
 - ブラウザ本体は同梱しません。Windows に最初から入っている Edge を Playwright が使います
-- 使う Node.js の優先順は `SHIKIGAMI_NODE` → 実行ファイルの横の `node\node.exe` → PATH の `node`。開発版は横に `node\` がないので、これまでどおり PATH の Node.js を使います
+- 使う Node.js の優先順は `SPELLSHEET_NODE` → 実行ファイルの横の `node\node.exe` → PATH の `node`。開発版は横に `node\` がないので、これまでどおり PATH の Node.js を使います
 - 配布サイズはインストーラーで数十 MB 増えます（`node.exe` が約 90 MB、圧縮後はその 1/3 程度）
 
 ## 注意

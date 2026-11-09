@@ -9,10 +9,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Serialize;
-use shikigami_agent::ipc::{self, Request};
-use shikigami_agent::{AgentStatus, Schedule, Schedules, When};
-use shikigami_core::call::called_ids;
-use shikigami_core::{ErrorPayload, Flow, FlowId, FlowService, VariableDef};
+use spellsheet_agent::ipc::{self, Request};
+use spellsheet_agent::{AgentStatus, Schedule, Schedules, When};
+use spellsheet_core::call::called_ids;
+use spellsheet_core::{ErrorPayload, Flow, FlowId, FlowService, VariableDef};
 use tauri::State;
 
 use crate::AppState;
@@ -51,7 +51,7 @@ pub struct ScheduleList {
     /// When this PC locks its screen by itself (a password-protected
     /// screen saver, the inactivity limit of a policy).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub screen_lock: Option<shikigami_desktop::screen_lock::ScreenLock>,
+    pub screen_lock: Option<spellsheet_desktop::screen_lock::ScreenLock>,
     /// Studio runs in a Remote Desktop session: closing its window locks
     /// the screen.
     pub remote: bool,
@@ -106,7 +106,7 @@ fn list(state: &AppState) -> CmdResult<ScheduleList> {
     Ok(ScheduleList {
         schedules,
         path: path.display().to_string(),
-        screen_lock: shikigami_desktop::screen_lock::current(),
+        screen_lock: spellsheet_desktop::screen_lock::current(),
         remote: is_remote(),
     })
 }
@@ -151,7 +151,7 @@ pub fn save_schedule(state: State<'_, AppState>, schedule: Schedule) -> CmdResul
         Err(e) => return Err(e.into()),
     }
     if schedule.id.is_empty() {
-        schedule.id = shikigami_agent::schedule::new_id();
+        schedule.id = spellsheet_agent::schedule::new_id();
         all.schedules.push(schedule);
     } else if let Some(slot) = all.schedules.iter_mut().find(|s| s.id == schedule.id) {
         *slot = schedule;
@@ -280,7 +280,7 @@ pub async fn stop_agent(state: State<'_, AppState>) -> CmdResult<()> {
 
 #[cfg(windows)]
 fn is_remote() -> bool {
-    shikigami_desktop::session::is_remote()
+    spellsheet_desktop::session::is_remote()
 }
 
 #[cfg(not(windows))]
@@ -294,7 +294,7 @@ fn is_remote() -> bool {
 pub fn release_remote_session() -> CmdResult<()> {
     #[cfg(windows)]
     {
-        shikigami_desktop::session::release_to_console()
+        spellsheet_desktop::session::release_to_console()
             .map_err(|e| err("SESSION_RELEASE_FAILED", e))
     }
     #[cfg(not(windows))]

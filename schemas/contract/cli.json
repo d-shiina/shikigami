@@ -1164,6 +1164,9 @@
         },
         {
           "name": "unenroll"
+        },
+        {
+          "name": "migrate"
         }
       ]
     },

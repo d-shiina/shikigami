@@ -2,7 +2,7 @@
 // the flow chart grow instead of a new row appearing in a list they are not
 // looking at. It only takes over a screen with nothing to lose: no flow
 // open, or the empty one the person made for the AI to fill.
-import type { Flow, Step } from "@shikigami/schema";
+import type { Flow, Step } from "@spellsheet/schema";
 import { type AgentActivity, type Chat, isBusy, waitsForChoice } from "../agent";
 import type { Drafting, Place } from "../store";
 

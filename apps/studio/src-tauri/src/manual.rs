@@ -1,7 +1,7 @@
 //! The pictures behind a flow's 手順書.
 //!
 //! A run started from the editor (not 「ここから実行」) keeps a picture of
-//! each browser or desktop node's screen (see `shikigami_runtime`'s
+//! each browser or desktop node's screen (see `spellsheet_runtime`'s
 //! `screens`) in `<local root>/manuals/<flow id>/next-<run id>/`. When the
 //! run completes, a `manual.json` describing them (and how many times each
 //! node ran) is written there and the folder replaces `current/`; a run
@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use shikigami_core::{ErrorPayload, Flow, FlowId, RunId, Step, StepId};
-use shikigami_runtime::drafts::{self, DraftShot};
-use shikigami_runtime::{RunEvent, RunEventEnvelope, RunReport, RunStatus, ScreenRect};
+use spellsheet_core::{ErrorPayload, Flow, FlowId, RunId, Step, StepId};
+use spellsheet_runtime::drafts::{self, DraftShot};
+use spellsheet_runtime::{RunEvent, RunEventEnvelope, RunReport, RunStatus, ScreenRect};
 use tauri::State;
 
 use crate::AppState;
@@ -417,7 +417,7 @@ fn export_path(dir: &Path, name: &str) -> PathBuf {
 mod tests {
     use super::*;
     use serde_json::{Map, json};
-    use shikigami_runtime::StepOutcome;
+    use spellsheet_runtime::StepOutcome;
 
     fn envelope(seq: u64, call_path: Vec<StepId>, event: RunEvent) -> RunEventEnvelope {
         RunEventEnvelope {

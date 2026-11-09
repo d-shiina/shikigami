@@ -19,7 +19,7 @@ pub(crate) fn spx_arg<I: IntoIterator<Item = String>>(args: I) -> Option<String>
     args.into_iter().skip(1).find(|a| {
         std::path::Path::new(a)
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case(shikigami_core::package::PACKAGE_EXTENSION))
+            .is_some_and(|e| e.eq_ignore_ascii_case(spellsheet_core::package::PACKAGE_EXTENSION))
     })
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Part, Step } from "@shikigami/schema";
+import type { Part, Step } from "@spellsheet/schema";
 import { alignOps, droppedDate, othersOnApp, pickedWindow, sameWindow, windowChips } from "./windowFinder";
 
 const picked = pickedWindow({

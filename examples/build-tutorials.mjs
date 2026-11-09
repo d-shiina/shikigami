@@ -1,4 +1,4 @@
-// Builds one importable bundle per tutorial: examples/tutorials/<name>.shikigami.json
+// Builds one importable bundle per tutorial: examples/tutorials/<name>.spellsheet.json
 // from the project folder examples/tutorials/<name>/.
 //
 //   node examples/build-tutorials.mjs
@@ -6,7 +6,7 @@
 // The folder (flow.json and the files under input/ config/ templates/ tests/) is
 // the source of truth. In Studio, "Import from file" on the Flows page
 // opens a bundle as a flow with its folder; the CLI runs it directly
-// (`spellsheet run examples/tutorials/<name>.shikigami.json`). Re-run this
+// (`spellsheet run examples/tutorials/<name>.spellsheet.json`). Re-run this
 // after editing a tutorial's folder.
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -45,7 +45,7 @@ for (const name of readdirSync(root).sort()) {
     data: readFileSync(join(folder, path)).toString("base64"),
   }));
   const bundle = {
-    format: "shikigami.flowBundle",
+    format: "spellsheet.flowBundle",
     formatVersion: 2,
     exportedAt: EXPORTED_AT,
     flow,
@@ -53,7 +53,7 @@ for (const name of readdirSync(root).sort()) {
     subflows: [],
     files,
   };
-  const out = join(root, `${name}.shikigami.json`);
+  const out = join(root, `${name}.spellsheet.json`);
   writeFileSync(out, JSON.stringify(bundle, null, 2) + "\n");
   console.log(`wrote ${out} (${files.length} file(s))`);
 }

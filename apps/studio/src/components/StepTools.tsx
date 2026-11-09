@@ -1,6 +1,6 @@
 // Move, extract and delete for the selected step, shown beside it in both the
 // flow chart and the procedure: actions on one step sit on that step.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { selectedIds } from "../store";

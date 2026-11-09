@@ -12,8 +12,8 @@ AI が何かを実行することはなく、画面やパスワードを見る�
 
 | ファイル | 中身 | 入れる場所 |
 | --- | --- | --- |
-| `shikigami-ai-instructions.md` | 答え方（8,000 文字未満） | エージェントの指示 |
-| `shikigami-ai-reference.md` | フローの形式、ノードごとのパラメーターと例、関数 | ナレッジ（添付ファイル） |
+| `spellsheet-ai-instructions.md` | 答え方（8,000 文字未満） | エージェントの指示 |
+| `spellsheet-ai-reference.md` | フローの形式、ノードごとのパラメーターと例、関数 | ナレッジ（添付ファイル） |
 
 Writer の「フロー」ページの **AI の答えを貼り付け** › **仕様書を保存** で保存できます（保存先は `ダウンロード\SpellSheet AI 仕様書`）。コマンドラインなら次のとおりです。
 
@@ -23,7 +23,7 @@ spellsheet ai-guide --dir <フォルダー>
 
 組み込みのノードだけの版は [docs/ai/](../ai/) にもあります（SpellSheet をまだ入れていない人向け）。ノードのプラグインは、自分の PC で保存したファイルにだけ載ります。
 
-- **Microsoft Copilot Studio のエージェント**：エージェントの指示に `shikigami-ai-instructions.md` の中身をすべて貼り付け、ナレッジに `shikigami-ai-reference.md` を追加します。以後、エージェントを使う人は誰でもそのままフローを依頼できます。
+- **Microsoft Copilot Studio のエージェント**：エージェントの指示に `spellsheet-ai-instructions.md` の中身をすべて貼り付け、ナレッジに `spellsheet-ai-reference.md` を追加します。以後、エージェントを使う人は誰でもそのままフローを依頼できます。
 - **エージェントを作れないチャット**：会話の最初に 2 つのファイルを添付し（または指示を貼り付けて詳細を添付し）、それに従うよう依頼します。詳細は長いため、添付の一部しか読まないチャットではノードを見落とすことがあります。詳細をナレッジに入れたエージェントのほうが確実です。
 
 SpellSheet を更新したときやプラグインを入れたときは、仕様書を保存し直して AI のファイルを入れ替えてください。
@@ -53,7 +53,7 @@ AI の要約と確認事項は、MCP でつないだ AI の変更と同じく **
 
 ```json
 {
-  "format": "shikigami.answer",
+  "format": "spellsheet.answer",
   "summary": "受注一覧を検索する\nログインし、注文番号で検索します。",
   "checks": ["検索するのは注文番号でよいですか？"],
   "flow": {

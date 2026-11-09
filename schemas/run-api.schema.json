@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ShikigamiRunApi",
+  "title": "SpellSheetRunApi",
   "type": "object",
   "properties": {
     "run_event_envelope": {
@@ -1099,5 +1099,5 @@
       ]
     }
   },
-  "$id": "https://shikigami.dev/schemas/run-api.schema.json"
+  "$id": "https://spellsheet.dev/schemas/run-api.schema.json"
 }

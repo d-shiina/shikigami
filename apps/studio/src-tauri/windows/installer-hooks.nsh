@@ -1,23 +1,29 @@
 ; Installer hooks (bundle.windows.nsis.installerHooks).
 ;
-; Writer was installed as "Shikigami Studio" before the product became
-; SpellSheet. An installer named "SpellSheet Writer" would otherwise put a
-; second copy in "%LOCALAPPDATA%\SpellSheet Writer" and leave the old one
-; behind, with the AI clients' MCP setup and the scheduled agent task still
-; pointing at the old copy's spellsheet.exe / shikigami.exe.
+; Writer was installed under the product's old name before it became
+; SpellSheet: first as "<old name> Studio", then as "SpellSheet Writer" but
+; still registered under the old publisher (Software\<old name>, which Tauri
+; took from the old app identifier). An installer that did not know would put
+; a second copy in "%LOCALAPPDATA%\SpellSheet Writer" and leave the old one
+; behind, with the AI clients' MCP setup and the scheduled worker task still
+; pointing at the old copy's command.
 ;
-; So when the old install is found, this one goes into the same folder (the
+; So when an old install is found, this one goes into the same folder (the
 ; paths others saved keep working), takes over its Start menu and desktop
-; shortcuts under the new name, and removes the old entry from
-; "Apps & features". Settings and flows are not here: they are in
-; %APPDATA% / %LOCALAPPDATA%\SpellSheet (moved by the app itself).
+; shortcuts under the new name, and removes the old registry entries. Writer
+; itself moves the rest on its first start (legacy.rs): the MCP setup of the
+; AI clients, the worker task, its window settings. Settings and flows are
+; not here: they are in %APPDATA% / %LOCALAPPDATA%\SpellSheet (moved by the
+; app itself).
 ;
 ; An old install made with the MSI (per machine, in Program Files) is removed
-; by its own uninstaller first, as Tauri does for an MSI of the same name (it
-; looks only for the current name). Writer then lives in this per-user
-; install; the release no longer ships an MSI.
+; by its own uninstaller first. Writer then lives in this per-user install;
+; the release no longer ships an MSI.
 
-!define LEGACY_PRODUCTNAME "Shikigami Studio"
+; The old name, as in its registry keys.
+!define LEGACY_NAME "Shikigami"
+!define LEGACY_PRODUCTNAME "${LEGACY_NAME} Studio"
+!define LEGACY_MANUKEY "Software\${LEGACY_NAME}"
 ; The second Start menu entry: the same app opening only its Runner window,
 ; for people who run published flows and never edit them.
 !define RUNNER_LNK "$SMPROGRAMS\SpellSheet Runner.lnk"
@@ -29,12 +35,22 @@ Var LegacyInstallDir
 
 !macro NSIS_HOOK_PREINSTALL
   StrCpy $LegacyInstallDir ""
-  ReadRegStr $0 SHCTX "${MANUKEY}\${LEGACY_PRODUCTNAME}" ""
+  ; Registered under this publisher already: Tauri found the folder itself.
+  ReadRegStr $0 SHCTX "${MANUPRODUCTKEY}" ""
+  ${If} $0 == ""
+    ReadRegStr $0 SHCTX "${LEGACY_MANUKEY}\${PRODUCTNAME}" ""
+    ${If} $0 == ""
+      ReadRegStr $0 SHCTX "${LEGACY_MANUKEY}\${LEGACY_PRODUCTNAME}" ""
+    ${EndIf}
+  ${EndIf}
   ${If} $0 != ""
-  ${AndIf} ${FileExists} "$0\${MAINBINARYNAME}.exe"
+  ${AndIf} $0 != $INSTDIR
+  ${AndIf} ${FileExists} "$0\*.exe"
     StrCpy $LegacyInstallDir $0
     StrCpy $INSTDIR $0
     SetOutPath $INSTDIR
+  ${ElseIf} $0 != ""
+    StrCpy $LegacyInstallDir $0
   ${Else}
     ; An MSI keeps its uninstall entry under a GUID in HKLM.
     StrCpy $1 0
@@ -46,7 +62,8 @@ Var LegacyInstallDir
       IntOp $1 $1 + 1
       ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "DisplayName"
       ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "Publisher"
-      ${If} "$R0$R1" == "${LEGACY_PRODUCTNAME}${MANUFACTURER}"
+      ${If} $R0 == "${LEGACY_PRODUCTNAME}"
+      ${AndIf} $R1 == "${LEGACY_NAME}"
         ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "UninstallString"
         ${If} $R0 != ""
           ExecWait '$R0'
@@ -83,9 +100,20 @@ Var LegacyInstallDir
       ${EndIf}
     ${EndIf}
 
-    ; One entry in "Apps & features", under the new name.
+    ; One entry in "Apps & features", under the new name and publisher.
     DeleteRegKey SHCTX "${LEGACY_UNINSTKEY}"
-    DeleteRegKey SHCTX "${MANUKEY}\${LEGACY_PRODUCTNAME}"
+    DeleteRegKey SHCTX "${LEGACY_MANUKEY}\${LEGACY_PRODUCTNAME}"
+    DeleteRegKey SHCTX "${LEGACY_MANUKEY}\${PRODUCTNAME}"
+    DeleteRegKey /ifempty SHCTX "${LEGACY_MANUKEY}"
+  ${EndIf}
+
+  ; The app's identifier (its notifications' sender) changed with the name,
+  ; and an update does not make the shortcuts again: give them the new one.
+  ${If} ${FileExists} "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ${EndIf}
+  ${If} ${FileExists} "$DESKTOP\${PRODUCTNAME}.lnk"
+    !insertmacro SetLnkAppUserModelId "$DESKTOP\${PRODUCTNAME}.lnk"
   ${EndIf}
 !macroend
 

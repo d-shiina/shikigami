@@ -160,7 +160,7 @@
       "type": "log.message",
       "name": "開始",
       "params": {
-        "message": "=== Shikigami フル機能デモを開始します ==="
+        "message": "=== SpellSheet フル機能デモを開始します ==="
       }
     },
     {
@@ -195,8 +195,8 @@
                   "type": "dialog.message",
                   "name": "開始の案内",
                   "params": {
-                    "message": "Shikigami のフル機能デモを始めます。\nExcel・Word・CSV を作り、ブラウザで出荷し、メモ帳を操作して画面を読み取ります。",
-                    "title": "Shikigami デモ",
+                    "message": "SpellSheet のフル機能デモを始めます。\nExcel・Word・CSV を作り、ブラウザで出荷し、メモ帳を操作して画面を読み取ります。",
+                    "title": "SpellSheet デモ",
                     "buttons": "ok",
                     "level": "info"
                   }
@@ -705,7 +705,7 @@
                   "name": "続行確認",
                   "params": {
                     "message": "{{ invoiceCount }} 件の請求書を作成しました。続行しますか？",
-                    "title": "Shikigami デモ",
+                    "title": "SpellSheet デモ",
                     "buttons": "okCancel",
                     "level": "info"
                   },
@@ -838,7 +838,7 @@
                         "process": "notepad.exe"
                       }
                     },
-                    "text": "Shikigami 請求デモ 合計 {{ formatNumber(grandTotal) }} 円"
+                    "text": "SpellSheet 請求デモ 合計 {{ formatNumber(grandTotal) }} 円"
                   }
                 },
                 {
@@ -1102,7 +1102,7 @@
                   "name": "結果",
                   "params": {
                     "message": "完了しました。\n請求 {{ invoiceCount }} 件・合計 {{ formatNumber(grandTotal) }} 円（高額 {{ flaggedCount }} 件）\n請求書 {{ len(invoiceFiles) }} 通・出荷 {{ len(shipped) }} 件",
-                    "title": "Shikigami デモ",
+                    "title": "SpellSheet デモ",
                     "buttons": "ok",
                     "level": "info"
                   }

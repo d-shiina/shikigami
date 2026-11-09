@@ -2,7 +2,7 @@
 // between sockets. Display only: it follows the steps in the order they are
 // written and links each read to the latest write before it, or to the
 // flow's starting values. It never decides anything the Runtime does.
-import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { nodeRows, outputs } from "./nodeRows";
 
 /** Pseudo node ids for the flow's own inputs and outputs. */

@@ -1,7 +1,7 @@
 // 「こうなれば正しい」 on the review: the promises the AI wrote for its
 // change (test cases in business words), whether the flow keeps them, and
 // the person's answer to whether each promise is right.
-import type { Evidence, TestCase } from "@shikigami/schema";
+import type { Evidence, TestCase } from "@spellsheet/schema";
 import { Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";

@@ -25,7 +25,7 @@ const PAGES: Record<string, (other: string) => string> = {
   "/same": () => `<button onclick="this.textContent = '押しました'">同じボタン</button>`,
 };
 
-const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SPELLSHEET_BROWSER_PATH });
 const r = { runId: "run_pick_frames" };
 
 beforeAll(async () => {
@@ -103,7 +103,7 @@ describe("pointing inside frames", () => {
     const marked = await person.call("getAttribute", {
       ...r,
       target: { role: "button", name: "奥のボタン", frame: { name: "inner", frame: { name: "main" } } },
-      name: "data-shikigami-candidate",
+      name: "data-spellsheet-candidate",
     });
     expect(marked).toBe("1");
     await person.call("click", { ...r, target: { label: "備考", frame: { name: "main" } } });
@@ -130,7 +130,7 @@ describe("highlight inside frames", () => {
   });
 
   it("outlines the element inside its frame", async () => {
-    browser = await chromium.launch({ executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+    browser = await chromium.launch({ executablePath: process.env.SPELLSHEET_BROWSER_PATH });
     const page = await browser.newPage();
     await page.goto(`${base}/`);
     const inner = page.frameLocator('iframe[name="main"]').frameLocator('iframe[name="inner"]');
@@ -146,10 +146,10 @@ describe("highlight inside frames", () => {
     );
     expect(shown).toBe(2);
     const drawn = await Promise.all(
-      page.frames().map((f) => f.evaluate(() => document.getElementById("__shikigami_highlight")?.shadowRoot?.querySelectorAll(".hl").length ?? 0)),
+      page.frames().map((f) => f.evaluate(() => document.getElementById("__spellsheet_highlight")?.shadowRoot?.querySelectorAll(".hl").length ?? 0)),
     );
     // One box in each of the two frames, none on the top page.
     expect(drawn.filter((n) => n === 1)).toHaveLength(2);
-    expect(await page.evaluate(() => Boolean(document.getElementById("__shikigami_highlight")))).toBe(false);
+    expect(await page.evaluate(() => Boolean(document.getElementById("__spellsheet_highlight")))).toBe(false);
   });
 });

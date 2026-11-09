@@ -1,0 +1,22 @@
+[package]
+name = "spellsheet-word"
+description = "Word document steps for SpellSheet (word.*): fill .docx templates, replace text and read text and tables directly, without Word; export PDF through Word"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+spellsheet-core.workspace = true
+spellsheet-runtime.workspace = true
+spellsheet-com.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

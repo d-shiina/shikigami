@@ -10,7 +10,7 @@ import { searchFlow, type SearchHit } from "../lib/flowSearch";
 import { t } from "../lib/i18n";
 import { nodeIcon } from "../lib/nodeIcons";
 import { typeTitle } from "../lib/sentence";
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 
 const MAX_HITS = 100;
 

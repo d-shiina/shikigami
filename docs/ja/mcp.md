@@ -8,22 +8,22 @@
 
 ## 接続方法
 
-トランスポートは **stdio** です。AI クライアントが `spellsheet mcp` を子プロセスとして起動します。ネットワークのポートは開きません。`shikigami` コマンドに PATH が通っている必要があります（インストーラーで導入される想定。開発中は `cargo build -p shikigami-cli` の `target/debug/shikigami`）。
+トランスポートは **stdio** です。AI クライアントが `spellsheet mcp` を子プロセスとして起動します。ネットワークのポートは開きません。`spellsheet` コマンドに PATH が通っている必要があります（インストーラーで導入される想定。開発中は `cargo build -p spellsheet-cli` の `target/debug/spellsheet`）。
 
 ### Claude Code
 
 プラグイン（MCP 設定と、フロー作成の作法を教えるスキルを同梱）を入れるのがおすすめです。
 
 ```text
-/plugin install shikigami --marketplace d-shiina/shikigami
+/plugin install spellsheet --marketplace d-shiina/spellsheet
 ```
 
-（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/shikigami` のあと `/plugin install shikigami@shikigami`。）
+（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/spellsheet` のあと `/plugin install spellsheet@spellsheet`。）
 
 MCP サーバーだけを登録する場合：
 
 ```sh
-claude mcp add shikigami -- spellsheet mcp
+claude mcp add spellsheet -- spellsheet mcp
 ```
 
 ### Codex
@@ -31,8 +31,8 @@ claude mcp add shikigami -- spellsheet mcp
 `~/.codex/config.toml`：
 
 ```toml
-[mcp_servers.shikigami]
-command = "shikigami"
+[mcp_servers.spellsheet]
+command = "spellsheet"
 args = ["mcp"]
 ```
 
@@ -45,7 +45,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 ```json
 {
   "mcpServers": {
-    "shikigami": { "command": "shikigami", "args": ["mcp"] }
+    "spellsheet": { "command": "spellsheet", "args": ["mcp"] }
   }
 }
 ```

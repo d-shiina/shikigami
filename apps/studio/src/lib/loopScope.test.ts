@@ -1,4 +1,4 @@
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { enclosingLoops, listSources, otherVariables, pageAbove, resultStep } from "./loopScope";
 

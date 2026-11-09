@@ -16,7 +16,7 @@ Sign in to an in-house web system and mark each pending order as shipped. A prac
 pnpm demo:site
 ```
 
-The order system opens at `http://127.0.0.1:8787/`. Sign in with user `demo`, password `shikigami`.
+The order system opens at `http://127.0.0.1:8787/`. Sign in with user `demo`, password `spellsheet`.
 
 ## 2. Register the sign-in as a secret
 
@@ -25,7 +25,7 @@ The password never goes into the flow or to the AI. Under "Secrets" in the sideb
 | Field | Value |
 |---|---|
 | Name | デモ受注システム |
-| Username / password | demo / shikigami |
+| Username / password | demo / spellsheet |
 | Sites and apps allowed | http://127.0.0.1:8787 |
 
 The flow and the AI only know the name. The values are typed only into fields of the allowed site ([secrets](../secrets.md)).

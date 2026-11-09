@@ -1,6 +1,6 @@
 // Stages Node.js and the browser adapter where `tauri.release.conf.json`
 // expects them (`bundle.resources`), so the installer puts them in `node\`
-// and `browser-adapter\` next to Studio and `shikigami.exe`. Browser steps
+// and `browser-adapter\` next to Studio and `spellsheet.exe`. Browser steps
 // and Node plugins then work on PCs without Node.js (see docs/browser.md).
 //
 // Node.js comes from nodejs.org, pinned to a version and checked against the
@@ -24,7 +24,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const outDir = join(root, "apps/studio/src-tauri/bundled");
 
 const host = execFileSync("rustc", ["-vV"], { encoding: "utf8" }).match(/^host: (.+)$/m)?.[1] ?? "";
-const arch = process.env.SHIKIGAMI_NODE_ARCH || (host.startsWith("aarch64") ? "arm64" : "x64");
+const arch = process.env.SPELLSHEET_NODE_ARCH || (host.startsWith("aarch64") ? "arm64" : "x64");
 if (!NODE_SHA256[arch]) throw new Error(`no pinned Node.js for arch '${arch}'`);
 
 rmSync(outDir, { recursive: true, force: true });

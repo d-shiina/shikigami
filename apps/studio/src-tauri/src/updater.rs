@@ -11,7 +11,7 @@
 //! "restart to update" (Studio comes back as the new version) or when Studio
 //! is closed (it stays closed; the next launch is the new version).
 //!
-//! The installer also carries the `shikigami` CLI (the MCP server), which an
+//! The installer also carries the `spellsheet` CLI (the MCP server), which an
 //! MCP client such as Claude Code may be running from the install folder,
 //! and Node.js (`node\node.exe`), which runs the browser adapter for Studio
 //! and for that server. Windows refuses to overwrite a running executable
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use shikigami_core::ErrorPayload;
+use spellsheet_core::ErrorPayload;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
@@ -32,13 +32,9 @@ pub(crate) const UPDATE_EVENT: &str = "update-progress";
 
 const CLI_EXE: &str = "spellsheet.exe";
 
-/// The same CLI under the product's old name, still installed for MCP
-/// clients and scheduled tasks set up before the rename.
-const LEGACY_CLI_EXE: &str = "shikigami.exe";
-
 /// Executables that may be running while the installer replaces them,
 /// relative to the install folder.
-const PARKED_EXES: [&str; 3] = [CLI_EXE, LEGACY_CLI_EXE, "node/node.exe"];
+const PARKED_EXES: [&str; 2] = [CLI_EXE, "node/node.exe"];
 
 type CmdResult<T> = Result<T, ErrorPayload>;
 
@@ -66,7 +62,7 @@ struct Ready {
 
 /// Downloaded installers wait here; a later launch clears it.
 fn download_dir() -> PathBuf {
-    std::env::temp_dir().join("shikigami-update")
+    std::env::temp_dir().join("spellsheet-update")
 }
 
 #[derive(Serialize)]
@@ -142,7 +138,7 @@ fn clean_downloads(dir: &Path, current_version: &str) {
     for path in entries.flatten().map(|e| e.path()) {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let newer = name
-            .strip_prefix("shikigami-")
+            .strip_prefix("spellsheet-")
             .and_then(|n| n.strip_suffix(".update"))
             .and_then(|v| semver::Version::parse(v).ok())
             .is_some_and(|v| v > current);
@@ -175,7 +171,7 @@ fn cursor_install_url(cli: &str) -> String {
         .replace('+', "%2B")
         .replace('/', "%2F")
         .replace('=', "%3D");
-    format!("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config={query}")
+    format!("cursor://anysphere.cursor-deeplink/mcp/install?name=spellsheet&config={query}")
 }
 
 /// Opens Cursor's "add MCP server" prompt for the installed CLI. The link is
@@ -277,7 +273,7 @@ pub async fn download_update(
         .await
         .map_err(|e| err("UPDATE_DOWNLOAD_FAILED", e.to_string()))?;
     let dir = download_dir();
-    let file = dir.join(format!("shikigami-{}.update", update.version));
+    let file = dir.join(format!("spellsheet-{}.update", update.version));
     std::fs::create_dir_all(&dir)
         .and_then(|()| std::fs::write(&file, &bytes))
         .map_err(|e| err("UPDATE_DOWNLOAD_FAILED", e.to_string()))?;
@@ -419,9 +415,9 @@ mod tests {
     fn startup_keeps_only_newer_downloads() {
         let dir = tempdir();
         for name in [
-            "shikigami-0.1.1.update",
-            "shikigami-0.1.2.update",
-            "shikigami-0.1.3.update",
+            "spellsheet-0.1.1.update",
+            "spellsheet-0.1.2.update",
+            "spellsheet-0.1.3.update",
             "junk",
         ] {
             write(&dir.path().join(name), "x");
@@ -432,7 +428,7 @@ mod tests {
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         left.sort();
-        assert_eq!(left, ["shikigami-0.1.3.update"]);
+        assert_eq!(left, ["spellsheet-0.1.3.update"]);
     }
 
     #[test]
@@ -493,7 +489,7 @@ mod tests {
         use base64::Engine as _;
         let url = cursor_install_url(r"C:\Program Files\SpellSheet\spellsheet.exe");
         let config = url
-            .strip_prefix("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config=")
+            .strip_prefix("cursor://anysphere.cursor-deeplink/mcp/install?name=spellsheet&config=")
             .unwrap();
         assert!(!config.contains(['+', '/', '=']));
         let config = config

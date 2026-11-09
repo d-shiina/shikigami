@@ -1,4 +1,4 @@
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { folderOf, insideFolder, nodeForFile } from "./fileDrop";
 

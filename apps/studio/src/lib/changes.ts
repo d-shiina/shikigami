@@ -1,7 +1,7 @@
 // Turns Core's journal entries into readable lines for the timeline
 // and the review cards. Display only: before/after values come straight from
 // the ops and inverse ops Core recorded, nothing is recomputed here.
-import type { EditOp, HistoryEntry, Flow, StepPatch, StepTypeDef } from "@shikigami/schema";
+import type { EditOp, HistoryEntry, Flow, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { findStep } from "../store";
 import { stepLabel, t } from "./i18n";
 

@@ -3,7 +3,7 @@
 // screen, register a login or put files in the flow's folder. Studio lists
 // these apart from what the AI must fix, with the one button that does each,
 // and gives the AI's part as text to paste back into the chat.
-import type { Flow, ProjectFiles, Step, StepTypeDef, ValidationIssue, ValidationReport } from "@shikigami/schema";
+import type { Flow, ProjectFiles, Step, StepTypeDef, ValidationIssue, ValidationReport } from "@spellsheet/schema";
 import type { AnswerProblem, SecretField } from "./api";
 import { t } from "./i18n";
 import { missingImages } from "./imageParts";
@@ -184,7 +184,7 @@ export function flowForChat(flow: Flow): string {
   if (flow.parts && Object.keys(flow.parts).length) content.parts = flow.parts;
   content.steps = flow.steps ?? [];
   if (flow.settings && Object.keys(flow.settings).length) content.settings = flow.settings;
-  return JSON.stringify({ format: "shikigami.answer", summary: "", checks: [], flow: content }, null, 2);
+  return JSON.stringify({ format: "spellsheet.answer", summary: "", checks: [], flow: content }, null, 2);
 }
 
 function withoutDefault<T extends { default?: unknown }>(v: T): Omit<T, "default"> {

@@ -1,4 +1,4 @@
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 import { appTag } from "../lib/palette";
 
 /** Where a node works ("ブラウザ", "Excel"), as a quiet grey tag after its name. */

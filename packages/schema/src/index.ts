@@ -5,7 +5,7 @@ export type * from "./generated";
 
 import type { ErrorPayload } from "./generated";
 
-/** Current flow file format version (`shikigami_core::SCHEMA_VERSION`). */
+/** Current flow file format version (`spellsheet_core::SCHEMA_VERSION`). */
 export const SCHEMA_VERSION = 2;
 
 /** Stable error codes shared by Core, Runtime, MCP tools and Studio. */

@@ -1,7 +1,7 @@
 // What a file dropped into Studio becomes: the path a file setting keeps
 // (relative to the flow's folder whenever it is inside it), and the node a
 // file dropped on the chart is read with.
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 
 /** Forward slashes, so `C:\a\b` and `C:/a/b` compare alike. */
 const norm = (p: string) => p.replace(/\\/g, "/");

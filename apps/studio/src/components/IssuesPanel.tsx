@@ -1,4 +1,4 @@
-import type { Flow, StepTypeDef, ValidationIssue } from "@shikigami/schema";
+import type { Flow, StepTypeDef, ValidationIssue } from "@spellsheet/schema";
 import { Check, ClipboardCopy, FolderOpen, KeyRound, MousePointerClick } from "lucide-react";
 import { useState } from "react";
 import { useStudio } from "../context";

@@ -1,9 +1,9 @@
 //! What differs between the AI command-line tools the pane can run: where
-//! each is installed, how it is started with only Shikigami's MCP tools, how
+//! each is installed, how it is started with only SpellSheet's MCP tools, how
 //! its output reads, and how it signs in.
 //!
 //! Every one runs headless, one process per message, in the agent folder
-//! (empty but for the files written here), with Shikigami as its only MCP
+//! (empty but for the files written here), with SpellSheet as its only MCP
 //! server and its own file and shell tools turned off. Instructions go in
 //! files each tool reads from its working folder, never in arguments: on
 //! Windows the npm-installed tools are `.cmd` files, which cannot carry
@@ -40,7 +40,7 @@ pub(crate) const KNOWN: [AgentKind; 4] = [
     AgentKind::Copilot,
 ];
 
-/// Built-in Gemini CLI tools, all turned off: only Shikigami's tools remain.
+/// Built-in Gemini CLI tools, all turned off: only SpellSheet's tools remain.
 /// (`tools.core` would also hide MCP tools.) Tools a newer Gemini CLI adds
 /// still need approval, which a headless run cannot give, so they are refused.
 const GEMINI_BUILTIN_TOOLS: &[&str] = &[
@@ -302,14 +302,14 @@ pub(crate) fn claude_args(mcp_config: &Path, system: &Path, session: Option<&str
         "--verbose",
         // Says when a tool call begins, long before its input is written.
         "--include-partial-messages",
-        // Only Shikigami: not the person's other MCP servers, nor files or shell.
+        // Only SpellSheet: not the person's other MCP servers, nor files or shell.
         "--strict-mcp-config",
         "--mcp-config",
     ]
     .map(str::to_owned)
     .into();
     args.push(mcp_config.display().to_string());
-    args.extend(["--tools", "", "--allowedTools", "mcp__shikigami"].map(str::to_owned));
+    args.extend(["--tools", "", "--allowedTools", "mcp__spellsheet"].map(str::to_owned));
     args.push("--append-system-prompt-file".to_owned());
     args.push(system.display().to_string());
     if let Some(session) = session.filter(|s| !s.is_empty()) {
@@ -337,7 +337,7 @@ fn codex_args(cli: &Path, server_args: &[String], session: Option<&str>) -> Vec<
         "--skip-git-repo-check",
         "--sandbox",
         "read-only",
-        // No shell or web search: only Shikigami's tools. Unknown settings
+        // No shell or web search: only SpellSheet's tools. Unknown settings
         // in an older Codex are ignored, unlike `--disable`.
         "-c",
         "features.shell_tool=false",
@@ -363,7 +363,7 @@ fn codex_args(cli: &Path, server_args: &[String], session: Option<&str>) -> Vec<
             .collect::<Vec<_>>()
             .join(",")
     ));
-    // A headless run cannot ask; Shikigami's tools are the ones it may use.
+    // A headless run cannot ask; SpellSheet's tools are the ones it may use.
     args.push("-c".to_owned());
     args.push(format!("{server}.default_tools_approval_mode='approve'"));
     if let Some(session) = session {
@@ -399,7 +399,7 @@ fn copilot_args(mcp_config: &Path, session: Option<&str>) -> Vec<String> {
     args.push(format!("@{}", mcp_config.display()));
     args.extend(
         [
-            // Not GitHub's own MCP servers; only Shikigami's tools, which run without asking.
+            // Not GitHub's own MCP servers; only SpellSheet's tools, which run without asking.
             "--disable-builtin-mcps",
             "--available-tools",
             SERVER,
@@ -416,7 +416,7 @@ fn copilot_args(mcp_config: &Path, session: Option<&str>) -> Vec<String> {
 }
 
 /// A tool's name without the prefix each agent gives MCP tools
-/// (`mcp__shikigami__get_flow`, `mcp_shikigami_get_flow`, `shikigami-get_flow`).
+/// (`mcp__spellsheet__get_flow`, `mcp_spellsheet_get_flow`, `spellsheet-get_flow`).
 pub(crate) fn tool_name(name: &str) -> Option<String> {
     [
         format!("mcp__{SERVER}__"),
@@ -713,7 +713,7 @@ mod tests {
     fn turn<'a>(dir: &'a Path, session: Option<&'a str>) -> Turn<'a> {
         Turn {
             dir,
-            cli: Path::new("C:\\Program Files\\Shikigami\\shikigami.exe"),
+            cli: Path::new("C:\\Program Files\\SpellSheet\\spellsheet.exe"),
             workspace: Path::new("D:\\work"),
             system_prompt: "be brief",
             session,
@@ -723,9 +723,9 @@ mod tests {
     #[test]
     fn strips_each_agents_tool_prefix() {
         for n in [
-            "mcp__shikigami__get_flow",
-            "mcp_shikigami_get_flow",
-            "shikigami-get_flow",
+            "mcp__spellsheet__get_flow",
+            "mcp_spellsheet_get_flow",
+            "spellsheet-get_flow",
         ] {
             assert_eq!(tool_name(n).as_deref(), Some("get_flow"), "{n}");
         }
@@ -733,17 +733,17 @@ mod tests {
     }
 
     #[test]
-    fn codex_gets_only_shikigami_and_resumes() {
+    fn codex_gets_only_spellsheet_and_resumes() {
         let dir = tempfile::tempdir().unwrap();
         let (args, _) = prepare(AgentKind::Codex, &turn(dir.path(), Some("t1"))).unwrap();
         let joined = args.join(" ");
         assert!(joined.starts_with("exec --json --skip-git-repo-check --sandbox read-only"));
         assert!(joined.contains("features.shell_tool=false"));
         assert!(joined.contains(
-            "mcp_servers.shikigami.command='C:\\Program Files\\Shikigami\\shikigami.exe'"
+            "mcp_servers.spellsheet.command='C:\\Program Files\\SpellSheet\\spellsheet.exe'"
         ));
         assert!(joined.contains(
-            "mcp_servers.shikigami.args=['--workspace','D:\\work','mcp','--writer-chat']"
+            "mcp_servers.spellsheet.args=['--workspace','D:\\work','mcp','--writer-chat']"
         ));
         assert!(joined.contains("default_tools_approval_mode='approve'"));
         assert!(joined.ends_with("resume t1 -"));
@@ -756,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn gemini_trusts_only_shikigami() {
+    fn gemini_trusts_only_spellsheet() {
         let dir = tempfile::tempdir().unwrap();
         let (args, env) = prepare(AgentKind::Gemini, &turn(dir.path(), None)).unwrap();
         assert_eq!(
@@ -765,7 +765,7 @@ mod tests {
                 "--output-format",
                 "stream-json",
                 "--allowed-mcp-server-names",
-                "shikigami"
+                "spellsheet"
             ]
         );
         assert_eq!(env, [("GEMINI_CLI_TRUST_WORKSPACE", "true".to_owned())]);
@@ -774,7 +774,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            settings.pointer("/mcpServers/shikigami/trust"),
+            settings.pointer("/mcpServers/spellsheet/trust"),
             Some(&json!(true))
         );
         assert!(
@@ -791,29 +791,27 @@ mod tests {
     }
 
     #[test]
-    fn copilot_gets_only_shikigami() {
+    fn copilot_gets_only_spellsheet() {
         let dir = tempfile::tempdir().unwrap();
         let (args, _) = prepare(AgentKind::Copilot, &turn(dir.path(), Some("s"))).unwrap();
         let joined = args.join(" ");
         assert!(joined.contains("--output-format json --additional-mcp-config @"));
-        assert!(
-            joined.contains(
-                "--disable-builtin-mcps --available-tools shikigami --allow-tool shikigami"
-            )
-        );
+        assert!(joined.contains(
+            "--disable-builtin-mcps --available-tools spellsheet --allow-tool spellsheet"
+        ));
         assert!(joined.ends_with("--resume s"));
         let mcp: Value = serde_json::from_str(
             &std::fs::read_to_string(dir.path().join("copilot-mcp.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(
-            mcp.pointer("/mcpServers/shikigami/args/1"),
+            mcp.pointer("/mcpServers/spellsheet/args/1"),
             Some(&json!("D:\\work"))
         );
     }
 
     // The lines below are what each tool printed against a stand-in model
-    // server, with Shikigami's real MCP server behind it.
+    // server, with SpellSheet's real MCP server behind it.
 
     #[test]
     fn reads_codex() {
@@ -822,9 +820,9 @@ mod tests {
             r#"{"type":"thread.started","thread_id":"01a1"}"#,
             r#"{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata not found"}}"#,
             r#"{"type":"error","message":"Reconnecting... 2/5"}"#,
-            r#"{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"shikigami","tool":"update_flow","arguments":{"summary":"送信を足しました"},"result":null,"error":null,"status":"in_progress"}}"#,
-            r#"{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"shikigami","tool":"create_flow","arguments":{},"result":{"content":[{"type":"text","text":"{\"flow\":{\"id\":\"scn_1\",\"name\":\"請求\"}}"}]},"error":null,"status":"completed"}}"#,
-            r#"{"type":"item.completed","item":{"id":"item_3","type":"mcp_tool_call","server":"shikigami","tool":"get_flow","arguments":{},"result":null,"error":{"message":"no such flow"},"status":"failed"}}"#,
+            r#"{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"spellsheet","tool":"update_flow","arguments":{"summary":"送信を足しました"},"result":null,"error":null,"status":"in_progress"}}"#,
+            r#"{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"spellsheet","tool":"create_flow","arguments":{},"result":{"content":[{"type":"text","text":"{\"flow\":{\"id\":\"scn_1\",\"name\":\"請求\"}}"}]},"error":null,"status":"completed"}}"#,
+            r#"{"type":"item.completed","item":{"id":"item_3","type":"mcp_tool_call","server":"spellsheet","tool":"get_flow","arguments":{},"result":null,"error":{"message":"no such flow"},"status":"failed"}}"#,
             r#"{"type":"item.completed","item":{"id":"item_4","type":"agent_message","text":"直しました。"}}"#,
             r#"{"type":"turn.completed","usage":{}}"#,
         ];
@@ -871,9 +869,9 @@ mod tests {
             r#"{"type":"message","role":"user","content":"hello"}"#,
             r#"{"type":"message","role":"assistant","content":"見て","delta":true}"#,
             r#"{"type":"message","role":"assistant","content":"みます。","delta":true}"#,
-            r#"{"type":"tool_use","tool_name":"mcp_shikigami_create_flow","tool_id":"c1","parameters":{"summary":"新しいフロー"}}"#,
+            r#"{"type":"tool_use","tool_name":"mcp_spellsheet_create_flow","tool_id":"c1","parameters":{"summary":"新しいフロー"}}"#,
             r#"{"type":"tool_result","tool_id":"c1","status":"success","output":"{\"flow\":{\"id\":\"scn_2\",\"name\":\"在庫\"}}"}"#,
-            r#"{"type":"tool_use","tool_name":"mcp_shikigami_get_flow","tool_id":"c2","parameters":{}}"#,
+            r#"{"type":"tool_use","tool_name":"mcp_spellsheet_get_flow","tool_id":"c2","parameters":{}}"#,
             r#"{"type":"tool_result","tool_id":"c2","status":"error","error":{"type":"x","message":"bad id"}}"#,
             r#"{"type":"message","role":"assistant","content":"できました。","delta":true}"#,
             r#"{"type":"result","status":"success","stats":{}}"#,
@@ -924,10 +922,10 @@ mod tests {
     fn reads_copilot() {
         let mut s = CopilotStream::default();
         let lines = [
-            r#"{"type":"session.mcp_server_status_changed","data":{"serverName":"shikigami","status":"connected"},"ephemeral":true}"#,
-            r#"{"type":"assistant.tool_call_delta","data":{"toolCallId":"call_1","toolName":"shikigami-update_flow","inputDelta":"{"},"ephemeral":true}"#,
-            r#"{"type":"assistant.tool_call_delta","data":{"toolCallId":"call_1","toolName":"shikigami-update_flow","inputDelta":"}"},"ephemeral":true}"#,
-            r#"{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"call_1","name":"shikigami-update_flow","arguments":{"summary":"確認を足しました"},"type":"function"}]}}"#,
+            r#"{"type":"session.mcp_server_status_changed","data":{"serverName":"spellsheet","status":"connected"},"ephemeral":true}"#,
+            r#"{"type":"assistant.tool_call_delta","data":{"toolCallId":"call_1","toolName":"spellsheet-update_flow","inputDelta":"{"},"ephemeral":true}"#,
+            r#"{"type":"assistant.tool_call_delta","data":{"toolCallId":"call_1","toolName":"spellsheet-update_flow","inputDelta":"}"},"ephemeral":true}"#,
+            r#"{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"call_1","name":"spellsheet-update_flow","arguments":{"summary":"確認を足しました"},"type":"function"}]}}"#,
             r#"{"type":"tool.execution_complete","data":{"toolCallId":"call_1","success":true,"result":{"content":"{}"}}}"#,
             r#"{"type":"assistant.message","data":{"content":"フローを確認しました。","toolRequests":[]}}"#,
             r#"{"type":"result","sessionId":"c-1","exitCode":0}"#,

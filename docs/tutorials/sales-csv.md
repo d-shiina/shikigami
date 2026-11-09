@@ -5,7 +5,7 @@ English | [日本語](../ja/tutorials/sales-csv.md)
 Every month each branch sends its sales as a CSV. Combine them into one workbook with a total per branch.
 
 - Result: `output/売上まとめ.xlsx` (sheets 明細 "details" and 支店別 "per branch")
-- Sample: `examples/tutorials/sales-csv/` (finished: `examples/tutorials/sales-csv.shikigami.json`)
+- Sample: `examples/tutorials/sales-csv/` (finished: `examples/tutorials/sales-csv.spellsheet.json`)
 - Time: about 10 minutes
 
 ![Flow chart](../assets/tutorials/sales-csv-flow.png)

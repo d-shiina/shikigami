@@ -27,7 +27,7 @@ flows/<フローの ID>/
 
 | 項目 | 意味 |
 |---|---|
-| `$schema` | エディターの補完用に `https://shikigami.dev/schemas/test-case.schema.json`（任意。中身は [schemas/test-case.schema.json](../../schemas/test-case.schema.json)） |
+| `$schema` | エディターの補完用に `https://spellsheet.dev/schemas/test-case.schema.json`（任意。中身は [schemas/test-case.schema.json](../../schemas/test-case.schema.json)） |
 | `description` | ケースの説明（任意） |
 | `inputs` | 入力変数の値。書かなかった入力は既定値のまま（`spellsheet run -i` と同じ） |
 | `expect.status` | 終わり方：`succeeded`（既定）・`failed`・`cancelled` |

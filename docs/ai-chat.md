@@ -12,8 +12,8 @@ The guide is two files, made from the nodes installed on your PC:
 
 | File | What it is | Where it goes |
 | --- | --- | --- |
-| `shikigami-ai-instructions.md` | How to answer (under 8,000 characters) | The agent's instructions |
-| `shikigami-ai-reference.md` | The flow format, every node with its params and examples, every function | Knowledge (an attached file) |
+| `spellsheet-ai-instructions.md` | How to answer (under 8,000 characters) | The agent's instructions |
+| `spellsheet-ai-reference.md` | The flow format, every node with its params and examples, every function | Knowledge (an attached file) |
 
 Save them from Writer (Flows › **Paste an AI answer** › **Save the guide**; they go to `Downloads\SpellSheet AI 仕様書`) or with the command line:
 
@@ -23,7 +23,7 @@ spellsheet ai-guide --dir <folder>
 
 A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Node plugins are only in the files you save on your PC.
 
-- **Microsoft Copilot Studio agent**: paste the whole of `shikigami-ai-instructions.md` into the agent's instructions and add `shikigami-ai-reference.md` as a knowledge source. Everyone who uses the agent then asks it for flows directly.
+- **Microsoft Copilot Studio agent**: paste the whole of `spellsheet-ai-instructions.md` into the agent's instructions and add `spellsheet-ai-reference.md` as a knowledge source. Everyone who uses the agent then asks it for flows directly.
 - **A chat without agents**: attach both files at the start of the conversation (or paste the instructions and attach the reference) and ask the AI to follow them. The reference is long, so a chat that reads only part of an attachment may miss nodes; an agent with the reference as knowledge works better.
 
 Save the guide again after updating SpellSheet or installing a plugin, and replace the files the AI has.
@@ -53,7 +53,7 @@ To have the AI change an existing flow, right-click the flow chart and choose **
 
 ```json
 {
-  "format": "shikigami.answer",
+  "format": "spellsheet.answer",
   "summary": "Search the order list\nLogs in and searches by order number.",
   "checks": ["Is the order number the right thing to search by?"],
   "flow": {

@@ -2,7 +2,7 @@
 
 English | [日本語](ja/files.md)
 
-Crate `shikigami-files`. Works without installing anything and is tested off Windows too. Value processing (building paths, filtering rows…) is written with expression functions, not nodes ([expressions.md](expressions.md)).
+Crate `spellsheet-files`. Works without installing anything and is tested off Windows too. Value processing (building paths, filtering rows…) is written with expression functions, not nodes ([expressions.md](expressions.md)).
 
 | Node | What it does | Output |
 |---|---|---|
@@ -36,7 +36,7 @@ flows/<id>/
 - Relative paths in a node's file params (`input/orders.xlsx`) resolve from the flow's folder, so the flow keeps working when the workspace moves or is shared. A subflow resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.
 - `work/` is emptied when a run starts. Set `settings.keepWork: true` on the flow to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
 - Bundles (`export_flow`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
-- `spellsheet run orders.shikigami.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
+- `spellsheet run orders.spellsheet.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
 - Older workspaces with `flows/<id>.json` are moved into folders when the workspace is opened.
 - Add files from Writer, from the AI (`write_project_file`), or with `spellsheet flow add-file <id> <file> --to input`.
 
@@ -46,7 +46,7 @@ A settings file in `config/` lists named values with a type and a description, s
 
 ```json
 {
-  "format": "shikigami.config",
+  "format": "spellsheet.config",
   "items": [
     { "name": "threshold", "type": "number", "value": 10000, "description": "Orders at or above this need approval" },
     { "name": "sendTo", "type": "text", "value": "accounts@example.com" }

@@ -5,7 +5,7 @@ import { generate } from "../scripts/generate.mjs";
 import type { EditOp, Flow } from "../src";
 import { isErrorPayload } from "../src";
 
-describe("@shikigami/schema", () => {
+describe("@spellsheet/schema", () => {
   it("generated types match the committed Rust schemas", async () => {
     const committed = await readFile(new URL("../src/generated.ts", import.meta.url), "utf8");
     expect(await generate()).toBe(committed);

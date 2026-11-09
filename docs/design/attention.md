@@ -36,5 +36,5 @@ Worker は人がいない前提なので、PC の画面には出さず、スケ�
 
 - ランタイムの `humanActionRequired` イベントに `dialog`（その手順が自分の窓を最前面に出す）を足した。画面はこれを見て、ダイアログのときは知らせない。
 - 画面（`lib/attention.ts`）が「今なにを待っているか」を名前（タグ）付きで決め、タグが変わった瞬間だけ `call_attention` を呼ぶ。待ちが終わると `clear_attention` で点滅を止め、通知を取り下げる。AI の依頼が 1 件片付いて残りがあるだけのときは、もう一度は鳴らさない。
-- `call_attention`（`src-tauri/src/attention.rs`）は窓が前にあれば何もしない。通知は WinRT の `ToastNotification`。表示名とアイコンは、インストーラーが付けるスタートメニューのショートカットの AppUserModelID（`dev.shikigami.studio`）から出る。インストールしていない開発用ビルドは PowerShell の ID を借りて出す。
+- `call_attention`（`src-tauri/src/attention.rs`）は窓が前にあれば何もしない。通知は WinRT の `ToastNotification`。表示名とアイコンは、インストーラーが付けるスタートメニューのショートカットの AppUserModelID（`dev.spellsheet.studio`）から出る。インストールしていない開発用ビルドは PowerShell の ID を借りて出す。
 - Worker と `spellsheet run` は `notify::WaitWatch` でイベントを見て、待ち始めたら `notify_waiting` で送る。

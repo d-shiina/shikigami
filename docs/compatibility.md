@@ -8,13 +8,13 @@ The promises SpellSheet makes to the outside, and the rules for changing them. F
 
 | Promise | Where it is defined | Main users |
 |---|---|---|
-| The flow file format (`schemaVersion`) | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | Saved flows, shared workspaces |
-| Named versions and bundles (`*.shikigami.json`, `formatVersion`) | `version.rs` → `schemas/api.schema.json` | Handing over to other PCs and workspaces |
+| The flow file format (`schemaVersion`) | `crates/spellsheet-core/src/model.rs` → `schemas/flow.schema.json` | Saved flows, shared workspaces |
+| Named versions and bundles (`*.spellsheet.json`, `formatVersion`) | `version.rs` → `schemas/api.schema.json` | Handing over to other PCs and workspaces |
 | `.spx` files (`manifest.json`, `format: spellsheet.package`, `formatVersion`) | `package.rs` → `schemas/api.schema.json` | Handing a flow to another person or PC |
 | Built-in node types (type names, params, blocks, whether `saveAs` applies, `risk`) | Each adapter → `schemas/contract/step-types.json` | Flows, what the AI has learned to write |
-| MCP tools (names, arguments, results, permission classes, annotations) | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI clients, skills |
+| MCP tools (names, arguments, results, permission classes, annotations) | `crates/spellsheet-mcp` → `schemas/contract/mcp-tools.json` | AI clients, skills |
 | Error codes (`code` and `retryable`) | `CoreError::code`, each node's errors | AI fixes, `onError` and retry decisions |
-| The CLI (commands, arguments, exit codes, `--json` output) | `crates/shikigami-cli` → `schemas/contract/cli.json`, `schemas/run-api.schema.json` | Task Scheduler, batch jobs, CI |
+| The CLI (commands, arguments, exit codes, `--json` output) | `crates/spellsheet-cli` → `schemas/contract/cli.json`, `schemas/run-api.schema.json` | Task Scheduler, batch jobs, CI |
 | Plugin manifests and JSON-RPC (`manifestVersion`) | [design/plugins.md](design/plugins.md) (Japanese) | Plugin authors |
 
 Not promises: Writer's screens, the internal Rust API (the crates are not published), the wording of logs and errors (`message` and `hint` are reworded), descriptions such as those of `list_step_types`, and local areas of the workspace (where undo history and run records are kept).
@@ -44,7 +44,7 @@ Either way it goes under "Breaking changes" in [CHANGELOG.md](../CHANGELOG.md). 
 ## 3. The flow file format
 
 - `schemaVersion` is the version of the file's shape. **It goes up by 1 every time the shape changes.** Flows reject unknown fields (to catch typos), so it goes up even when only an optional field is added. An older SpellSheet then stops with a clear "saved by a newer version, please update" (`UNSUPPORTED_SCHEMA_VERSION`)
-- When it goes up, add a "previous version → current version" function to `MIGRATIONS` in `crates/shikigami-core/src/migrate.rs`. Loading converts from old versions one node at a time, so each function only needs to know the version just before it. A gap makes the tests fail
+- When it goes up, add a "previous version → current version" function to `MIGRATIONS` in `crates/spellsheet-core/src/migrate.rs`. Loading converts from old versions one node at a time, so each function only needs to know the version just before it. A gap makes the tests fail
 - Breaking changes to built-in node params are migrated here too (rewriting every node with `for_each_step`). Built-in nodes ship with SpellSheet itself, so nodes carry no versions of their own. Having flows write versions would add to what AI has to write and where it can go wrong ([design/ai-authoring.md](design/ai-authoring.md), Japanese)
 - Files, named versions, flows inside bundles and subflows all go through the same migration (`migrate::from_value` / `migrate::deserialize`)
 - A migrated flow is written in the new version the next time it is saved. Reading alone never rewrites the file

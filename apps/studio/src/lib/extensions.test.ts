@@ -1,4 +1,4 @@
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { effects } from "./effects";
 import { credentialFor, registerExtensions } from "./extensions";

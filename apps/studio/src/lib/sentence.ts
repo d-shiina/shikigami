@@ -3,7 +3,7 @@
 // interprets them beyond choosing words, so an unknown type still reads as
 // its label. Word order differs between the languages, so each has its own
 // builders rather than dictionary entries.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { extensionParamTitle } from "./extensions";
 import { locale, stepLabel, t } from "./i18n";
 import { choiceLabel, columnOf, type Match, recognize, slotsOf, splitParts, textOf, valueKind, wordsOf } from "./transforms";

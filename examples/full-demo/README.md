@@ -33,27 +33,27 @@ pnpm demo:full
 Writer で動かす（ワークスペースに取り込むとプロジェクトフォルダーとして展開されます）:
 
 ```bash
-spellsheet flow import examples/full-demo.shikigami.json
+spellsheet flow import examples/full-demo.spellsheet.json
 ```
 
 入力 `siteUrl` を空のまま実行すると、同梱のデモサイト（`input/web/`）をファイル
 （file://）として開きます。file:// のページにはシークレットを入力できない仕様の
 ため、このときのログインは `browser.waitForHuman` で手動（ユーザー名 `demo`・
-パスワード `shikigami`）になります。シークレットでのログインまで見せたいときは
+パスワード `spellsheet`）になります。シークレットでのログインまで見せたいときは
 `pnpm demo:site` を起動し、`siteUrl` に `http://127.0.0.1:8787/` を入れて、
 シークレット「デモ受注システム」（サイト `http://127.0.0.1:8787/`）を登録します。
 
 CLI から直接:
 
 ```bash
-spellsheet run examples/full-demo.shikigami.json
-# ソースから: cargo run -p shikigami-cli -- run examples/full-demo.shikigami.json
+spellsheet run examples/full-demo.spellsheet.json
+# ソースから: cargo run -p spellsheet-cli -- run examples/full-demo.spellsheet.json
 ```
 
 無人実行や CI では、`config/設定.json` の `実環境を使う` を `false` にすると
 ダイアログ・アプリ操作の節を飛ばして、ファイル処理だけで最後まで動きます。
 
-`examples/full-demo.shikigami.json`（配布・実行用のバンドル）はこのフォルダーと
+`examples/full-demo.spellsheet.json`（配布・実行用のバンドル）はこのフォルダーと
 デモサイト `examples/web/` から生成します。編集したら作り直してください:
 
 ```bash

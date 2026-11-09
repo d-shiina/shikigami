@@ -6,7 +6,7 @@
 
 [English](README.md) | 日本語
 
-> 製品名は Shikigami から **SpellSheet** に変わりました（式＝spell、紙＝sheet）。設定やデータのフォルダーも新しい名前（`%APPDATA%\SpellSheet`・`%LOCALAPPDATA%\SpellSheet`）になり、更新すると古い `Shikigami` のフォルダーは自動でそこへ移ります。環境変数 `SHIKIGAMI_HOME`・`SHIKIGAMI_PLUGINS` もそのまま使えます。コマンドは `spellsheet` になりました（今までの `shikigami` も同じものとして使えます）。リポジトリ名とインストーラーは、当面は旧名のままです。
+> 名前は「式（spell）を書いた紙（sheet）」から来ています。以前の名前で出していた版から更新すると、設定・データのフォルダー、シークレット、自動実行のタスク、Writer の画面の設定、AI ツールの MCP 登録（名前は `spellsheet` になります。AI ツールを一度起動し直してください）まで、自動で引き継ぎます。
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
@@ -14,7 +14,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 ## 使い始める
 
-1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
+1. [最新のリリース](https://github.com/d-shiina/spellsheet/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
 2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
 3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
@@ -46,13 +46,13 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 ## 構成
 
 ```text
-crates/shikigami-core      Flow Core（唯一の正規データ層）
-crates/shikigami-runtime   RPA Runtime（AI・GUI なしで実行）
-crates/shikigami-cli       CLI（spellsheet コマンド。`spellsheet mcp` で MCP サーバー）
-crates/shikigami-mcp       MCP サーバー（rmcp）
+crates/spellsheet-core      Flow Core（唯一の正規データ層）
+crates/spellsheet-runtime   RPA Runtime（AI・GUI なしで実行）
+crates/spellsheet-cli       CLI（spellsheet コマンド。`spellsheet mcp` で MCP サーバー）
+crates/spellsheet-mcp       MCP サーバー（rmcp）
 apps/studio                SpellSheet Writer（Tauri 2 + React + React Flow）
 packages/schema            Rust から生成した TypeScript 型
-plugins/shikigami          Claude Code プラグイン（MCP 設定＋スキル）
+plugins/spellsheet          Claude Code プラグイン（MCP 設定＋スキル）
 schemas/                   生成された JSON Schema
 examples/                  サンプルフロー
 ```
@@ -80,15 +80,15 @@ pnpm install
 
 # Writer のフロントエンドをビルド（Tauri のビルドスクリプトが dist を要求するため、
 # clone 直後は cargo test / cargo build の前に一度必要）
-pnpm --filter @shikigami/studio build
+pnpm --filter @spellsheet/studio build
 
 # テスト
 cargo test --workspace
 pnpm -r test
 
 # CLI でサンプルを実行（AI・GUI なし）
-cargo run -p shikigami-cli -- run examples/invoice-summary.json
-cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=10000
+cargo run -p spellsheet-cli -- run examples/invoice-summary.json
+cargo run -p spellsheet-cli -- run examples/invoice-summary.json -i threshold=10000
 
 # フル機能デモ：ブラウザ・ダイアログ・Excel・Word・メモ帳+OCR・Outlook などを
 # 1 本で画面に見せる（詳細は examples/full-demo/README.md）
@@ -101,7 +101,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%APPDATA%\SpellSheet\workspace` です。環境変数 `SPELLSHEET_HOME`（旧名の `SHIKIGAMI_HOME` も使えます）または CLI の `--workspace` で変更できます。
+ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%APPDATA%\SpellSheet\workspace` です。環境変数 `SPELLSHEET_HOME`または CLI の `--workspace` で変更できます。
 
 ### CLI の例
 
@@ -120,21 +120,21 @@ Writer を開いたまま CLI でフローを編集すると、変更が Writer 
 
 ## AI から使う（MCP）
 
-Claude Code ならプラグインを入れるだけです（`shikigami` コマンドに PATH が通っている必要があります）。
+Claude Code ならプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
 
 ```text
-/plugin install shikigami --marketplace d-shiina/shikigami
+/plugin install spellsheet --marketplace d-shiina/spellsheet
 ```
 
-Writer をインストールしている場合は、Writer と同じフォルダーにある `shikigami.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
+Writer をインストールしている場合は、Writer と同じフォルダーにある `spellsheet.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
 
-MCP サーバーだけを登録する場合は `claude mcp add shikigami -- spellsheet mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
+MCP サーバーだけを登録する場合は `claude mcp add spellsheet -- spellsheet mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p spellsheet-cli` で更新されます）。
 
 ```powershell
-claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp
+claude mcp add --scope user spellsheet -- C:\path\to\spellsheet\target\debug\spellsheet.exe mcp
 ```
 
-この登録とプラグインを併用すると、プラグイン側の `shikigami` サーバー（PATH 上の `shikigami` を起動）は接続に失敗しますが、スキルは使えます。
+この登録とプラグインを併用すると、プラグイン側の `spellsheet` サーバー（PATH 上の `spellsheet` を起動）は接続に失敗しますが、スキルは使えます。
 
 Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/ja/mcp.md) を参照してください。AI の変更は Writer に即座に反映され、Writer から元に戻せます。
 

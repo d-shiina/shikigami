@@ -2,7 +2,7 @@
 
 English | [日本語](ja/database.md)
 
-Crate `shikigami-db`. Built-in nodes that run SQL through ODBC, so one pair of nodes reaches SQL Server, Oracle, Access, PostgreSQL, MySQL and anything else with an ODBC driver on the PC. Windows has the ODBC driver manager built in; the database's own driver is installed as usual (for SQL Server, "ODBC Driver 18 for SQL Server").
+Crate `spellsheet-db`. Built-in nodes that run SQL through ODBC, so one pair of nodes reaches SQL Server, Oracle, Access, PostgreSQL, MySQL and anything else with an ODBC driver on the PC. Windows has the ODBC driver manager built in; the database's own driver is installed as usual (for SQL Server, "ODBC Driver 18 for SQL Server").
 
 | Node | What it does | Output | Risk |
 |---|---|---|---|

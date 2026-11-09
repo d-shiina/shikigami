@@ -2,7 +2,7 @@
 // or deletes, mail, commands, other apps), read from the step types' risk
 // levels and path params, and which of those a review group adds, changes or
 // removes. Display only: nothing here decides whether a step may run.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { stepLabel } from "./i18n";
 import type { StepDiff } from "./review";
 import { flatten } from "./review";

@@ -1,4 +1,4 @@
-import type { CaseResult, TestCase } from "@shikigami/schema";
+import type { CaseResult, TestCase } from "@spellsheet/schema";
 import { Check, Play, Save, Square, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";

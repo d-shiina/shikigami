@@ -313,7 +313,7 @@ describe("agent store", () => {
   });
 
   it("carries the one conversation from before over", () => {
-    fakeStorage().set("shikigami.studio.agentSession", "sess_old");
+    fakeStorage().set("spellsheet.studio.agentSession", "sess_old");
     const store = createAgentStore(fakeAgent());
     expect(store.getState().chats.some((c) => c.sessionId === "sess_old" && c.flowId === null)).toBe(true);
     vi.unstubAllGlobals();

@@ -9,7 +9,7 @@
 //
 // so nothing new is stored, and the runtime and AI clients read it as they
 // always have. Studio calls it the 画像 kind.
-import type { EditOp, Flow, Part, ProjectFiles, Step, StepTypeDef } from "@shikigami/schema";
+import type { EditOp, Flow, Part, ProjectFiles, Step, StepTypeDef } from "@spellsheet/schema";
 import { partUses } from "./parts";
 
 /** The folder cut-out pictures go to. */

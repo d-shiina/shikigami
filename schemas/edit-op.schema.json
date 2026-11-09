@@ -671,5 +671,5 @@
       ]
     }
   },
-  "$id": "https://shikigami.dev/schemas/edit-op.schema.json"
+  "$id": "https://spellsheet.dev/schemas/edit-op.schema.json"
 }

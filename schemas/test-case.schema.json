@@ -73,5 +73,5 @@
       ]
     }
   },
-  "$id": "https://shikigami.dev/schemas/test-case.schema.json"
+  "$id": "https://spellsheet.dev/schemas/test-case.schema.json"
 }

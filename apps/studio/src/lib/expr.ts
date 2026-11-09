@@ -1,5 +1,5 @@
 // Reads flow expressions into tokens, the same way Core does
-// (crates/shikigami-core/src/expr.rs), for display and editing help only:
+// (crates/spellsheet-core/src/expr.rs), for display and editing help only:
 // colouring variables, suggesting names, and recognising the shapes the
 // transform forms edit. Studio never evaluates expressions itself; the
 // result under a field comes from Core (`eval_expression`).

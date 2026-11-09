@@ -75,7 +75,7 @@ SpellSheet の手順書は、人が録らなくても、Studio で一度実行�
 
 ## 実装
 
-- ランタイム：`crates/shikigami-runtime/src/screens.rs`（撮る時と引数）、`drafts.rs`（作るときの画面）、`RunOptions.screens_dir`、`RunEvent::ScreenCaptured`。
-- アダプター：`packages/browser-adapter/src/adapter.ts` の `manualShot`、`crates/shikigami-desktop` の `manual_shot`。
+- ランタイム：`crates/spellsheet-runtime/src/screens.rs`（撮る時と引数）、`drafts.rs`（作るときの画面）、`RunOptions.screens_dir`、`RunEvent::ScreenCaptured`。
+- アダプター：`packages/browser-adapter/src/adapter.ts` の `manualShot`、`crates/spellsheet-desktop` の `manual_shot`。
 - Studio（Rust）：`apps/studio/src-tauri/src/manual.rs`（集めて入れ替える、`get_manual`・`manual_image`・`save_manual_masks`・`save_manual_export`）。
 - Studio（画面）：`lib/manual.ts`（フローと撮った画面から章・画面・手順を作る、`pagesOf` で紙に分ける）、`lib/manualExport.ts`（焼き込みと HTML）、`components/ManualView.tsx`。

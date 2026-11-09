@@ -97,9 +97,9 @@ jobs:
             exit 0
           fi
           {
-            echo "TAURI_SIGNING_PRIVATE_KEY<<SHIKIGAMI_EOF"
+            echo "TAURI_SIGNING_PRIVATE_KEY<<SPELLSHEET_EOF"
             echo "$PRIVATE_KEY"
-            echo "SHIKIGAMI_EOF"
+            echo "SPELLSHEET_EOF"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$PASSWORD"
             echo "TAURI_UPDATER_PUBKEY=$PUBKEY"
           } >> "$GITHUB_ENV"
@@ -110,9 +110,9 @@ jobs:
         shell: bash
         run: |
           {
-            echo "body<<SHIKIGAMI_EOF"
+            echo "body<<SPELLSHEET_EOF"
             node scripts/release-notes.mjs "${{ steps.version.outputs.version }}"
-            echo "SHIKIGAMI_EOF"
+            echo "SPELLSHEET_EOF"
           } >> "$GITHUB_OUTPUT"
 
       - uses: dtolnay/rust-toolchain@stable
@@ -129,7 +129,7 @@ jobs:
         shell: bash
         run: |
           key="$RUNNER_TEMP/throwaway.key"
-          pnpm --filter @shikigami/studio exec tauri signer generate --ci -w "$key"
+          pnpm --filter @spellsheet/studio exec tauri signer generate --ci -w "$key"
           {
             echo "TAURI_SIGNING_PRIVATE_KEY=$(cat "$key")"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
@@ -151,7 +151,7 @@ jobs:
           key: ocr-dist-${{ runner.os }}-${{ hashFiles('apps/studio/scripts/bundle-ocr.mjs') }}
       - run: pnpm studio:bundle-ocr
         env:
-          SHIKIGAMI_OCR_ACCURATE: required
+          SPELLSHEET_OCR_ACCURATE: required
       - run: node apps/studio/scripts/set-pubkey.mjs
 
       - name: Tag main

@@ -2,7 +2,7 @@
 
 [English](../system.md) | 日本語
 
-クレート `shikigami-system`。アプリの画面ではなく、その外にあるものを扱う組込ノードです。値の加工は式の関数で書きます（[expressions.md](expressions.md)）。
+クレート `spellsheet-system`。アプリの画面ではなく、その外にあるものを扱う組込ノードです。値の加工は式の関数で書きます（[expressions.md](expressions.md)）。
 
 | ノード | 内容 | 出力 | リスク |
 |---|---|---|---|

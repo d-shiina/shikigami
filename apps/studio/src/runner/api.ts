@@ -1,5 +1,5 @@
 // The run window's bridge to the backend (src-tauri/src/runner.rs).
-import { isErrorPayload, type ProjectFiles, type RunEventEnvelope, type RunReport, type RunStatus, type Flow } from "@shikigami/schema";
+import { isErrorPayload, type ProjectFiles, type RunEventEnvelope, type RunReport, type RunStatus, type Flow } from "@spellsheet/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ApiError, type RunRecord } from "../lib/api";

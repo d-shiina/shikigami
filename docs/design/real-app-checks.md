@@ -8,7 +8,7 @@ CI で確かめているもの（ここではやらなくてよい）：WinForms
 
 どれも Studio の AI に頼むのがいちばん早い。例：「メモ帳を開いて、ヘルプ > バージョン情報を desktop.selectMenu で開いて閉じるフローを作って、試しに動かして」。AI は `inspect_ui` で画面を見てから組む。
 
-1. `git pull` のあと `cargo build -p shikigami-cli`（MCP の `target\debug\shikigami.exe` を新しくする）、`pnpm studio:dev` で Studio を起動
+1. `git pull` のあと `cargo build -p spellsheet-cli`（MCP の `target\debug\spellsheet.exe` を新しくする）、`pnpm studio:dev` で Studio を起動
 2. 下の表の上から順に、AI に頼むか手でノードを置いて動かす
 3. 結果の列に「OK」「NG（エラーコードと一言）」を書く。NG はエラーの詳細（Studio の実行ログ）をスレッドに貼ってもらえれば直す
 

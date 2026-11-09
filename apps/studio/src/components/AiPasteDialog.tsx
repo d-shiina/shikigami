@@ -2,19 +2,20 @@
 // window): give it the guide, paste its answer, and see at once what is left
 // for the person (pick the screen parts, register logins, put files) apart
 // from what the AI must fix, which goes back to the chat as text.
-import type { EditOutcome, ProjectFiles } from "@shikigami/schema";
+import type { EditOutcome, ProjectFiles } from "@spellsheet/schema";
 import { ExternalLink, FileDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { agent, api, type AnswerProblem } from "../lib/api";
 import { locale, t } from "../lib/i18n";
 import { issueText } from "../lib/issueText";
+import { DOCS_URL } from "../lib/repo";
 import { answerProblemText, writtenAt } from "../lib/problemText";
 import { authorIssues, handOffText, personTodos, returnText } from "../lib/todos";
 import { useProjectMaybe } from "../project";
 import { CopyForAi, TodoList, Written } from "./IssuesPanel";
 
-const GUIDE_URL = `https://github.com/d-shiina/shikigami/blob/main/docs/${locale === "ja" ? "ja/" : ""}ai-chat.md`;
+const GUIDE_URL = `${DOCS_URL}${locale === "ja" ? "ja/" : ""}ai-chat.md`;
 
 type Result = { kind: "problems"; problems: AnswerProblem[] } | { kind: "done"; outcome: EditOutcome };
 

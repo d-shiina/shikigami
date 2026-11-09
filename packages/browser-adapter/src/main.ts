@@ -56,4 +56,4 @@ lines.on("line", (line) => {
 lines.on("close", () => {
   void adapter.shutdown().finally(() => process.exit(0));
 });
-process.stderr.write("shikigami browser adapter ready\n");
+process.stderr.write("spellsheet browser adapter ready\n");

@@ -1,4 +1,4 @@
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { freeName, resultName } from "./resultName";
 

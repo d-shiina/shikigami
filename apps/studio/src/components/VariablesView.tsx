@@ -5,7 +5,7 @@
 // opens it on the chart.
 import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
-import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@shikigami/schema";
+import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@spellsheet/schema";
 import { Lock, Trash2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
@@ -356,7 +356,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
       : []),
   ];
 
-  const view = useTableView(columns, { storageKey: "shikigami.studio.variables.sort" });
+  const view = useTableView(columns, { storageKey: "spellsheet.studio.variables.sort" });
   if (!flow) return null;
 
   return (

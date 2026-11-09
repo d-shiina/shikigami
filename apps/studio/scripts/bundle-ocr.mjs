@@ -1,8 +1,8 @@
 // Stages the OCR engine where `tauri.release.conf.json` expects it
 // (`bundle.resources`), so the installer puts it in `ocr\` next to Studio
-// and `shikigami.exe`: PaddleOCR's PP-OCRv6 small models (det.onnx,
+// and `spellsheet.exe`: PaddleOCR's PP-OCRv6 small models (det.onnx,
 // rec.onnx) and ONNX Runtime. A copy goes to target/ocr, where development
-// builds and `cargo test` find it (see crates/shikigami-desktop/src/paddle.rs).
+// builds and `cargo test` find it (see crates/spellsheet-desktop/src/paddle.rs).
 //
 // `--if-missing` (run by `pnpm studio:dev`) does nothing when target/ocr
 // already holds these exact files: without them OCR silently falls back to
@@ -11,7 +11,7 @@
 // The accurate models (PP-OCRv6 medium, `accurate: true`: much better on
 // handwriting, several times slower) go in `medium\`. They are not on PyPI;
 // they come from RapidOCR's ModelScope, which some networks block, so they
-// are best-effort unless SHIKIGAMI_OCR_ACCURATE=required (the release build).
+// are best-effort unless SPELLSHEET_OCR_ACCURATE=required (the release build).
 //
 // Everything else comes from PyPI wheels, pinned to a version and checked against
 // the SHA-256 below; downloads are cached in target/ocr-dist. The models are
@@ -49,7 +49,7 @@ const ACCURATE = [
     to: "medium/rec.onnx",
   },
 ];
-const accurateMode = process.env.SHIKIGAMI_OCR_ACCURATE ?? "try"; // try | required | skip
+const accurateMode = process.env.SPELLSHEET_OCR_ACCURATE ?? "try"; // try | required | skip
 const RUNTIME = {
   "win32-x64": {
     url: `${PYPI}/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl`,
@@ -75,7 +75,7 @@ const devDir = join(root, "target/ocr");
 const cacheDir = join(root, "target/ocr-dist");
 
 const host = execFileSync("rustc", ["-vV"], { encoding: "utf8" }).match(/^host: (.+)$/m)?.[1] ?? "";
-const arch = process.env.SHIKIGAMI_OCR_ARCH || (host.startsWith("aarch64") ? "arm64" : "x64");
+const arch = process.env.SPELLSHEET_OCR_ARCH || (host.startsWith("aarch64") ? "arm64" : "x64");
 const platform = `${process.platform}-${arch}`;
 const runtime = RUNTIME[platform];
 if (!runtime) throw new Error(`no pinned ONNX Runtime for ${platform}`);

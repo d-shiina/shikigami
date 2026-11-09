@@ -1,8 +1,8 @@
-// Shikigami extension: Azure AI Document Intelligence (cloud AI-OCR).
+// SpellSheet extension: Azure AI Document Intelligence (cloud AI-OCR).
 //
-// Newline-delimited JSON-RPC 2.0 on stdin/stdout, as every Shikigami
+// Newline-delimited JSON-RPC 2.0 on stdin/stdout, as every SpellSheet
 // extension speaks (docs/extensions.md). No dependencies: Node.js 18 or
-// later (Shikigami ships one) has fetch.
+// later (SpellSheet ships one) has fetch.
 //
 // readDocument sends the file to the Azure resource at `endpoint`, waits
 // for the analysis and returns { text, pages, tables, fields, model }.

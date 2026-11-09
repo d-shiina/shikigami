@@ -1,5 +1,5 @@
 // 「ここから実行」: where a run may start, and the values it starts with.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import type { RunState } from "../store";
 
 /**

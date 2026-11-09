@@ -627,7 +627,7 @@ export function RunsPage() {
     { label: r.delete, icon: Trash2, danger: true, confirm: r.confirmDelete, run: () => void remove([item]) },
   ];
   const columns = useColumns(facts, (item, on) => void setEnabled([item], on));
-  const view = useTableView(columns, { storageKey: "shikigami.studio.schedules.sort", initialSort: { column: "next", descending: false } });
+  const view = useTableView(columns, { storageKey: "spellsheet.studio.schedules.sort", initialSort: { column: "next", descending: false } });
   const filtered = states.size + kinds.size > 0;
   const lockNote = schedules.map((item) => facts(item).locks).find(Boolean);
   return (

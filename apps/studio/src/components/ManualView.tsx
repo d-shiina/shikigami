@@ -1,7 +1,7 @@
 // The 手順書: the open flow read as a procedure, with the screens of the last
 // run from Studio (docs/design/manual.md). 「編集する」 switches to the
 // editable outline (StoryView).
-import type { Flow, Step } from "@shikigami/schema";
+import type { Flow, Step } from "@spellsheet/schema";
 import { Camera, Clock, Download, EyeOff, Maximize2, MessageSquareText, Pencil, Play, RotateCw, Workflow } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
@@ -113,7 +113,7 @@ type Ctx = {
   onPage: (n: number) => void;
 };
 
-const CHECKS_KEY = "shikigami.studio.manualChecks.";
+const CHECKS_KEY = "spellsheet.studio.manualChecks.";
 
 /** The 「業務どおり」 ticks of a flow: a convenience on this PC, kept in the browser. */
 function useChecks(flowId: string | undefined) {

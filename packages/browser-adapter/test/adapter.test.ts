@@ -11,10 +11,10 @@ import { startDemoSite } from "../src/demo-site.ts";
 import { AdapterError } from "../src/targets.ts";
 
 // Uses Playwright's bundled Chromium (PLAYWRIGHT_BROWSERS_PATH) or
-// SHIKIGAMI_BROWSER_PATH; CI installs it with `playwright-core install`.
+// SPELLSHEET_BROWSER_PATH; CI installs it with `playwright-core install`.
 let server: Server;
 let base: string;
-const adapter = new Adapter({ forceHeadless: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+const adapter = new Adapter({ forceHeadless: true, timeoutMs: 3000, executablePath: process.env.SPELLSHEET_BROWSER_PATH });
 const run = { runId: "run_test" };
 
 beforeAll(async () => {
@@ -41,8 +41,8 @@ describe("browser adapter", () => {
     const r = { runId: "run_manual_shot" };
     await adapter.call("open", { ...r, url: `${base}orders.html` });
     await adapter.call("fill", { ...r, target: { label: "ユーザー名" }, value: "demo" });
-    await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "shikigami" });
-    const path = join(mkdtempSync(join(tmpdir(), "shikigami-manual-")), "001.jpg");
+    await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "spellsheet" });
+    const path = join(mkdtempSync(join(tmpdir(), "spellsheet-manual-")), "001.jpg");
     const shot = (await adapter.call("screenshot", {
       ...r,
       path,
@@ -90,7 +90,7 @@ describe("browser adapter", () => {
       for (const el of await target.all()) all.push(await el.boundingBox());
       return all.filter((b): b is NonNullable<typeof b> => b !== null);
     };
-    const path = join(mkdtempSync(join(tmpdir(), "shikigami-manual-")), "001.jpg");
+    const path = join(mkdtempSync(join(tmpdir(), "spellsheet-manual-")), "001.jpg");
     const shot = (await adapter.call("screenshot", { ...r, path, report: true })) as {
       regions: { x: number; y: number; width: number; height: number }[];
     };
@@ -124,7 +124,7 @@ describe("browser adapter", () => {
     expect(opened.title).toContain("ログイン");
 
     await adapter.call("fill", { ...run, target: { label: "ユーザー名" }, value: "demo" });
-    await adapter.call("fill", { ...run, target: { label: "パスワード" }, value: "shikigami" });
+    await adapter.call("fill", { ...run, target: { label: "パスワード" }, value: "spellsheet" });
     await adapter.call("click", { ...run, target: { role: "button", name: "ログイン" } });
     await adapter.call("waitFor", { ...run, target: { role: "heading", name: "受注一覧" } });
 
@@ -203,7 +203,7 @@ describe("browser adapter", () => {
       adapter.call("fill", {
         ...r,
         target: { label: "パスワード" },
-        value: "shikigami",
+        value: "spellsheet",
         secret: { name: "demo", sites: ["https://example.com"], sensitive: true },
       }),
     );
@@ -213,11 +213,11 @@ describe("browser adapter", () => {
     await adapter.call("fill", {
       ...r,
       target: { label: "パスワード" },
-      value: "shikigami",
+      value: "spellsheet",
       secret: { name: "demo", sites: [site], sensitive: true },
     });
     const page = (await adapter.call("snapshot", r)) as { snapshot: string; login?: { hint: string } };
-    expect(page.snapshot).not.toContain("shikigami");
+    expect(page.snapshot).not.toContain("spellsheet");
     expect(page.snapshot).toContain("demo");
     expect(page.login?.hint).toContain("list_secrets");
 
@@ -227,7 +227,7 @@ describe("browser adapter", () => {
     expect(again.snapshot).not.toContain("typed-by-hand");
 
     // Review evidence: a JPEG of the page next to the tree.
-    const shot = join(mkdtempSync(join(tmpdir(), "shikigami-")), "shot.jpg");
+    const shot = join(mkdtempSync(join(tmpdir(), "spellsheet-")), "shot.jpg");
     await adapter.call("snapshot", { ...r, screenshotPath: shot });
     expect([...readFileSync(shot).subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
     await adapter.call("closeRun", r);
@@ -250,14 +250,14 @@ describe("browser adapter", () => {
         adapter.call("fill", {
           ...r,
           target: { label: "パスワード" },
-          value: "shikigami",
+          value: "spellsheet",
           secret: { name: "demo", sites: [new URL(hopUrl).origin], sensitive: true },
         }),
       );
       expect(err.code).toBe("SECRET_SITE_MISMATCH");
       const page = (await adapter.call("snapshot", r)) as { url: string; snapshot: string };
       expect(page.url).toContain("localhost");
-      expect(page.snapshot).not.toContain("shikigami");
+      expect(page.snapshot).not.toContain("spellsheet");
     } finally {
       await adapter.call("closeRun", r);
       hop.close();
@@ -269,7 +269,7 @@ describe("browser adapter", () => {
     await adapter.call("open", { ...first, url: `${base}orders.html`, session: "demo" });
     expect(await adapter.call("isVisible", { ...first, target: { role: "heading", name: "受注一覧" }, waitMs: 500 })).toBe(false);
     await adapter.call("fill", { ...first, target: { label: "ユーザー名" }, value: "demo" });
-    await adapter.call("fill", { ...first, target: { label: "パスワード" }, value: "shikigami" });
+    await adapter.call("fill", { ...first, target: { label: "パスワード" }, value: "spellsheet" });
     await adapter.call("click", { ...first, target: { role: "button", name: "ログイン" } });
     await adapter.call("waitFor", { ...first, target: { role: "heading", name: "受注一覧" } });
     const closed = (await adapter.call("closeRun", first)) as { sessions: { name: string; state: unknown }[] };
@@ -302,13 +302,13 @@ describe("browser adapter", () => {
 });
 
 describe("pointing at the page", () => {
-  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SPELLSHEET_BROWSER_PATH });
   const r = { runId: "run_pick" };
 
   beforeAll(async () => {
     await person.call("open", { ...r, url: base });
     await person.call("fill", { ...r, target: { label: "ユーザー名" }, value: "demo" });
-    await person.call("fill", { ...r, target: { label: "パスワード" }, value: "shikigami" });
+    await person.call("fill", { ...r, target: { label: "パスワード" }, value: "spellsheet" });
     await person.call("click", { ...r, target: { role: "button", name: "ログイン" } });
     await person.call("waitFor", { ...r, target: { role: "heading", name: "受注一覧" } });
   });
@@ -409,7 +409,7 @@ describe("pointing at the page", () => {
     expect(await asked).toMatchObject({ status: "picked", target: { role: "button", name: "ログイン" } });
     // The browser stays open for the next pick, on the page the person is at: the url is not opened again.
     await person.call("fill", { ...s, target: { label: "ユーザー名" }, value: "demo" });
-    await person.call("fill", { ...s, target: { label: "パスワード" }, value: "shikigami" });
+    await person.call("fill", { ...s, target: { label: "パスワード" }, value: "spellsheet" });
     await person.call("click", { ...s, target: { role: "button", name: "ログイン" } });
     await person.call("waitFor", { ...s, target: { role: "heading", name: "受注一覧" } });
     const again = person.call("pick", { ...s, url: base, timeoutMs: 5000 });
@@ -444,7 +444,7 @@ describe("OAuth sign-in", () => {
   let providerBase: string;
   let redirectUrl: string;
   const companyHits: string[] = [];
-  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SPELLSHEET_BROWSER_PATH });
 
   const listen = async (server: Server): Promise<string> => {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));

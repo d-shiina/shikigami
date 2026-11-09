@@ -1,7 +1,7 @@
 import { nodeIcon } from "../../lib/nodeIcons";
 // A node in the inspector (read-only summary) and in the node editor (the
 // full form): docs/design/ui-principles.md §2.
-import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
 import { Maximize2, MessageSquareText } from "lucide-react";

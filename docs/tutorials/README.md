@@ -14,7 +14,7 @@ Each tutorial takes one piece of office work from start to finish: ask the AI fo
 
 - Install and start SpellSheet Writer ([Getting started in the README](../../README.md#getting-started))
 - Open the AI pane with "Claude Code" at the top left of Writer (Ctrl+J) and sign in
-- The sample files are in `examples/tutorials/`. The finished flows (`*.shikigami.json`) are there too. To look at one without the AI, press "Open finished" under "Samples" on Writer's Flows page (the sample files come with it), or open the bundle with "Import from file"
+- The sample files are in `examples/tutorials/`. The finished flows (`*.spellsheet.json`) are there too. To look at one without the AI, press "Open finished" under "Samples" on Writer's Flows page (the sample files come with it), or open the bundle with "Import from file"
 
 ## The steps every tutorial shares
 

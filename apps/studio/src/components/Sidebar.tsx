@@ -97,8 +97,8 @@ function MiniItem({ icon: Icon, label, on, onClick, count, tone, dot, busy, titl
   );
 }
 
-const RECENT_KEY = "shikigami.studio.recent";
-const PINS_KEY = "shikigami.studio.pins";
+const RECENT_KEY = "spellsheet.studio.recent";
+const PINS_KEY = "spellsheet.studio.pins";
 const RECENT_MAX = 6;
 
 function readIds(key: string): string[] {

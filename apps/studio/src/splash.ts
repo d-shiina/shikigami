@@ -2,12 +2,13 @@
 // bundle so the screen shows at once: only the fonts and three strings.
 import "@fontsource-variable/inter/index.css";
 import "@fontsource-variable/noto-sans-jp";
+import "./lib/legacyStorage";
 import { splashText } from "./lib/splashText";
 
 const text = splashText(
   (() => {
     try {
-      return globalThis.localStorage?.getItem("shikigami.studio.locale");
+      return globalThis.localStorage?.getItem("spellsheet.studio.locale");
     } catch {
       return null;
     }

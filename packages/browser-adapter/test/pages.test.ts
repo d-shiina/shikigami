@@ -51,7 +51,7 @@ const PAGES: Record<string, string> = {
 
 let server: Server;
 let base: string;
-const adapter = new Adapter({ forceHeadless: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+const adapter = new Adapter({ forceHeadless: true, timeoutMs: 3000, executablePath: process.env.SPELLSHEET_BROWSER_PATH });
 const run = { runId: "run_pages" };
 
 beforeAll(async () => {
@@ -216,7 +216,7 @@ describe("hover, scroll and attributes", () => {
 });
 
 describe("downloads and uploads", () => {
-  const dir = mkdtempSync(join(tmpdir(), "shikigami-dl-"));
+  const dir = mkdtempSync(join(tmpdir(), "spellsheet-dl-"));
 
   it("saves a download to a path or under the site's name", async () => {
     const saved = (await adapter.call("download", { ...run, target: { css: "#dl" }, path: join(dir, "out", "受注.csv") })) as { path: string; fileName: string };

@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "shikigami": {
-      "command": "shikigami",
-      "args": ["mcp"]
-    }
-  }
-}

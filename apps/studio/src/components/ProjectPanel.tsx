@@ -7,7 +7,7 @@
 // file setting, or onto the chart as the node that reads it (FileDrag).
 import { HoverPreview } from "./HoverPreview";
 import { isImagePath } from "../lib/preview";
-import type { ProjectFile, Flow, Step, StepTypeDef } from "@shikigami/schema";
+import type { ProjectFile, Flow, Step, StepTypeDef } from "@spellsheet/schema";
 import {
   Boxes,
   Copy,

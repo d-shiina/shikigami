@@ -1,6 +1,6 @@
 // Every variable of a flow in one table: what it is, where it starts,
 // which steps write it and which read it. Display only, like dataFlow.ts.
-import type { Step, VarDirection, VariableDef, VarType } from "@shikigami/schema";
+import type { Step, VarDirection, VariableDef, VarType } from "@spellsheet/schema";
 import { CALL, callMap, knownVariables, outputs, referencedVariables } from "./nodeRows";
 import { BINDS } from "./stepTypes";
 

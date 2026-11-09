@@ -8,14 +8,14 @@ describe("samples", () => {
   it("open bundles Writer can import", async () => {
     for (const sample of SAMPLES.filter((s) => s.bundle)) {
       const bundle = JSON.parse(await sample.bundle!());
-      expect(bundle.format, sample.id).toBe("shikigami.flowBundle");
+      expect(bundle.format, sample.id).toBe("spellsheet.flowBundle");
       expect(bundle.flow.id, sample.id).toMatch(/^scn_tutorial_/);
     }
   });
 
   it("link the tutorial in Writer's language", () => {
-    expect(tutorialUrl("invoices")).toBe("https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/invoices.md");
+    expect(tutorialUrl("invoices")).toBe("https://github.com/d-shiina/spellsheet/blob/main/docs/ja/tutorials/invoices.md");
     setLocale("en", false);
-    expect(tutorialUrl()).toBe("https://github.com/d-shiina/shikigami/blob/main/docs/tutorials/README.md");
+    expect(tutorialUrl()).toBe("https://github.com/d-shiina/spellsheet/blob/main/docs/tutorials/README.md");
   });
 });

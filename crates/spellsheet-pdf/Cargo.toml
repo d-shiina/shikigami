@@ -1,0 +1,23 @@
+[package]
+name = "spellsheet-pdf"
+description = "PDF steps for SpellSheet (pdf.*): reading the text of a PDF, joining and splitting PDFs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+spellsheet-core.workspace = true
+spellsheet-runtime.workspace = true
+spellsheet-files.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+pdf-extract = "0.12.1"
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

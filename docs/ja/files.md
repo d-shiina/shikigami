@@ -2,7 +2,7 @@
 
 [English](../files.md) | 日本語
 
-クレート `shikigami-files`。何もインストールせずに動き、Windows 以外でもテストできます。値の加工（パスの組み立て、行の絞り込みなど）はノードではなく式の関数で書きます（[expressions.md](expressions.md)）。
+クレート `spellsheet-files`。何もインストールせずに動き、Windows 以外でもテストできます。値の加工（パスの組み立て、行の絞り込みなど）はノードではなく式の関数で書きます（[expressions.md](expressions.md)）。
 
 | ノード | 内容 | 出力 |
 |---|---|---|
@@ -36,7 +36,7 @@ flows/<id>/
 - ノードのファイルの項目に書いた相対パス（`input/受注一覧.xlsx`）は、フローのフォルダーから解決します。保存先を移しても共有しても動きます。サブフローは自分のフォルダーから解決します。フォルダーの外（`..`）を指すと `PATH_OUTSIDE_PROJECT` の警告。絶対パスは従来どおり使えます。
 - `work/` は実行のはじめに空にします。残したいときはフローの `settings.keepWork: true`。1 ノードだけ試す（`test_step`）ときは空にせず、ログも書きません。
 - バンドル（`export_flow`）と複製はファイルも持っていきます（`output/`・`work/`・`logs/` を除く）。人に渡す `.spx` では、`input/` は業務の実データが多いので最初は外してあります（「渡す」でチェックを入れるか、CLI の `--with-input`）。
-- バンドルのファイルを `spellsheet run 受注.shikigami.json` で直接実行すると、ファイルを隣の `受注.files/<id>/` に展開してそこで実行します。実行後も `output/` と `logs/` が残ります。
+- バンドルのファイルを `spellsheet run 受注.spellsheet.json` で直接実行すると、ファイルを隣の `受注.files/<id>/` に展開してそこで実行します。実行後も `output/` と `logs/` が残ります。
 - 従来の `flows/<id>.json` は、保存先を開いたときにフォルダーへ移します。
 - ファイルは Writer、AI（`write_project_file`）、`spellsheet flow add-file <id> <ファイル> --to input` で追加できます。
 
@@ -46,7 +46,7 @@ flows/<id>/
 
 ```json
 {
-  "format": "shikigami.config",
+  "format": "spellsheet.config",
   "items": [
     { "name": "承認しきい値", "type": "number", "value": 10000, "description": "この金額以上は承認待ち" },
     { "name": "送信先", "type": "text", "value": "keiri@example.co.jp" }

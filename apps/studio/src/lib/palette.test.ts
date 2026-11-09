@@ -1,4 +1,4 @@
-import type { FlowSummary, Step, StepTypeDef } from "@shikigami/schema";
+import type { FlowSummary, Step, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { insertPlace } from "../store";
 import { setLocale, t } from "./i18n";

@@ -1,4 +1,4 @@
-import type { VarDirection, VariableDef, VarType } from "@shikigami/schema";
+import type { VarDirection, VariableDef, VarType } from "@spellsheet/schema";
 import { focus, varFocus } from "../lib/focus";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";

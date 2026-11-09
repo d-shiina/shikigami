@@ -8,11 +8,20 @@
 
 ### 主な変更
 
+- 製品の中に残っていた以前の名前を、すべて SpellSheet に変えました。リポジトリは `d-shiina/spellsheet` になり、更新もここから届きます。以前の版から更新すると、最初の起動で次のものを自動で引き継ぎます
+  - AI ツール（Claude Code・Claude Desktop・Codex・Cursor・Gemini CLI・Copilot CLI・VS Code・Windsurf）に登録した MCP サーバー：名前を `spellsheet` に、コマンドを `spellsheet.exe` に書き換えます。書き換える前のファイルは `<ファイル名>.before-spellsheet` として隣に残します。AI ツールは一度起動し直してください
+  - 無人実行のタスク（`SpellSheet\Worker`）：`spellsheet.exe` で動くように登録し直します（次のサインインから）
+  - Writer の画面の設定（テーマ・言語・最近開いたフロー・AI との会話など）、シークレット、設定ファイル、カスタム ノード
+- Claude Code のプラグインは `/plugin install spellsheet --marketplace d-shiina/spellsheet` で入れ直してください（以前の名前のプラグインは自動では置き換わりません）
+- この版で書き出したフロー（`.spx`）と、Writer で保存した設定ファイルは、0.1.19 以前の SpellSheet では開けません。フローを受け取る PC も更新してください
+
 - 実行が人を待ち始めたとき（ブラウザでのサインイン、エラーでの一時停止、AI からの承認の依頼など）、Writer や Runner が他のウィンドウの後ろにあれば、タスクバーのボタンが点滅し、Windows の通知でも知らせるようになりました。通知を押すと、待っている画面が前に出ます。Runner にも「操作を待っています」が出ます
 - Worker やタスク スケジューラーでの無人実行が人の操作を待ち始めたことを、`policy.json` の `notify` で知らせられるようになりました（`on` に `waiting`）
 
 ### 変更
 
+- 形式の名前を変えました：フローのまとめ `spellsheet.flowBundle`、設定ファイル `spellsheet.config`、AI の答え `spellsheet.answer`、カスタム ノードの `spellsheet-plugin.json`、ファイル名の `.spellsheet.json`、環境変数 `SPELLSHEET_*`、JSON Schema の `$id`（`https://spellsheet.dev/schemas/…`）。以前の名前のものも読めます
+- MCP サーバーの名前を `spellsheet` に、管理サーバーとの通信のヘッダーを `x-spellsheet-*` にしました（以前の Worker からの要求も受け付けます）
 - 実行イベント `humanActionRequired` に `dialog` が加わりました（その手順が自分のダイアログを最前面に出すとき `true`）
 - `policy.json` の `notify[].on` に `waiting` を書けるようになりました
 
@@ -95,7 +104,7 @@
 
 ### 主な変更
 
-- アプリの名前が「SpellSheet」になりました。作る画面は「SpellSheet Writer」、実行画面は「SpellSheet Runner」、無人で動かすしくみは「Worker」です。コマンドは `spellsheet` になりました（今までの `shikigami` もそのまま使えます）
+- アプリの名前が「SpellSheet」になりました。作る画面は「SpellSheet Writer」、実行画面は「SpellSheet Runner」、無人で動かすしくみは「Worker」です。コマンドは `spellsheet` になりました（以前の名前のコマンドもそのまま使えます）
 - フローを `.spx` の 1 ファイルで人や別の PC に「渡す」ことができるようになりました。受け取った `.spx` はダブルクリックすると、取り込む前に中身と「この PC で動かすのに必要なこと」が出ます。パスワードや個人情報の初期値は入りません
 - 課の共有フォルダーを「配布フォルダー」として登録できるようになりました。「配布フォルダーに置く」で公開中の版を置くと、同じフォルダーを登録している人のフロー一覧に新しい版があることが出て、違いを見てから取り込めます
 - フロー図が、灰色の机の上に置いた白い紙 1 枚の見た目になりました。手順書や AI の変更の確認も、同じ白い紙で読めます
@@ -142,10 +151,10 @@
 - Writer を二重に起動しないようにしました。動いている間にもう一度起動すると、2 つ目は開かずに今の Writer が前面に出ます（`--runner` のショートカットなら実行画面が出ます）。今までは 2 つ目が同じワークスペースで開き、AI からのシークレットの依頼・承認・「画面から選ぶ」がどちらにも出たり、同じフローを両方で直して片方の変更が消えたりしました。開発用の `pnpm studio:dev` はこれまでどおりインストール版と並べて動かせます
 - 「変数」の一覧をシークレットと同じ表にしました。名前で検索でき、向き（入力・出力・ローカル）や「実行時に入力」で絞り込め、見出しを押すと並べ替えられます。行にチェックを入れて、まとめて機密にしたり削除したりできます
 - シークレットの画面を作り直しました。一覧は名前・種類・使える先・使っているフロー・更新日の表になり、どのフローがどのシークレットを使っているかが分かります（押すとそのフローが開きます）。編集画面は設定画面と同じ形で、登録済みの値は伏せたまま、入力したときだけ置き換わります。フローの一覧情報（`FlowSummary`）に、ノードが参照するシークレット名 `secrets` が加わりました
-- コマンドを `spellsheet` にしました（`spellsheet run`・`spellsheet mcp` など）。インストール先には今までの `shikigami.exe` も同じものとして入るので、Claude Code などに登録済みの MCP サーバーやバッチファイルはそのまま動きます。Writer の「MCP サーバーの登録」に出るコマンドは `spellsheet.exe` を使います。`agent install` のタスク スケジューラーの名前は `SpellSheet\Agent` になり、古い `Shikigami\Agent` があれば置き換えます
+- コマンドを `spellsheet` にしました（`spellsheet run`・`spellsheet mcp` など）。インストール先には以前の名前のコマンドも同じものとして入るので、Claude Code などに登録済みの MCP サーバーやバッチファイルはそのまま動きます。Writer の「MCP サーバーの登録」に出るコマンドは `spellsheet.exe` を使います。`agent install` のタスク スケジューラーの名前は `SpellSheet\Agent` になり、以前の名前のタスクがあれば置き換えます
 - 作る画面の名前を「SpellSheet Writer」に、実行画面を「SpellSheet Runner」にしました。スタートメニューには「SpellSheet Writer」と「SpellSheet Runner」の 2 つが並びます（Runner は同じアプリの実行画面だけを開く入口で、編集しない人向け）。SpellSheet がもう動いているときにもう一方を開くと、新しく起動せずに動いている SpellSheet の中で開きます。画面・AI への説明・ドキュメントの「Writer」も「Writer」にしました
-- 無人で動くエージェントを「Worker」にしました。コマンドは `spellsheet worker run`・`worker install`・`worker status` など（今までの `agent` もそのまま使えます）。`worker install` のタスク スケジューラーの名前は `SpellSheet\Worker` になり、古い `Shikigami\Agent` があれば置き換えます。`schedule list --json` の `agent` の項目名はそのままです
-- インストールの名前を「SpellSheet Writer」にしました（スタートメニュー・デスクトップのショートカット・「アプリと機能」の名前）。今の「Shikigami Studio」から更新すると、同じフォルダーにそのまま入り、古い名前のショートカットと「アプリと機能」の項目は新しい名前に置き換わります。インストール先が変わらないので、AI クライアントに登録した MCP サーバーとタスク スケジューラーのエージェントはそのまま動きます。新しく入れると `%LOCALAPPDATA%\SpellSheet Writer` に入ります。配布するファイル名は `SpellSheet.Writer_<版>_x64-setup.exe` です。MSI の配布はやめました（自動更新はもともとこのインストーラーで行っています）。MSI で入れた「Shikigami Studio」があると、更新のときにその MSI を先にアンインストールしてからユーザー単位で入れ直します（そのときは `spellsheet worker install` と MCP サーバーの登録をやり直してください）
+- 無人で動くエージェントを「Worker」にしました。コマンドは `spellsheet worker run`・`worker install`・`worker status` など（今までの `agent` もそのまま使えます）。`worker install` のタスク スケジューラーの名前は `SpellSheet\Worker` になり、以前の名前のタスクがあれば置き換えます。`schedule list --json` の `agent` の項目名はそのままです
+- インストールの名前を「SpellSheet Writer」にしました（スタートメニュー・デスクトップのショートカット・「アプリと機能」の名前）。以前の名前の「… Studio」から更新すると、同じフォルダーにそのまま入り、古い名前のショートカットと「アプリと機能」の項目は新しい名前に置き換わります。インストール先が変わらないので、AI クライアントに登録した MCP サーバーとタスク スケジューラーのエージェントはそのまま動きます。新しく入れると `%LOCALAPPDATA%\SpellSheet Writer` に入ります。配布するファイル名は `SpellSheet.Writer_<版>_x64-setup.exe` です。MSI の配布はやめました（自動更新はもともとこのインストーラーで行っています）。MSI で入れた「SpellSheet Studio」があると、更新のときにその MSI を先にアンインストールしてからユーザー単位で入れ直します（そのときは `spellsheet worker install` と MCP サーバーの登録をやり直してください）
 - フロー図のノードを追加するボタンを、どこでも同じ「＋ ノード追加」にしました（今までは線や枠の最後が「＋」だけ、空の枠が「＋ ノード追加」と混ざっていました）。線の上のボタンは線を指したとき、枠の中の最後のボタンはその枠の中を指したときだけ出て、ふだんの図はすっきりします。フローの最後と空の枠のボタンはいつも出ます
 - Writer の右の欄（インスペクター）は、ノードか部品を選んだときだけ開くようにしました。何も選んでいないときは閉じて、フロー図や表に幅を返します。フローの設定（名前・説明・変数・実行の設定）は、タイトルバー右端の「右の欄」ボタンか、開始・終了の札を押すと開き、閉じるまで出したままになります
 - 「変数」の一覧で、初期値・型・向きを表のセルでそのまま直せるようにしました（Enter で確定、Esc で元に戻す）。機密にする・削除は右クリック、変数の追加は表の下から。右の欄が出なくなった分、表が広くなり、ノード名や説明が見切れにくくなりました
@@ -164,7 +173,7 @@
 
 ### 変更
 
-- 設定・データのフォルダーを新しい名前にしました：`%APPDATA%\SpellSheet`（設定・既定のワークスペース）と `%LOCALAPPDATA%\SpellSheet`（拡張機能・ログ・共有ワークスペースの PC ごとの記録）。更新後の最初の起動で古い `Shikigami` のフォルダーを自動で移すので、フロー・実行記録・設定・拡張機能・シークレットはそのまま使えます（古い版が動いていて移せないときは古いフォルダーのまま動き、次の起動で移します）。スケジュールや AI クライアントに書いた古いフォルダーのパスも、移った先を見ます。シークレットの鍵は資格情報マネージャーで「SpellSheet」の名前に写します。環境変数は `SPELLSHEET_HOME`・`SPELLSHEET_PLUGINS` になり、古い `SHIKIGAMI_HOME`・`SHIKIGAMI_PLUGINS` も読みます。自分で作った Edge のプロファイル（`%LOCALAPPDATA%\Shikigami\edge-profile`）も移るので、そのショートカットの `--user-data-dir` は `SpellSheet` に書き換えてください
+- 設定・データのフォルダーを新しい名前にしました：`%APPDATA%\SpellSheet`（設定・既定のワークスペース）と `%LOCALAPPDATA%\SpellSheet`（拡張機能・ログ・共有ワークスペースの PC ごとの記録）。更新後の最初の起動で以前の名前のフォルダーを自動で移すので、フロー・実行記録・設定・拡張機能・シークレットはそのまま使えます（古い版が動いていて移せないときは古いフォルダーのまま動き、次の起動で移します）。スケジュールや AI クライアントに書いた古いフォルダーのパスも、移った先を見ます。シークレットの鍵は資格情報マネージャーで「SpellSheet」の名前に写します。環境変数は `SPELLSHEET_HOME`・`SPELLSHEET_PLUGINS` になり、古い `SPELLSHEET_HOME`・`SPELLSHEET_PLUGINS` も読みます。自分で作った Edge のプロファイル（`%LOCALAPPDATA%\SpellSheet\edge-profile`）も移るので、そのショートカットの `--user-data-dir` は `SpellSheet` に書き換えてください
 - Studio：Windows アプリの「画面から選ぶ」で、何を取るかを枠のすぐそばに書くようにしました。オレンジの枠（ウィンドウ）の角に「Excel ・ タイトルに「請求書」を含む」のように次にどうやってそのウィンドウを探すかを、青い枠（部品）のすぐ下に部品の名前を出します。画面の上の帯はなくし、「クリックで選ぶ ・ Esc でやめる」だけの小さな帯を画面の下に出します（マウスが近づくと上へ逃げます）。最大化したアプリのタイトルやタブを隠さなくなりました。
 - 「画面から選ぶ」でウィンドウのタイトルを使うとき、タイトルの日付や番号を外して探すようにしました（`請求書_2026年11月.xlsx - Excel` なら「請求書」を含む）。来月のファイルでも同じフローで見つかります。外すと別のウィンドウにも当たるときは、今までどおりタイトル全体を使います。
 - Studio：Windows アプリのノードの設定で、ウィンドウを部品と別の行に出し、探し方を「Excel ならどれでも」「タイトルに「請求書」を含む」「「…」だけ」から選べるようにしました（タイトル・照合方法の欄は「詳しく…」に）。同じアプリのウィンドウを別の探し方で使うノード・部品があれば、「探し方をそろえる」でまとめて同じにできます。
@@ -180,7 +189,7 @@
 - Studio：ノードの設定画面をすっきりさせました。最初はそのノードに要る設定と値の入っている設定だけが並び、任意の設定・結果を保存する変数・実行の設定（待ち時間・再試行・エラー時・無効化）・メモは一つの「＋ 設定を追加」から足します。表示名はヘッダーでその場で直せます。設定の説明は欄の下ではなく名前の横の「?」に移し、「基本」「出力」「実行の設定」「変数のつながり」の見出しと、ヘッダーの設定の繰り返しをなくしました。クリックなどの対象は、値の入った項目だけを出し、空の項目は「詳しく指定」に畳みます。
 - Studio：実行ログの行の右に、内部の ID（`stp_…`）ではなくノードの名前を出すようにしました。押すとフロー図のそのノードへ移ります。サブフローの中のノードは「サブフロー名 › ノード名」と出て、押すとサブフローに入ってそのノードを見せます。エラーの行の先頭の英語のエラーコードはなくしました（コードは実行の記録に残ります）。
 - Studio：サブフローの中で失敗して実行が終わったときも、下のパネルのノード名を押すと、呼び出したノードではなくサブフローの中の失敗したノードへ移ります。
-- 実行の終わりのエラー（`RunReport.error`・`runFinished`）に、ノードの名前 `stepLabel`（表示名、なければノードの種類の名前）を入れました。サブフローの中で失敗したときは `details.subFlow.stepLabel` にも入ります。サブフローがさらに呼んだフローの中で失敗したときは、そこへ至った呼び出しノードを `details.subFlow.callPath` に並べます。通知（Teams・Slack）の「ノード」はこの名前で書き、`shikigami run` とテストの出力は `請求書の保存 [stp_013_save]` のように名前と ID を並べます。
+- 実行の終わりのエラー（`RunReport.error`・`runFinished`）に、ノードの名前 `stepLabel`（表示名、なければノードの種類の名前）を入れました。サブフローの中で失敗したときは `details.subFlow.stepLabel` にも入ります。サブフローがさらに呼んだフローの中で失敗したときは、そこへ至った呼び出しノードを `details.subFlow.callPath` に並べます。通知（Teams・Slack）の「ノード」はこの名前で書き、`spellsheet run` とテストの出力は `請求書の保存 [stp_013_save]` のように名前と ID を並べます。
 - Studio：変数の値の線（ノードや値を指したときに出る線）が、ノードの裏を通らず、横の空きとノードの間の隙間を回り込むようになりました。
 - Studio：実行ログを作り直しました。通ったノードを上から順に 1 行ずつ、終わり方（✓・×・実行中）・かかった時間・実行全体のどのあたりで動いたかの帯と一緒に並べます。繰り返し・分岐・グループ・サブフロー呼び出しの中で動いたノードはその下に字下げして並び、繰り返しは「1 件目」「2 件目」…にまとまります。終わったところはたたみ、エラーや警告のあるところ・実行中のところは開いたままです。エラーは失敗したノードのすぐ下に一度だけ出ます。「ログ出力」ノードが書いた行（フローのログ）は吹き出しの印で目立たせ、SpellSheet が書いた行は小さく灰色で出します。上の「すべて／フローのログ／エラーと警告」で絞り込め、右のボタンでログを文字にしてコピーできます。フロー図で選んだノードの行は青く示します。上へスクロールして読んでいる間は最新の行へ飛ばず、「最新へ」で戻れます。
 
@@ -206,7 +215,7 @@
 
 ### 主な変更
 
-- 製品名を **SpellSheet**（式＝spell、紙＝sheet）に変えました。Studio の窓の名前・画面の文言・実行画面「SpellSheet 実行」・タスクトレイ・ダイアログ・エラーの案内・AI に渡す説明・ドキュメントが新しい名前になります。インストール先・スタートメニューの名前・コマンド `shikigami`・設定やデータのフォルダー・自動更新は今まで通りなので、更新しても今の環境はそのまま動きます
+- 製品名を **SpellSheet**（式＝spell、紙＝sheet）に変えました。Studio の窓の名前・画面の文言・実行画面「SpellSheet 実行」・タスクトレイ・ダイアログ・エラーの案内・AI に渡す説明・ドキュメントが新しい名前になります。インストール先・スタートメニューの名前・コマンド・設定やデータのフォルダー・自動更新は今まで通りなので、更新しても今の環境はそのまま動きます
 - 変数やノードの結果の保存先に、`受注番号` や `請求金額` のような日本語の名前を付けられるようになりました
 - フロー図の繰り返しと分岐が読みやすくなりました。判定の場所に黄色の六角形の札（「次の 1 件がある？」など）が付き、「はい」「いいえ」でどこへ進むかが線で分かります。繰り返しの戻り線は本体の終わりから先頭へ戻り、エラー処理の「失敗したとき」へは実行の各ノードから線が飛びます。図の横幅も狭くなりました
 - AI チャットは窓の右上のボタン（または Ctrl+J）で開き、フロー図の外の右端に出るようになりました。最小化・最大化・閉じるも窓の右上の角に付きました
@@ -220,7 +229,7 @@
 
 - Studio：開いているフローのフォルダー（入力・設定・テンプレート・出力）を、エクスプローラーで開けるようにしました。タイトルバーのフロー名の横のボタン、フロー図の何もないところの右クリック、フロー一覧の行の右クリックから開けます。
 - `policy.json` の `desktop.waitUnlockedMinutes`：画面ロック中、マウス・キーボードを使うノードが、ロックが解かれるまでこの分数まで待つようにできます（既定は今まで通りすぐ止まる）。
-- リモートデスクトップ：Studio の「自動実行」の「画面を残して切断」と `shikigami session release` で、ロックしないまま切断できるようにしました。切断後もデスクトップのフローが動き続けます。`shikigami session status` で、画面が使えるか・何分でロックされるかを確かめられます。
+- リモートデスクトップ：Studio の「自動実行」の「画面を残して切断」と `spellsheet session release` で、ロックしないまま切断できるようにしました。切断後もデスクトップのフローが動き続けます。`spellsheet session status` で、画面が使えるか・何分でロックされるかを確かめられます。
 - Studio の「自動実行」：マウス・キーボードを使うフローの予定に、この PC が操作のないまま何分でロックされるか（パスワード付きのスクリーンセーバー、会社のポリシー）と、ロック中はそこで止まることを出すようにしました。
 - MCP：テストケースを書く `save_test_case` と、まとめて流して期待と比べる `run_tests` を追加しました。AI がフローを直すたびに、前の結果が崩れていないかを自分で確かめられます（docs/testing.md）
 - デスクトップ：マウス・キーボードを使うノードがあるフローの実行中は、画面が消えたり PC がスリープしたりしないようにしました。スリープからの復帰でサインインが要り、`DESKTOP_UNAVAILABLE` で止まることがなくなります。パスワード付きのスクリーンセーバーやポリシーによるロックは、会社の安全の設定なので止めません。
@@ -260,12 +269,12 @@
 
 - 文字認識（OCR）の「表の読み取り」（`table: true`）：罫線や文字の並びから表を行と列に分け、`rows`（見出しの名前で引ける各行、例 `{{ invoice.rows[0].金額 }}`）と `cells` を返します。請求書の明細や業務アプリの一覧を表として取り出せます
 - Studio：フロー図の下のパネルに「テスト」タブを追加しました。実行のあとに「この実行をテストケースとして保存」を押すと、その入力と結果を期待する答えとして残せます。「すべて実行」で作業中の内容を流し、期待どおりか、違うならどこがどう違うかを並べて表示します（docs/testing.md）
-- テスト：フローのフォルダーの `tests/<名前>.json` に、入力と期待する終わり方・出力（書いたものだけ比べます）・エラーの種類を書いたテストケースを置き、`shikigami test <フロー> [--case 名前] [--draft] [--json]` でまとめて流せるようにしました。違ったケースは期待した値と実際の値を並べて出し、終了コードは 1 になります。売上 CSV のチュートリアルに見本のケースを付けました（docs/testing.md）
+- テスト：フローのフォルダーの `tests/<名前>.json` に、入力と期待する終わり方・出力（書いたものだけ比べます）・エラーの種類を書いたテストケースを置き、`spellsheet test <フロー> [--case 名前] [--draft] [--json]` でまとめて流せるようにしました。違ったケースは期待した値と実際の値を並べて出し、終了コードは 1 になります。売上 CSV のチュートリアルに見本のケースを付けました（docs/testing.md）
 - デスクトップ：部品の指定に `within`（この部品の中だけを探す）と `after`（この部品の後ろで最初に当たる部品）を追加しました。同じ名前のボタンが並ぶ画面や、名前のない入力欄を、番号（`nth`）に頼らず「送り先のグループの中の検索」「氏名ラベルの後の入力欄」のように指せます。「画面から選ぶ」も、番号の前にこの 2 つで組めないか試します
 - Word：「Word 文字の置換」（`word.replaceText`、書式はそのまま、Word なし）、「Word 表の読み取り」（`word.readTables`、1 行目を見出しにした行の一覧、Word なし）、「Word PDF 出力」（`word.exportPdf`、Word が必要）
 - Studio：一時停止中に、パネルの「この時点の変数」をクリックして値を変えられるようにしました。続行すると以降のノードは変えた値を使います（シークレットと長すぎる値は変更できません）。Runtime の実行の操作に `setVariable`（`name`・`value`）を追加
 - Studio：フローの中の検索（Ctrl+F、フロー図の左上の虫眼鏡）。ノードの名前・種類・内容・メモ・結果の変数・設定値で探し、ブロックの中のノードも見つけます。変数名で探すと、その変数を使うノードが並びます。結果を上下キーで選ぶとフロー図がそのノードへ動きます
-- シークレット：値の保存先に「Windows の資格情報マネージャー」を選べるようにしました。汎用資格情報のアドレスを選ぶと、ユーザー名とパスワードを使うたびにそこから読みます（資格情報マネージャーでパスワードを変えると次の実行から新しいものを使います）。CLI は `shikigami secret set --windows-credential <アドレス>` と `shikigami secret windows-credentials`。シークレットの一覧・入力に `windowsCredential` を追加
+- シークレット：値の保存先に「Windows の資格情報マネージャー」を選べるようにしました。汎用資格情報のアドレスを選ぶと、ユーザー名とパスワードを使うたびにそこから読みます（資格情報マネージャーでパスワードを変えると次の実行から新しいものを使います）。CLI は `spellsheet secret set --windows-credential <アドレス>` と `spellsheet secret windows-credentials`。シークレットの一覧・入力に `windowsCredential` を追加
 
 ### 修正
 
@@ -292,13 +301,13 @@
 
 ### 追加
 
-- 拡張機能：クラウド型 AI-OCR・社内システム・SaaS などのノードを後から追加できるようにしました。Studio のサイドバーの「拡張機能」で、zip ファイル・URL・GitHub のリポジトリから、追加されるノード・外部へ送るデータ・必要なシークレットを確認してインストールでき、有効/無効・更新の確認・アンインストール、JSON の一覧（URL を設定）からの導入もできます。CLI は `shikigami plugin install / update / remove / enable / disable / registry`。拡張機能のノードはパレットに拡張機能ごとに並び、AI にも渡ります。外部へ送るノードは確認パネルの「外への影響」に表示します（[docs/ja/extensions.md](docs/ja/extensions.md)）
+- 拡張機能：クラウド型 AI-OCR・社内システム・SaaS などのノードを後から追加できるようにしました。Studio のサイドバーの「拡張機能」で、zip ファイル・URL・GitHub のリポジトリから、追加されるノード・外部へ送るデータ・必要なシークレットを確認してインストールでき、有効/無効・更新の確認・アンインストール、JSON の一覧（URL を設定）からの導入もできます。CLI は `spellsheet plugin install / update / remove / enable / disable / registry`。拡張機能のノードはパレットに拡張機能ごとに並び、AI にも渡ります。外部へ送るノードは確認パネルの「外への影響」に表示します（[docs/ja/extensions.md](docs/ja/extensions.md)）
 - 見本の拡張機能 `examples/plugins/azure-ocr`（Azure AI Document Intelligence で画像・PDF の文字・表・請求書や領収書の項目を読み取り）
-- 拡張機能のマニフェスト（`shikigami-plugin.json`）に `publisher`・`homepage`・`tag`・`icon`・`credentials`、ノードの `summary`・`external`・`pathParams` を追加（すべて省略可、既存の拡張機能はそのまま動きます）
+- 拡張機能のマニフェスト（`spellsheet-plugin.json`）に `publisher`・`homepage`・`tag`・`icon`・`credentials`、ノードの `summary`・`external`・`pathParams` を追加（すべて省略可、既存の拡張機能はそのまま動きます）
 - AI の答えを貼り付けたときのエラーを、どのノードのどの設定で何が違うかを日本語で、書かれていた内容と一緒に出すようにしました。「AI に返す文面をコピー」の文面には、エラーごとに書かれていた内容と直し方、式のエラーなら式の決まりの抜粋が付きます。式の検証は、ほかの言語の書き方（`===`、`=` での比較、`and` / `or`、Excel の `=SUM(...)` や `&`、`x.trim()`、`a ? b : c` など）を見分けて直し方を返します（MCP の検証結果にも入ります）。文字の欄でそのままでは値が埋め込まれない `${変数}` は警告します
 - Studio：画像で場所を探すデスクトップのノード（マウスクリック・要素の待機・表示の確認・マウスオーバーなど）に「画面から切り取る」を追加しました。画面が暗くなったところで探す画像の範囲をドラッグすると、名前を付けて種類「画像」の部品になり、画像はフローの templates/ に保存されます。部品の画面では、画像の上のクリックで操作する位置、つまみで一致率（既定 90%）を決められ、「撮り直し」で同じ名前のまま画像だけを切り取り直せます。部品の一覧から未使用の部品をまとめて削除できます。保存形式は変わりません（中身は image を持つデスクトップの部品です）。実機（Windows）ではまだ試していません
-- スケジュール：「メールが届いたら」（`mailReceived`）。決まった間隔で Outlook か Microsoft 365 のフォルダーを見て、件名・差出人の条件に合う新しいメール 1 通ごとにフローを始め、そのメール（id・件名・差出人・添付ファイル名）を入力変数に入れます。Studio の「自動実行」と `shikigami schedule add --mail-received` で設定できます。一度に 500 通より多く届いても、見る範囲をさかのぼって全部を扱います
-- スケジュール：祝日・会社の休日の除外（`skipHolidays`）、毎月の第 n 営業日・最終営業日（`businessDay`）、毎月の日が休日なら前・次の営業日に動かす（`onHoliday`）。日本の祝日は内蔵、会社の休日と出勤日はワークスペースの `holidays.json` に書きます。Studio の「自動実行」と `shikigami schedule add`（`--skip-holidays`・`--business-day`・`--on-holiday`）で設定できます
+- スケジュール：「メールが届いたら」（`mailReceived`）。決まった間隔で Outlook か Microsoft 365 のフォルダーを見て、件名・差出人の条件に合う新しいメール 1 通ごとにフローを始め、そのメール（id・件名・差出人・添付ファイル名）を入力変数に入れます。Studio の「自動実行」と `spellsheet schedule add --mail-received` で設定できます。一度に 500 通より多く届いても、見る範囲をさかのぼって全部を扱います
+- スケジュール：祝日・会社の休日の除外（`skipHolidays`）、毎月の第 n 営業日・最終営業日（`businessDay`）、毎月の日が休日なら前・次の営業日に動かす（`onHoliday`）。日本の祝日は内蔵、会社の休日と出勤日はワークスペースの `holidays.json` に書きます。Studio の「自動実行」と `spellsheet schedule add`（`--skip-holidays`・`--business-day`・`--on-holiday`）で設定できます
 - Studio：ブラウザの操作の記録。**記録** で「ブラウザ」と URL を選ぶと、クリック・入力・選択・チェック・キー・URL の移動を書き留め、デスクトップの記録と同じ一覧から「そのままノードにする」「AI に整えてもらう」が使えます。対象は「画面から選ぶ」と同じ作り方で、パスワードは記録しません
 - Studio：ノードを右クリックして「繰り返し（リスト）で囲む」「条件分岐で囲む」「エラー処理で囲む」などを選ぶと、そのノード（Shift+クリックで選んだ続きのノードも）をその場で繰り返し・条件分岐・エラー処理・グループの中に入れます
 - Studio：ノードの右クリックに「ここから実行」と「ここまで実行」。「ここから実行」は前のノードを実行せず、そのノードから最後まで実行します。変数は直前の実行がそのノードに来たときの値で始まり、`work/` も空にしません。グループ・try の中からも始められます（繰り返し・分岐の中からはできません）
@@ -313,7 +322,7 @@
 - デスクトップ：「ウィンドウ状態」（`desktop.setWindow`）で最大化・最小化・元のサイズ・前面に出す・位置と大きさの変更、「チェック状態」（`desktop.check`）でアプリのチェックボックスのチェックを付ける・外す（何度流しても同じ状態）
 - 「プロセス一覧」（`process.list`）と「プロセス終了」（`process.kill`）。固まった業務アプリを落として立ち上げ直せます。`policy.json` の `apps` で終了させてよいプログラムを絞れます
 - ブラウザ：`browser.click` に右クリック（`button: "right"`）・ダブルクリック（`double`）・キーを押しながらのクリック（`modifiers`）。チェックボックスを確実にオン／オフにする「チェック状態」（`browser.check`、すでにその状態なら何もしない）。戻る・進む・再読み込みの「ページ移動」（`browser.navigate`）。`browser.fill` の `typing: true` で 1 文字ずつキーを打つ入力
-- 無人実行（自動実行・`shikigami run`）を含むフロー全体の実行がブラウザ・デスクトップのノードで失敗したとき、そのときのページ・ウィンドウの画面を実行ログの隣（`logs/<時刻>_failed.png`）に保存し、エラーの `details.screenshot` に場所を入れるようにしました。`policy.json` の `records.failureScreenshots: false` で止められます
+- 無人実行（自動実行・`spellsheet run`）を含むフロー全体の実行がブラウザ・デスクトップのノードで失敗したとき、そのときのページ・ウィンドウの画面を実行ログの隣（`logs/<時刻>_failed.png`）に保存し、エラーの `details.screenshot` に場所を入れるようにしました。`policy.json` の `records.failureScreenshots: false` で止められます
 - 「グループ」（`control.group`）に再試行の回数を付けると、中のどれかのノードが失敗したとき、グループの中身を最初からやり直すようにしました（ブラウザを開く→ログイン→画面を開く、をまとめてやり直すときなど）。ほかの制御ノードに書いた `retry` はこれまで黙って無視していたので、検証で警告（`CONTROL_RETRY`）を出します
 - 文字認識（OCR）の各行に信頼度（`confidence`）と、自信のない文字の位置（`unsure`）を付けました。Studio のノードの実行結果では、読んだエンジン・行ごとの信頼度を表示し、信頼度の低い文字に色を付けます
 - OCR エンジンを足す口（`OcrProvider`）。拡張機能のクラウド AI-OCR などを `engine` で選べるようになります
@@ -330,7 +339,7 @@
 - Excel：「シート名の変更」「シートの削除」が、別のブックへの参照（`[他.xlsx]データ!A1`）を自分のシートと取り違えていたのを直しました。シートをまたぐ参照（`1月:3月!A1`）の端のシートは、名前の変更を止めるようにしました。「シートのコピー」で、コピー元のシート自身を指す数式がコピーを指すようにしました
 - 「入力フォーム」で、大文字・小文字だけが違う項目名（`name` と `Name`）を同じ名前として止めるようにしました（答えが上書きされていたため）
 - Studio：「画面から選ぶ」の間、マウスカーソルがとても重くなることがあったのを直しました。マウスの動きを待たせていた監視の待ち方を改め、マウスの下の部品を調べる回数も、マウスが動いたときだけ・アプリの応答の速さに合わせて間引きます
-- Studio：「画面から選ぶ」の監視の中でエラーが起きても Studio ごと落ちないようにし、Studio の内部エラーを `%LOCALAPPDATA%\Shikigami\logs\studio-crash.log` に残すようにしました
+- Studio：「画面から選ぶ」の監視の中でエラーが起きても Studio ごと落ちないようにし、Studio の内部エラーを `%LOCALAPPDATA%\SpellSheet\logs\studio-crash.log` に残すようにしました
 
 ### 変更
 
@@ -358,7 +367,7 @@
 
 ### 追加
 
-- Studio：AI ペインで Claude Code のほかに OpenAI Codex・Gemini CLI・GitHub Copilot を使えるようにしました。設定の「使う AI」（AI を使う準備の枠でも選べます）で切り替え、どれもペインのボタンで導入（Codex・Gemini・Copilot は npm、Node.js が無ければ先に入れます）とサインインができます。どの AI も Shikigami のツールだけを使い、作業の表示・会話の続き・差し戻しの直しは同じように動きます。会話は AI ごとに続きます
+- Studio：AI ペインで Claude Code のほかに OpenAI Codex・Gemini CLI・GitHub Copilot を使えるようにしました。設定の「使う AI」（AI を使う準備の枠でも選べます）で切り替え、どれもペインのボタンで導入（Codex・Gemini・Copilot は npm、Node.js が無ければ先に入れます）とサインインができます。どの AI も SpellSheet のツールだけを使い、作業の表示・会話の続き・差し戻しの直しは同じように動きます。会話は AI ごとに続きます
 - Studio：設定の「MCP サーバーの登録」に、選んでいる AI 用の登録コマンドを表示
 - Studio：フローが 0 件のときの「自分で組む／AI に依頼／見本を開く」の 3 択。ノード検索（Ctrl+K）と右クリックに「AI に依頼」
 - Studio：公開の前に、エラー・未設定・要対応のノードや最後の実行の失敗が残っていれば知らせ、もう一度押すと「このまま公開」
@@ -398,7 +407,7 @@
 
 ### 変更
 
-- Studio：「ノードの単体実行」（Tauri の `test_step`）。前のノードは実行せず、実行の記録（`runs/`）にも残しません。読む変数に値がないときは押せず、理由を表示します。AI の `test_step` と同じ一ノードのフロー（`shikigami_runtime::single`）で動きます
+- Studio：「ノードの単体実行」（Tauri の `test_step`）。前のノードは実行せず、実行の記録（`runs/`）にも残しません。読む変数に値がないときは押せず、理由を表示します。AI の `test_step` と同じ一ノードのフロー（`spellsheet_runtime::single`）で動きます
 - Studio：右ペイン（インスペクター）のノード表示は読むだけになり、設定・出力・実行の設定を「名前：値」で表示します
 - アダプター：結果が表になるノードの列名は `Adapter::table_columns()` が答えます（これまでは excel・file の 2 種類を決め打ち）。プラグインも同じ形で加われます
 - Studio：繰り返しの番号（`control.repeat` の `indexVar`）と `control.try` の `errorVar` を、変数を書き込む設定として扱います（変数の表・フロー図の出力に出ます）
@@ -408,9 +417,9 @@
 - Studio：AI ペインに「AI を使う準備」の枠。「Claude Code を導入する」で公式インストーラーを窓なしで実行し、終わるとそのままサインインに進みます（`config.json` で `agent.command` を指定しているときは出しません）
 - Studio：プロジェクトのファイルを、ノードのファイルの設定欄（ノードの画面）へドラッグして入れられます。ノードの画面の左にも「このフローのファイル」を並べました。エクスプローラーからのドロップも同じで、フローのフォルダーの外のファイルは取り込んでから入れます（フォルダーの設定にはファイルのあるフォルダーが入ります）
 - Studio：ファイルをフロー図にドロップすると、そのファイルを読むノードを作ります（Excel → 表を行ごとに読む、CSV → CSV を読む、PDF・Word・テキスト → 文字を読む、templates/ の .docx → ひな形に差し込む、config/ の .json → 設定ファイルを読む）。ノードの上なら直後に、空のブロックならその中に、何もない所なら最後に置きます
-- シークレットに種類（ログイン・API キー・OAuth アプリ）を追加。Studio の登録フォームは種類ごとに入力欄の名前（API キー、クライアント ID・クライアント シークレット）と使う欄だけを表示し、一覧に種類の印を付けます。保存場所とフローでの書き方（`{ "secret", "field" }`）は変わりません。CLI は `shikigami secret set --kind api-key|oauth`、AI は `request_secret` の `kind`、`list_secrets` に `kind`（docs/secrets.md）
+- シークレットに種類（ログイン・API キー・OAuth アプリ）を追加。Studio の登録フォームは種類ごとに入力欄の名前（API キー、クライアント ID・クライアント シークレット）と使う欄だけを表示し、一覧に種類の印を付けます。保存場所とフローでの書き方（`{ "secret", "field" }`）は変わりません。CLI は `spellsheet secret set --kind api-key|oauth`、AI は `request_secret` の `kind`、`list_secrets` に `kind`（docs/secrets.md）
 - Studio：OAuth アプリのシークレットに、アクセストークンの有効期限・最後に取得した日時・自動で更新されるかを表示
-- 実行の記録（`report.json` の `secretsUsed`）と `shikigami audit`（`secrets`）に、その実行が使ったシークレットの名前を残します（値は残しません）
+- 実行の記録（`report.json` の `secretsUsed`）と `spellsheet audit`（`secrets`）に、その実行が使ったシークレットの名前を残します（値は残しません）
 
 ### 修正
 
@@ -423,7 +432,7 @@
 - AI を使わずに手でフローを組むのが楽になりました。ノードをダブルクリックすると設定が画面いっぱいに開き、左の「使える値」（繰り返し中の行の列や、ほかの変数）をクリックするだけで入力欄に入ります。右の「このノードだけ試す」で、そのノードまで実行して結果をその場で確かめられます
 - 繰り返しの「リスト」は、前のノードの結果（「rows（CSV を読むの結果）」など）から選ぶだけになりました。文字の設定欄には「変数」ボタンが付き、CSV・Excel の列名も実行する前から候補に出ます
 - ノードの設定は必要な行だけを表示し、「＋ 設定を追加」で 1 行ずつ足せます。設定ファイルの画面は表になり、打てば保存されます
-- 「画面から選ぶ」が、フローを実行していなくても使えるようになりました。上の「ページを開く」のアドレスを Shikigami がブラウザで開き、そこで部品をクリックします
+- 「画面から選ぶ」が、フローを実行していなくても使えるようになりました。上の「ページを開く」のアドレスを SpellSheet がブラウザで開き、そこで部品をクリックします
 - 検証の指摘は「「CSV を読む」の「ファイル」が入っていません」のように、設定の名前とノードの名前で表示します。ファイルの設定には「参照…」が付き、結果を入れる変数の名前は自動で付きます
 
 ### 追加
@@ -431,7 +440,7 @@
 - Studio：ノードをダブルクリック（または右ペインの「開く」）で開くノードの画面。左「使える値」、中央「設定」、右「試した結果」（「このノードだけ試す」は前のノードから順に実行し、このノードの直後で止めます）。右ペインは要約と「開く」だけに
 - Studio：文字の設定欄の「変数」ボタンと、式の欄の候補に、繰り返し中の行の列（`excel.readRows`・`file.readCsv` の見出しをファイルから読む）を表示。繰り返しの「リスト」は上にあるノードの結果から選択（式で書く道も残ります）
 - Studio：設定は必須と値のあるものだけを表示し、「＋ 設定を追加」で足す（実行の設定も同じ）。設定ファイルの画面は 1 行 = 名前｜値｜種類の表で自動保存、作ると「設定ファイルを読む」をフローの先頭に置きます
-- Studio：「画面から選ぶ」「光らせる」は、実行していないときはそのノードより上の一番近い「ページを開く」のアドレスを Shikigami 自身のブラウザで開いて使えます。開いたブラウザは次に選ぶときまで残ります。上に「ページを開く」がない・アドレスが変数のときは理由を表示（docs/browser.md）
+- Studio：「画面から選ぶ」「光らせる」は、実行していないときはそのノードより上の一番近い「ページを開く」のアドレスを SpellSheet 自身のブラウザで開いて使えます。開いたブラウザは次に選ぶときまで残ります。上に「ページを開く」がない・アドレスが変数のときは理由を表示（docs/browser.md）
 - Studio：ファイルの設定に「参照…」（フローのフォルダーの外のファイルは取り込みます。フォルダーの設定はフォルダーを選びます）。結果を返すノードには結果の変数名（rows・text・response など）が自動で付き、新しい繰り返しは直前のノードの結果を回します
 
 ### 変更
@@ -442,13 +451,13 @@
 
 ### 主な変更
 
-- Microsoft Copilot など、Shikigami に直接つながらない AI でもフローを作れるようになりました。Studio の「AI の答えを貼り付け」から AI 向けの説明を保存して AI に渡し、返ってきた答えを貼り付けると、内容を確かめてフローに取り込みます
+- Microsoft Copilot など、SpellSheet に直接つながらない AI でもフローを作れるようになりました。Studio の「AI の答えを貼り付け」から AI 向けの説明を保存して AI に渡し、返ってきた答えを貼り付けると、内容を確かめてフローに取り込みます
 - 画面から部品を選ぶ・ログイン情報を登録するなど、人の手直しが必要なところは「要手直し」として一覧とフロー図に表示されます
 - ノードの設定欄・選択肢・エラーの文を、プログラムの名前ではなく分かる言葉で表示するようにしました（例：「上書きする」「文字コード」）
 
 ### 追加
 
-- MCP を使えない AI（Microsoft Copilot など）でフローを作る：`shikigami ai-guide`（Studio の「AI の答えを貼り付け」›「仕様書を保存」）が AI に読ませる指示（8,000 文字未満）と詳細（全ノード・関数）を書き出し、AI の答え（`{ "format": "shikigami.answer", "summary", "checks", "flow" }`、前後の文章つきでも可）を Studio に貼り付けると検証して取り込みます。人の手直し（部品を画面から選ぶ・ログイン情報の登録・入力ファイル）は一覧とフロー図の「要手直し」で、AI の誤りは AI に返す文面のコピーで示します。取り込みは「AI（貼り付け）」の変更として確認待ちに入ります（docs/ai-chat.md）
+- MCP を使えない AI（Microsoft Copilot など）でフローを作る：`spellsheet ai-guide`（Studio の「AI の答えを貼り付け」›「仕様書を保存」）が AI に読ませる指示（8,000 文字未満）と詳細（全ノード・関数）を書き出し、AI の答え（`{ "format": "spellsheet.answer", "summary", "checks", "flow" }`、前後の文章つきでも可）を Studio に貼り付けると検証して取り込みます。人の手直し（部品を画面から選ぶ・ログイン情報の登録・入力ファイル）は一覧とフロー図の「要手直し」で、AI の誤りは AI に返す文面のコピーで示します。取り込みは「AI（貼り付け）」の変更として確認待ちに入ります（docs/ai-chat.md）
 - フロー形式：部品（`parts`）の `target` を省けるようにしました。省いた部品は人が画面から選ぶまで、それを使うノードが `PART_NOT_PICKED` で検証を通りません。変更履歴の `actor.kind` に `chat`（AI の答えの貼り付け）を追加
 
 ### 変更
@@ -470,7 +479,7 @@
 
 ### 主な変更
 
-- 現場の人向けの実行画面「Shikigami 実行」：公開されたフローを選び、入力欄に記入して実行できます。ファイルの選択・カレンダー・選択肢の入力欄、タスクトレイのアイコンにも対応しました
+- 現場の人向けの実行画面「SpellSheet 実行」：公開されたフローを選び、入力欄に記入して実行できます。ファイルの選択・カレンダー・選択肢の入力欄、タスクトレイのアイコンにも対応しました
 - 「自動実行」：毎日・曜日・毎月などの決まった時刻にフローを実行するスケジュールを、Studio の画面で設定できます。失敗したときに Teams・Slack へ知らせることもできます（この通知の設定は、今は設定ファイルに書きます）
 - 値によって処理を分ける「値で分岐」ノードを追加しました（VBA の Select Case と同じ考え方です）
 - 停止ボタンで実行を確実に中止できるようになりました
@@ -483,12 +492,12 @@
 - 値で分岐（VBA の Select Case）：`control.switch`（`value` / `cases` / `default`）と `control.case`（`values` か `condition`）。上から最初に当たったケースだけを実行し、どれにも当たらなければ `default`。検証コード `NOT_A_CASE` / `CASE_OUTSIDE_SWITCH`。フローの形式は変わりません。Studio ではケースごとの枝と「ケースを追加」を表示
 - ブラウザの「画面から選ぶ」と `ask_user_to_pick` で、iframe の中の部品も指せるようになりました。指した部品は `target.frame` 付きで返ります（フレームの中のフレーム、別のサイトの iframe も）。「光らせる」も iframe の中の部品に効きます。`target.frame` は 4 段まで書けます（これまでは 2 段）
 - Studio に「自動実行」：エージェントの状態（実行中のフロー）と「エージェントを開始」・停止、スケジュールの一覧・追加・編集・有効と無効（次と前回の時刻つき、公開版がないものは警告）。フローのインスペクターに「スケジュール」の節
-- Studio：現場の人が使う実行画面「Shikigami 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
-- 実行画面の入力欄：変数に任意の印 `format`（`file`・`folder`・`date`・`month`）と `choices`（選択肢）を書くと、実行画面がファイル・フォルダーを選択する「参照…」、カレンダー、選択肢の一覧を出します。検査のエラー `INVALID_VARIABLE_FORMAT` / `INVALID_VARIABLE_CHOICES`。フロー形式 `schemaVersion` 6（古いファイルはそのまま読めます。6 のファイルは 0.1.3 までの Shikigami では開けません）（docs/runner.md）
+- Studio：現場の人が使う実行画面「SpellSheet 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
+- 実行画面の入力欄：変数に任意の印 `format`（`file`・`folder`・`date`・`month`）と `choices`（選択肢）を書くと、実行画面がファイル・フォルダーを選択する「参照…」、カレンダー、選択肢の一覧を出します。検査のエラー `INVALID_VARIABLE_FORMAT` / `INVALID_VARIABLE_CHOICES`。フロー形式 `schemaVersion` 6（古いファイルはそのまま読めます。6 のファイルは 0.1.3 までの SpellSheet では開けません）（docs/runner.md）
 - タスクトレイのアイコン：クリックで実行画面、右クリックで「実行画面を開く」「Studio を開く」「終了」。`--runner` で起動すると実行画面を閉じてもトレイに残り、`--tray` でトレイだけで起動します（docs/runner.md）
-- 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
-- 管理サーバー（プロトコル v1、docs/remote.md）：`shikigami agent enroll <URL> <コード>` で PC を一度だけ使える登録コードで登録（鍵の組は PC で作り、秘密鍵は資格情報マネージャー）。`policy.json` の `remote` で許したフローの公開版だけを、手が空いたエージェントが自分から取りに行き、イベントとレポートを返す。サーバーでの取り消し、断ったジョブ（`REMOTE_NOT_ALLOWED` / `NOT_PUBLISHED` / `VERSION_MISMATCH`）、`shikigami agent unenroll`、`agent status` にサーバーとの接続。参考実装のサーバー `shikigami manager serve`（登録コード・ワーカー・ジョブの管理用 API）
-- 監査の記録 `shikigami audit`：変更・公開・AI（MCP）の操作・実行を、誰がどこからしたかつきで 1 つの一覧に（`--since` / `--until` / `--flow` / `--json`）。`records.keepDays` は MCP の呼び出しの記録も期限で削除します（docs/audit.md）
+- 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `spellsheet run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
+- 管理サーバー（プロトコル v1、docs/remote.md）：`spellsheet agent enroll <URL> <コード>` で PC を一度だけ使える登録コードで登録（鍵の組は PC で作り、秘密鍵は資格情報マネージャー）。`policy.json` の `remote` で許したフローの公開版だけを、手が空いたエージェントが自分から取りに行き、イベントとレポートを返す。サーバーでの取り消し、断ったジョブ（`REMOTE_NOT_ALLOWED` / `NOT_PUBLISHED` / `VERSION_MISMATCH`）、`spellsheet agent unenroll`、`agent status` にサーバーとの接続。参考実装のサーバー `spellsheet manager serve`（登録コード・ワーカー・ジョブの管理用 API）
+- 監査の記録 `spellsheet audit`：変更・公開・AI（MCP）の操作・実行を、誰がどこからしたかつきで 1 つの一覧に（`--since` / `--until` / `--flow` / `--json`）。`records.keepDays` は MCP の呼び出しの記録も期限で削除します（docs/audit.md）
 
 ### 変更
 
@@ -502,18 +511,18 @@
 
 ### 変更（呼び名：シナリオ → フロー）
 
-- 「シナリオ」を「フロー / Flow」に改名しました（サブシナリオは「サブフロー / Subflow」）。Studio・ドキュメント・MCP・CLI・保存形式のすべてが対象です。製品名 Shikigami は変わりません
+- 「シナリオ」を「フロー / Flow」に改名しました（サブシナリオは「サブフロー / Subflow」）。Studio・ドキュメント・MCP・CLI・保存形式のすべてが対象です。製品名 SpellSheet は変わりません
 - 保存先：`scenarios/<id>/scenario.json` は `flows/<id>/flow.json` になりました。古いワークスペースは開いたときに自動で移します（ごみ箱の中も）
 - フロー形式 `schemaVersion` 5：呼び出しノード `scenario.call { scenario }` は `flow.call { flow }` になりました。古いファイル・版・バンドルは読み込み時に自動で書き換えます
-- バンドルの `format` は `shikigami.flowBundle`、中身は `flow` / `subflows` です。0.1.2 までの `shikigami.scenarioBundle` も読めます
+- バンドルの `format` は `spellsheet.flowBundle`、中身は `flow` / `subflows` です。0.1.2 までの `spellsheet.scenarioBundle` も読めます
 - MCP ツール：`list_flows` / `get_flow` / `validate_flow` / `export_flow` / `create_flow` / `update_flow` / `delete_flow` / `import_flow` / `extract_subflow` / `run_flow` / `stop_flow`、引数は `flowId`。旧名（`create_scenario` など）と `scenarioId` も当面は受け付けます（一覧には出しません）
-- CLI：`shikigami flow …`（`shikigami scenario …` も当面は動きます）
+- CLI：`spellsheet flow …`（`spellsheet scenario …` も当面は動きます）
 - policy.json：`flows`、`ai.runFlow` / `ai.deleteFlow`（旧名 `scenarios` / `runScenario` / `deleteScenario` も読めます）
 - **互換性のない変更**：出力側の名前は新しい名前だけになります。エラーコード `SCENARIO_*` は `FLOW_*`（`SUBSCENARIO_NOT_PUBLISHED` は `SUBFLOW_NOT_PUBLISHED`）、`run --json` と MCP の結果の `scenarioId` / `scenarioName` / `scenario` は `flowId` / `flowName` / `flow` です
 
 ### 追加
 
-- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のフロー（`examples/tutorials/*.shikigami.json`、「ファイルから読み込む」で開ける）付き
+- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のフロー（`examples/tutorials/*.spellsheet.json`、「ファイルから読み込む」で開ける）付き
 - Studio のフローの画面の下に「見本」：チュートリアルの手順のページを開く、完成形のフローを見本のファイルごと開く
 - SAP GUI for Windows：SAP GUI Scripting が有効なら、同じ `desktop.*` のノードがスクリプトの仕組みを通して動きます（`inspect_ui` は SAP の部品 id と役割を一覧に、クリック・入力・読み取り・コンボボックス・ファンクションキー・メニューバー・`desktop.getTable` でテーブルコントロールと ALV グリッドの全行）。新しいノード `sap.runTransaction`（トランザクションを開き、ステータスバーを返す）。無効なときに SAP の部品 id を書くと `SAP_SCRIPTING_OFF`（有効にする手順つき）。実際の SAP ではまだ確認していません（docs/desktop.md「SAP GUI」）
 - Java アプリ（Swing・AWT）：Java Access Bridge（`jabswitch -enable`）が有効なら、同じ `desktop.*` のノードがそれを通して動きます（`inspect_ui` は役割と名前で一覧に、クリック・入力・読み取り・一覧の選択・メニューバー・`desktop.getTable` で `JTable`）。無効なときは `JAVA_BRIDGE_OFF`（有効にする手順つき）（docs/desktop.md「Java アプリ」）
@@ -522,7 +531,7 @@
 - メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
 - Excel 本体での操作：この PC の Excel でブックを開いているときは、`excel.*` の読み書きがファイルではなく開いているブックに働きます（画面の内容を読み、書いたら保存、Excel は閉じない）。`excel.recalculate`（数式を計算し直して保存）、`excel.sort`（見出しの列で並べ替え）、`excel.exportPdf`（ブックかシートを PDF に）を追加。どれもデスクトップ版 Excel が要り、ブックが開いていなければ見えない別の Excel を使います（docs/office.md）
 - Excel の書式・フィルター・ピボット：`excel.format`（太字・色・塗りつぶし・表示形式・配置・罫線・列幅）、`excel.filter`（見出しの列と値で絞り込み、`clear: true` で解除）、`excel.pivot`（見出しでまとめて合計・件数などを新しいシートに）を追加。どれもデスクトップ版 Excel が要り、開いているブックがあればそれを使います（docs/office.md）
-- スケジュールとエージェント：`shikigami agent install` で PC ごとのエージェントがサインイン時に起動し、`schedules.json` のスケジュール（毎日・曜日・毎月・n 分ごと・1 回）と、フォルダーにファイルが置かれたときに公開版を実行します。`shikigami agent status / stop / run / uninstall`、`shikigami schedule list / add / remove / enable / disable`（docs/schedules.md）
+- スケジュールとエージェント：`spellsheet agent install` で PC ごとのエージェントがサインイン時に起動し、`schedules.json` のスケジュール（毎日・曜日・毎月・n 分ごと・1 回）と、フォルダーにファイルが置かれたときに公開版を実行します。`spellsheet agent status / stop / run / uninstall`、`spellsheet schedule list / add / remove / enable / disable`（docs/schedules.md）
 
 ### 変更
 
@@ -539,7 +548,7 @@
 - PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンク、ほかのページだけが描く画像（共有の画像一覧に入っているもの）は引き継ぎません（docs/pdf.md）
 - Studio のノードパレット：入力か出力を持つフローを「サブフロー」の分類にノードとして並べます。名前で探して選ぶと、そのフローの呼び出し（`scenario.call`）が足されます。開いているフロー自身と、入力も出力もないフローは並べません
 - `list_scenarios` の各行に `inputs` / `outputs`（入力・出力の変数名。どちらもなければ省略）を足しました。呼び出せる形が一覧で分かります
-- MCP ツール `ask_user_to_pick`：どのボタンかわからない（行ごとの「編集」、名前のないアイコンなど）とき、AI は推測せず人に指してもらいます。ブラウザに AI の言葉の帯が出て、迷っている候補には番号付きの枠が付き、人がクリックした部品を（ページには押させずに）`target` で受け取ります。同じ部品が並ぶときは `nth` と表の行の文字 `row` も返します。Studio にも「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れます。ブラウザアダプターに `pick` / `highlight` / `cancelPick`（`shikigami-browser` の inspect の `action`）、Studio が人の手で対象を選ぶときにも使えます
+- MCP ツール `ask_user_to_pick`：どのボタンかわからない（行ごとの「編集」、名前のないアイコンなど）とき、AI は推測せず人に指してもらいます。ブラウザに AI の言葉の帯が出て、迷っている候補には番号付きの枠が付き、人がクリックした部品を（ページには押させずに）`target` で受け取ります。同じ部品が並ぶときは `nth` と表の行の文字 `row` も返します。Studio にも「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れます。ブラウザアダプターに `pick` / `highlight` / `cancelPick`（`spellsheet-browser` の inspect の `action`）、Studio が人の手で対象を選ぶときにも使えます
 - Studio のブラウザのノードでも「画面から選ぶ」「光らせる」が使えます（実行中・止めているときに、そのブラウザで選ぶ）
 - `test_step` は browser ノードを動かす前に、対象をブラウザ上で少しのあいだ枠で光らせます（「ここを押します」）
 - `inspect_page` の `image: true`：スクリーンショットを AI にも渡します（ツリーだけでは見分けにくいページ向け）
@@ -582,8 +591,8 @@
 - MCP の編集ツールに `checks`（AI の仮定など、人にしか決められないことを 1 問ずつ）。ジャーナル（`HistoryEntry.checks`）に残り、`get_history` / `get_review` で読めます。Studio は「よい／違う…」で聞き、「違う…」は差し戻しのフォームを開きます
 - シナリオをプロジェクト（フォルダー）として保存：`scenarios/<id>/scenario.json` の隣に `input/`・`config/`・`templates/`・`output/`・`work/`・`logs/` を置き、入力の Excel・設定ファイル・出力のひな形をシナリオと一緒に持てます。ステップのファイルの項目（ステップ型の `pathParams`）に書いた相対パスは、そのシナリオのフォルダーから解決します（サブシナリオは自分のフォルダーから）。従来の `scenarios/<id>.json` は保存先を開いたときにフォルダーへ移します（docs/files.md）
 - 実行のたびに `work/` を空にし（`settings.keepWork` で残せる）、人が読む実行ログを `logs/<日時>_<結果>.log` に書きます（新しい 100 件を残す）
-- 設定ファイルの形式 `{"format":"shikigami.config","items":[…]}` と、それを `{名前: 値}` で読む `config.read`
-- MCP ツール `list_project_files` / `read_project_file` / `write_project_file` / `delete_project_file`、`test_step` の `scenarioId`、CLI の `shikigami scenario files` / `scenario add-file`
+- 設定ファイルの形式 `{"format":"spellsheet.config","items":[…]}` と、それを `{名前: 値}` で読む `config.read`
+- MCP ツール `list_project_files` / `read_project_file` / `write_project_file` / `delete_project_file`、`test_step` の `scenarioId`、CLI の `spellsheet scenario files` / `scenario add-file`
 - Studio：フロー図の左に浮かぶ「プロジェクト」の棚。入力・設定・テンプレート・出力をロゴの 4 色で分け、どのノードが使っているか、Excel で開いたままか（`ProjectFile.inUse`）を出します。エクスプローラーからのドロップで追加（棚の上ならその棚、ほかは名前で振り分け）。設定ファイルはフォームで作って編集し、項目ごとに使っているノードを出します。テキストと実行ログもその場で開けます。ノードのファイルの項目は棚と同じ色で表示します
 - バンドルとシナリオの複製に、プロジェクトのファイル（`output/`・`work/`・`logs/` を除く）を含めます
 - 画像認識と OCR：部品が見えない画面（Citrix・リモートデスクトップ・独自描画）でも、`desktop.mouseClick` / `desktop.type` / `desktop.waitFor` / `desktop.isVisible` の `target` に `image`（PNG を画面から探す）か `ocr`（文字を OCR で探す）を書けます。`offset` で見つけた場所からずらし、`region` で探す範囲を絞り、複数見つかれば `nth` で選びます。新しいノード `desktop.readText`（ウィンドウ・部品・範囲・画像ファイルの文字を位置つきで OCR）と `desktop.screenshot`（PNG で保存。探す画像の切り出しにも使う）。OCR は PaddleOCR（PP-OCRv6 small、ONNX Runtime、オフラインで日本語・中国語・英語）が既定でインストーラに同梱（`pnpm studio:bundle-ocr`）、入っていなければ Windows OCR（`desktop.readText` の `engine` で使ったほうを返し、Windows OCR に落ちたときは `warning`。開発版は `pnpm studio:dev` が PaddleOCR を自動で用意）。PaddleOCR はラテン文字とそっくりな別の文字（`ı`・ギリシャ文字・キリル文字）を選ばない（「AI」が「Aı」にならない）。縦書きの行も上から読む。`accurate: true`（Studio の「高精度」）で手書きに強い大きいモデル（PP-OCRv6 medium、インストーラに同梱、数倍遅い）で読む。MCP の `inspect_ui` に `ocr`（文字と位置）と `image`（ウィンドウの絵を AI に返す）、ウィンドウの絵を観察に残す。Studio のノードにデスクトップの対象を言葉で表示（docs/desktop.md）
@@ -596,20 +605,20 @@
 - ライセンスを Apache License 2.0 にしました（`LICENSE`・`NOTICE`）。貢献のしかた（DCO）は `CONTRIBUTING.md`、脆弱性の報告先は `SECURITY.md`
 - シナリオの `requires`：使っているプラグインと版の範囲（`{ "plugin:kintone": "^0.3.1" }`）。Core がステップに合わせて自動で更新します。入っていないプラグインは `PLUGIN_NOT_INSTALLED`、範囲外の版は `PLUGIN_VERSION_MISMATCH` で実行前に止まります。範囲は `update_scenario` の `patch.requires` で変えられます
 - ステップ型の非推奨の印（`deprecated`、プラグインのマニフェストは `steps[].deprecated`）。使うと検証で `DEPRECATED_STEP_TYPE` の警告と代わりの型が出ます
-- `list_step_types` / `get_step_schema` / `shikigami step-types --json` の各型に `plugin`（提供元のプラグインと版）
+- `list_step_types` / `get_step_schema` / `spellsheet step-types --json` の各型に `plugin`（提供元のプラグインと版）
 - 互換性の方針 `docs/compatibility.md` と、MCP ツール・組込ステップ型・CLI の契約のスナップショット（`schemas/contract/`）
-- 公開版：`shikigami version publish <id> [番号]` / `version unpublish <id>`、Studio のレビュー台の「承認して公開」と版タブの「公開」。記録は `versions/<id>/publish.jsonl`。`version list` は公開中の版に `published` を付けます。MCP の `run_scenario` に `published: true`、`get_scenario` / `list_versions` に `published`
-- ワークスペースの `policy.json`：許可するサイト（`sites`：`browser.open`・`oauth.signIn`・`http.request`）・プログラム（`apps`：`desktop.launch`・`process.run`）と、AI の `run_scenario` / `test_step` / `delete_scenario` を危険度ごとに `allow` / `ask` / `deny`。外れたステップは `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`、壊れた設定は `POLICY_INVALID` で止まります。CLI の `shikigami policy show|check|init`、MCP の `get_policy`、Studio の「許可と承認」。詳しくは `docs/policy.md`
-- AI の操作の承認：`ask` の操作は `APPROVAL_REQUIRED`（`details.approvalId`）を返し、人が Studio か `shikigami approval approve <id>` で許可した同じ内容だけが 1 回動きます。`delete_scenario` / `run_scenario` / `test_step` に `approvalId` / `approvalWaitMs` / `approvalReason`
+- 公開版：`spellsheet version publish <id> [番号]` / `version unpublish <id>`、Studio のレビュー台の「承認して公開」と版タブの「公開」。記録は `versions/<id>/publish.jsonl`。`version list` は公開中の版に `published` を付けます。MCP の `run_scenario` に `published: true`、`get_scenario` / `list_versions` に `published`
+- ワークスペースの `policy.json`：許可するサイト（`sites`：`browser.open`・`oauth.signIn`・`http.request`）・プログラム（`apps`：`desktop.launch`・`process.run`）と、AI の `run_scenario` / `test_step` / `delete_scenario` を危険度ごとに `allow` / `ask` / `deny`。外れたステップは `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`、壊れた設定は `POLICY_INVALID` で止まります。CLI の `spellsheet policy show|check|init`、MCP の `get_policy`、Studio の「許可と承認」。詳しくは `docs/policy.md`
+- AI の操作の承認：`ask` の操作は `APPROVAL_REQUIRED`（`details.approvalId`）を返し、人が Studio か `spellsheet approval approve <id>` で許可した同じ内容だけが 1 回動きます。`delete_scenario` / `run_scenario` / `test_step` に `approvalId` / `approvalWaitMs` / `approvalReason`
 - プラグインのマニフェストの `steps[].targets`：サイト・プログラムを指す param を宣言すると、組込と同じ `policy.json` の検査を受けます
 - 組込ステップ型 `pdf.readText`（PDF の文字を読む。パスワードはシークレットで渡せる）
 
 ### 変更
 
-- **`shikigami run <シナリオID>` は公開版だけを動かすようになりました。** 公開版がなければ `NOT_PUBLISHED`（終了コード 2）で止まります。今までどおり作業中の内容を動かすには `--draft` を付けるか、`shikigami version publish <id>` で公開してください。ファイルを指定した `run` は変わりません
-- シナリオのファイル形式を `schemaVersion` 3 にしました（`settings.keepWork` の追加。2 のファイルはそのまま読めます）。ファイルを含むバンドルは形式の版 2 で書き出し、**この版より古い Shikigami では読み込めません**（ファイルのないバンドルは従来どおり 1）
+- **`spellsheet run <シナリオID>` は公開版だけを動かすようになりました。** 公開版がなければ `NOT_PUBLISHED`（終了コード 2）で止まります。今までどおり作業中の内容を動かすには `--draft` を付けるか、`spellsheet version publish <id>` で公開してください。ファイルを指定した `run` は変わりません
+- シナリオのファイル形式を `schemaVersion` 3 にしました（`settings.keepWork` の追加。2 のファイルはそのまま読めます）。ファイルを含むバンドルは形式の版 2 で書き出し、**この版より古い SpellSheet では読み込めません**（ファイルのないバンドルは従来どおり 1）
 - 検証の `RELATIVE_PATH` をなくし、プロジェクトのフォルダーの外（`..`）を指すパスに `PATH_OUTSIDE_PROJECT` の警告を出すようにしました
-- `dialog.message` / `dialog.input` のダイアログを Studio と同じ見た目に（白地と濃紺の文字、Windows のアプリがダークならダーク、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。`dialog.selectFile` のフォルダー選択はエクスプローラーの画面に。Studio なしの `shikigami run` でも同じに出ます。ノードの指定と結果は変わりません
-- シナリオのファイル形式を `schemaVersion` 2 にしました（`requires` の追加）。1 のファイルはそのまま読めて、次に保存したときに 2 になります。**2 で保存したファイルは、この版より古い Shikigami では開けません**
+- `dialog.message` / `dialog.input` のダイアログを Studio と同じ見た目に（白地と濃紺の文字、Windows のアプリがダークならダーク、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。`dialog.selectFile` のフォルダー選択はエクスプローラーの画面に。Studio なしの `spellsheet run` でも同じに出ます。ノードの指定と結果は変わりません
+- シナリオのファイル形式を `schemaVersion` 2 にしました（`requires` の追加）。1 のファイルはそのまま読めて、次に保存したときに 2 になります。**2 で保存したファイルは、この版より古い SpellSheet では開けません**
 - プラグインのマニフェストの `version` は semver（`0.1.0` の形）が必須になりました
 - 名前付きの版とバンドルの中のシナリオも、ファイルと同じ移行を通るようにしました

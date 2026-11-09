@@ -1,6 +1,6 @@
 // The settings form of a node: one field per param of its definition, the
 // screen target fields (with 画面から選ぶ / 光らせる), secrets and lists.
-import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
 import { Boxes, Crosshair, Image as ImageIcon, ScanSearch } from "lucide-react";

@@ -40,16 +40,16 @@ export const MCP_CLIENTS: { kind: McpClient; name: string }[] = [
 export function mcpCommand(kind: McpClient, cliPath: string): string {
   switch (kind) {
     case "codex":
-      return `codex mcp add shikigami -- "${cliPath}" mcp`;
+      return `codex mcp add spellsheet -- "${cliPath}" mcp`;
     case "gemini":
-      return `gemini mcp add --scope user shikigami "${cliPath}" mcp`;
+      return `gemini mcp add --scope user spellsheet "${cliPath}" mcp`;
     case "copilot":
-      return `copilot mcp add shikigami -- "${cliPath}" mcp`;
+      return `copilot mcp add spellsheet -- "${cliPath}" mcp`;
     case "cursor":
       // What goes in ~/.cursor/mcp.json when the "add" link cannot be used.
-      return JSON.stringify({ mcpServers: { shikigami: { command: cliPath, args: ["mcp"] } } }, null, 2);
+      return JSON.stringify({ mcpServers: { spellsheet: { command: cliPath, args: ["mcp"] } } }, null, 2);
     default:
-      return `claude mcp add --scope user shikigami -- "${cliPath}" mcp`;
+      return `claude mcp add --scope user spellsheet -- "${cliPath}" mcp`;
   }
 }
 
@@ -61,7 +61,7 @@ export function McpSetupRow() {
   useEffect(start, []);
   const info = useApp((s) => s.info);
   const agentInfo = useAgent((s) => s.info);
-  // A `command` agent registers Shikigami its own way; start on Claude Code's.
+  // A `command` agent registers SpellSheet its own way; start on Claude Code's.
   const agentKind = agentInfo && agentInfo.kind !== "command" ? agentInfo.kind : "claudeCode";
   return (
     <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint} align="start">

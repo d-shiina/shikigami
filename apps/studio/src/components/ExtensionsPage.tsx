@@ -391,7 +391,7 @@ function registryColumns(onInstall: (source: string) => void): Column<Offered>[]
   ];
 }
 
-/** The catalog: a JSON index set by URL, nothing hosted by Shikigami. */
+/** The catalog: a JSON index set by URL, nothing hosted by SpellSheet. */
 function Registry({
   list,
   installed,
@@ -412,7 +412,7 @@ function Registry({
   const [error, setError] = useState<string | null>(null);
   const [states, setStates] = useState<Set<"have" | "new">>(new Set());
   const columns = registryColumns(onInstall);
-  const view = useTableView(columns, { storageKey: "shikigami.studio.extensions.registry.sort", initialSort: { column: "name", descending: false } });
+  const view = useTableView(columns, { storageKey: "spellsheet.studio.extensions.registry.sort", initialSort: { column: "name", descending: false } });
   const load = useCallback(async () => {
     if (!list.registry) return setEntries(null);
     setEntries(null);
@@ -579,7 +579,7 @@ export function ExtensionsPage() {
     });
   };
   const columns = installedColumns((ext, on) => void setEnabled([ext], on));
-  const view = useTableView(columns, { storageKey: "shikigami.studio.extensions.sort", initialSort: { column: "name", descending: false } });
+  const view = useTableView(columns, { storageKey: "spellsheet.studio.extensions.sort", initialSort: { column: "name", descending: false } });
   const q = query.trim().toLowerCase();
   const keep = (ext: InstalledExtension, skip?: "state") =>
     (skip === "state" || !states.size || states.has(stateOf(ext))) &&

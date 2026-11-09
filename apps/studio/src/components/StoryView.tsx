@@ -1,4 +1,4 @@
-import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Step, StepTypeDef } from "@spellsheet/schema";
 import { IF } from "../lib/stepTypes";
 import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";

@@ -110,8 +110,8 @@ function Banner() {
   );
 }
 
-const VIEW_KEY = "shikigami.studio.view";
-const SIDEBAR_KEY = "shikigami.studio.list";
+const VIEW_KEY = "spellsheet.studio.view";
+const SIDEBAR_KEY = "spellsheet.studio.list";
 
 function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -132,7 +132,7 @@ function useRemembered<T extends string>(key: string, fallback: T, read: (raw: s
   return [value, set];
 }
 
-const SIZES_KEY = "shikigami.studio.sizes";
+const SIZES_KEY = "spellsheet.studio.sizes";
 
 /** Panel widths the person dragged to, remembered across launches. */
 function useSizes(): [Sizes, (next: Sizes) => void] {

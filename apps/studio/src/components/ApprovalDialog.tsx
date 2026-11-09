@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@shikigami/schema";
+import type { ApprovalRequest } from "@spellsheet/schema";
 import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -45,7 +45,7 @@ export function ApprovalDialog() {
         </p>
         <p className="text-xs text-slate-500">{by}</p>
         {request.reason && (
-          // The AI's own words: a quote, never Shikigami's instruction.
+          // The AI's own words: a quote, never SpellSheet's instruction.
           <p className="rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
             {t.approvalFrom}
             {t.colon}

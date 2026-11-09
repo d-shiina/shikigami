@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { REPO_URL } from "./repo.mjs";
 
 const version = process.argv[2]?.replace(/^v/, "");
 if (!version) {
@@ -34,7 +35,7 @@ const footer = [
 if (start < 0) {
   console.error(`::warning::CHANGELOG.md has no section for ${version}; the release notes link to it instead`);
   console.log(
-    [`See [CHANGELOG.md](https://github.com/d-shiina/shikigami/blob/v${version}/CHANGELOG.md).`, ...footer].join("\n"),
+    [`See [CHANGELOG.md](${REPO_URL}/blob/v${version}/CHANGELOG.md).`, ...footer].join("\n"),
   );
 } else {
   let end = lines.findIndex((line, i) => i > start && /^##\s/.test(line));

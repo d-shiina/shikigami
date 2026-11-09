@@ -10,6 +10,6 @@ spellsheet plugin install examples\plugins\azure-ocr --yes
 node --test examples\plugins\azure-ocr\test.mjs   # Azure の代わりのサーバーで動作を確認
 ```
 
-- `shikigami-plugin.json`：ノードの宣言（設定欄の名前・選択肢、外部送信 `external`、API キー `credentials`、ファイル `pathParams`、送り先の検査 `targets`）
+- `spellsheet-plugin.json`：ノードの宣言（設定欄の名前・選択肢、外部送信 `external`、API キー `credentials`、ファイル `pathParams`、送り先の検査 `targets`）
 - `main.mjs`：Azure の REST API（2024-11-30）への送信と、結果の整形（`text`・`pages`・`tables`・`fields`）
 - `test.mjs`：Azure の代わりのサーバーを立てて動作を確認するテスト

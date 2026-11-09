@@ -35,7 +35,7 @@ spellsheet worker unenroll
 ## The reference server
 
 ```powershell
-spellsheet manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
+spellsheet manager serve --listen 127.0.0.1:8740 --data C:\spellsheet-manager
 ```
 
 `--data` holds `state.json` (workers, jobs and their logs) and `admin-token`, made on first start. It listens on plain HTTP: anything beyond the PC itself goes through a reverse proxy with HTTPS (the worker refuses `http://` except for `localhost`).
@@ -53,7 +53,7 @@ Admin API (`Authorization: Bearer <admin-token>`):
 | `POST /admin/jobs/{id}/cancel` | Cancel: a queued job at once, a running one at the PC's next check-in |
 
 ```powershell
-$h = @{ Authorization = "Bearer $(Get-Content C:\shikigami-manager\admin-token)" }
+$h = @{ Authorization = "Bearer $(Get-Content C:\spellsheet-manager\admin-token)" }
 Invoke-RestMethod -Method Post -Headers $h http://127.0.0.1:8740/admin/enrollment-codes
 Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
   -Body '{"flowId":"scn_01a1…","inputs":{"month":"2026-11"},"requestedBy":"dana"}' `
@@ -68,9 +68,9 @@ All requests are `POST` with a JSON body, under `/v1`. After enrollment each car
 
 | Header | Value |
 |---|---|
-| `X-Shikigami-Worker` | The worker ID from enrollment |
-| `X-Shikigami-Time` | Unix time in seconds; the server refuses more than 5 minutes off its clock |
-| `X-Shikigami-Signature` | Base64 Ed25519 signature of `shikigami-v1\n{METHOD}\n{path}\n{time}\n{hex SHA-256 of the body}` |
+| `X-SpellSheet-Worker` | The worker ID from enrollment |
+| `X-SpellSheet-Time` | Unix time in seconds; the server refuses more than 5 minutes off its clock |
+| `X-SpellSheet-Signature` | Base64 Ed25519 signature of `spellsheet-v1\n{METHOD}\n{path}\n{time}\n{hex SHA-256 of the body}` |
 
 | Path | Body → answer |
 |---|---|

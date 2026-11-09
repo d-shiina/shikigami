@@ -5,7 +5,7 @@ English | [日本語](../ja/tutorials/invoices.md)
 Group an Excel order list by customer and fill a Word template to make the invoices. It runs on a PC without Word or Excel (the files are read and written directly).
 
 - Result: `output/請求書/請求書_<customer>.docx` (one per customer) and `output/請求一覧.xlsx`
-- Sample: `examples/tutorials/invoices/` (finished: `examples/tutorials/invoices.shikigami.json`)
+- Sample: `examples/tutorials/invoices/` (finished: `examples/tutorials/invoices.spellsheet.json`)
 - Time: about 15 minutes
 
 ![Flow chart](../assets/tutorials/invoices-flow.png)
