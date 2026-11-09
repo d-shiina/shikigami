@@ -986,7 +986,10 @@ function StepNode({ data }: StepNodeProps) {
               : head
                 ? "flow-head-plain border-slate-300 hover:border-slate-400"
                 : "border-slate-200 hover:border-slate-300"
-      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
+      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
+        // An open frame glows as a whole (flow-frame-running): its head is only its top edge.
+        data.runState === "running" && head && !head.collapsed ? "!border-accent-500" : data.runState ? RUN_STYLE[data.runState] : ""
+      }`}
       data-run={data.runState}
     >
       {!head && data.clock && <RunBar clock={data.clock} stepId={data.step.id ?? ""} />}
@@ -1520,7 +1523,7 @@ function TerminalNode({ data }: NodeProps<Node<TerminalData>>) {
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean };
+type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean; running: boolean };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -1535,7 +1538,7 @@ function FrameNode({ data }: NodeProps<Node<FrameData>>) {
       style={{ width: data.width, height: data.height }}
       className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""} ${
         data.selected ? "flow-frame-selected" : ""
-      }`}
+      } ${data.running ? "flow-frame-running" : ""}`}
     />
   );
 }
@@ -1962,7 +1965,7 @@ export function FlowCanvas() {
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id) } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id), running: states[f.id] === "running" } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
