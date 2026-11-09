@@ -21,7 +21,7 @@ use spellsheet_secrets::KeyStore;
 use crate::agent::{Agent, RunRequest};
 use protocol::{
     Ack, ClaimRequest, EnrollRequest, EnrollResponse, Events, Finished, HEADER_SIGNATURE,
-    HEADER_TIME, HEADER_WORKER, Job, Offer, PREFIX, Rejected, Started, WorkerKey,
+    HEADER_TIME, HEADER_WORKER, Job, Offer, PREFIX, Rejected, Started, WorkerKey, legacy_header,
 };
 
 /// How long the server may hold a claim open.
@@ -186,16 +186,38 @@ impl Link {
         let body = serde_json::to_vec(body).map_err(remote_err)?;
         let path = format!("{PREFIX}{path}");
         let time = time::OffsetDateTime::now_utc().unix_timestamp();
-        let response = client()?
-            .post(format!("{}{path}", self.base))
-            .header(HEADER_WORKER, &self.worker_id)
-            .header(HEADER_TIME, time.to_string())
-            .header(HEADER_SIGNATURE, self.key.sign("POST", &path, time, &body))
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(body)
-            .send()
-            .await
-            .map_err(remote_err)?;
+        let send = |legacy: bool| {
+            let (worker, stamp, signature, sig) = if legacy {
+                (
+                    legacy_header(HEADER_WORKER),
+                    legacy_header(HEADER_TIME),
+                    legacy_header(HEADER_SIGNATURE),
+                    self.key.sign_legacy("POST", &path, time, &body),
+                )
+            } else {
+                (
+                    HEADER_WORKER.to_owned(),
+                    HEADER_TIME.to_owned(),
+                    HEADER_SIGNATURE.to_owned(),
+                    self.key.sign("POST", &path, time, &body),
+                )
+            };
+            client().map(|c| {
+                c.post(format!("{}{path}", self.base))
+                    .header(worker, &self.worker_id)
+                    .header(stamp, time.to_string())
+                    .header(signature, sig)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body.clone())
+                    .send()
+            })
+        };
+        let mut response = send(false)?.await.map_err(remote_err)?;
+        // A server not yet updated after the product's rename knows only the
+        // old headers; the worker may be updated first.
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            response = send(true)?.await.map_err(remote_err)?;
+        }
         if response.status() == reqwest::StatusCode::NO_CONTENT {
             return Ok(None);
         }

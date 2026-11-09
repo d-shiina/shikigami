@@ -190,7 +190,18 @@ fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
                 continue;
             }
         };
-        let updated = if file.extension().is_some_and(|e| e == "toml") {
+        let toml = file.extension().is_some_and(|e| e == "toml");
+        if !toml
+            && serde_json::from_str::<Value>(&text).is_err()
+            && text.to_ascii_lowercase().contains(&old)
+        {
+            // Comments or trailing commas (VS Code allows them): left as
+            // written, so the old command stays for it.
+            all = false;
+            tracing::warn!(file = %file.display(), "cannot read the MCP setup as JSON to move it");
+            continue;
+        }
+        let updated = if toml {
             Some(migrate_toml(&text)).filter(|t| *t != text)
         } else {
             migrate_json(&text, !old_kept)
@@ -629,6 +640,19 @@ mod tests {
         }
         assert!(!migrate_mcp_setups(std::slice::from_ref(&file)));
         assert!(migrate_mcp_setups(&[dir.path().join("missing.json")]));
+    }
+
+    #[test]
+    fn a_setup_with_comments_keeps_the_old_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("mcp.json");
+        let old = old();
+        std::fs::write(
+            &file,
+            format!("{{ // mine\n \"servers\": {{ \"{old}\": {{ \"command\": \"{old}\" }}, }} }}"),
+        )
+        .unwrap();
+        assert!(!migrate_mcp_setups(std::slice::from_ref(&file)));
     }
 
     #[test]

@@ -167,6 +167,13 @@ impl WorkerKey {
                 .sign(signed_text(method, path, time, body).as_bytes()),
         )
     }
+
+    /// The signature a server from before the product's rename checks (it
+    /// reads the [`legacy_header`]s), for a worker updated before its server.
+    pub fn sign_legacy(&self, method: &str, path: &str, time: i64, body: &[u8]) -> String {
+        let text = spellsheet_core::paths::legacy_spelling(&signed_text(method, path, time, body));
+        B64.encode(self.0.sign(text.as_bytes()))
+    }
 }
 
 /// Checks a request's signature against a worker's public key (base64).
@@ -206,6 +213,8 @@ mod tests {
         let sig = B64.encode(pair.sign(old_text.as_bytes()));
         let public = WorkerKey::from_seed(&seed).public_key();
         assert!(verify(&public, &sig, "POST", "/v1/x", 5, b"{}"));
+        let key = WorkerKey::from_seed(&seed);
+        assert_eq!(key.sign_legacy("POST", "/v1/x", 5, b"{}"), sig);
         assert_ne!(legacy_header(HEADER_TIME), HEADER_TIME);
     }
 
