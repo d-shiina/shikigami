@@ -2583,7 +2583,7 @@ fn check_app(text: &Text, window: &WindowInfo) -> Result<(), StepError> {
             ),
         )
         .with_details(json!({
-            "hint": format!("If this app is right, ask the user to add app:{} to the secret's sites in Studio.", window.process)
+            "hint": format!("If this app is right, ask the user to add app:{} to the secret's sites in Writer.", window.process)
         }))),
         _ => Ok(()),
     }

@@ -1118,7 +1118,7 @@ fn text(input: &ActionInput, key: &str) -> Result<Text, StepError> {
         )
         .with_details(json!({
             "secret": secret.name,
-            "hint": "Call request_secret with this name and the app, written as app:<exe name> (e.g. app:billing.exe): Studio then asks the user to add it to this secret's sites."
+            "hint": "Call request_secret with this name and the app, written as app:<exe name> (e.g. app:billing.exe): Writer then asks the user to add it to this secret's sites."
         })));
     }
     Ok(Text {
@@ -1245,7 +1245,7 @@ fn target_schema(allow: Allow) -> Value {
     });
     let image = json!({
         "type": "object",
-        "description": "画面上で探す画像（部品が inspect_ui に出ないアプリ用）。同じアプリの画面から切り出した PNG（Studio の「画面から切り取る」、または desktop.screenshot）。何度も使う画像は image 部品にする",
+        "description": "画面上で探す画像（部品が inspect_ui に出ないアプリ用）。同じアプリの画面から切り出した PNG（Writer の「画面から切り取る」、または desktop.screenshot）。何度も使う画像は image 部品にする",
         "properties": {
             "path": { "type": "string", "minLength": 1, "description": "PNG ファイル。フローのフォルダーからの相対パス（templates/保存ボタン.png）かフルパス" },
             "threshold": { "type": "number", "minimum": 0.5, "maximum": 1, "description": "似ている度合いの下限（既定 0.9）" },

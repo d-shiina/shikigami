@@ -2,23 +2,23 @@
 
 English | [日本語](ja/release.md)
 
-The installed Studio updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Studio opens again as the new version a few seconds later) or when you close Studio (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
+The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
 - Checked at: `https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
-- Tamper protection: installers are signed with a dedicated signing key, and Studio verifies them with the public key embedded at release time before replacing itself
+- Tamper protection: installers are signed with a dedicated signing key, and Writer verifies them with the public key embedded at release time before replacing itself
 - Installer: NSIS (per user, no administrator rights).
 - Development builds (`pnpm studio:dev`) do not check
 
 ## The CLI (MCP server) is updated too
 
-The release installer puts `shikigami.exe` (CLI and MCP server) in the same folder as Studio. Register this `shikigami.exe` with Claude Code and the MCP server is updated with every Studio update, at the same path. Copy the registration command from the version menu at the bottom right of Studio.
+The release installer puts `shikigami.exe` (CLI and MCP server) in the same folder as Writer. Register this `shikigami.exe` with Claude Code and the MCP server is updated with every Writer update, at the same path. Copy the registration command from the version menu at the bottom right of Writer.
 
 ```powershell
 claude mcp add --scope user shikigami -- "<install folder>\shikigami.exe" mcp
 ```
 
-Updating works even while Claude Code runs the MCP server. Windows cannot overwrite a running exe but can rename it, so right before starting the installer Studio renames `shikigami.exe` to `shikigami-<old version>.exe.old` (and the bundled `node\node.exe` to `node-<old version>.exe.old`). The running server keeps going on the old file, and the next start uses the new version (in Claude Code, reconnect from `/mcp`). Leftover `.old` files are removed the next time Studio starts. If the installation is cancelled, the file is put back.
+Updating works even while Claude Code runs the MCP server. Windows cannot overwrite a running exe but can rename it, so right before starting the installer Writer renames `shikigami.exe` to `shikigami-<old version>.exe.old` (and the bundled `node\node.exe` to `node-<old version>.exe.old`). The running server keeps going on the old file, and the next start uses the new version (in Claude Code, reconnect from `/mcp`). Leftover `.old` files are removed the next time Writer starts. If the installation is cancelled, the file is put back.
 
 When developing from the repository with `target\debug\shikigami.exe` registered, `cargo build -p shikigami-cli` keeps updating it as before.
 
@@ -37,12 +37,12 @@ It creates a signing key (without a password) at `~\.tauri\shikigami.key` and re
 
 If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`, the value is put on the clipboard and the registration page opens; paste and save (twice).
 
-**If the private key is lost, installed copies of Studio can no longer receive updates.** Back up `shikigami.key`. To protect the key with a password, create it yourself and also register `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as a secret.
+**If the private key is lost, installed copies of Writer can no longer receive updates.** Back up `shikigami.key`. To protect the key with a password, create it yourself and also register `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as a secret.
 
 ## Releasing
 
 1. Turn "Unreleased" in [CHANGELOG.md](../CHANGELOG.md) into a heading with the version and date (breaking changes and deprecations: [compatibility.md](compatibility.md) §9)
-1. Raise `version` under `[workspace.package]` in the root `Cargo.toml` (this one place sets the version of Studio, the CLI and the MCP server). Run `cargo check` to update `Cargo.lock`, and commit
+1. Raise `version` under `[workspace.package]` in the root `Cargo.toml` (this one place sets the version of Writer, the CLI and the MCP server). Run `cargo check` to update `Cargo.lock`, and commit
 2. Push a tag with the same version
 
    ```sh
@@ -58,7 +58,7 @@ If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`,
 
 A pull request that changes the release build (the workflow, `apps/studio/scripts/`, the Tauri configuration) runs the same build as a trial: it publishes nothing and leaves the installers on the run page, so they can be installed by hand before tagging. Without the signing key it signs with a throwaway key.
 
-Once published, installed copies of Studio find the update the next time they start.
+Once published, installed copies of Writer find the update the next time they start.
 
 ## Building a release locally
 
@@ -73,7 +73,7 @@ The public key is read from `~\.tauri\shikigami.key.pub`.
 
 ## Bundling Node.js and the browser adapter
 
-So that browser automation and Node plugins work on PCs without Node.js (including company PCs where it cannot be installed), the installer puts the following in Studio's folder.
+So that browser automation and Node plugins work on PCs without Node.js (including company PCs where it cannot be installed), the installer puts the following in Writer's folder.
 
 | Folder | Contents |
 |---|---|
@@ -88,5 +88,5 @@ So that browser automation and Node plugins work on PCs without Node.js (includi
 
 ## Notes
 
-- Installers are not code-signed (Authenticode), so the first installation shows a SmartScreen warning. Updates happen inside Studio and show none
+- Installers are not code-signed (Authenticode), so the first installation shows a SmartScreen warning. Updates happen inside Writer and show none
 - The first version with the updater has to be installed by hand from Releases

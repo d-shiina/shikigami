@@ -82,5 +82,5 @@ panic = "warn"
 
 [profile.release]
 # No cross-crate LTO: it made each release binary link for minutes (the
-# release build twice: CLI and Studio), for no speed a user would notice.
+# release build twice: CLI and Writer), for no speed a user would notice.
 lto = false

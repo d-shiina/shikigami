@@ -1,8 +1,8 @@
 ; Installer hooks (bundle.windows.nsis.installerHooks).
 ;
-; Studio was installed as "Shikigami Studio" before the product became
-; SpellSheet. An installer named "SpellSheet Studio" would otherwise put a
-; second copy in "%LOCALAPPDATA%\SpellSheet Studio" and leave the old one
+; Writer was installed as "Shikigami Studio" before the product became
+; SpellSheet. An installer named "SpellSheet Writer" would otherwise put a
+; second copy in "%LOCALAPPDATA%\SpellSheet Writer" and leave the old one
 ; behind, with the AI clients' MCP setup and the scheduled agent task still
 ; pointing at the old copy's spellsheet.exe / shikigami.exe.
 ;
@@ -14,10 +14,14 @@
 ;
 ; An old install made with the MSI (per machine, in Program Files) is removed
 ; by its own uninstaller first, as Tauri does for an MSI of the same name (it
-; looks only for the current name). Studio then lives in this per-user
+; looks only for the current name). Writer then lives in this per-user
 ; install; the release no longer ships an MSI.
 
 !define LEGACY_PRODUCTNAME "Shikigami Studio"
+; The second Start menu entry: the same app opening only its Runner window,
+; for people who run published flows and never edit them.
+!define RUNNER_LNK "$SMPROGRAMS\SpellSheet Runner.lnk"
+
 !define LEGACY_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_PRODUCTNAME}"
 
 ; The old install's folder, when this install takes it over.
@@ -54,6 +58,10 @@ Var LegacyInstallDir
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  ; Made on every install and update, so existing installs get it too.
+  CreateShortcut "${RUNNER_LNK}" "$INSTDIR\${MAINBINARYNAME}.exe" "--runner"
+  !insertmacro SetLnkAppUserModelId "${RUNNER_LNK}"
+
   ${If} $LegacyInstallDir != ""
     ; Start menu: the old shortcut goes, the new one is made even on a
     ; silent update (which otherwise makes none).
@@ -78,5 +86,14 @@ Var LegacyInstallDir
     ; One entry in "Apps & features", under the new name.
     DeleteRegKey SHCTX "${LEGACY_UNINSTKEY}"
     DeleteRegKey SHCTX "${MANUKEY}\${LEGACY_PRODUCTNAME}"
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_PREUNINSTALL
+  ${If} $UpdateMode <> 1
+    ${If} ${FileExists} "${RUNNER_LNK}"
+      !insertmacro UnpinShortcut "${RUNNER_LNK}"
+      Delete "${RUNNER_LNK}"
+    ${EndIf}
   ${EndIf}
 !macroend

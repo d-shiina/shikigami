@@ -35,7 +35,7 @@ env:
 
 jobs:
   studio:
-    name: Studio (Windows)
+    name: Writer (Windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,7 +137,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       # The installer ships the CLI (MCP server), Node.js and the browser
-      # adapter next to Studio, so browser steps work without Node.js.
+      # adapter next to Writer, so browser steps work without Node.js.
       - run: pnpm studio:bundle-cli
       - uses: actions/cache@v4
         with:
@@ -171,7 +171,7 @@ jobs:
           tauriScript: pnpm tauri
           args: --config src-tauri/tauri.release.gen.json
           tagName: ${{ steps.version.outputs.tag }}
-          releaseName: SpellSheet Studio ${{ steps.version.outputs.tag }}
+          releaseName: SpellSheet Writer ${{ steps.version.outputs.tag }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ steps.version.outputs.prerelease == 'true' }}

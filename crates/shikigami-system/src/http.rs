@@ -73,7 +73,7 @@ pub fn check_site(name: &str, sites: &[String], url: &reqwest::Url) -> Result<()
         "secret": name,
         "sites": sites,
         "url": origin,
-        "hint": "Call request_secret with this name and the API's origin (e.g. https://api.example.com) so the user can allow it in Studio.",
+        "hint": "Call request_secret with this name and the API's origin (e.g. https://api.example.com) so the user can allow it in Writer.",
     })))
 }
 

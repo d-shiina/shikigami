@@ -16,7 +16,7 @@ Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-
 ```
 
 - variables[].type: string, number, boolean, object, array or any. direction: input (given when the run starts), output (returned), inOut, local (default). A secret: true variable is masked in logs.
-- parts: screen parts the person picks in Studio (see "The screen" in the instructions). app: browser or desktop.
+- parts: screen parts the person picks in Writer (see "The screen" in the instructions). app: browser or desktop.
 - settings (optional): defaultTimeoutMs per step, defaultRetry { "maxAttempts": 3, "backoffMs": 1000 }, onError "fail" or "continue", keepWork.
 
 ## A step
@@ -38,7 +38,7 @@ Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-
 
 ## The screen
 
-A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
+A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Writer and Writer fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
 
 ## Expression functions
 
@@ -416,7 +416,7 @@ Example: `{"type":"clipboard.set","params":{"text":"{{ join(map(rows, r => r.cod
 
 #### config.read (設定ファイル読み込み)
 
-Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: "..." }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.
+Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Writer) into an object of its values, e.g. { 締め日: 25, 送り先: "..." }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.
 
 Params:
 - `path`*: text [path] — フローのフォルダーからの相対パス（例: input/in.csv、output/result.csv）、または絶対パス（C:\work\in.csv）

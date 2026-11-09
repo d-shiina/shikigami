@@ -623,7 +623,7 @@ fn move_to_trash(root: &Path, dir: &Path) -> Result<()> {
     std::fs::rename(dir, &aside).map_err(|e| InstallError {
         code: "PLUGIN_IN_USE",
         message: format!(
-            "{} is in use and cannot be replaced or removed now ({e}); close Studio and the AI clients, then try again",
+            "{} is in use and cannot be replaced or removed now ({e}); close Writer and the AI clients, then try again",
             dir.display()
         ),
         problems: Vec::new(),

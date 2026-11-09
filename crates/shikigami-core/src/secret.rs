@@ -235,7 +235,7 @@ impl std::fmt::Display for SecretError {
 impl std::error::Error for SecretError {}
 
 /// Hint shown when a secret is missing.
-pub const REGISTER_HINT: &str = "Call request_secret with this name and the site's address: Studio then asks the user to register it. Or ask the user to register it in SpellSheet Studio (シークレット) or with `spellsheet secret set <name>`; list_secrets shows the registered names. Never ask for the password in chat.";
+pub const REGISTER_HINT: &str = "Call request_secret with this name and the site's address: Writer then asks the user to register it. Or ask the user to register it in SpellSheet Writer (シークレット) or with `spellsheet secret set <name>`; list_secrets shows the registered names. Never ask for the password in chat.";
 
 /// Where the Runtime looks secrets up. Implemented by the workspace vault
 /// (`shikigami-secrets`); tests use an in-memory one.

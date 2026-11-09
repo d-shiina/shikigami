@@ -147,7 +147,7 @@ fn request(kind: Kind, input: &ActionInput) -> Result<Request, StepError> {
             "secret": secret.name,
             "sites": secret.sites,
             "url": site,
-            "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
+            "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Writer."),
         })))
     };
     let user = match params.get("user").filter(|v| !v.is_null()) {

@@ -996,7 +996,7 @@
       ]
     },
     {
-      "name": "agent",
+      "name": "worker",
       "subcommands": [
         {
           "name": "run"

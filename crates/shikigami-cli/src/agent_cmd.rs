@@ -1,4 +1,4 @@
-//! `spellsheet agent …` and `spellsheet schedule …`.
+//! `spellsheet worker …` and `spellsheet schedule …`.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -16,20 +16,20 @@ use shikigami_secrets::Vault;
 
 #[derive(Subcommand)]
 pub enum AgentCmd {
-    /// Run the agent in this window until stopped (Ctrl+C or `agent stop`).
+    /// Run the worker in this window until stopped (Ctrl+C or `worker stop`).
     /// It starts scheduled runs and file triggers (`spellsheet schedule`).
     Run,
-    /// Whether the agent runs, what it is running and what comes next.
+    /// Whether the worker runs, what it is running and what comes next.
     Status {
         #[arg(long)]
         json: bool,
     },
-    /// Stop the running agent (runs in progress are cancelled; `finally` runs).
+    /// Stop the running worker (runs in progress are cancelled; `finally` runs).
     Stop,
-    /// Start the agent whenever you sign in to Windows (a Task Scheduler
+    /// Start the worker whenever you sign in to Windows (a Task Scheduler
     /// task for your user), and start it now.
     Install,
-    /// Remove the task `agent install` made (and stop the agent).
+    /// Remove the task `worker install` made (and stop the worker).
     Uninstall,
     /// Connect this PC to a management server with the one-time code it
     /// gave you. Jobs are taken only when policy.json has `remote.enabled`,
@@ -80,7 +80,7 @@ pub fn manager_cmd(cmd: &ManagerCmd) -> Result<ExitCode> {
 
 #[derive(Subcommand)]
 pub enum ScheduleCmd {
-    /// The schedules of this PC and, if the agent runs, when they fire next.
+    /// The schedules of this PC and, if the worker runs, when they fire next.
     List {
         #[arg(long)]
         json: bool,
@@ -259,7 +259,7 @@ pub fn agent_cmd(
             );
             let policy_path = Policy::path(svc.store().root());
             let agent = Agent::new(Arc::new(svc), runtime);
-            // Notifications still being sent when the agent stops (a run
+            // Notifications still being sent when the worker stops (a run
             // cancelled by the stop, for one) are waited for below.
             let sending = Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new()));
             let sends = Arc::clone(&sending);
@@ -284,7 +284,7 @@ pub fn agent_cmd(
                     }
                 });
                 eprintln!(
-                    "SpellSheet agent for {} (Ctrl+C stops)",
+                    "SpellSheet Worker for {} (Ctrl+C stops)",
                     workspace.display()
                 );
                 let served = Arc::clone(&agent).serve().await;
@@ -300,7 +300,7 @@ pub fn agent_cmd(
             })
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::AddrInUse {
-                    anyhow::anyhow!("{e} (see `spellsheet agent status`)")
+                    anyhow::anyhow!("{e} (see `spellsheet worker status`)")
                 } else {
                     e.into()
                 }
@@ -312,20 +312,20 @@ pub fn agent_cmd(
                     println!("{}", serde_json::json!({ "running": false }));
                 } else {
                     println!(
-                        "the agent is not running (start it with `spellsheet agent run`, or `agent install`)"
+                        "the worker is not running (start it with `spellsheet worker run`, or `worker install`)"
                     );
                 }
                 return Ok(ExitCode::from(1));
             };
             let Some(status) = r.status else {
-                bail!("the agent did not answer: {:?}", r.error);
+                bail!("the worker did not answer: {:?}", r.error);
             };
             if *json {
                 println!("{}", serde_json::to_string_pretty(&status)?);
                 return Ok(ExitCode::SUCCESS);
             }
             println!(
-                "agent running (pid {}, since {})",
+                "worker running (pid {}, since {})",
                 status.pid, status.started_at
             );
             if let Some(problem) = &status.problem {
@@ -354,8 +354,8 @@ pub fn agent_cmd(
             }
         }
         AgentCmd::Stop => match ask(&local_root, &Request::Stop)? {
-            Some(_) => println!("stopping the agent"),
-            None => println!("the agent is not running"),
+            Some(_) => println!("stopping the worker"),
+            None => println!("the worker is not running"),
         },
         AgentCmd::Enroll { manager, code } => {
             let keys = shikigami_agent::remote::default_key_store(&local_root);
@@ -403,21 +403,24 @@ pub fn agent_cmd(
     Ok(ExitCode::SUCCESS)
 }
 
-const TASK_NAME: &str = r"SpellSheet\Agent";
+const TASK_NAME: &str = r"SpellSheet\Worker";
 
-/// The task's name before the product was renamed: replaced by `install`,
-/// removed by `uninstall`.
-const LEGACY_TASK_NAME: &str = r"Shikigami\Agent";
+/// The task's names before the rename (`Shikigami\Agent` in releases,
+/// `SpellSheet\Agent` on builds from main between them): replaced by
+/// `install`, removed by `uninstall`. Old tasks still work meanwhile:
+/// `agent` is an alias of `worker`.
+#[cfg(windows)]
+const LEGACY_TASK_NAMES: [&str; 2] = [r"Shikigami\Agent", r"SpellSheet\Agent"];
 
 #[cfg(windows)]
 fn install(workspace: &Path) -> Result<()> {
     let exe = std::env::current_exe()?;
     let command = format!(
-        "\"{}\" agent run --workspace \"{}\"",
+        "\"{}\" worker run --workspace \"{}\"",
         exe.display(),
         workspace.display()
     );
-    // Two tasks would start two agents for the same workspace.
+    // Two tasks would start two workers for the same workspace.
     remove_legacy_task();
     let status = std::process::Command::new("schtasks")
         .args([
@@ -432,7 +435,7 @@ fn install(workspace: &Path) -> Result<()> {
         .args(["/Run", "/TN", TASK_NAME])
         .status();
     println!(
-        "the agent starts when you sign in to Windows (task {TASK_NAME}), and was started now"
+        "the worker starts when you sign in to Windows (task {TASK_NAME}), and was started now"
     );
     Ok(())
 }
@@ -452,33 +455,37 @@ fn uninstall() -> Result<()> {
     Ok(())
 }
 
-/// Deletes the task an install before the rename made, if there is one.
-/// Whether there was.
+/// Deletes the tasks an install before the rename made, if there are any.
+/// Whether there were.
 #[cfg(windows)]
 fn remove_legacy_task() -> bool {
-    let removed = std::process::Command::new("schtasks")
-        .args(["/Delete", "/F", "/TN", LEGACY_TASK_NAME])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success());
-    if removed {
-        println!("removed the task {LEGACY_TASK_NAME} (the name before SpellSheet)");
+    let mut any = false;
+    for name in LEGACY_TASK_NAMES {
+        let removed = std::process::Command::new("schtasks")
+            .args(["/Delete", "/F", "/TN", name])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if removed {
+            println!("removed the task {name} (its name before)");
+            any = true;
+        }
     }
-    removed
+    any
 }
 
 #[cfg(not(windows))]
 fn install(_workspace: &Path) -> Result<()> {
     bail!(
-        "`agent install` registers a Windows Task Scheduler task ({TASK_NAME}); on this system start `spellsheet agent run` yourself"
+        "`worker install` registers a Windows Task Scheduler task ({TASK_NAME}); on this system start `spellsheet worker run` yourself"
     )
 }
 
 #[cfg(not(windows))]
 fn uninstall() -> Result<()> {
     bail!(
-        "`agent uninstall` removes a Windows Task Scheduler task ({TASK_NAME}, or {LEGACY_TASK_NAME} from before the rename)"
+        "`worker uninstall` removes a Windows Task Scheduler task ({TASK_NAME}, and its names before the rename)"
     )
 }
 
@@ -508,7 +515,7 @@ pub fn schedule_cmd(
                 return Ok(ExitCode::SUCCESS);
             }
             if status.is_none() {
-                println!("(the agent is not running: schedules do not fire until it does)");
+                println!("(the worker is not running: schedules do not fire until it does)");
             }
             for s in &schedules.schedules {
                 let next = status
@@ -549,7 +556,7 @@ pub fn schedule_cmd(
             }
             if ask(&local_root, &Request::Status)?.is_none() {
                 eprintln!(
-                    "note: the agent is not running; start it with `spellsheet agent install` (or `agent run`)"
+                    "note: the worker is not running; start it with `spellsheet worker install` (or `worker run`)"
                 );
             }
         }

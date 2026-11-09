@@ -124,7 +124,7 @@ impl CoreError {
             Self::UnsupportedSchemaVersion { found, supported } => Some(serde_json::json!({
                 "found": found,
                 "supported": supported,
-                "hint": "The file was saved by a newer SpellSheet. Update SpellSheet (Studio offers the update, or install the latest release) to open it.",
+                "hint": "The file was saved by a newer SpellSheet. Update SpellSheet (Writer offers the update, or install the latest release) to open it.",
             })),
             Self::StepNotFound(id) | Self::DuplicateStepId(id) => {
                 Some(serde_json::json!({ "step_id": id }))

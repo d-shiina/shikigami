@@ -27,7 +27,7 @@ DCO の要点は「この変更を自分が書いた、または OSS として�
 
 ```powershell
 pnpm install
-pnpm studio:dev          # Studio
+pnpm studio:dev          # Writer
 cargo test --workspace   # Rust のテスト
 pnpm -r test             # TypeScript のテスト
 pnpm schema:generate     # Rust の型を変えたら JSON Schema と TypeScript の型を作り直す

@@ -89,7 +89,7 @@ fn missing_secrets_and_fields_say_how_to_fix() {
         .resolve(&reference("nope", SecretField::Password))
         .unwrap_err();
     assert_eq!(e.code, "SECRET_NOT_FOUND");
-    assert!(e.hint.unwrap().contains("Studio"));
+    assert!(e.hint.unwrap().contains("Writer"));
     v.set(input("a")).unwrap();
     let e = v.resolve(&reference("a", SecretField::Totp)).unwrap_err();
     assert_eq!(e.code, "SECRET_FIELD_EMPTY");

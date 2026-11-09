@@ -1,4 +1,4 @@
-//! SpellSheet Studio backend.
+//! SpellSheet Writer backend.
 //!
 //! Every command is a thin wrapper over `FlowService` (editing) or
 //! `Runtime` (execution). Studio owns no flow logic of its own, so what
@@ -261,7 +261,7 @@ pub fn run() {
             });
         });
     if let Err(e) = result {
-        tracing::error!(error = %e, "Studio exited with an error");
+        tracing::error!(error = %e, "Writer exited with an error");
         std::process::exit(1);
     }
 }

@@ -73,7 +73,7 @@ mod tests {
     use super::*;
 
     fn args(list: &[&str]) -> Vec<String> {
-        std::iter::once("SpellSheet Studio.exe")
+        std::iter::once("SpellSheet Writer.exe")
             .chain(list.iter().copied())
             .map(String::from)
             .collect()
