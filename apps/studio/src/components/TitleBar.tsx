@@ -26,6 +26,8 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
   // The flow places open a flow into the editor; the others are pages.
   const editing = (place === "flows" || place === "review") && hasFlow;
   const page = PAGE_TITLE[place]?.();
+  // A new flow the AI is making is named in the bar as an open flow is, once it exists.
+  const drafting = useStudio((s) => (place === "flows" && !hasFlow ? s.drafting : null));
   // The review desk keeps its own view, starting on the AI's report.
   const reviewView = useReviewView((s) => s.view);
   const setReviewView = useReviewView((s) => s.setView);
@@ -33,6 +35,19 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
     <header data-tauri-drag-region className="@container/title relative flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet px-3 select-none">
       {editing ? (
         <FlowTitle />
+      ) : drafting ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button type="button" onClick={() => setPlace("library")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+            {t.flows}
+          </button>
+          <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
+            /
+          </span>
+          <span className="min-w-[5em] truncate px-0.5 text-[13px] font-semibold text-ink" title={drafting.request}>
+            {drafting.title || t.agent.untitled}
+          </span>
+          <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">{t.drafting.tag}</span>
+        </div>
       ) : place === "extensions" ? (
         // Custom nodes are managed from Settings, so the page reads as a part of it.
         <>

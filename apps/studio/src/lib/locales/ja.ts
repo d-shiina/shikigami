@@ -343,6 +343,18 @@ export const ja = {
   revisionCount: (n: number) => `${n} 回目の変更`,
   reloadedByConflict: "他のクライアント（AI など）が更新したため、最新の内容を読み込みました。",
   externalChange: "AI など Writer の外で行われた変更を反映しました。",
+  drafting: {
+    tag: "AI が作成中",
+    making: "AI がフローを組み立てています",
+    starting: "AI を起動しています",
+    thinking: "考えています",
+    doing: (what: string) => `${what}中`,
+    question: "AI が質問しています",
+    questionHint: "右のチャットで答えると、続きを組み立てます",
+    openChat: "チャットを開く",
+    grows: "ノードはできた順にここに並びます",
+    asked: "依頼",
+  },
   openedAiFlow: (name: string) => `AI が作った「${name}」を開きました`,
   runStarted: "実行を開始しました",
   status: {
