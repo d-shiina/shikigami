@@ -187,6 +187,35 @@ async function writeWhole(path, bytes) {
   }
 }
 
+
+/** Refuses before anything is fetched when a file to be saved is already there. */
+async function refuseExisting(paths) {
+  for (const path of paths) {
+    const there = await stat(path).then(
+      () => true,
+      () => false,
+    );
+    if (there) throw new StepError("FILE_EXISTS", `${path} is already there`, { hint: "Set overwrite: true to replace it." });
+  }
+}
+
+/** Where a file's contents are fetched from: Google's own documents are exported as Office files. */
+function contentUrl(meta) {
+  const exported = EXPORTS[meta.mimeType];
+  return exported
+    ? `${API}/files/${encodeURIComponent(meta.id)}/export?mimeType=${encodeURIComponent(exported[0])}`
+    : `${API}/files/${encodeURIComponent(meta.id)}?alt=media&supportsAllDrives=true`;
+}
+
+/** The name a file is saved under on this PC: an exported document gets its Office extension. */
+function localName(meta) {
+  const ext = EXPORTS[meta.mimeType]?.[1];
+  return ext && !meta.name.toLowerCase().endsWith(ext) ? `${meta.name}${ext}` : meta.name;
+}
+
+/** Files with something to download: not folders, and of Google's own kinds only those exported. */
+const downloadable = (e) => e.mimeType !== FOLDER && (!e.mimeType?.startsWith("application/vnd.google-apps.") || Boolean(EXPORTS[e.mimeType]));
+
 const actions = {
   async list({ account, folder, pattern, timeoutMs = 60000 }) {
     const token = tokenOf(account);
@@ -216,14 +245,30 @@ const actions = {
         hint: "Google Sheets, Docs and Slides are saved as Excel, Word and PowerPoint files; other kinds cannot be downloaded.",
       });
     }
-    const url = exported
-      ? `${API}/files/${encodeURIComponent(meta.id)}/export?mimeType=${encodeURIComponent(exported[0])}`
-      : `${API}/files/${encodeURIComponent(meta.id)}?alt=media&supportsAllDrives=true`;
-    const response = await drive(token, url, { signal });
+    const response = await drive(token, contentUrl(meta), { signal });
     if (!response.ok) throw await failure(response, `${meta.name} could not be downloaded`);
     const bytes = Buffer.from(await response.arrayBuffer());
     await writeWhole(to, bytes);
     return { path: to, ...shape(meta), size: bytes.length };
+  },
+
+  async downloadFolder({ account, folder, to, pattern, overwrite = false, timeoutMs = 600000 }) {
+    const token = tokenOf(account);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const keep = matcher(pattern);
+    const where = await item(token, folder, "folder", signal);
+    const files = (await children(token, where.id, signal)).filter((e) => downloadable(e) && keep(e.name));
+    if (!overwrite) await refuseExisting(files.map((e) => join(to, localName(e))));
+    const saved = [];
+    for (const e of files) {
+      const response = await drive(token, contentUrl(e), { signal });
+      if (!response.ok) throw await failure(response, `${e.name} could not be downloaded`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      const path = join(to, localName(e));
+      await writeWhole(path, bytes);
+      saved.push({ path, ...shape(e), name: localName(e), size: bytes.length });
+    }
+    return { folder: to, files: saved };
   },
 
   async upload({ account, path, folder, name, overwrite = false, timeoutMs = 120000 }) {

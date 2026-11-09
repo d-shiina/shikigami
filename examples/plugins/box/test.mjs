@@ -146,6 +146,21 @@ test("downloads by path into a new folder, and refuses to replace without overwr
   p.close();
 });
 
+test("downloads the files of a folder that match, checking for files already there first", async () => {
+  const p = plugin();
+  const to = join(work, "folder-in");
+  const first = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, pattern: "*.xlsx" });
+  assert.equal(first.error, undefined, JSON.stringify(first.error));
+  assert.deepEqual(first.result.files.map((f) => f.name), ["受注.xlsx"]);
+  assert.equal(readFileSync(join(to, "受注.xlsx"), "utf8"), "BOOK!");
+  const all = await p.call("downloadFolder", { account: "good-token", folder: "11", to });
+  assert.equal(all.error.data.code, "FILE_EXISTS");
+  assert.throws(() => readFileSync(join(to, "メモ.txt")));
+  const replaced = await p.call("downloadFolder", { account: "good-token", folder: "11", to, overwrite: true });
+  assert.deepEqual(replaced.result.files.map((f) => f.name), ["受注.xlsx", "メモ.txt"]);
+  p.close();
+});
+
 test("uploads, and adds a new version only with overwrite", async () => {
   const p = plugin();
   const path = join(work, "メモ.txt");

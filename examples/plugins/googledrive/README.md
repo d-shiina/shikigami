@@ -6,6 +6,7 @@
 |---|---|
 | `googledrive.list`（Google ドライブのフォルダーの一覧） | フォルダーのファイルとフォルダーを返します。`pattern`（`*.xlsx`）で絞り込めます |
 | `googledrive.download`（Google ドライブからダウンロード） | ファイルをこの PC に保存します。Google スプレッドシート・ドキュメント・スライドは Excel・Word・PowerPoint のファイルにします |
+| `googledrive.downloadFolder`（Google ドライブのフォルダーをダウンロード） | フォルダーの直下にあるファイルを、この PC のフォルダーに保存します（例：`input`）。フローのフォルダーの入力を Google ドライブにしたとき、実行の前に使われます |
 | `googledrive.upload`（Google ドライブにアップロード） | この PC のファイルをフォルダーに置きます。同じ名前があれば `overwrite: true` で中身を置き換えます（前の中身は版の履歴に残ります。50 MB まで） |
 
 フォルダーとファイルは、「マイドライブ」からのパス（`経理/受注/受注.xlsx`）、ID、または Google ドライブで開いたときのアドレスで指定します。共有ドライブはアドレスか ID で指定します。

@@ -2,16 +2,18 @@
 // folder. The input part of the files panel lists the files the flow reads
 // that are not there yet, and offers three ways: put the file in the
 // folder, read it from a file server, or read it from cloud storage
-// (through its API: CloudPlace.tsx; or a sync app's folder). The output/ part of the files panel offers the same for where
-// files are written. A place outside is kept as a folder setting
-// (lib/filePlaces.ts), so the flow can be handed over and the receiver
-// only changes the setting.
-import type { NeededFile } from "@spellsheet/schema";
+// (through its API, fetched into input/ before each run: CloudPlace.tsx; or a
+// sync app's folder). The output/ part of the files panel offers the same
+// for where files are written. A place outside is kept as a folder setting
+// (lib/filePlaces.ts, config/cloud.json), so the flow can be handed over and
+// the receiver only changes the setting.
+import type { CloudPlace, NeededFile } from "@spellsheet/schema";
 import { CircleAlert, Cloud, FileInput, FolderOutput, Server } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useContext, useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { chooseAsk } from "../lib/ask";
+import { type CloudSide, serviceOf } from "../lib/cloudPlaces";
 import { placeChange, placeName, portable } from "../lib/filePlaces";
 import { t } from "../lib/i18n";
 import { ProjectContext, projectApi, useProjectMaybe } from "../project";
@@ -170,7 +172,7 @@ export function NeededFiles() {
       ))}
       {cloud && (
         <CloudPlaceDialog
-          file={cloud}
+          side="input"
           onClose={() => setCloud(null)}
           onSynced={() => {
             setCloud(null);
@@ -242,7 +244,7 @@ export function OutputPlaceMenu() {
       )}
       {cloud && (
         <CloudPlaceDialog
-          file={null}
+          side="output"
           onClose={() => setCloud(false)}
           onSynced={() => {
             setCloud(false);
@@ -251,6 +253,33 @@ export function OutputPlaceMenu() {
         />
       )}
     </span>
+  );
+}
+
+const NO_PLACE: CloudPlace | null = null;
+
+/**
+ * At the top of the input or output part of the files panel: the cloud
+ * storage folder each run fetches from or sends to, with a button to change it.
+ */
+export function CloudPlaceLine({ side }: { side: CloudSide }) {
+  const place = useProjectMaybe((s) => s.files?.cloud?.[side] ?? NO_PLACE, NO_PLACE);
+  const [open, setOpen] = useState(false);
+  if (!place) return null;
+  const c = t.places.cloudDialog;
+  const label = place.label || (serviceOf(place) ? c.services[serviceOf(place)!.id]?.label : undefined) || place.service;
+  const text = side === "input" ? c.readPlace(label, place.folder) : c.writePlace(label, place.folder);
+  return (
+    <div data-cloud-place={side} className="mx-1 mb-1 flex items-start gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-[11.5px] text-slate-600">
+      <Cloud size={13} strokeWidth={1.75} className="mt-px shrink-0 text-brand-500" aria-hidden="true" />
+      <span className="min-w-0 flex-1 leading-snug break-words">
+        {text}
+      </span>
+      <button type="button" onClick={() => setOpen(true)} className="shrink-0 text-brand-500 hover:underline">
+        {c.change}
+      </button>
+      {open && <CloudPlaceDialog side={side} onClose={() => setOpen(false)} />}
+    </div>
   );
 }
 

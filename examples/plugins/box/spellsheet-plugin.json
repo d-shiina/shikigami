@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "name": "box",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "label": "Box",
   "description": "Box のフォルダーの一覧・ファイルのダウンロード・アップロードを、Box Drive を入れていない PC でも Box API で行います。",
   "publisher": "SpellSheet",
@@ -137,6 +137,77 @@
             "overwrite": true
           },
           "saveAs": "order"
+        }
+      ],
+      "pathParams": [
+        "to"
+      ]
+    },
+    {
+      "action": "downloadFolder",
+      "label": "Box のフォルダーをダウンロード",
+      "summary": "Box のフォルダーにあるファイルをこの PC のフォルダーに保存します",
+      "description": "Downloads every file directly in a Box folder (the ones whose names match `pattern`, e.g. \"*.xlsx\") into the folder `to` on this PC (relative paths are in the flow's folder, e.g. \"input\"). `folder` is a folder ID (\"0\" is All Files) or a path from All Files such as \"経理/受注\". Files already there are replaced only with `overwrite: true` (checked before anything is downloaded). Output: { folder, files: [{ path, id, name, size, modifiedAt }] }. A flow folder whose input is set to cloud storage (config/cloud.json) runs this before the first node.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "Box のアカウント",
+            "description": "登録済みのシークレット（種類：OAuth）。先に「OAuth サインイン」ノードで同じシークレットにサインインしておきます"
+          },
+          "folder": {
+            "type": "string",
+            "minLength": 1,
+            "title": "フォルダー",
+            "description": "フォルダー ID（すべてのファイルは 0）か、すべてのファイルからのパス（例：経理/受注）"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "title": "保存先のフォルダー",
+            "description": "この PC のフォルダー（例：input）"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "名前の絞り込み",
+            "description": "例：*.xlsx。空欄の場合はすべて"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false,
+            "title": "上書き",
+            "description": "同じ名前のファイルがあれば置き換えます"
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "secretParams": [
+        "account"
+      ],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "defaultTimeoutMs": 600000,
+      "examples": [
+        {
+          "type": "box.downloadFolder",
+          "name": "受注フォルダーを取ってくる",
+          "params": {
+            "account": {
+              "secret": "Box",
+              "field": "accessToken"
+            },
+            "folder": "経理/受注",
+            "to": "input",
+            "pattern": "*.xlsx",
+            "overwrite": true
+          },
+          "saveAs": "fetched"
         }
       ],
       "pathParams": [

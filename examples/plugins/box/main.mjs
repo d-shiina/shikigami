@@ -156,6 +156,18 @@ async function writeWhole(path, bytes) {
   }
 }
 
+
+/** Refuses before anything is fetched when a file to be saved is already there. */
+async function refuseExisting(paths) {
+  for (const path of paths) {
+    const there = await stat(path).then(
+      () => true,
+      () => false,
+    );
+    if (there) throw new StepError("FILE_EXISTS", `${path} is already there`, { hint: "Set overwrite: true to replace it." });
+  }
+}
+
 const actions = {
   async list({ account, folder, pattern, timeoutMs = 60000 }) {
     const token = tokenOf(account);
@@ -188,6 +200,24 @@ const actions = {
     const bytes = Buffer.from(await response.arrayBuffer());
     await writeWhole(to, bytes);
     return { path: to, ...shape(meta), size: bytes.length };
+  },
+
+  async downloadFolder({ account, folder, to, pattern, overwrite = false, timeoutMs = 600000 }) {
+    const token = tokenOf(account);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const keep = matcher(pattern);
+    const files = (await items(token, await folderId(token, folder, signal), signal)).filter((e) => e.type === "file" && keep(e.name));
+    if (!overwrite) await refuseExisting(files.map((e) => join(to, e.name)));
+    const saved = [];
+    for (const e of files) {
+      const response = await box(token, `${API}/files/${e.id}/content`, { signal });
+      if (!response.ok) throw await failure(response, `the file ${e.name} could not be downloaded`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      const path = join(to, e.name);
+      await writeWhole(path, bytes);
+      saved.push({ path, ...shape(e), size: bytes.length });
+    }
+    return { folder: to, files: saved };
   },
 
   async upload({ account, path, folder, name, overwrite = false, timeoutMs = 120000 }) {

@@ -1,19 +1,20 @@
-// 「クラウドストレージから読む」「クラウドストレージに書き出す」: the flow
-// reaches Box, Google Drive or OneDrive / SharePoint through its API
-// (lib/cloudPlaces.ts), so it runs on PCs
-// without the sync app. One dialog does all of it: install the custom node
-// that comes with Writer when it is missing, choose or register the OAuth
-// app to sign in with, and say where in the storage. Picking a sync app's
-// folder (the earlier way) stays at the bottom.
+// 「クラウドストレージから読む」「クラウドストレージに書き出す」: the flow's
+// folder fetches input/ from Box, Google Drive or OneDrive / SharePoint
+// before each run, or sends what the run wrote to output/ after it, through
+// the storage's API (lib/cloudPlaces.ts), so it runs on PCs without the sync
+// app. It is a setting of the folder (config/cloud.json), not nodes. One
+// dialog does all of it: install the custom node that comes with Writer when
+// it is missing, choose or register the OAuth app to sign in with, and say
+// which folder. Picking a sync app's folder (the earlier way) stays at the
+// bottom, for a missing input file.
 import { Cloud, ExternalLink, Info } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { agent, extensionsApi } from "../lib/api";
-import { CLOUD_SERVICES, type CloudService, cloudChange } from "../lib/cloudPlaces";
-import { placeName } from "../lib/filePlaces";
+import { CLOUD_PATH, CLOUD_SERVICES, type CloudService, type CloudSide, cloudPlace, serviceOf, withCloudPlace } from "../lib/cloudPlaces";
 import { t } from "../lib/i18n";
-import { ProjectContext, projectApi } from "../project";
+import { ProjectContext, projectApi, useProjectMaybe } from "../project";
 
 const NEW = "\u0000new";
 
@@ -27,36 +28,38 @@ const secretFor = (oauth: { name: string; sites: string[] }[], service: CloudSer
   oauth.find((s) => s.sites.includes(`plugin:${service.plugin}`))?.name ?? NEW;
 
 export function CloudPlaceDialog({
-  file,
+  side,
   onClose,
   onSynced,
 }: {
-  /** input/受注.xlsx to read, or null to write what goes in output/. */
-  file: string | null;
+  /** Fetch input/ from the storage, or send output/ there. */
+  side: CloudSide;
   onClose: () => void;
-  /** The person would rather pick a sync app's folder. */
-  onSynced: () => void;
+  /** The person would rather pick a sync app's folder (not offered without it). */
+  onSynced?: () => void;
 }) {
   const c = t.places.cloudDialog;
-  const [serviceId, setServiceId] = useState<CloudService["id"]>("box");
+  const reading = side === "input";
+  const cloud = useProjectMaybe((s) => s.files?.cloud ?? null, null);
+  const current = cloud?.[side] ?? null;
+  const [serviceId, setServiceId] = useState<CloudService["id"]>(() => serviceOf(current)?.id ?? "box");
   const service = CLOUD_SERVICES.find((x) => x.id === serviceId) ?? CLOUD_SERVICES[0]!;
   const words = c.services[service.id]!;
-  const label = words.short;
   const project = useContext(ProjectContext);
   const flow = useStudio((s) => s.flow);
   const types = useStudio((s) => s.stepTypes);
   const secrets = useStudio((s) => s.secrets);
   const loadSecrets = useStudio((s) => s.loadSecrets);
   const saveSecretAdding = useStudio((s) => s.saveSecretAdding);
-  const applyOps = useStudio((s) => s.applyOps);
   const installedNode = types.some((x) => x.type === service.download);
   const oauth = secrets.filter((s) => s.kind === "oauth");
   const [secret, setSecret] = useState(() => secretFor(oauth, service));
   const [newName, setNewName] = useState(words.secret);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [redirect, setRedirect] = useState("");
-  const [target, setTarget] = useState("");
+  const [redirect, setRedirect] = useState(() => (typeof current?.signIn?.redirectUrl === "string" ? current.signIn.redirectUrl : ""));
+  const [target, setTarget] = useState(current?.folder ?? "");
+  const [pattern, setPattern] = useState(current?.pattern ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Custom nodes installed from this dialog: they work after Writer restarts.
@@ -66,19 +69,22 @@ export function CloudPlaceDialog({
   const plugin = installedNode || restartNeeded ? "installed" : installing ? "installing" : "missing";
 
   useEffect(() => void loadSecrets(), [loadSecrets]);
-  // When the list arrives and when the service changes, choose the secret already allowed to reach its node.
+  // When the list arrives and when the service changes, choose the secret
+  // the setting already uses, or the one already allowed to reach its node.
   const secretsKey = oauth.map((s) => `${s.name}:${s.sites.join(",")}`).join("|");
   // biome-ignore lint/correctness/useExhaustiveDependencies: chosen again only when the service or the list changes
   useEffect(() => {
-    setSecret(secretFor(oauth, service));
+    const kept = serviceOf(current)?.id === service.id && oauth.some((s) => s.name === current?.secret) ? current?.secret : undefined;
+    setSecret(kept ?? secretFor(oauth, service));
     setNewName(words.secret);
   }, [service.id, secretsKey]);
-  // The redirect URL of a sign-in node the flow already has for that secret.
+  // The redirect URL the other side already uses with that secret.
   useEffect(() => {
-    const existing = (flow?.steps ?? []).find((s) => s.type === "oauth.signIn" && s.params?.secret === secret);
-    const url = existing?.params?.redirectUrl;
+    if (redirect) return;
+    const other = cloud?.[reading ? "output" : "input"];
+    const url = other?.secret === secret ? other.signIn?.redirectUrl : undefined;
     if (typeof url === "string") setRedirect(url);
-  }, [flow, secret]);
+  }, [cloud, secret, reading, redirect]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -86,7 +92,6 @@ export function CloudPlaceDialog({
   }, [onClose]);
 
   if (!flow || !project) return null;
-  const fileName = file ? (file.split("/").pop() ?? file) : "";
 
   const install = async () => {
     setError(null);
@@ -102,11 +107,19 @@ export function CloudPlaceDialog({
     }
   };
 
+  const save = async (text: string | null, notice: string) => {
+    if (text === null) await projectApi.remove(flow.id, CLOUD_PATH);
+    else await projectApi.writeText(flow.id, CLOUD_PATH, text, true);
+    project.setState({ notice, panelOpen: true });
+    await project.getState().onChanged(flow.id);
+    onClose();
+  };
+
   const submit = async () => {
     const isNew = secret === NEW;
     const name = isNew ? newName.trim() : secret;
-    const where = service.target(target);
-    if (!name || !where || !redirect.trim() || (isNew && !clientId.trim())) {
+    const folder = service.target(target);
+    if (!name || !folder || !redirect.trim() || (isNew && !clientId.trim())) {
       setError(c.missing);
       return;
     }
@@ -116,35 +129,19 @@ export function CloudPlaceDialog({
       // The secret must allow the token URL, the API and the custom node.
       const saved = await saveSecretAdding(isNew ? { name, kind: "oauth", username: clientId.trim(), password: clientSecret } : { name }, service.sites);
       if (!saved) return;
-      const settings = await projectApi.readText(flow.id, "config/settings.json").catch(() => null);
-      const settingName = file ? placeName(file, c.settingName(label)) : placeName(c.outputName(label), "");
-      const change = cloudChange({
-        flow,
-        types,
-        service,
-        file,
-        target: where,
-        secret: name,
-        redirectUrl: redirect.trim(),
-        settings,
-        name: settingName,
-        description: file ? c.settingDescription(fileName, label) : c.outputDescription(label),
-        labels: { signIn: c.signInNode(label), download: c.downloadNode, upload: c.uploadNode },
-      });
-      if (!change) {
-        project.setState({ notice: t.places.noOutput });
-        onClose();
-        return;
-      }
-      await projectApi.writeText(flow.id, change.configPath, change.configText, true);
-      if (await applyOps(change.ops)) {
-        project.setState({
-          notice: file ? c.readDone(fileName, label, change.count) : c.writeDone(label, change.count),
-          panelOpen: true,
-        });
-        onClose();
-      }
-      await project.getState().onChanged(flow.id);
+      const place = cloudPlace(service, { label: words.label, secret: name, redirectUrl: redirect.trim(), folder, pattern: reading ? pattern : "" });
+      await save(withCloudPlace(cloud, side, place), reading ? c.readDone(words.label, folder) : c.writeDone(words.label, folder));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await save(withCloudPlace(cloud, side, null), reading ? c.readRemoved : c.writeRemoved);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -157,7 +154,7 @@ export function CloudPlaceDialog({
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form
         role="dialog"
-        aria-label={file ? c.readTitle : c.writeTitle}
+        aria-label={reading ? c.readTitle : c.writeTitle}
         data-cloud-dialog
         className="max-h-[88vh] w-[500px] overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-dialog"
         onSubmit={(e) => {
@@ -165,8 +162,8 @@ export function CloudPlaceDialog({
           if (ready) void submit();
         }}
       >
-        <h2 className="text-[15px] font-bold">{file ? c.readTitle : c.writeTitle}</h2>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">{file ? c.readLead(fileName) : c.writeLead}</p>
+        <h2 className="text-[15px] font-bold">{reading ? c.readTitle : c.writeTitle}</h2>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">{reading ? c.readLead : c.writeLead}</p>
 
         <div className="mt-4 text-[12px] font-medium text-slate-600">{c.service}</div>
         <div className="mt-1 flex flex-wrap gap-1.5" role="radiogroup" aria-label={c.service}>
@@ -254,12 +251,13 @@ export function CloudPlaceDialog({
           )}
           <Field label={c.redirect} hint={c.redirectHint} value={redirect} onChange={setRedirect} placeholder="https://www.example.com/" />
           <Field
-            label={file ? c.file : c.folder}
+            label={reading ? c.readFolder : c.writeFolder}
             hint={`${words.targetHint}${c.targetHint}`}
             value={target}
             onChange={setTarget}
-            placeholder={file ? c.filePlaceholder : c.folderPlaceholder}
+            placeholder={reading ? c.readPlaceholder : c.writePlaceholder}
           />
+          {reading && <Field label={c.pattern} hint={c.patternHint} value={pattern} onChange={setPattern} placeholder="*.xlsx" />}
           <p className="flex gap-1.5 text-[12px] leading-relaxed text-slate-500">
             <Info size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
             {c.signInNote(words.label)}
@@ -269,9 +267,17 @@ export function CloudPlaceDialog({
         {error && <p className="mt-3 text-[12.5px] text-shu-600">{error}</p>}
 
         <div className="mt-5 flex items-center gap-2">
-          <button type="button" title={c.syncedHint} onClick={onSynced} className="mr-auto text-[12.5px] text-brand-500 hover:underline">
-            {c.synced}
-          </button>
+          {current ? (
+            <button type="button" disabled={busy} onClick={() => void remove()} className="mr-auto text-[12.5px] text-shu-600 hover:underline">
+              {c.remove}
+            </button>
+          ) : onSynced ? (
+            <button type="button" title={c.syncedHint} onClick={onSynced} className="mr-auto text-[12.5px] text-brand-500 hover:underline">
+              {c.synced}
+            </button>
+          ) : (
+            <span className="mr-auto" />
+          )}
           <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] text-slate-600 hover:bg-slate-100">
             {t.cancel}
           </button>
@@ -280,7 +286,7 @@ export function CloudPlaceDialog({
             disabled={busy || !ready}
             className="h-8 rounded-lg bg-primary px-4 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
           >
-            {file ? c.readApply : c.writeApply}
+            {reading ? c.readApply : c.writeApply}
           </button>
         </div>
       </form>

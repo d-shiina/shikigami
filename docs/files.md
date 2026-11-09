@@ -73,43 +73,47 @@ and write `{{ settings.ordersFolder }}/orders.xlsx` in the node.
 In Writer:
 
 - When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`) and **Read from cloud storage** (below). Folders inside the user's profile are kept as `%USERPROFILE%\…`
-- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the file server folder you pick; cloud storage uploads each file once written (below)
+- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the file server folder you pick; cloud storage sends the files at the end of each run (below)
 - **Browse…** in a node's settings asks, for a file outside the flow's folder, whether to read it where it is or copy it in
 - A `.spx` lists the full paths and the settings' folders under what the receiving PC needs; on import, Writer checks whether this PC opens them
-- The AI's `list_project_files` returns the missing input files as `needed`
+- The AI's `list_project_files` returns the missing input files as `needed`, and the cloud storage setting as `cloud` (with an input place, `needed` is empty)
 
 ### Cloud storage (API)
 
-On PCs without the sync app (Box Drive and the like), and for unattended runs, the flow reaches the storage through its API. Box is supported now (Google Drive and OneDrive / SharePoint come next).
+On PCs without the sync app (Box Drive and the like), and for unattended runs, the flow's folder reaches the storage through its API: Box, Google Drive, and OneDrive / SharePoint. It is a setting of the folder, not nodes: the nodes keep reading `input/orders.xlsx` and writing `output/invoice.pdf`, so the same flow also runs with the files put in its folder by hand.
 
-**Read from cloud storage** asks for:
+- **Input**: each time a whole run starts, the files directly in a cloud storage folder are fetched into `input/` (replacing files of the same name), before the first node.
+- **Output**: each time a run ends without an error, the files it wrote directly in `output/` (new or changed during the run) are sent to a cloud storage folder (replacing files of the same name). They stay in `output/` too.
+
+In the files panel, **Read from cloud storage** (for a missing input file) and **Change where files are written → Write to cloud storage** ask for:
 
 | Field | What |
 |---|---|
-| Secret to sign in with | An OAuth app secret. A new one takes the client ID and client secret of an app made in the Box developer console (user authentication, OAuth 2.0); `https://api.box.com` and `plugin:box` are added to its sites |
+| Service | Box, Google Drive or OneDrive / SharePoint |
+| Secret to sign in with | An OAuth app secret. A new one takes the client ID and client secret of the app made in the service's developer console; the API's sites and `plugin:<name>` are added to its sites |
 | Redirect URL | The one registered with the app ([oauth.md](oauth.md)) |
-| File | A path from All Files (`Accounting/Orders/orders.xlsx`), or the address Box shows for it (kept as its ID) |
+| Folder | A path from the top of the storage (`Accounting/Orders`), or the address of the folder (Box, Google Drive) or its link (OneDrive / SharePoint) |
+| Names to fetch (input only) | `*.xlsx` and the like. Empty: every file in the folder (not the folders in it) |
 
-The flow then has:
+The setting is `config/cloud.json`:
 
 ```jsonc
-{ "type": "config.read", "params": { "path": "config/settings.json" }, "saveAs": "settings" },
-{ "type": "oauth.signIn", "name": "Sign in to Box", "params": { "secret": "Box", "authorizeUrl": "…", "tokenUrl": "…", "redirectUrl": "…" } },
-{ "type": "box.download", "name": "Download orders.xlsx", "params": {
-    "account": { "secret": "Box", "field": "accessToken" },
-    "file": "{{ settings.orders_box }}", "to": "work/orders.xlsx", "overwrite": true } },
-{ "type": "excel.readRows", "params": { "path": "work/orders.xlsx" } }
+{
+  "format": "spellsheet.cloud",
+  "input": {
+    "service": "box", "label": "Box", "secret": "Box",
+    "signIn": { "authorizeUrl": "…", "tokenUrl": "…", "redirectUrl": "…" },
+    "folder": "Accounting/Orders", "pattern": "*.xlsx"
+  },
+  "output": { "service": "onedrive", "label": "OneDrive / SharePoint", "secret": "Microsoft", "signIn": { … }, "folder": "Accounting/Out" }
+}
 ```
 
-Where the file is in Box is the setting `orders_box` (`text`), so the receiver of the flow changes the setting only. The first run opens the Box sign-in page; later runs stay signed in ([oauth.md](oauth.md)).
+Input and output may use different services or accounts (secrets). The run signs in with `oauth.signIn` first: the first run opens the sign-in page, later runs stay signed in ([oauth.md](oauth.md)). The run's log says what was moved (`Fetched 2 files from Accounting/Orders in Box into input/ (orders.xlsx, prices.xlsx)`); when a transfer fails the run fails, named as the transfer. 「ここから実行」 (run from a node) keeps `input/` as it is. The token is never in the setting, so the flow can be handed over: the receiver signs in with their own account and changes the folder if needed.
 
-**Write to cloud storage** sends each file written into `output/` with `box.upload` (a new version when the name is taken), after the last node that writes it. A file written inside a loop is sent once after the loop unless its path has `{{ }}`; one written inside an if, a switch or a try is sent inside that branch. The files stay in `output/` too.
-
-The Box custom node (`box.list`, `box.download`, `box.upload`) comes with Writer; when it is not installed yet, the dialog installs it and Writer restarts.
+The work is done by the custom node of the service (`box`, `googledrive`, `onedrive`): `<name>.downloadFolder` and `<name>.upload`. They come with Writer; when one is not installed yet, the dialog installs it and Writer restarts. Their nodes (`box.list`, `box.download`, `box.downloadFolder`, `box.upload`, …) can also be used in a flow.
 
 Keep `work/` in the flow's folder: it is emptied at every run, and in a synced folder the sync lags behind (locked files) and others see half-made files.
-
-Without Box Drive, the Box custom nodes (`box.*`) read and write through the Box API.
 
 ## Encodings
 

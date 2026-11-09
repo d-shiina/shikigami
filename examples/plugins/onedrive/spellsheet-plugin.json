@@ -144,6 +144,77 @@
       ]
     },
     {
+      "action": "downloadFolder",
+      "label": "OneDrive・SharePoint のフォルダーをダウンロード",
+      "summary": "OneDrive・SharePoint のフォルダーにあるファイルをこの PC のフォルダーに保存します",
+      "description": "Downloads every file directly in a OneDrive・SharePoint folder (the ones whose names match `pattern`, e.g. \"*.xlsx\") into the folder `to` on this PC (relative paths are in the flow's folder, e.g. \"input\"). `folder` is a sharing link or SharePoint address of the folder, or a path from your OneDrive such as \"経理/受注\". Files already there are replaced only with `overwrite: true` (checked before anything is downloaded). Output: { folder, files: [{ path, id, name, size, modifiedAt }] }. A flow folder whose input is set to cloud storage (config/cloud.json) runs this before the first node.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "Microsoft のアカウント",
+            "description": "登録済みのシークレット（種類：OAuth）。先に「OAuth サインイン」ノードで同じシークレットにサインインしておきます"
+          },
+          "folder": {
+            "type": "string",
+            "minLength": 1,
+            "title": "フォルダー",
+            "description": "SharePoint・OneDrive のフォルダーのリンクか、自分の OneDrive からのパス（例：経理/受注）"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "title": "保存先のフォルダー",
+            "description": "この PC のフォルダー（例：input）"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "名前の絞り込み",
+            "description": "例：*.xlsx。空欄の場合はすべて"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false,
+            "title": "上書き",
+            "description": "同じ名前のファイルがあれば置き換えます"
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "secretParams": [
+        "account"
+      ],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "defaultTimeoutMs": 600000,
+      "examples": [
+        {
+          "type": "onedrive.downloadFolder",
+          "name": "受注フォルダーを取ってくる",
+          "params": {
+            "account": {
+              "secret": "Microsoft",
+              "field": "accessToken"
+            },
+            "folder": "経理/受注",
+            "to": "input",
+            "pattern": "*.xlsx",
+            "overwrite": true
+          },
+          "saveAs": "fetched"
+        }
+      ],
+      "pathParams": [
+        "to"
+      ]
+    },
+    {
       "action": "upload",
       "label": "OneDrive にアップロード",
       "summary": "この PC のファイルを OneDrive・SharePoint のフォルダーに置きます",

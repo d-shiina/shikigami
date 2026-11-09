@@ -6,6 +6,7 @@ OneDrive アプリで同期していない PC や、サーバーで無人実行�
 |---|---|
 | `onedrive.list`（OneDrive のフォルダーの一覧） | フォルダーのファイルとフォルダーを返します。`pattern`（`*.xlsx`）で絞り込めます |
 | `onedrive.download`（OneDrive からダウンロード） | ファイルをこの PC に保存します |
+| `onedrive.downloadFolder`（OneDrive・SharePoint のフォルダーをダウンロード） | フォルダーの直下にあるファイルを、この PC のフォルダーに保存します（例：`input`）。フローのフォルダーの入力を OneDrive・SharePoint にしたとき、実行の前に使われます |
 | `onedrive.upload`（OneDrive にアップロード） | この PC のファイルをフォルダーに置きます。同じ名前があれば `overwrite: true` で置き換えます（前のものは版の履歴に残ります）。4 MB を超えるファイルは分けて送ります（50 MB まで） |
 
 フォルダーとファイルは、サインインした人の OneDrive からのパス（`経理/受注/受注.xlsx`）か、OneDrive・SharePoint で「リンクのコピー」をしたリンクで指定します。SharePoint のドキュメント ライブラリは、リンクで指定します（ブラウザーで開いたときのアドレスでも動くことがあります）。

@@ -167,6 +167,21 @@ test("downloads by path or by a sharing link, without sending the token to the d
   p.close();
 });
 
+test("downloads the files of a OneDrive folder or a SharePoint one", async () => {
+  const p = plugin();
+  const to = join(work, "folder-in");
+  const mine = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, pattern: "*.xlsx" });
+  assert.equal(mine.error, undefined, JSON.stringify(mine.error));
+  assert.deepEqual(mine.result.files.map((f) => f.name), ["受注.xlsx"]);
+  assert.equal(readFileSync(join(to, "受注.xlsx"), "utf8"), "BOOK!");
+  const shared = await p.call("downloadFolder", { account: "good-token", folder: SHARED_FOLDER, to });
+  assert.equal(shared.error, undefined, JSON.stringify(shared.error));
+  assert.equal(readFileSync(join(to, "共有.csv"), "utf8"), "a,");
+  const again = await p.call("downloadFolder", { account: "good-token", folder: SHARED_FOLDER, to });
+  assert.equal(again.error.data.code, "FILE_EXISTS");
+  p.close();
+});
+
 test("uploads into a OneDrive folder or a SharePoint one, replacing only with overwrite", async () => {
   const p = plugin();
   const path = join(work, "メモ.txt");

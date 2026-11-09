@@ -145,6 +145,18 @@ test("downloads by path or by address, saves Sheets as Excel, and refuses to rep
   p.close();
 });
 
+test("downloads the files of a folder, saving Sheets as Excel", async () => {
+  const p = plugin();
+  const to = join(work, "folder-in");
+  const answer = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to });
+  assert.equal(answer.error, undefined, JSON.stringify(answer.error));
+  assert.deepEqual(answer.result.files.map((f) => f.name), ["受注.xlsx", "集計.xlsx", "メモ.txt"]);
+  assert.equal(readFileSync(join(to, "集計.xlsx"), "utf8"), "EXPORT sheet");
+  const again = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, pattern: "*.txt" });
+  assert.equal(again.error.data.code, "FILE_EXISTS");
+  p.close();
+});
+
 test("uploads a new file, and replaces an existing one only with overwrite", async () => {
   const p = plugin();
   const path = join(work, "メモ.txt");
