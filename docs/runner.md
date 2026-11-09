@@ -4,7 +4,7 @@ English | [日本語](ja/runner.md)
 
 Writer is for the people who make flows. The people who only run them get a small window of their own, **SpellSheet Runner**: pick a published flow, fill in its inputs, press Run, and see what came out.
 
-- "SpellSheet Runner" in the Start menu opens only this window (for people who never edit; it is the same app as Writer, started with `--runner`). Writer's sidebar ("Runner") and the tray icon open it too. When SpellSheet is already running, it opens there instead of starting again
+- "SpellSheet Runner" in the Start menu opens only this window (for people who never edit; it is the same app as Writer, started with `--runner`). Writer's sidebar ("Runner") and the tray icon open it too. Runner has a taskbar button of its own, apart from Writer's; pinning it starts Runner. When SpellSheet is already running, it opens there instead of starting again
 - Only published flows are listed, and a run always uses the published version. Flows are published in Writer's To review ([policy.md](policy.md))
 - A person starts the run and watches it, so the unattended policy (`unattended` in `policy.json`) does not apply, as with Run in Writer. The run is recorded like any other (`origin.trigger` `studio`, `requestedBy` `runner`)
 - An unhandled error ends the run. Nothing pauses for debugging here: the window says what happened and what to do, in the same words as Writer
