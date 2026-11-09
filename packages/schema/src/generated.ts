@@ -279,12 +279,12 @@ export type ReviewVerdict = "approved" | "rejected";
  */
 export type Decision = ("allow" | "deny") | "ask";
 /**
- * How an unattended run ended, for [`NotifyRule::on`].
+ * How an unattended run ended, for [`NotifyRule::on`], or that it waits.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "RunOutcome".
  */
-export type RunOutcome = "succeeded" | "failed" | "cancelled";
+export type RunOutcome = ("succeeded" | "failed" | "cancelled") | "waiting";
 /**
  * Identifier of a request for a person's approval of an AI action.
  *
@@ -2122,7 +2122,7 @@ export interface RemotePolicy {
  */
 export interface NotifyRule {
   /**
-   * Which endings to report. Default: failures only.
+   * Which endings to report (and `waiting`). Default: failures only.
    */
   on?: RunOutcome[];
   /**
@@ -2517,6 +2517,7 @@ export type RunEventEnvelope1 =
       type: "humanActionRequired";
       stepId: StepId;
       message: string;
+      dialog?: boolean;
     }
   | {
       type: "loopRound";

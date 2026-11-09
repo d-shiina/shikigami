@@ -5,6 +5,7 @@
 //! the GUI does is exactly what MCP clients and the CLI can do.
 
 mod agent;
+mod attention;
 mod commands;
 mod debug;
 mod extensions;
@@ -263,6 +264,8 @@ pub fn run() {
             runner::open_runner,
             runner::runner_pick,
             tray::set_tray_labels,
+            attention::call_attention,
+            attention::clear_attention,
         ])
         .build(tauri::generate_context!())
         .map(|app| {

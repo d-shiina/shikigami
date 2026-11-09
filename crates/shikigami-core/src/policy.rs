@@ -184,13 +184,16 @@ impl DesktopPolicy {
     }
 }
 
-/// How an unattended run ended, for [`NotifyRule::on`].
+/// How an unattended run ended, for [`NotifyRule::on`], or that it waits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RunOutcome {
     Succeeded,
     Failed,
     Cancelled,
+    /// Not an ending: a step started waiting for a person (a login in the
+    /// browser, a dialog). Sent once for each wait, while it waits.
+    Waiting,
 }
 
 /// The shape of the message posted to a webhook.
@@ -211,7 +214,7 @@ pub enum NotifyFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NotifyRule {
-    /// Which endings to report. Default: failures only.
+    /// Which endings to report (and `waiting`). Default: failures only.
     #[serde(default = "failed_only")]
     pub on: Vec<RunOutcome>,
     /// Only these flow IDs (default: every flow).

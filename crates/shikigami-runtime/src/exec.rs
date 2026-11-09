@@ -321,10 +321,11 @@ impl Emitter {
         });
     }
 
-    pub(crate) fn human_action_required(&self, message: String, step_id: StepId) {
+    pub(crate) fn human_action_required(&self, message: String, step_id: StepId, dialog: bool) {
         self.emit(RunEvent::HumanActionRequired {
             step_id,
             message: self.mask(&message),
+            dialog,
         });
     }
 

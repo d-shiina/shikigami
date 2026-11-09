@@ -263,6 +263,8 @@ pub fn agent_cmd(
             // cancelled by the stop, for one) are waited for below.
             let sending = Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new()));
             let sends = Arc::clone(&sending);
+            let waiting_sends = Arc::clone(&sending);
+            let waiting_policy = policy_path.clone();
             agent.on_finished(Arc::new(move |report| {
                 let report = report.clone();
                 let policy_path = policy_path.clone();
@@ -270,6 +272,17 @@ pub fn agent_cmd(
                     while set.try_join_next().is_some() {}
                     set.spawn(async move {
                         shikigami_agent::notify::notify(&policy_path, &report).await;
+                    });
+                }
+            }));
+            // A run waiting for a person: nobody may be at this PC.
+            agent.on_waiting(Arc::new(move |waiting| {
+                let waiting = waiting.clone();
+                let policy_path = waiting_policy.clone();
+                if let Ok(mut set) = waiting_sends.lock() {
+                    while set.try_join_next().is_some() {}
+                    set.spawn(async move {
+                        shikigami_agent::notify::notify_waiting(&policy_path, &waiting).await;
                     });
                 }
             }));

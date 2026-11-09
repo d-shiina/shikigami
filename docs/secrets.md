@@ -100,7 +100,7 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 ### MFA
 
 - **One-time codes (TOTP)**: register the MFA setup key and `field: "totp"` types the current code each time.
-- **Phone approval, SMS, CAPTCHA…**: `browser.waitForHuman` waits for the person. Writer shows "Waiting for you" and the browser comes to the front. It continues once the `until` element (e.g. the heading after login) appears. It waits 5 minutes by default (change with `timeoutMs`). Headless runs do not wait and fail with `HUMAN_REQUIRED`.
+- **Phone approval, SMS, CAPTCHA…**: `browser.waitForHuman` waits for the person. Writer (Runner) shows "Waiting for you" and the browser comes to the front. When Writer or Runner is behind other windows, its taskbar button flashes and a Windows notification says so too. It continues once the `until` element (e.g. the heading after login) appears. It waits 5 minutes by default (change with `timeoutMs`). Headless runs do not wait and fail with `HUMAN_REQUIRED`.
 - Unattended flows normally keep a sign-in made once by a person with `session`.
 
 ## Masking

@@ -133,4 +133,20 @@ describe("the run window's progress", () => {
     expect(p.tops.map((s) => s.state)).toEqual(["done", "done", "failed"]);
     expect(p.finished).toEqual({ status: "failed", error, durationMs: 1200 });
   });
+
+  it("shows what a step waits for until it finishes, inside a called flow too", () => {
+    const events = [
+      { ...base, seq: 0, type: "stepStarted", stepId: "call", stepType: "flow.call", attempt: 1 },
+      { ...base, seq: 1, callPath: ["call"], type: "stepStarted", stepId: "login", stepType: "browser.waitForHuman", attempt: 1 },
+      { ...base, seq: 2, callPath: ["call"], type: "humanActionRequired", stepId: "login", message: "ブラウザでサインインしてください" },
+    ];
+    expect(progress(sample, events as never).waiting).toEqual({ stepId: "login", message: "ブラウザでサインインしてください", dialog: false });
+    // A step of the same id in the started flow is another step.
+    const other = { ...base, seq: 3, type: "stepFinished", stepId: "login", stepType: "x", outcome: "succeeded", durationMs: 1 };
+    expect(progress(sample, [...events, other] as never).waiting).not.toBeNull();
+    const done = { ...other, callPath: ["call"] };
+    expect(progress(sample, [...events, done] as never).waiting).toBeNull();
+    const dialog = { ...base, seq: 4, type: "humanActionRequired", stepId: "read", message: "答えてください", dialog: true };
+    expect(progress(sample, [dialog] as never).waiting?.dialog).toBe(true);
+  });
 });

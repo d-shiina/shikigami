@@ -128,7 +128,7 @@ Times are the PC's local time. The worker reads the file again when it changes. 
 | Field | Default | Meaning |
 |---|---|---|
 | `webhook` | (required) | Where to post. `https://` (`http://` only for `localhost`). Anyone with the URL can post there: treat it like a password |
-| `on` | `["failed"]` | Which endings: `failed`, `succeeded`, `cancelled` |
+| `on` | `["failed"]` | Which endings: `failed`, `succeeded`, `cancelled`. With `waiting`, also when a run **starts waiting for a person** (a sign-in in the browser, a dialog): once per wait; if nobody comes in time, it fails and `failed` reports it |
 | `format` | `teams` | `teams`: a card for a Teams "Workflows" webhook (or Power Automate's "When a HTTP request is received", which can also send mail). `slack`: `{ "text": … }` for Slack and similar tools. `json`: the run's summary for your own systems |
 | `flows` | all | Only these flow IDs |
 

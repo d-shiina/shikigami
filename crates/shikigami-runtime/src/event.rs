@@ -168,8 +168,15 @@ pub enum RunEvent {
         step_id: Option<StepId>,
     },
     /// A step waits for a person (e.g. to log in or approve MFA on the
-    /// screen). Studio shows `message` until the step finishes.
-    HumanActionRequired { step_id: StepId, message: String },
+    /// screen). Studio shows `message` until the step finishes. `dialog`:
+    /// the step shows its own window in front of the others (a SpellSheet
+    /// dialog), so the screens do not call the person themselves.
+    HumanActionRequired {
+        step_id: StepId,
+        message: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        dialog: bool,
+    },
     /// A loop (`forEach`, `repeat`, `while`) starts a round: `round` counts
     /// from 1, `total` is how many it will run at most when known (the
     /// items of a `forEach`, the count of a `repeat`). Studio shows how far

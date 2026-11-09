@@ -9,7 +9,9 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use shikigami_core::Policy;
 use shikigami_core::policy::{NotifyFormat, NotifyRule, RunOutcome};
-use shikigami_runtime::{RunReport, RunStatus, RunTrigger};
+use shikigami_core::{FlowId, RunId};
+use shikigami_runtime::{RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunStatus, RunTrigger};
+use time::OffsetDateTime;
 
 fn outcome(status: RunStatus) -> Option<RunOutcome> {
     match status {
@@ -46,7 +48,11 @@ fn title(report: &RunReport) -> String {
 }
 
 fn trigger_text(report: &RunReport) -> String {
-    let how = match report.origin.trigger {
+    origin_text(&report.origin)
+}
+
+fn origin_text(origin: &RunOrigin) -> String {
+    let how = match origin.trigger {
         Some(RunTrigger::Schedule) => "スケジュール",
         Some(RunTrigger::Remote) => "管理サーバー",
         Some(RunTrigger::Cli) => "コマンド",
@@ -54,7 +60,7 @@ fn trigger_text(report: &RunReport) -> String {
         Some(RunTrigger::Mcp) => "AI",
         None => "",
     };
-    match &report.origin.requested_by {
+    match &origin.requested_by {
         Some(who) if !how.is_empty() => format!("{how}（{who}）"),
         Some(who) => who.clone(),
         None => how.to_owned(),
@@ -82,21 +88,22 @@ fn place(error: &shikigami_runtime::RunError) -> Option<String> {
     })
 }
 
+fn local(t: OffsetDateTime) -> String {
+    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
+    let t = t.to_offset(offset);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        t.year(),
+        u8::from(t.month()),
+        t.day(),
+        t.hour(),
+        t.minute(),
+        t.second()
+    )
+}
+
 /// Name / value lines shown in every format.
 fn facts(report: &RunReport) -> Vec<(&'static str, String)> {
-    let local = |t: time::OffsetDateTime| {
-        let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
-        let t = t.to_offset(offset);
-        format!(
-            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-            t.year(),
-            u8::from(t.month()),
-            t.day(),
-            t.hour(),
-            t.minute(),
-            t.second()
-        )
-    };
     let mut out = vec![("フロー", report.flow_name.clone())];
     if let Some(error) = &report.error {
         out.push(("エラー", format!("{}: {}", error.code, error.message)));
@@ -124,31 +131,15 @@ fn facts(report: &RunReport) -> Vec<(&'static str, String)> {
 pub fn message(report: &RunReport, format: NotifyFormat) -> Value {
     let facts = facts(report);
     match format {
-        NotifyFormat::Teams => json!({
-            "type": "message",
-            "attachments": [{
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "type": "AdaptiveCard",
-                    "version": "1.4",
-                    "body": [
-                        {
-                            "type": "TextBlock",
-                            "text": title(report),
-                            "weight": "Bolder",
-                            "size": "Medium",
-                            "wrap": true,
-                            "color": if report.status == RunStatus::Failed { "Attention" } else { "Default" },
-                        },
-                        {
-                            "type": "FactSet",
-                            "facts": facts.iter().map(|(k, v)| json!({ "title": k, "value": v })).collect::<Vec<_>>(),
-                        }
-                    ]
-                }
-            }]
-        }),
+        NotifyFormat::Teams => teams_card(
+            &title(report),
+            if report.status == RunStatus::Failed {
+                "Attention"
+            } else {
+                "Default"
+            },
+            &facts,
+        ),
         NotifyFormat::Slack => {
             let lines: Vec<String> = facts.iter().map(|(k, v)| format!("{k}: {v}")).collect();
             json!({ "text": format!("{}\n{}", title(report), lines.join("\n")) })
@@ -198,21 +189,161 @@ pub async fn notify(policy_path: &Path, report: &RunReport) {
     if rules.is_empty() {
         return;
     }
+    for rule in rules {
+        post(rule, &message(report, rule.format)).await;
+    }
+}
+
+/// An unattended run that started waiting for a person: nobody may be at
+/// the PC, so `notify` rules with `waiting` in `on` say so while it waits
+/// (it fails when its time runs out, which `failed` reports as usual).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Waiting {
+    pub run_id: RunId,
+    pub flow_id: FlowId,
+    pub flow_name: String,
+    /// What the step asks the person to do.
+    pub message: String,
+    pub origin: RunOrigin,
+    pub at: OffsetDateTime,
+}
+
+/// Follows a run's events and tells when a wait for a person starts.
+#[derive(Debug, Default)]
+pub struct WaitWatch {
+    started: Option<(FlowId, String, RunOrigin)>,
+}
+
+impl WaitWatch {
+    pub fn on_event(&mut self, e: &RunEventEnvelope) -> Option<Waiting> {
+        match &e.event {
+            RunEvent::RunStarted {
+                flow_id,
+                flow_name,
+                origin,
+                ..
+            } if e.call_path.is_empty() => {
+                self.started = Some((flow_id.clone(), flow_name.clone(), origin.clone()));
+                None
+            }
+            RunEvent::HumanActionRequired { message, .. } => {
+                let (flow_id, flow_name, origin) = self.started.clone()?;
+                Some(Waiting {
+                    run_id: e.run_id.clone(),
+                    flow_id,
+                    flow_name,
+                    message: message.clone(),
+                    origin,
+                    at: e.at,
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
+fn waiting_title(w: &Waiting) -> String {
+    format!("【操作待ち】{}", w.flow_name)
+}
+
+/// The body posted for `w` in `format`.
+pub fn waiting_message(w: &Waiting, format: NotifyFormat) -> Value {
+    let mut facts = vec![
+        ("フロー", w.flow_name.clone()),
+        ("待っていること", w.message.clone()),
+    ];
+    let how = origin_text(&w.origin);
+    if !how.is_empty() {
+        facts.push(("きっかけ", how));
+    }
+    if let Some(machine) = &w.origin.machine {
+        facts.push(("PC", machine.clone()));
+    }
+    facts.push(("待ち始めた時刻", local(w.at)));
+    facts.push(("実行 ID", w.run_id.to_string()));
+    match format {
+        NotifyFormat::Teams => teams_card(&waiting_title(w), "Warning", &facts),
+        NotifyFormat::Slack => {
+            let lines: Vec<String> = facts.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+            json!({ "text": format!("{}\n{}", waiting_title(w), lines.join("\n")) })
+        }
+        NotifyFormat::Json => json!({
+            "event": "humanActionRequired",
+            "runId": w.run_id,
+            "flowId": w.flow_id,
+            "flowName": w.flow_name,
+            "message": w.message,
+            "at": w.at.format(&time::format_description::well_known::Rfc3339).ok(),
+            "origin": w.origin,
+            "title": waiting_title(w),
+        }),
+    }
+}
+
+/// The rules of `policy` that ask for `waiting` and apply to `w`.
+pub fn waiting_rules_for<'a>(policy: &'a Policy, w: &Waiting) -> Vec<&'a NotifyRule> {
+    policy
+        .notify
+        .iter()
+        .filter(|r| r.applies(RunOutcome::Waiting, w.flow_id.as_str()))
+        .collect()
+}
+
+/// Posts `w` to every webhook in the `notify` rules that ask for `waiting`.
+pub async fn notify_waiting(policy_path: &Path, w: &Waiting) {
+    let policy = match Policy::load(policy_path) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "notifications not sent: policy.json is broken");
+            return;
+        }
+    };
+    for rule in waiting_rules_for(&policy, w) {
+        post(rule, &waiting_message(w, rule.format)).await;
+    }
+}
+
+async fn post(rule: &NotifyRule, body: &Value) {
     let Some(client) = client() else {
         return;
     };
-    for rule in rules {
-        let body = message(report, rule.format);
-        match client.post(&rule.webhook).json(&body).send().await {
-            Ok(r) if r.status().is_success() => {}
-            Ok(r) => {
-                tracing::warn!(status = %r.status(), "the notification webhook refused the message")
-            }
-            // The URL is the webhook's password (Slack paths, Teams query
-            // strings): keep it out of the log.
-            Err(e) => tracing::warn!(error = %e.without_url(), "could not send a notification"),
+    match client.post(&rule.webhook).json(body).send().await {
+        Ok(r) if r.status().is_success() => {}
+        Ok(r) => {
+            tracing::warn!(status = %r.status(), "the notification webhook refused the message")
         }
+        // The URL is the webhook's password (Slack paths, Teams query
+        // strings): keep it out of the log.
+        Err(e) => tracing::warn!(error = %e.without_url(), "could not send a notification"),
     }
+}
+
+fn teams_card(title: &str, color: &str, facts: &[(&str, String)]) -> Value {
+    json!({
+        "type": "message",
+        "attachments": [{
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": title,
+                        "weight": "Bolder",
+                        "size": "Medium",
+                        "wrap": true,
+                        "color": color,
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": facts.iter().map(|(k, v)| json!({ "title": k, "value": v })).collect::<Vec<_>>(),
+                    }
+                ]
+            }
+        }]
+    })
 }
 
 #[cfg(test)]
@@ -279,5 +410,57 @@ mod tests {
         for m in [slack, teams.to_string(), json.to_string()] {
             assert!(!m.contains("secretish"));
         }
+    }
+
+    fn event(value: Value) -> RunEventEnvelope {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn a_wait_is_told_once_to_the_rules_that_ask_for_it() {
+        let mut watch = WaitWatch::default();
+        let start = event(json!({
+            "runId": "run_1", "seq": 0, "at": "2026-11-09T00:00:00Z", "type": "runStarted",
+            "flowId": "scn_a", "flowName": "受注取り込み", "revision": 1,
+            "origin": { "trigger": "schedule", "requestedBy": "毎朝", "machine": "PC-01" }
+        }));
+        assert!(watch.on_event(&start).is_none());
+        let wait = event(json!({
+            "runId": "run_1", "seq": 3, "at": "2026-11-09T00:01:00Z", "type": "humanActionRequired",
+            "stepId": "s2", "message": "ブラウザでサインインしてください"
+        }));
+        let waiting = watch.on_event(&wait).unwrap();
+        assert_eq!(waiting.flow_name, "受注取り込み");
+        assert_eq!(waiting.message, "ブラウザでサインインしてください");
+
+        let policy: Policy = serde_json::from_value(json!({
+            "notify": [
+                { "webhook": "https://a.example/x" },
+                { "webhook": "https://b.example/x", "on": ["failed", "waiting"], "format": "slack" }
+            ]
+        }))
+        .unwrap();
+        assert!(policy.problems().is_empty());
+        let rules = waiting_rules_for(&policy, &waiting);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].webhook, "https://b.example/x");
+
+        let slack = waiting_message(&waiting, NotifyFormat::Slack)["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(slack.starts_with("【操作待ち】受注取り込み"), "{slack}");
+        assert!(slack.contains("待っていること: ブラウザでサインインしてください"));
+        assert!(slack.contains("PC: PC-01"));
+        assert!(!slack.contains("s2"));
+        let teams = waiting_message(&waiting, NotifyFormat::Teams);
+        assert_eq!(
+            teams["attachments"][0]["content"]["body"][0]["color"],
+            "Warning"
+        );
+        assert_eq!(
+            waiting_message(&waiting, NotifyFormat::Json)["event"],
+            "humanActionRequired"
+        );
     }
 }

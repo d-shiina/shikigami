@@ -12,6 +12,8 @@ export interface Progress {
   /** When the run started (the first event). */
   startedAt: string | null;
   finished: { status: RunStatus; error: RunError | null; durationMs: number } | null;
+  /** A step waits for the person (a login in the browser, a dialog) until it finishes. */
+  waiting: { stepId: string; message: string; dialog: boolean } | null;
 }
 
 export function progress(flow: Flow, events: RunEventEnvelope[]): Progress {
@@ -28,11 +30,18 @@ export function progress(flow: Flow, events: RunEventEnvelope[]): Progress {
   index(flow.steps ?? []);
   let now: Step | null = null;
   let finished: Progress["finished"] = null;
+  let waiting: (Progress["waiting"] & { at: string }) | null = null;
+  const where = (e: { callPath?: string[] | null }, stepId: string) => `${(e.callPath ?? []).join("/")}:${stepId}`;
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const e of ordered) {
     // Inside a called flow, the call step of this one is what moves.
     const own = (e.callPath ?? [])[0] ?? ("stepId" in e ? e.stepId : undefined);
     const topId = own ? top.get(own) : undefined;
+    if (e.type === "humanActionRequired") {
+      waiting = { stepId: e.stepId, message: e.message, dialog: e.dialog === true, at: where(e, e.stepId) };
+    } else if (e.type === "stepFinished" && waiting?.at === where(e, e.stepId)) {
+      waiting = null;
+    }
     if (e.type === "stepStarted") {
       if (topId) {
         // Starting a later step means the ones before it are behind.
@@ -46,6 +55,7 @@ export function progress(flow: Flow, events: RunEventEnvelope[]): Progress {
     } else if (e.type === "runFinished") {
       finished = { status: e.status, error: e.error ?? null, durationMs: e.durationMs };
       now = null;
+      waiting = null;
       if (e.status === "failed") for (const [id, state] of states) if (state === "running") states.set(id, "failed");
     }
   }
@@ -54,5 +64,6 @@ export function progress(flow: Flow, events: RunEventEnvelope[]): Progress {
     now,
     startedAt: ordered[0]?.at ?? null,
     finished,
+    waiting: waiting && { stepId: waiting.stepId, message: waiting.message, dialog: waiting.dialog },
   };
 }

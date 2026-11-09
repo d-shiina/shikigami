@@ -205,7 +205,9 @@ impl RunLog {
                 }
                 text
             }
-            RunEvent::HumanActionRequired { step_id, message } => {
+            RunEvent::HumanActionRequired {
+                step_id, message, ..
+            } => {
                 format!("  WAITING {}: {message}", self.name(step_id))
             }
             RunEvent::Paused {

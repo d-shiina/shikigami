@@ -3,6 +3,7 @@
 import { unsetParams } from "./lib/nodeRows";
 import { valuesBefore } from "./lib/startAt";
 import { missingInputs } from "./lib/runInputs";
+import type { WaitingHuman } from "./lib/attention";
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -438,7 +439,7 @@ export type StudioState = {
   secretsLoaded: boolean;
   secretsOpen: boolean;
   /** A running step waits for the person at the PC (manual login, MFA). */
-  human: { stepId: string; message: string } | null;
+  human: WaitingHuman | null;
   /** Logins AI clients asked the user to register (request_secret), oldest first. */
   secretRequests: SecretRequest[];
   /** The last run stopped on a missing or incomplete secret. */
@@ -1965,7 +1966,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             // The line points at the node in there, not just at the call.
             if (env.type === "log") push(env.level, env.message, env.stepId ?? call, env.stepId ? path : undefined);
             if (env.type === "humanActionRequired") {
-              human = { stepId: call, message: env.message };
+              human = { stepId: call, message: env.message, dialog: env.dialog === true };
               push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId, path);
             }
             run.inner = { ...run.inner, [key]: states };
@@ -1986,7 +1987,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if ((env.attempt ?? 1) <= 1) run.starts = [...run.starts, { stepId: env.stepId, seq: env.seq }];
               break;
             case "humanActionRequired":
-              human = { stepId: env.stepId, message: env.message };
+              human = { stepId: env.stepId, message: env.message, dialog: env.dialog === true };
               push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId);
               break;
             case "stepFinished":

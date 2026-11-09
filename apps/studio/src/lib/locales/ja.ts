@@ -1666,6 +1666,14 @@ export const ja = {
       "web-orders": { name: "Web の受注システムで未処理の注文を出荷する", uses: "ブラウザ・ログイン" },
     } as Record<string, { name: string; uses: string }>,
   },
+  // Windows の通知：実行が人を待ち始めたとき、窓が後ろにいれば出す（lib/attention.ts）。
+  attention: {
+    waiting: (flow: string | null) => (flow ? `「${flow}」が操作を待っています` : "フローが操作を待っています"),
+    pausedOnError: (flow: string | null) => (flow ? `「${flow}」がエラーで一時停止しました` : "フローがエラーで一時停止しました"),
+    pausedAtBreakpoint: (flow: string | null) => (flow ? `「${flow}」がブレークポイントで一時停止しました` : "フローがブレークポイントで一時停止しました"),
+    pauseBody: (node: string | null) => (node ? `「${node}」で止まっています。Writer で続け方を選んでください` : "Writer で続け方を選んでください"),
+    aiTitle: "AI が Writer での操作を待っています",
+  },
   tray: {
     tooltip: "SpellSheet",
     openRunner: "Runner を開く",
