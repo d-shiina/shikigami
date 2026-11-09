@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 # Only the rlib: the staticlib and cdylib that the Tauri template adds are for
 # iOS/Android, and each one is a full extra link (with LTO) of the whole app.

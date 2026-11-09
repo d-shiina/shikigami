@@ -1672,6 +1672,7 @@ mod tests {
         assert!(is_sign_in_url(
             "https://github.com/login/oauth/authorize?c=1"
         ));
+        assert!(DOCS_URL.starts_with("https://github.com/"), "{DOCS_URL}");
         assert!(!is_sign_in_url(env!("CARGO_PKG_REPOSITORY")));
         assert!(!is_sign_in_url("https://claude.com/ x"));
         assert!(is_docs_url(&format!("{DOCS_URL}ja/tutorials/README.md")));

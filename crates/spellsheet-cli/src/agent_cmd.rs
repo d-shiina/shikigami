@@ -63,10 +63,29 @@ pub enum ManagerCmd {
     },
 }
 
+/// A manager started before the product's rename kept its state in the old
+/// default folder: it moves to the new one, so its workers, jobs and admin
+/// token stay.
+fn upgrade_legacy_data(data: &Path) {
+    let name = data
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let old = data.with_file_name(spellsheet_core::paths::legacy_spelling(name));
+    if old != data
+        && old.is_dir()
+        && !data.exists()
+        && let Err(e) = std::fs::rename(&old, data)
+    {
+        eprintln!("cannot move {} to {}: {e}", old.display(), data.display());
+    }
+}
+
 /// `spellsheet manager …`.
 pub fn manager_cmd(cmd: &ManagerCmd) -> Result<ExitCode> {
     match cmd {
         ManagerCmd::Serve { listen, data } => {
+            upgrade_legacy_data(data);
             let manager = spellsheet_manager::Manager::open(data)
                 .with_context(|| format!("opening {}", data.display()))?;
             eprintln!(
@@ -722,5 +741,22 @@ mod migrate_tests {
         assert_eq!(legacy_task_arguments("t", &task, false), None);
         // Under an old task name it is moved all the same.
         assert!(legacy_task_arguments("t", &task, true).is_some());
+    }
+}
+
+#[cfg(test)]
+mod manager_tests {
+    #[test]
+    fn the_old_default_folder_moves_to_the_new_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join(spellsheet_core::paths::legacy_spelling(
+            "spellsheet-manager",
+        ));
+        std::fs::create_dir(&old).unwrap();
+        std::fs::write(old.join("admin-token"), "t").unwrap();
+        let new = dir.path().join("spellsheet-manager");
+        super::upgrade_legacy_data(&new);
+        assert!(new.join("admin-token").is_file());
+        assert!(!old.exists());
     }
 }

@@ -78,7 +78,10 @@ pub(crate) fn spawn_after_start() {
     }
     std::thread::spawn(move || {
         let Some(home) = dirs::home_dir() else { return };
-        let all_moved = migrate_mcp_setups(&mcp_setups(&home, dirs::config_dir().as_deref()));
+        let mut files = mcp_setups(&home, dirs::config_dir().as_deref());
+        files.extend(project_setups(&home));
+        files.extend(plugin_setups(&home.join(".claude").join("plugins")));
+        let all_moved = migrate_mcp_setups(&files);
         migrate_worker_task(&cli);
         if all_moved {
             remove_old_command(&dir);
@@ -104,6 +107,56 @@ fn mcp_setups(home: &Path, roaming: Option<&Path>) -> Vec<PathBuf> {
         files.push(roaming.join("Code").join("User").join("mcp.json"));
     }
     files
+}
+
+/// The project-level setups of the folders Claude Code knows
+/// (`projects` in `~/.claude.json`): `.mcp.json`, and Cursor's, VS Code's and
+/// Gemini CLI's files in the same folders.
+fn project_setups(home: &Path) -> Vec<PathBuf> {
+    let Ok(text) = std::fs::read_to_string(home.join(".claude.json")) else {
+        return vec![];
+    };
+    let Ok(Value::Object(config)) = serde_json::from_str::<Value>(&text) else {
+        return vec![];
+    };
+    let Some(Value::Object(projects)) = config.get("projects") else {
+        return vec![];
+    };
+    projects
+        .keys()
+        .map(PathBuf::from)
+        .flat_map(|dir| {
+            [
+                dir.join(".mcp.json"),
+                dir.join(".cursor").join("mcp.json"),
+                dir.join(".vscode").join("mcp.json"),
+                dir.join(".gemini").join("settings.json"),
+            ]
+        })
+        .collect()
+}
+
+/// The `.mcp.json` of the Claude Code plugins installed on this PC
+/// (`~/.claude/plugins`), such as the one SpellSheet shipped under its old name.
+fn plugin_setups(root: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if depth > 0 {
+                    walk(&path, depth - 1, out);
+                }
+            } else if path.file_name().is_some_and(|n| n == ".mcp.json") {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, 6, &mut out);
+    out
 }
 
 /// Rewrites each file that mentions the old server or command. False when
@@ -256,9 +309,7 @@ fn migrate_toml(text: &str) -> String {
         } else if let Some(value) = trimmed.strip_prefix("command").map(str::trim_start)
             && let Some(value) = value.strip_prefix('=').map(str::trim)
             && let Some(quote) = value.chars().next().filter(|c| *c == '"' || *c == '\'')
-            && let Some(inner) = value
-                .strip_prefix(quote)
-                .and_then(|v| v.strip_suffix(quote))
+            && let Some(inner) = toml_string(&value[1..], quote)
             && let Some(new) = new_command(inner, &old)
         {
             replaced = Some(line.replacen(inner, &new, 1));
@@ -266,6 +317,23 @@ fn migrate_toml(text: &str) -> String {
         out.push_str(replaced.as_deref().unwrap_or(line));
     }
     out
+}
+
+/// The text of a TOML string up to its closing `quote` (`rest` starts just
+/// after the opening one), whatever follows it (a `# comment`). A basic
+/// string ("…") skips escaped characters; a literal one ('…') has none.
+fn toml_string(rest: &str, quote: char) -> Option<&str> {
+    let mut escaped = false;
+    for (i, c) in rest.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && quote == '"' {
+            escaped = true;
+        } else if c == quote {
+            return Some(&rest[..i]);
+        }
+    }
+    None
 }
 
 /// A worker task made with the old command, or under an old task name,
@@ -384,6 +452,36 @@ mod tests {
         );
         let done = "[mcp_servers.spellsheet]\ncommand = \"spellsheet\"\n";
         assert_eq!(migrate_toml(done), done);
+    }
+
+    #[test]
+    fn toml_command_with_a_comment_moves_too() {
+        let old = old();
+        let text =
+            format!("[mcp_servers.{old}]\ncommand = \"C:\\\\x\\\\{old}.exe\" # MCP server\n");
+        assert_eq!(
+            migrate_toml(&text),
+            "[mcp_servers.spellsheet]\ncommand = \"C:\\\\x\\\\spellsheet.exe\" # MCP server\n"
+        );
+    }
+
+    #[test]
+    fn project_folders_and_plugins_are_looked_at() {
+        let home = tempfile::tempdir().unwrap();
+        let project = home.path().join("work");
+        std::fs::write(
+            home.path().join(".claude.json"),
+            json!({ "projects": { project.display().to_string(): {} } }).to_string(),
+        )
+        .unwrap();
+        assert!(project_setups(home.path()).contains(&project.join(".mcp.json")));
+        let plugin = home.path().join("plugins/cache/m/p/1.0.0");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(plugin.join(".mcp.json"), "{}").unwrap();
+        assert_eq!(
+            plugin_setups(&home.path().join("plugins")),
+            [plugin.join(".mcp.json")]
+        );
     }
 
     #[test]
