@@ -51,11 +51,14 @@ spellsheet plugin remove azureocr
 
 ### 一覧（レジストリ）
 
-組織やコミュニティで使うカスタム ノードの一覧を、JSON の索引ファイル 1 つで配れます。サーバーは不要で、Git リポジトリに置いたファイルの raw URL などで構いません。
+Writer の「一覧」タブには、一覧（JSON の索引ファイル）に載っているカスタム ノードが並びます。初期値は **SpellSheet 公式の一覧**（`https://spellsheet.github.io/plugins/index.json`、リポジトリ [spellsheet/plugins](https://github.com/spellsheet/plugins)）です。組織やコミュニティの一覧を足したり、公式の一覧を外したりできます。同じ名前が複数の一覧にあるときは、上の一覧のものを使います。サーバーは不要で、Git リポジトリに置いたファイルや GitHub Pages で配れます。
 
 ```powershell
-spellsheet plugin registry --set https://example.com/spellsheet-extensions.json
-spellsheet plugin registry          # 一覧を表示
+spellsheet plugin registry                                   # 一覧の場所と、載っているカスタム ノード
+spellsheet plugin registry --set https://spellsheet.github.io/plugins/index.json https://example.com/index.json
+spellsheet plugin registry --set                             # 一覧を使わない
+spellsheet plugin registry --reset                           # 公式の一覧だけに戻す
+spellsheet plugin install azureocr --yes                     # 一覧に載っている名前でインストール
 ```
 
 ```json
@@ -65,16 +68,28 @@ spellsheet plugin registry          # 一覧を表示
       "name": "azureocr",
       "label": "Azure AI-OCR",
       "description": "Azure AI Document Intelligence で画像・PDF を読み取ります",
-      "version": "0.1.0",
-      "publisher": "SpellSheet 見本",
-      "homepage": "https://github.com/<owner>/<repo>",
-      "source": "https://github.com/<owner>/<repo>"
+      "version": "0.2.0",
+      "publisher": "SpellSheet",
+      "homepage": "https://github.com/spellsheet/plugin-azureocr",
+      "source": "https://github.com/spellsheet/plugin-azureocr",
+      "url": "https://github.com/spellsheet/plugin-azureocr/releases/download/v0.2.0/azureocr-0.2.0.zip",
+      "sha256": "<zip の SHA-256（16 進 64 文字）>"
     }
   ]
 }
 ```
 
-`source` はインストールの入手先（GitHub のリポジトリか zip の URL）です。索引の URL はユーザーの設定ファイル（`%APPDATA%\SpellSheet\config.json` の `extensions.registry`）に保存します。
+| 項目 | 意味 |
+|---|---|
+| `name` / `label` | 名前（ノード型の接頭辞）と表示名。一覧の中で同じ名前は 1 つだけ |
+| `version` / `url` / `sha256` | 載せた版の zip と、その SHA-256。Writer は落とした zip のハッシュが違えば入れず、中の `name` と `version` も一覧どおりか確かめます。作者があとからリリースを差し替えても、一覧を直すまで利用者には届きません |
+| `source` | 開発している場所。`url` が無い行は、ここ（GitHub のリポジトリなら最新のリリース）から入れます。版とハッシュで固定されないので、公式の一覧では使いません |
+| `withdrawn` | 取り下げた理由。インストール・更新はできなくなり、入っている PC の Writer には「無効にするかアンインストールしてください」と出ます |
+| `description` / `publisher` / `homepage` | 一覧に出す説明・発行元・紹介ページ |
+
+一覧からインストールしたカスタム ノードは、更新のときも一覧を読み直し、一覧に載っている版だけを入れます。一覧の場所はユーザーの設定ファイル（`%APPDATA%\SpellSheet\config.json` の `extensions.registries`）に保存します。以前の版の `extensions.registry`（1 つだけの URL）は、公式の一覧の次に並べて引き継ぎます。
+
+公式の一覧に載せたいときは、自分のリポジトリでリリースを作り、spellsheet/plugins に 1 行足す Pull Request を送ってください。載せる前に、自動の検査（`spellsheet plugin check`、ハッシュ、名前の重複）と人の確認を通します。一覧に載っていることは「安全を保証する」ではなく、「名前と中身が載せたときのままで、外へ送る先が書いてある」という意味です。
 
 ### 外部へ送るデータと実行の許可
 

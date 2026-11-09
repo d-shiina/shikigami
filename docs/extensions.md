@@ -51,11 +51,14 @@ A flow using a node of a turned-off extension fails validation with `PLUGIN_NOT_
 
 ### Registry
 
-A list of extensions for your organisation or community is one JSON index file. No server is needed: the raw URL of a file in a Git repository is enough.
+Writer's Catalog tab lists the custom nodes in the registries (JSON index files). By default that is the **official SpellSheet registry** (`https://spellsheet.github.io/plugins/index.json`, repository [spellsheet/plugins](https://github.com/spellsheet/plugins)). Add your organisation's or community's, or remove the official one; when several list the same name, the one higher up wins. No server is needed: a file in a Git repository or GitHub Pages is enough.
 
 ```powershell
-spellsheet plugin registry --set https://example.com/spellsheet-extensions.json
-spellsheet plugin registry          # show the list
+spellsheet plugin registry                                   # the registries and what they list
+spellsheet plugin registry --set https://spellsheet.github.io/plugins/index.json https://example.com/index.json
+spellsheet plugin registry --set                             # no registries
+spellsheet plugin registry --reset                           # only the official one again
+spellsheet plugin install azureocr --yes                     # install by its name in the registries
 ```
 
 ```json
@@ -65,16 +68,28 @@ spellsheet plugin registry          # show the list
       "name": "azureocr",
       "label": "Azure AI-OCR",
       "description": "Reads images and PDFs with Azure AI Document Intelligence",
-      "version": "0.1.0",
-      "publisher": "SpellSheet samples",
-      "homepage": "https://github.com/<owner>/<repo>",
-      "source": "https://github.com/<owner>/<repo>"
+      "version": "0.2.0",
+      "publisher": "SpellSheet",
+      "homepage": "https://github.com/spellsheet/plugin-azureocr",
+      "source": "https://github.com/spellsheet/plugin-azureocr",
+      "url": "https://github.com/spellsheet/plugin-azureocr/releases/download/v0.2.0/azureocr-0.2.0.zip",
+      "sha256": "<SHA-256 of the zip, 64 hex digits>"
     }
   ]
 }
 ```
 
-`source` is where to install from (a GitHub repository or a zip URL). The index URL is kept in the user's config file (`extensions.registry` in `%APPDATA%\SpellSheet\config.json`).
+| Field | Meaning |
+|---|---|
+| `name` / `label` | Name (the node type prefix) and display name; one entry per name |
+| `version` / `url` / `sha256` | The listed version's zip and its SHA-256. A download with another hash is not installed, and its manifest's `name` and `version` must match the entry. A release replaced after listing reaches no one until the index changes |
+| `source` | Where it is developed. An entry without `url` installs from here (a GitHub repository's latest release), unpinned; the official registry does not use that |
+| `withdrawn` | Why it was taken off the list. It can no longer be installed or updated, and Writer tells PCs that have it to turn it off or uninstall it |
+| `description` / `publisher` / `homepage` | Shown in the catalog |
+
+Extensions installed from a registry read it again to update, and only take the version it lists. The registries are kept in the user's config file (`extensions.registries` in `%APPDATA%\SpellSheet\config.json`); the single `extensions.registry` of earlier versions is kept after the official one.
+
+To list yours in the official registry, publish a release in your own repository and send spellsheet/plugins a pull request adding one entry. It goes through automatic checks (`spellsheet plugin check`, the hash, name clashes) and a person's review first. Being listed means "the name and contents are what was reviewed, and what is sent outside is declared", not "guaranteed safe".
 
 ### Data sent outside, and what may run
 

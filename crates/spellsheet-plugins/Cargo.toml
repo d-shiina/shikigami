@@ -17,6 +17,7 @@ tokio-util.workspace = true
 tracing.workspace = true
 dirs.workspace = true
 semver.workspace = true
+sha2 = "0.10.9"
 uuid.workspace = true
 time.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "system-proxy"] }

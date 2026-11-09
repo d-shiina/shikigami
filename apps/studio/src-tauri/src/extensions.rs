@@ -78,7 +78,8 @@ pub fn list_extensions(ext: State<'_, Extensions>) -> CmdResult<Value> {
     Ok(json!({
         "root": root.display().to_string(),
         "installed": installed,
-        "registry": install::registry_url(),
+        "registries": install::registry_urls(),
+        "officialRegistry": install::OFFICIAL_REGISTRY,
         "restartNeeded": ext.changed.load(Ordering::Relaxed),
     }))
 }
@@ -173,20 +174,18 @@ pub fn uninstall_extension(ext: State<'_, Extensions>, name: String) -> CmdResul
     Ok(())
 }
 
-/// Sets (or clears, with an empty text) the registry index URL.
+/// Sets the registry index URLs, in order (earlier ones win a name).
 #[tauri::command]
-pub fn set_extension_registry(url: String) -> CmdResult<()> {
-    install::set_registry_url(&url).map_err(|e| err("REGISTRY_INVALID", e))
+pub fn set_extension_registries(urls: Vec<String>) -> CmdResult<()> {
+    install::set_registry_urls(&urls).map_err(|e| err("REGISTRY_INVALID", e))
 }
 
-/// The extensions the registry offers.
+/// The extensions the registries offer, and the registries that could not
+/// be read.
 #[tauri::command]
 pub async fn fetch_extension_registry() -> CmdResult<Value> {
-    let Some(url) = install::registry_url() else {
-        return Ok(json!([]));
-    };
-    let list = install::fetch_registry(&url).await.map_err(install_err)?;
-    Ok(json!(list))
+    let urls = install::registry_urls();
+    Ok(json!(install::fetch_registries(&urls).await))
 }
 
 /// Restarts Studio so installed, updated or turned-off extensions take effect.

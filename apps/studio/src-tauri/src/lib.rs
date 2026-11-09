@@ -171,7 +171,7 @@ pub fn run() {
             extensions::discard_extension,
             extensions::set_extension_enabled,
             extensions::uninstall_extension,
-            extensions::set_extension_registry,
+            extensions::set_extension_registries,
             extensions::fetch_extension_registry,
             extensions::restart_for_extensions,
             commands::save_ai_guide,

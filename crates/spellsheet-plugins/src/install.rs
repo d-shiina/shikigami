@@ -3,8 +3,9 @@
 //!
 //! Installed plugins live in one folder each under [`install_root`]
 //! (`%LOCALAPPDATA%\SpellSheet\plugins\<name>\`). A plugin comes from a zip
-//! file or folder on this PC, a zip URL, or a GitHub repository's latest
-//! release. It is first *staged*: downloaded, unpacked and checked in a
+//! file or folder on this PC, a zip URL, a GitHub repository's latest
+//! release, or a registry (a JSON index listing extensions, each pinned to a
+//! version and the SHA-256 of its zip). It is first *staged*: downloaded, unpacked and checked in a
 //! folder of its own, so a person can see what it is (its nodes, what it
 //! sends outside, the secrets it takes) before it is put in place. Nothing
 //! is started while staging: the manifest is only read.
@@ -79,16 +80,31 @@ type Result<T> = std::result::Result<T, InstallError>;
 pub enum Source {
     /// A zip file or a plugin folder on this PC.
     File { path: String },
-    /// A zip file on the web (https).
-    Url { url: String },
+    /// A zip file on the web (https), checked against `sha256` when given.
+    Url {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sha256: Option<String>,
+    },
     /// The latest release of a GitHub repository (`owner/name`): its first
     /// `.zip` asset, else the release's source zip.
     Github { repo: String },
+    /// The extension `name` as a registry lists it: the version and zip
+    /// the index pins. `registry` is the index URL; empty, the configured
+    /// registries are looked through in order ([`registry_urls`]). Updates
+    /// read the index again, so they too only take what it lists.
+    Registry {
+        name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        registry: String,
+    },
 }
 
 impl Source {
     /// Reads what a person typed or picked: a GitHub repository URL (or
-    /// `github:owner/name`), an https URL of a zip, or a path.
+    /// `github:owner/name`), an https URL of a zip, a path, or the name of
+    /// an extension in the registries (`registry:name`, or the bare name
+    /// when no such file or folder exists here).
     pub fn parse(text: &str) -> Result<Self> {
         let text = text.trim().trim_matches('"');
         if text.is_empty() {
@@ -96,6 +112,12 @@ impl Source {
                 "SOURCE_EMPTY",
                 "no file, URL or GitHub repository was given",
             ));
+        }
+        if let Some(name) = text.strip_prefix("registry:") {
+            return registry_name(name);
+        }
+        if crate::manifest::is_plugin_name(text) && !Path::new(text).exists() {
+            return registry_name(text);
         }
         if let Some(repo) = text.strip_prefix("github:") {
             return github_repo(repo).map(|repo| Self::Github { repo });
@@ -107,12 +129,18 @@ impl Source {
         {
             // A release asset's own URL is a plain download.
             if rest.contains("/releases/download/") {
-                return Ok(Self::Url { url: text.into() });
+                return Ok(Self::Url {
+                    url: text.into(),
+                    sha256: None,
+                });
             }
             return github_repo(rest).map(|repo| Self::Github { repo });
         }
         if lower.starts_with("https://") {
-            return Ok(Self::Url { url: text.into() });
+            return Ok(Self::Url {
+                url: text.into(),
+                sha256: None,
+            });
         }
         if lower.starts_with("http://") {
             return Err(InstallError::new(
@@ -132,10 +160,25 @@ impl Source {
     pub fn display(&self) -> String {
         match self {
             Self::File { path } => path.clone(),
-            Self::Url { url } => url.clone(),
+            Self::Url { url, .. } => url.clone(),
             Self::Github { repo } => format!("https://github.com/{repo}"),
+            Self::Registry { name, .. } => format!("registry:{name}"),
         }
     }
+}
+
+fn registry_name(name: &str) -> Result<Source> {
+    let name = name.trim();
+    if !crate::manifest::is_plugin_name(name) {
+        return Err(InstallError::new(
+            "SOURCE_INVALID",
+            format!("'{name}' is not the name of an extension"),
+        ));
+    }
+    Ok(Source::Registry {
+        name: name.into(),
+        registry: String::new(),
+    })
 }
 
 /// `owner/name` from the start of a repository path.
@@ -182,6 +225,9 @@ pub struct Staged {
     pub id: String,
     pub source: Source,
     pub manifest: Manifest,
+    /// The SHA-256 the download was checked against, when one was given
+    /// (a registry pins it).
+    pub sha256: Option<String>,
     /// The plugin folder inside the staging folder.
     dir: PathBuf,
 }
@@ -198,6 +244,10 @@ impl Staged {
         summary["id"] = json!(self.id);
         summary["source"] = json!(self.source);
         summary["installedVersion"] = json!(current);
+        summary["sha256"] = json!(self.sha256);
+        if let Source::Registry { registry, .. } = &self.source {
+            summary["official"] = json!(registry == OFFICIAL_REGISTRY);
+        }
         summary
     }
 }
@@ -252,15 +302,47 @@ fn io_error(what: &str, path: &Path, e: std::io::Error) -> InstallError {
 /// Downloads (or copies) the plugin, unpacks it and checks its manifest.
 /// `taken` are the built-in adapter names. Starts nothing.
 pub async fn stage(root: &Path, source: Source, taken: &[&str]) -> Result<Staged> {
+    // A registry name is first looked up: the index says what to download.
+    let (source, fetch, entry) = match source {
+        Source::Registry { name, registry } => {
+            let urls = if registry.is_empty() {
+                registry_urls()
+            } else {
+                vec![registry]
+            };
+            let (registry, entry) = find_in_registries(&urls, &name).await?;
+            let fetch = entry_source(&entry)?;
+            (
+                Source::Registry {
+                    name,
+                    registry: registry.clone(),
+                },
+                fetch,
+                Some(entry),
+            )
+        }
+        other => (other.clone(), other, None),
+    };
     let id = uuid::Uuid::now_v7().simple().to_string();
     let work = staging_root(root).join(&id);
     std::fs::create_dir_all(&work).map_err(|e| io_error("cannot create", &work, e))?;
-    let result = stage_into(&work, &source, taken).await;
+    let result = match stage_into(&work, &fetch, taken).await {
+        Ok((dir, manifest)) => match &entry {
+            Some(entry) => check_entry(&manifest, entry).map(|()| (dir, manifest)),
+            None => Ok((dir, manifest)),
+        },
+        Err(e) => Err(e),
+    };
+    let sha256 = match &fetch {
+        Source::Url { sha256, .. } => sha256.clone(),
+        _ => None,
+    };
     match result {
         Ok((dir, manifest)) => Ok(Staged {
             id,
             source,
             manifest,
+            sha256,
             dir,
         }),
         Err(e) => {
@@ -288,9 +370,12 @@ async fn stage_into(work: &Path, source: &Source, taken: &[&str]) -> Result<(Pat
                 ));
             }
         }
-        Source::Url { url } => {
+        Source::Url { url, sha256 } => {
             let zip = work.join("download.zip");
             download(url, &zip).await?;
+            if let Some(expected) = sha256 {
+                check_sha256(&zip, expected)?;
+            }
             let file = std::fs::File::open(&zip).map_err(|e| io_error("cannot open", &zip, e))?;
             unzip(file, &content)?;
         }
@@ -300,6 +385,12 @@ async fn stage_into(work: &Path, source: &Source, taken: &[&str]) -> Result<(Pat
             download(&url, &zip).await?;
             let file = std::fs::File::open(&zip).map_err(|e| io_error("cannot open", &zip, e))?;
             unzip(file, &content)?;
+        }
+        Source::Registry { .. } => {
+            return Err(InstallError::new(
+                "SOURCE_INVALID",
+                "a registry entry cannot point at another registry entry",
+            ));
         }
     }
     let dir = find_plugin_dir(&content)?;
@@ -773,6 +864,10 @@ pub fn list(roots: &[PathBuf], managed_root: Option<&Path>, taken: &[&str]) -> V
     out
 }
 
+/// The official registry: the index of the `spellsheet/plugins` repository,
+/// served by GitHub Pages. Listed first unless a person removes it.
+pub const OFFICIAL_REGISTRY: &str = "https://spellsheet.github.io/plugins/index.json";
+
 /// One extension in a registry index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -781,57 +876,319 @@ pub struct RegistryEntry {
     pub label: String,
     #[serde(default)]
     pub description: String,
-    /// The latest version, when the index says.
+    /// The version the index lists. With `url`, the zip must hold exactly
+    /// this version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub publisher: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub homepage: String,
-    /// Where to install it from: a GitHub repository or a zip URL.
+    /// Where it is developed: a GitHub repository (or a zip URL). Installed
+    /// from when the entry has no `url`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
+    /// The zip of `version` (https).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The SHA-256 of that zip (64 hex digits). A download that differs is
+    /// not installed, so a release replaced after the entry was reviewed
+    /// does not reach anyone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// Why it was taken off the list (a problem was found). It is no longer
+    /// installed or updated, and Writer says so next to installed copies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub withdrawn: Option<String>,
+    /// The index it came from (filled in when read, not by the index).
+    #[serde(default, skip_deserializing)]
+    pub registry: String,
+    /// It came from [`OFFICIAL_REGISTRY`] (filled in when read).
+    #[serde(default, skip_deserializing)]
+    pub official: bool,
+}
+
+fn is_sha256(s: &str) -> bool {
+    s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Reads a registry index: `{ "extensions": [ RegistryEntry, … ] }`, as
 /// served from any https URL (a file in a Git repository is enough; no
-/// server is needed).
+/// server is needed). Entries that cannot be installed safely are refused
+/// with the index, so its maintainers notice.
 pub fn parse_registry(index: &Value) -> Result<Vec<RegistryEntry>> {
     let list = index.get("extensions").cloned().ok_or_else(|| {
         InstallError::new("REGISTRY_INVALID", "the index has no \"extensions\" list")
     })?;
-    serde_json::from_value(list).map_err(|e| {
+    let entries: Vec<RegistryEntry> = serde_json::from_value(list).map_err(|e| {
         InstallError::new("REGISTRY_INVALID", format!("the index cannot be read: {e}"))
-    })
+    })?;
+    let mut problems = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        let at = format!("extensions[{i}] ({})", e.name);
+        if !crate::manifest::is_plugin_name(&e.name) {
+            problems.push(format!("{at}: name is not an extension name"));
+        }
+        if e.url.is_none() && e.source.trim().is_empty() {
+            problems.push(format!("{at}: needs url (and sha256) or source"));
+        }
+        if let Some(url) = &e.url
+            && !url.to_ascii_lowercase().starts_with("https://")
+        {
+            problems.push(format!("{at}: url is not https"));
+        }
+        if let Some(sha) = &e.sha256
+            && !is_sha256(sha)
+        {
+            problems.push(format!("{at}: sha256 is not 64 hex digits"));
+        }
+        if e.sha256.is_some() && e.url.is_none() {
+            problems.push(format!("{at}: sha256 needs the url of the zip it is for"));
+        }
+        if e.url.is_some() && e.version.is_none() {
+            problems.push(format!("{at}: url needs the version it holds"));
+        }
+        if entries[..i].iter().any(|o| o.name == e.name) {
+            problems.push(format!("{at}: listed twice"));
+        }
+    }
+    if problems.is_empty() {
+        Ok(entries)
+    } else {
+        Err(InstallError {
+            code: "REGISTRY_INVALID",
+            message: "the index has entries that cannot be installed".into(),
+            problems,
+        })
+    }
 }
 
 /// Downloads and reads a registry index.
 pub async fn fetch_registry(url: &str) -> Result<Vec<RegistryEntry>> {
-    if !url.trim().to_ascii_lowercase().starts_with("https://") {
+    let url = url.trim();
+    if !url.to_ascii_lowercase().starts_with("https://") {
         return Err(InstallError::new(
             "SOURCE_NOT_HTTPS",
             format!("'{url}' is not an https URL"),
         ));
     }
-    parse_registry(&get_json(url.trim()).await?)
+    let mut entries = parse_registry(&get_json(url).await?)?;
+    for e in &mut entries {
+        e.registry = url.to_owned();
+        e.official = url == OFFICIAL_REGISTRY;
+    }
+    Ok(entries)
 }
 
-/// The registry index URL set in config.json (`extensions.registry`).
-pub fn registry_url() -> Option<String> {
-    spellsheet_core::UserConfig::load()
-        .extra
-        .get("extensions")
-        .and_then(|e| e.get("registry"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
+/// A registry that could not be read.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryFailure {
+    pub registry: String,
+    pub code: &'static str,
+    pub message: String,
+    pub problems: Vec<String>,
 }
 
-/// Sets (or, with an empty text, clears) the registry index URL.
-pub fn set_registry_url(url: &str) -> std::result::Result<(), String> {
-    let url = url.trim();
-    if !url.is_empty() && !url.to_ascii_lowercase().starts_with("https://") {
-        return Err(format!("'{url}' is not an https URL"));
+/// What the registries offer together.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Offered {
+    /// One entry per name: an earlier registry wins over a later one.
+    pub extensions: Vec<RegistryEntry>,
+    pub failed: Vec<RegistryFailure>,
+}
+
+/// Reads every registry in `urls` (in parallel) and merges them in order.
+pub async fn fetch_registries(urls: &[String]) -> Offered {
+    let results = futures_join_all(urls.iter().cloned().map(|url| async move {
+        let result = fetch_registry(&url).await;
+        (url, result)
+    }))
+    .await;
+    let mut offered = Offered::default();
+    for (registry, result) in results {
+        match result {
+            Ok(entries) => {
+                for e in entries {
+                    if !offered.extensions.iter().any(|o| o.name == e.name) {
+                        offered.extensions.push(e);
+                    }
+                }
+            }
+            Err(e) => offered.failed.push(RegistryFailure {
+                registry,
+                code: e.code,
+                message: e.message,
+                problems: e.problems,
+            }),
+        }
+    }
+    offered
+}
+
+/// Runs the futures together and keeps their order.
+async fn futures_join_all<F>(futures: impl Iterator<Item = F>) -> Vec<F::Output>
+where
+    F: std::future::Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    let handles: Vec<_> = futures.map(tokio::spawn).collect();
+    let mut out = Vec::with_capacity(handles.len());
+    for handle in handles {
+        if let Ok(value) = handle.await {
+            out.push(value);
+        }
+    }
+    out
+}
+
+/// The entry for `name` in the first of `urls` that lists it.
+async fn find_in_registries(urls: &[String], name: &str) -> Result<(String, RegistryEntry)> {
+    if urls.is_empty() {
+        return Err(InstallError::new(
+            "REGISTRY_NOT_SET",
+            "no registry is set, so there is no list to find the extension in",
+        ));
+    }
+    let offered = fetch_registries(urls).await;
+    if let Some(entry) = offered.extensions.into_iter().find(|e| e.name == name) {
+        return Ok((entry.registry.clone(), entry));
+    }
+    if let Some(f) = offered.failed.into_iter().next() {
+        return Err(InstallError {
+            code: f.code,
+            message: format!("{}: {}", f.registry, f.message),
+            problems: f.problems,
+        });
+    }
+    Err(InstallError::new(
+        "REGISTRY_ENTRY_NOT_FOUND",
+        format!("no registry lists an extension named '{name}'"),
+    ))
+}
+
+/// What to download for a registry entry: its pinned zip, else its source.
+fn entry_source(entry: &RegistryEntry) -> Result<Source> {
+    if let Some(reason) = &entry.withdrawn {
+        return Err(InstallError::new(
+            "PLUGIN_WITHDRAWN",
+            format!(
+                "'{}' was taken off the list {}: {reason}",
+                entry.name, entry.registry
+            ),
+        ));
+    }
+    if let Some(url) = &entry.url {
+        return Ok(Source::Url {
+            url: url.clone(),
+            sha256: entry.sha256.as_ref().map(|s| s.to_ascii_lowercase()),
+        });
+    }
+    match Source::parse(&entry.source)? {
+        source @ (Source::Github { .. } | Source::Url { .. }) => Ok(source),
+        _ => Err(InstallError::new(
+            "REGISTRY_INVALID",
+            format!(
+                "the entry for '{}' does not say where to download it",
+                entry.name
+            ),
+        )),
+    }
+}
+
+/// The downloaded extension is the one the entry lists.
+fn check_entry(manifest: &Manifest, entry: &RegistryEntry) -> Result<()> {
+    if manifest.name != entry.name {
+        return Err(InstallError::new(
+            "REGISTRY_ENTRY_MISMATCH",
+            format!(
+                "the registry lists '{}', but the download holds the extension '{}'",
+                entry.name, manifest.name
+            ),
+        ));
+    }
+    if entry.url.is_some()
+        && let Some(version) = &entry.version
+        && *version != manifest.version
+    {
+        return Err(InstallError::new(
+            "REGISTRY_ENTRY_MISMATCH",
+            format!(
+                "the registry lists '{}' {version}, but the download holds {}",
+                entry.name, manifest.version
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The file's SHA-256 is `expected`.
+fn check_sha256(path: &Path, expected: &str) -> Result<()> {
+    use sha2::{Digest, Sha256};
+    let mut file = std::fs::File::open(path).map_err(|e| io_error("cannot open", path, e))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).map_err(|e| io_error("cannot read", path, e))?;
+    let actual = format!("{:x}", hasher.finalize());
+    if actual.eq_ignore_ascii_case(expected) {
+        Ok(())
+    } else {
+        Err(InstallError::new(
+            "ARCHIVE_HASH_MISMATCH",
+            format!(
+                "the download is not the one the registry lists (SHA-256 {actual}, listed {expected}); it may have been replaced after it was listed"
+            ),
+        ))
+    }
+}
+
+/// The registry index URLs, in order (earlier ones win a name): config.json
+/// `extensions.registries`, else the official one followed by the single
+/// `extensions.registry` of earlier versions.
+pub fn registry_urls() -> Vec<String> {
+    let config = spellsheet_core::UserConfig::load();
+    let extensions = config.extra.get("extensions");
+    urls_from(extensions)
+}
+
+fn urls_from(extensions: Option<&Value>) -> Vec<String> {
+    let clean = |v: &Value| {
+        v.as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    if let Some(list) = extensions
+        .and_then(|e| e.get("registries"))
+        .and_then(Value::as_array)
+    {
+        let mut out: Vec<String> = Vec::new();
+        for url in list.iter().filter_map(clean) {
+            if !out.contains(&url) {
+                out.push(url);
+            }
+        }
+        return out;
+    }
+    let mut out = vec![OFFICIAL_REGISTRY.to_owned()];
+    if let Some(url) = extensions.and_then(|e| e.get("registry")).and_then(clean)
+        && url != OFFICIAL_REGISTRY
+    {
+        out.push(url);
+    }
+    out
+}
+
+/// Sets the registry index URLs, in order (an empty list: none at all).
+pub fn set_registry_urls(urls: &[String]) -> std::result::Result<(), String> {
+    let mut list: Vec<String> = Vec::new();
+    for url in urls.iter().map(|u| u.trim()).filter(|u| !u.is_empty()) {
+        if !url.to_ascii_lowercase().starts_with("https://") {
+            return Err(format!("'{url}' is not an https URL"));
+        }
+        if !list.iter().any(|u| u == url) {
+            list.push(url.to_owned());
+        }
     }
     let mut config = spellsheet_core::UserConfig::load();
     let mut extensions = config
@@ -840,18 +1197,11 @@ pub fn set_registry_url(url: &str) -> std::result::Result<(), String> {
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    if url.is_empty() {
-        extensions.remove("registry");
-    } else {
-        extensions.insert("registry".into(), json!(url));
-    }
-    if extensions.is_empty() {
-        config.extra.remove("extensions");
-    } else {
-        config
-            .extra
-            .insert("extensions".into(), Value::Object(extensions));
-    }
+    extensions.remove("registry");
+    extensions.insert("registries".into(), json!(list));
+    config
+        .extra
+        .insert("extensions".into(), Value::Object(extensions));
     config.save().map_err(|e| e.to_string())
 }
 
@@ -955,6 +1305,175 @@ mod tests {
                 .code,
             "REGISTRY_INVALID"
         );
+    }
+
+    #[test]
+    fn reads_registry_sources() {
+        let named = Source::Registry {
+            name: "azureocr".into(),
+            registry: String::new(),
+        };
+        assert_eq!(Source::parse("registry:azureocr").unwrap(), named);
+        // A bare name is a registry name unless such a file or folder is here.
+        assert_eq!(Source::parse("azureocr").unwrap(), named);
+        assert_eq!(Source::parse(&named.display()).unwrap(), named);
+        assert_eq!(
+            Source::parse("registry:Azure OCR").unwrap_err().code,
+            "SOURCE_INVALID"
+        );
+        // What is recorded for updates keeps the index and the hash.
+        let pinned = Source::Url {
+            url: "https://x/a.zip".into(),
+            sha256: Some("ab".repeat(32)),
+        };
+        let text = serde_json::to_string(&pinned).unwrap();
+        assert_eq!(serde_json::from_str::<Source>(&text).unwrap(), pinned);
+        let old: Source =
+            serde_json::from_str(r#"{"kind":"url","url":"https://x/a.zip"}"#).unwrap();
+        assert_eq!(
+            old,
+            Source::Url {
+                url: "https://x/a.zip".into(),
+                sha256: None
+            }
+        );
+    }
+
+    fn entry(value: Value) -> RegistryEntry {
+        parse_registry(&json!({ "extensions": [value] }))
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn refuses_registry_entries_that_cannot_be_installed_safely() {
+        let sha = "0f".repeat(32);
+        let bad = |value: Value| {
+            parse_registry(&json!({ "extensions": [value] }))
+                .unwrap_err()
+                .problems
+                .join("\n")
+        };
+        assert!(bad(json!({ "name": "a", "label": "A" })).contains("needs url"));
+        assert!(
+            bad(json!({ "name": "a", "label": "A", "url": "http://x/a.zip", "version": "1.0.0", "sha256": sha }))
+                .contains("not https")
+        );
+        assert!(
+            bad(json!({ "name": "a", "label": "A", "url": "https://x/a.zip", "version": "1.0.0", "sha256": "abc" }))
+                .contains("64 hex")
+        );
+        assert!(
+            bad(json!({ "name": "a", "label": "A", "source": "https://github.com/x/a", "sha256": sha }))
+                .contains("needs the url")
+        );
+        assert!(
+            bad(json!({ "name": "a", "label": "A", "url": "https://x/a.zip", "sha256": sha }))
+                .contains("needs the version")
+        );
+        assert!(
+            bad(json!({ "name": "A b", "label": "A", "source": "https://github.com/x/a" }))
+                .contains("not an extension name")
+        );
+        let twice = parse_registry(&json!({ "extensions": [
+            { "name": "a", "label": "A", "source": "https://github.com/x/a" },
+            { "name": "a", "label": "A", "source": "https://github.com/y/a" },
+        ] }))
+        .unwrap_err();
+        assert!(twice.problems[0].contains("listed twice"), "{twice}");
+        // Whether it is official is not the index's to say.
+        let e = entry(
+            json!({ "name": "a", "label": "A", "source": "https://github.com/x/a", "official": true, "registry": "x" }),
+        );
+        assert!(!e.official && e.registry.is_empty());
+    }
+
+    #[test]
+    fn a_registry_entry_pins_what_is_installed() {
+        let sha = "AB".repeat(32);
+        let pinned = entry(json!({
+            "name": "azureocr", "label": "Azure AI-OCR", "version": "0.2.0",
+            "url": "https://github.com/acme/azureocr/releases/download/v0.2.0/azureocr-0.2.0.zip",
+            "sha256": sha, "source": "https://github.com/acme/azureocr",
+        }));
+        assert_eq!(
+            entry_source(&pinned).unwrap(),
+            Source::Url {
+                url: pinned.url.clone().unwrap(),
+                sha256: Some("ab".repeat(32)),
+            }
+        );
+        // Without a pinned zip, the source (a repository's latest release).
+        let loose = entry(
+            json!({ "name": "azureocr", "label": "A", "source": "https://github.com/acme/azureocr" }),
+        );
+        assert_eq!(
+            entry_source(&loose).unwrap(),
+            Source::Github {
+                repo: "acme/azureocr".into()
+            }
+        );
+        let local =
+            entry(json!({ "name": "azureocr", "label": "A", "source": "C:/plugins/azureocr.zip" }));
+        assert_eq!(entry_source(&local).unwrap_err().code, "REGISTRY_INVALID");
+        let mut withdrawn = pinned.clone();
+        withdrawn.withdrawn = Some("sends files to an undeclared address".into());
+        let err = entry_source(&withdrawn).unwrap_err();
+        assert_eq!(err.code, "PLUGIN_WITHDRAWN");
+        assert!(err.message.contains("undeclared"), "{err}");
+
+        // The download must be the extension and version listed.
+        let manifest = read_manifest(&hello()).unwrap();
+        let mut listed = pinned.clone();
+        listed.name = "hello".into();
+        listed.version = Some(manifest.version.clone());
+        assert!(check_entry(&manifest, &listed).is_ok());
+        listed.version = Some("9.9.9".into());
+        assert_eq!(
+            check_entry(&manifest, &listed).unwrap_err().code,
+            "REGISTRY_ENTRY_MISMATCH"
+        );
+        assert_eq!(
+            check_entry(&manifest, &pinned).unwrap_err().code,
+            "REGISTRY_ENTRY_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn checks_the_sha256_of_a_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.zip");
+        std::fs::write(&file, b"abc").unwrap();
+        let abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        assert!(check_sha256(&file, abc).is_ok());
+        assert!(check_sha256(&file, &abc.to_ascii_uppercase()).is_ok());
+        assert_eq!(
+            check_sha256(&file, &"0".repeat(64)).unwrap_err().code,
+            "ARCHIVE_HASH_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn lists_the_registries_in_order() {
+        assert_eq!(urls_from(None), vec![OFFICIAL_REGISTRY.to_owned()]);
+        // The one URL earlier versions kept comes after the official one.
+        assert_eq!(
+            urls_from(Some(
+                &json!({ "registry": "https://acme.example/index.json" })
+            )),
+            vec![
+                OFFICIAL_REGISTRY.to_owned(),
+                "https://acme.example/index.json".to_owned()
+            ]
+        );
+        // A list set by the person is taken as it is, even without the official one.
+        assert_eq!(
+            urls_from(Some(
+                &json!({ "registries": ["https://acme.example/index.json", " ", "https://acme.example/index.json"], "registry": "https://old" })
+            )),
+            vec!["https://acme.example/index.json".to_owned()]
+        );
+        assert!(urls_from(Some(&json!({ "registries": [] }))).is_empty());
     }
 
     fn hello() -> PathBuf {

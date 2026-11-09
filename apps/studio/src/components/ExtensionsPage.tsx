@@ -1,14 +1,15 @@
 // The 「カスタム ノード」 page (code: extensions / plugins), opened from Settings and the palette (docs/extensions.md): extensions installed on this
 // PC, as in VS Code: turn one on or off, check for an update, uninstall it,
 // or install one from a zip file, an https URL, a GitHub repository or the
-// catalog (a JSON index whose URL is set here). Installing shows what the
+// catalog (the registries: JSON indexes, the official one first, each entry
+// pinned to a version and the SHA-256 of its zip). Installing shows what the
 // extension is first (its nodes, what they send outside, the secrets and the
 // program) and installs only when the person confirms. Studio loads
 // extensions when it starts, so a change offers a restart.
-import { CirclePause, CirclePlay, CloudUpload, Puzzle, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronDown, CirclePause, CirclePlay, CloudUpload, List, Puzzle, RefreshCw, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useStudioApi } from "../context";
-import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry } from "../lib/api";
+import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry, type RegistryOffer } from "../lib/api";
 import { confirmAsk } from "../lib/ask";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
@@ -65,6 +66,13 @@ function Preview({ preview, busy, onConfirm, onCancel }: { preview: ExtensionPre
             {preview.name} · {t.extensions.version(preview.version ?? "")}
             {preview.publisher ? ` · ${t.extensions.by(preview.publisher)}` : ""}
           </p>
+          {preview.source.kind === "registry" && (
+            <p className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-600">
+              {preview.sha256 && <ShieldCheck size={13} strokeWidth={1.75} className="shrink-0 text-moegi-600" aria-hidden="true" />}
+              {preview.official ? p.fromOfficial : p.fromRegistry}
+              {preview.sha256 ? p.hashChecked : ""}
+            </p>
+          )}
           {isUpdate && (
             <p className="mt-0.5 text-[12px] text-slate-600">
               {preview.installedVersion === preview.version ? p.reinstall(preview.version ?? "") : p.update(preview.installedVersion ?? "", preview.version ?? "")}
@@ -333,11 +341,48 @@ function installedColumns(onEnabled: (ext: InstalledExtension, on: boolean) => v
 }
 
 type Offered = RegistryEntry & { have?: InstalledExtension };
+type OfferState = "withdrawn" | "update" | "have" | "new";
+const OFFER_STATES: OfferState[] = ["update", "have", "new", "withdrawn"];
 
-function registryColumns(onInstall: (source: string) => void): Column<Offered>[] {
+const offerState = (x: Offered): OfferState => (x.withdrawn ? "withdrawn" : x.have ? (x.version && x.have.version && x.version !== x.have.version ? "update" : "have") : "new");
+
+function offerBadge(x: Offered) {
   const e = t.extensions;
+  const r = e.registry;
+  switch (offerState(x)) {
+    case "withdrawn":
+      return <StatusBadge tone="red" label={r.withdrawn} title={x.withdrawn} />;
+    case "update":
+      return <StatusBadge tone="blue" label={r.updateAvailable} title={r.updateFromTo(x.have?.version ?? "", x.version ?? "")} />;
+    case "have":
+      return <StatusBadge tone="green" label={e.installedState} title={x.have?.version ? e.version(x.have.version) : undefined} />;
+    default:
+      return <span className="text-[12.5px] text-slate-500">{e.notInstalled}</span>;
+  }
+}
+
+const offerLabel = (s: OfferState) => {
+  const e = t.extensions;
+  return s === "withdrawn" ? e.registry.withdrawn : s === "update" ? e.registry.updateAvailable : s === "have" ? e.installedState : e.notInstalled;
+};
+
+function registryColumns(onInstall: (x: Offered) => void): Column<Offered>[] {
+  const e = t.extensions;
+  const r = e.registry;
   return [
-    { id: "name", header: t.runs.name, sortValue: (x) => x.label, cell: (x) => <NameCell ext={{ ...x, icon: x.have?.icon }} /> },
+    {
+      id: "name",
+      header: t.runs.name,
+      sortValue: (x) => x.label,
+      cell: (x) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1">
+            <NameCell ext={{ ...x, icon: x.have?.icon }} />
+          </span>
+          {x.official && <Tag title={r.officialTitle}>{r.official}</Tag>}
+        </span>
+      ),
+    },
     {
       id: "publisher",
       header: e.publisherColumn,
@@ -359,14 +404,12 @@ function registryColumns(onInstall: (source: string) => void): Column<Offered>[]
       id: "state",
       header: e.stateColumn,
       width: "w-[168px]",
-      sortValue: (x) => (x.have ? 0 : 1),
-      group: (x) => ({ key: x.have ? "have" : "new", order: x.have ? 0 : 1, label: x.have ? e.installedState : e.notInstalled }),
-      cell: (x) =>
-        x.have ? (
-          <StatusBadge tone="green" label={e.installedState} title={x.have.version ? e.version(x.have.version) : undefined} />
-        ) : (
-          <span className="text-[12.5px] text-slate-500">{e.notInstalled}</span>
-        ),
+      sortValue: (x) => OFFER_STATES.indexOf(offerState(x)),
+      group: (x) => {
+        const s = offerState(x);
+        return { key: s, order: OFFER_STATES.indexOf(s), label: offerLabel(s) };
+      },
+      cell: offerBadge,
     },
     {
       // What the catalog is for, so always in view (not a hover action).
@@ -375,113 +418,163 @@ function registryColumns(onInstall: (source: string) => void): Column<Offered>[]
       width: "w-[132px]",
       align: "right",
       hideable: false,
-      cell: (x) => (
-        <button
-          type="button"
-          className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12.5px] whitespace-nowrap text-slate-700 hover:bg-slate-100"
-          onClick={(ev) => {
-            ev.stopPropagation();
-            onInstall(x.source);
-          }}
-        >
-          {x.have ? e.checkUpdate : e.install}
-        </button>
-      ),
+      cell: (x) => {
+        const s = offerState(x);
+        if (s === "withdrawn") return null;
+        return (
+          <button
+            type="button"
+            className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12.5px] whitespace-nowrap text-slate-700 hover:bg-slate-100"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onInstall(x);
+            }}
+          >
+            {s === "update" ? r.update : s === "have" ? e.checkUpdate : e.install}
+          </button>
+        );
+      },
     },
   ];
 }
 
-/** The catalog: a JSON index set by URL, nothing hosted by SpellSheet. */
+/** Where the catalog comes from: the registries, in order (earlier ones win a name). */
+function RegistrySources({ list, onSaved }: { list: ExtensionList; onSaved: () => void }) {
+  const r = t.extensions.registry;
+  const [adding, setAdding] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const save = async (urls: string[]) => {
+    setError(null);
+    try {
+      await extensionsApi.setRegistries(urls);
+      setAdding("");
+      onSaved();
+    } catch (err) {
+      setError(message(err));
+    }
+  };
+  const hasOfficial = list.registries.includes(list.officialRegistry);
+  return (
+    <div className="mb-3 rounded-lg border border-slate-200 bg-sheet p-3">
+      <p className="mb-2 text-[12px] text-slate-500">{r.sourcesHint}</p>
+      {list.registries.length === 0 ? (
+        <p className="mb-2 text-[12.5px] text-slate-600">{r.notSet}</p>
+      ) : (
+        <ul className="mb-2 divide-y divide-slate-100">
+          {list.registries.map((url) => (
+            <li key={url} className="flex items-center gap-2 py-1.5 text-[13px]">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{url === list.officialRegistry ? r.officialName : url}</span>
+                {url === list.officialRegistry && <span className="block truncate text-[11.5px] text-slate-500">{url}</span>}
+              </span>
+              <button
+                type="button"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-500 hover:bg-slate-100 hover:text-ink"
+                title={r.removeSource}
+                aria-label={r.removeSource}
+                onClick={() => void save(list.registries.filter((u) => u !== url))}
+              >
+                <X size={14} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          className={`${inputClass} h-7`}
+          value={adding}
+          placeholder={r.urlPlaceholder}
+          onChange={(ev) => setAdding(ev.target.value)}
+          onKeyDown={(ev) => ev.key === "Enter" && adding.trim() && void save([...list.registries, adding.trim()])}
+        />
+        <button
+          type="button"
+          disabled={!adding.trim()}
+          className="h-7 shrink-0 rounded-lg border border-slate-300 px-2.5 text-[13px] text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          onClick={() => void save([...list.registries, adding.trim()])}
+        >
+          {r.add}
+        </button>
+        {!hasOfficial && (
+          <button type="button" className="h-7 shrink-0 rounded-lg px-2.5 text-[13px] text-primary hover:bg-slate-100" onClick={() => void save([list.officialRegistry, ...list.registries])}>
+            {r.addOfficial}
+          </button>
+        )}
+      </div>
+      {error && <p className="mt-2 text-xs text-shu-600">{error}</p>}
+    </div>
+  );
+}
+
+/** The catalog: what the registries (JSON indexes) list; nothing hosted by a server. */
 function Registry({
   list,
+  offer,
   installed,
   query,
   onInstall,
   onSaved,
 }: {
   list: ExtensionList;
+  offer: RegistryOffer | null;
   installed: InstalledExtension[];
   query: string;
-  onInstall: (source: string) => void;
+  onInstall: (x: Offered) => void;
   onSaved: () => void;
 }) {
   const r = t.extensions.registry;
   const e = t.extensions;
-  const [url, setUrl] = useState(list.registry ?? "");
-  const [entries, setEntries] = useState<RegistryEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [states, setStates] = useState<Set<"have" | "new">>(new Set());
+  const [editing, setEditing] = useState(false);
+  const [states, setStates] = useState<Set<OfferState>>(new Set());
   const columns = registryColumns(onInstall);
   const view = useTableView(columns, { storageKey: "spellsheet.studio.extensions.registry.sort", initialSort: { column: "name", descending: false } });
-  const load = useCallback(async () => {
-    if (!list.registry) return setEntries(null);
-    setEntries(null);
-    setError(null);
-    try {
-      setEntries(await extensionsApi.registry());
-    } catch (err) {
-      setError(message(err));
-    }
-  }, [list.registry]);
-  useEffect(() => void load(), [load]);
+  const entries = offer?.extensions ?? null;
   const offered: Offered[] = (entries ?? []).map((entry) => ({ ...entry, have: installed.find((i) => i.name === entry.name) }));
   const q = query.trim().toLowerCase();
   const matches = (x: Offered) => !q || [x.label, x.name, x.description ?? "", x.publisher ?? ""].join(" ").toLowerCase().includes(q);
-  const rows = offered.filter((x) => matches(x) && (!states.size || states.has(x.have ? "have" : "new")));
+  const rows = offered.filter((x) => matches(x) && (!states.size || states.has(offerState(x))));
+  const stateOptions = OFFER_STATES.map((value) => ({
+    value,
+    label: offerLabel(value),
+    count: offered.filter((x) => matches(x) && offerState(x) === value).length,
+  })).filter((o) => o.count > 0 || states.has(o.value));
+  const n = list.registries.length;
   return (
     <div>
-      {/* Where the catalog comes from: a setting of this tab, kept on one line above it. */}
       <div className="mb-3 flex items-center gap-2">
-        <span className="shrink-0 text-[12px] font-medium text-slate-600">{r.url}</span>
-        <input className={`${inputClass} h-7 max-w-[520px]`} value={url} placeholder={r.urlPlaceholder} onChange={(ev) => setUrl(ev.target.value)} />
         <button
           type="button"
-          disabled={url === (list.registry ?? "")}
-          className="h-7 shrink-0 rounded-lg border border-slate-300 px-2.5 text-[13px] text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-          onClick={async () => {
-            try {
-              await extensionsApi.setRegistry(url);
-              onSaved();
-            } catch (err) {
-              setError(message(err));
-            }
-          }}
+          aria-expanded={editing}
+          onClick={() => setEditing((v) => !v)}
+          className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] text-slate-700 hover:bg-slate-100"
         >
-          {r.save}
+          <List size={14} strokeWidth={1.75} aria-hidden="true" />
+          {r.sources(n)}
+          <ChevronDown size={14} strokeWidth={1.75} className={editing ? "rotate-180" : ""} aria-hidden="true" />
         </button>
         {entries && entries.length > 0 && (
           <>
             <span className="flex-1" />
-            <FacetFilter
-              label={e.stateColumn}
-              value={states}
-              onChange={setStates}
-              options={(["have", "new"] as const).map((value) => ({
-                value,
-                label: value === "have" ? e.installedState : e.notInstalled,
-                count: offered.filter((x) => matches(x) && (value === "have") === !!x.have).length,
-              }))}
-            />
+            <FacetFilter label={e.stateColumn} value={states} onChange={setStates} options={stateOptions} />
             <ViewMenu view={view} />
           </>
         )}
       </div>
-      {error && <p className="mb-2 text-xs text-shu-600">{error}</p>}
-      {!list.registry ? (
+      {editing && <RegistrySources list={list} onSaved={onSaved} />}
+      {offer?.failed.map((f) => (
+        <p key={f.registry} className="mb-2 text-xs text-shu-600" title={f.problems.join("\n")}>
+          {r.failed(f.registry === list.officialRegistry ? r.officialName : f.registry, f.message)}
+        </p>
+      ))}
+      {n === 0 ? (
         <Empty>{r.notSet}</Empty>
       ) : entries === null ? (
-        !error && <p className="text-sm text-slate-500">{r.loading}</p>
+        <p className="text-sm text-slate-500">{r.loading}</p>
       ) : entries.length === 0 ? (
-        <Empty>{r.empty}</Empty>
+        offer?.failed.length ? null : <Empty>{r.empty}</Empty>
       ) : (
-        <DataTable
-          columns={columns}
-          view={view}
-          rows={rows}
-          total={offered.length}
-          rowKey={(x) => x.name}
-          empty={e.notFound}
-        />
+        <DataTable columns={columns} view={view} rows={rows} total={offered.length} rowKey={(x) => x.name} empty={e.notFound} />
       )}
       <p className="mt-3 text-[12px] leading-relaxed text-slate-500">{r.intro}</p>
     </div>
@@ -512,6 +605,7 @@ export function ExtensionsPage() {
   const [query, setQuery] = useState("");
   const [states, setStates] = useState<Set<InstalledState>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [offer, setOffer] = useState<RegistryOffer | null>(null);
   const load = useCallback(async () => {
     try {
       setList(await extensionsApi.list());
@@ -521,6 +615,32 @@ export function ExtensionsPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  // The catalog is read once the registries are known (and again when they change):
+  // it also says which installed ones were withdrawn.
+  const registriesKey = list?.registries.join("\n");
+  useEffect(() => {
+    if (registriesKey === undefined) return;
+    if (!registriesKey) return setOffer({ extensions: [], failed: [] });
+    let live = true;
+    setOffer(null);
+    extensionsApi
+      .registry()
+      .then((o) => live && setOffer(o))
+      .catch((err: unknown) => live && setOffer({ extensions: [], failed: [{ registry: "", code: "", message: message(err), problems: [] }] }));
+    return () => {
+      live = false;
+    };
+  }, [registriesKey]);
+  const fromRegistry = async (x: RegistryEntry) => {
+    setNotice(null);
+    setError(null);
+    try {
+      setInstalling(null);
+      setPreview(await extensionsApi.stage(`registry:${x.name}`));
+    } catch (err) {
+      setError(message(err));
+    }
+  };
   const act = async (what: () => Promise<unknown>) => {
     setNotice(null);
     try {
@@ -564,6 +684,10 @@ export function ExtensionsPage() {
     }
   };
   const installed = list?.installed ?? [];
+  const withdrawn = installed.flatMap((ext) => {
+    const entry = offer?.extensions.find((x) => x.name === ext.name && x.withdrawn);
+    return entry ? [{ ext, reason: entry.withdrawn! }] : [];
+  });
   const setEnabled = (exts: InstalledExtension[], on: boolean) =>
     act(async () => {
       for (const ext of exts) if (ext.managed && ext.enabled !== on) await extensionsApi.setEnabled(ext.name, on);
@@ -656,6 +780,12 @@ export function ExtensionsPage() {
             </button>
           </div>
         )}
+        {withdrawn.map(({ ext, reason }) => (
+          <p key={ext.dir} className="mb-3 flex gap-1.5 rounded-md bg-shu-50 px-2 py-1.5 text-[12.5px] text-shu-600">
+            <TriangleAlert size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {e.registry.withdrawnInstalled(ext.label, reason)}
+          </p>
+        ))}
         {error && <p className="mb-3 text-xs text-shu-600">{error}</p>}
         {notice && <p className="mb-3 text-xs text-slate-600">{notice}</p>}
         {formOpen && (
@@ -698,16 +828,7 @@ export function ExtensionsPage() {
               <p className="mt-3 text-[12px] leading-relaxed text-slate-500">{e.intro}</p>
             </>
           ) : (
-            <Registry
-              list={list}
-              installed={installed}
-              query={query}
-              onInstall={(source) => {
-                setPreview(null);
-                setInstalling(source);
-              }}
-              onSaved={() => void load()}
-            />
+            <Registry list={list} offer={offer} installed={installed} query={query} onInstall={(x) => void fromRegistry(x)} onSaved={() => void load()} />
           ))}
       </div>
     </div>
