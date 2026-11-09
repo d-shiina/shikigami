@@ -1879,7 +1879,7 @@ export const en: Dict = {
     exportDialog: {
       title: "Export the procedure",
       blurFields: "Blur tables and input fields",
-      blurFieldsHint: "Blurs table cells and input fields on browser screens, e.g. when customers' names show.",
+      blurFieldsHint: "Blurs table cells, input fields and the values in label-and-value rows on browser screens (labels stay readable), as the screens in the manual already show.",
       noPictures: "Leave out the screens",
       noPicturesHint: "Words only.",
       warn: "The screens show what was on them when the flow ran. Check them before sharing outside the company.",
