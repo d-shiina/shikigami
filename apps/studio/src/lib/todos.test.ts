@@ -47,6 +47,19 @@ describe("personTodos", () => {
   });
 });
 
+describe("an account picked each run", () => {
+  it("asks to register each of the input's choices that is missing", () => {
+    const picked = {
+      ...flow,
+      parts: {},
+      variables: [{ name: "アカウント", type: "string", direction: "input", choices: ["受注（経理）", "受注（申請）"] }],
+      steps: [{ id: "u", type: "browser.fill", params: { value: { secret: "{{ アカウント }}", field: "username" } } }],
+    } as Flow;
+    const todos = personTodos(picked, defs, new Set(["受注（経理）"]), null);
+    expect(todos).toEqual([{ kind: "secret", name: "受注（申請）", fields: ["username"], steps: ["u"] }]);
+  });
+});
+
 describe("text for the AI", () => {
   const validation: ValidationReport = {
     valid: false,

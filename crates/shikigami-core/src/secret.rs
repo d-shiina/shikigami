@@ -18,7 +18,8 @@ use serde_json::{Value, json};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SecretRef {
-    /// Name the secret was registered under (literal, no `{{ }}`).
+    /// Name the secret was registered under (literal), or `{{ variable }}`
+    /// of an input whose `choices` are registered names ([`name_variable`]).
     pub secret: String,
     pub field: SecretField,
 }
@@ -148,6 +149,21 @@ pub fn check_name(name: &str) -> Result<(), String> {
         return Err("a secret name must not start or end with spaces".into());
     }
     Ok(())
+}
+
+/// The variable a secret name is taken from, when the name is written
+/// `{{ variable }}` (a choice the person makes when the run starts, e.g.
+/// which of two accounts of the same site to log in with). The variable
+/// must be an input with `choices`: validation checks that, so the names a
+/// flow may use stay listed in the flow.
+pub fn name_variable(name: &str) -> Option<&str> {
+    let inner = name.trim().strip_prefix("{{")?.strip_suffix("}}")?.trim();
+    let ok = !inner.is_empty()
+        && !inner.contains("{{")
+        && !inner.contains("}}")
+        && inner.chars().all(|c| c.is_alphanumeric() || c == '_')
+        && !inner.starts_with(|c: char| c.is_ascii_digit());
+    ok.then_some(inner)
 }
 
 /// What a step gets for a [`SecretRef`].
@@ -306,7 +322,7 @@ pub fn secret_ref_schema() -> Value {
         "type": "object",
         "description": "A registered secret, e.g. { \"secret\": \"受注システム\", \"field\": \"password\" }. Only the name is written here; the value is looked up when the step runs.",
         "properties": {
-            "secret": { "type": "string", "minLength": 1, "maxLength": MAX_NAME_LEN },
+            "secret": { "type": "string", "minLength": 1, "maxLength": MAX_NAME_LEN, "description": "The registered name, or \"{{ variable }}\" of an input variable whose `choices` are registered names (to pick one of several accounts of the same site each run)." },
             "field": { "enum": ["username", "password", "totp"] }
         },
         "required": ["secret", "field"],
@@ -343,6 +359,16 @@ mod tests {
         assert!(check_name(" a").is_err());
         assert!(check_name("{{ x }}").is_err());
         assert!(check_name(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn names_from_a_variable() {
+        assert_eq!(name_variable("{{ アカウント }}"), Some("アカウント"));
+        assert_eq!(name_variable("{{account}}"), Some("account"));
+        assert_eq!(name_variable("受注システム"), None);
+        assert_eq!(name_variable("{{ a.b }}"), None);
+        assert_eq!(name_variable("{{ a }}{{ b }}"), None);
+        assert_eq!(name_variable("x {{ a }}"), None);
     }
 
     #[test]

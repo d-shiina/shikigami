@@ -26,6 +26,7 @@ export const issuesJa: Record<string, IssueText> = {
   PATH_OUTSIDE_PROJECT: (c) => (c.field ? `「${c.label(c.field)}」にフローのフォルダーの外は指定できません` : "フローのフォルダーの外は指定できません"),
   FOREACH_COLLECT_WITHOUT_SAVE_AS: "「結果を集める変数」を使うには、「結果を保存する変数」も入力してください",
   INVALID_SECRET_REF: "シークレットの指定が正しくありません。シークレットを選び直してください",
+  SECRET_ACCOUNTS_MIXED: "ユーザー名とパスワードが別々のシークレットを指しています。同じアカウントのシークレットを選んでください",
   SECRET_DEFAULT: "機密の変数には初期値を入力できません。シークレットに登録して使ってください",
   UNKNOWN_STEP_TYPE: "この種類のノードはこの Writer では使えません",
   DEPRECATED_STEP_TYPE: "このノードは古い種類です。新しいノードに置き換えてください",
