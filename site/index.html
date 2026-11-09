@@ -32,16 +32,28 @@
   </header>
 
   <main>
-    <section class="hero">
+    <section class="hero hero-night">
+      <div class="glow"></div>
+      <img class="mark-big" src="assets/mark-large.webp" alt="">
+      <div class="shade"></div>
       <div class="wrap">
         <p class="eyebrow">Windows の業務自動化（RPA）・無料のオープンソース</p>
-        <h1><span>いつもの AI が作り、</span><span>あなたが読んで直し、</span><span>PC が回し続ける。</span></h1>
+        <h1 class="sr">いつもの AI が作り、あなたが読んで直し、PC が回し続ける。</h1>
+        <ol class="spell" aria-hidden="true">
+          <li class="c-cyan"><span class="n">1</span>いつもの AI が作り、</li>
+          <li class="c-green"><span class="n">2</span>あなたが読んで直し、</li>
+          <li class="c-orange"><span class="n">3</span>PC が回し続ける。</li>
+        </ol>
         <p class="lead">やりたいことをふだんの言葉で頼むと、AI が画面を確かめながら自動化のフローを組みます。できたフローは日本語の手順と画面の写真で読めて、その場で直せます。公開したフローは、AI を使わずに PC の中だけで毎日動きます。</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="download.html"><svg class="i"><use href="assets/icons.svg#download"/></svg>無料でダウンロード</a>
           <a class="btn btn-lg" href="#how">使い方を見る</a>
         </div>
         <p class="meta">Windows 10・11（64 ビット）・管理者権限は不要<span data-version-line hidden>・最新版 <span data-version></span></span></p>
+      </div>
+    </section>
+    <section class="shot-after">
+      <div class="wrap">
         <div class="shot">
           <picture><source srcset="assets/writer-dark.webp" media="(prefers-color-scheme: dark)"><img src="assets/writer.webp" width="1440" height="900" alt="SpellSheet Writer でフローを開いた画面。左にプロジェクトのファイル、中央にフロー図、上に AI への依頼欄がある"></picture>
         </div>
@@ -118,7 +130,7 @@
             <p class="label">03　PC の中で無人実行まで</p>
             <h3>動かすときは、AI もクラウドも使いません</h3>
             <p>AI を使うのは作るときと直すときだけです。公開したフローは PC の中だけで動くので、毎日動かしても AI の料金は増えず、毎回同じ手順で動きます。</p>
-            <p>スケジュールやフォルダーにファイルが置かれたときに自動で動かせて、終わったら Teams や Slack に知らせます。ログイン情報は Windows の資格情報マネージャーに保管し、AI には名前しか渡しません。</p>
+            <p>スケジュールやフォルダーにファイルが置かれたときに自動で動かせて、失敗したときなどは Teams や Slack に知らせます。ログイン情報は Windows の資格情報マネージャーに保管し、AI には名前しか渡しません。</p>
           </div>
           <div class="pc" role="img" aria-label="作る、確かめて公開する、動かす、のすべてが社内の PC の中で行われる図">
             <div class="pc-title"><svg class="i i-sm"><use href="assets/icons.svg#monitor"/></svg>社内の Windows PC</div>
@@ -182,6 +194,31 @@
           </div>
         </div>
         <p style="margin-top:32px">見本のファイル付きのチュートリアル（各 15 分ほど）で、売上 CSV の集計・請求書の作成・Web の受注システムの 3 つを最初から最後まで試せます。<a data-gh="/blob/main/docs/ja/tutorials/README.md" href="https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/README.md">チュートリアルを読む</a></p>
+      </div>
+    </section>
+
+    <section id="apps">
+      <div class="wrap">
+        <h2>Writer・Runner・Worker・Controller</h2>
+        <p class="sub">作る人、使う人、無人の PC、まとめて見る人。それぞれに合った画面があります。Writer・Runner・Worker は 1 つのインストーラーにまとめて入っています。</p>
+        <div class="roles">
+          <div class="role c-cyan">
+            <div class="role-head"><svg class="i"><use href="assets/icons.svg#pencil"/></svg><b>Writer</b><span>作る人</span></div>
+            <p>AI に頼んでフローを組み、フロー図や手順書で読んで直し、公開します。インストールしてデスクトップから開くのがこの画面です。</p>
+          </div>
+          <div class="role c-green">
+            <div class="role-head"><svg class="i"><use href="assets/icons.svg#play"/></svg><b>Runner</b><span>使う人</span></div>
+            <p>公開されたフローを選んで、ボタン 1 つで実行する画面です。見えるのは入力欄と結果だけなので、フローを作らない人にも渡せます。</p>
+          </div>
+          <div class="role c-orange">
+            <div class="role-head"><svg class="i"><use href="assets/icons.svg#monitor"/></svg><b>Worker</b><span>無人の PC</span></div>
+            <p>画面を出さずに Windows の裏で待ち、スケジュールや依頼に合わせてフローを実行します。失敗したときなどは Teams や Slack に知らせます。</p>
+          </div>
+          <div class="role c-navy soon">
+            <div class="role-head"><svg class="i"><use href="assets/icons.svg#building"/></svg><b>Controller</b><span>組織で管理</span></div>
+            <p>何台もの PC の Worker と実行の記録を、1 か所でまとめて見る組織向けの管理ツールです。<em class="tag">準備中</em></p>
+          </div>
+        </div>
       </div>
     </section>
 

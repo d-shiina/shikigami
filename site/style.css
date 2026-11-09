@@ -349,3 +349,66 @@ footer a { color: var(--fg-muted); }
 .step:nth-child(2) { --c: var(--green); --c-soft: var(--green-soft); }
 .step:nth-child(3) { --c: var(--orange); --c-soft: var(--orange-soft); }
 .step::before { background: var(--c-soft, var(--accent-soft)); color: var(--c, var(--accent)); }
+
+/* Hero, night: the start-up screen of Writer (navy, the mark, its light). */
+.hero-night {
+  position: relative; overflow: hidden; text-align: left;
+  background: #0b131b; color: #f4f6f8;
+  padding: 88px 0 96px;
+}
+.hero-night .glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 78% 30%, rgba(31, 111, 184, 0.42), transparent 40%),
+    radial-gradient(circle at 90% 74%, rgba(240, 120, 40, 0.22), transparent 36%),
+    radial-gradient(circle at 62% 84%, rgba(60, 160, 110, 0.18), transparent 38%),
+    radial-gradient(circle at 66% 14%, rgba(30, 190, 200, 0.16), transparent 34%);
+}
+.hero-night .mark-big {
+  position: absolute; width: 620px; height: 620px; right: -120px; top: -40px; pointer-events: none;
+}
+.hero-night .shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, #0b131b 0%, rgba(11, 19, 27, 0.94) 36%, rgba(11, 19, 27, 0.35) 64%, rgba(11, 19, 27, 0.05) 85%);
+}
+.hero-night .wrap { position: relative; }
+.hero-night .eyebrow { color: rgba(244, 246, 248, 0.72); }
+.hero-night h1 { color: #ffffff; margin-left: 0; }
+.hero-night .lead { color: rgba(244, 246, 248, 0.8); margin-left: 0; max-width: 34em; }
+.hero-night .cta { justify-content: flex-start; }
+.hero-night .meta { color: rgba(244, 246, 248, 0.6); }
+.hero-night .btn-primary { background: #ffffff; border-color: #ffffff; color: #0b2a45; }
+.hero-night .btn:not(.btn-primary) { background: transparent; color: #f4f6f8; border-color: rgba(244, 246, 248, 0.35); }
+.hero-night .btn:not(.btn-primary):hover { border-color: #f4f6f8; }
+@media (max-width: 760px) {
+  .hero-night .mark-big { width: 360px; height: 360px; right: -140px; top: -60px; opacity: 0.55; }
+  .hero-night .shade { background: rgba(11, 19, 27, 0.55); }
+}
+.shot-after { padding-top: 0; }
+.shot-after .shot { margin-top: -56px; position: relative; }
+
+/* The slogan as a spell: three numbered lines, one logo color each. */
+.spell { list-style: none; padding: 0; margin: 0 0 24px; font-weight: 700; line-height: 1.35;
+  font-size: clamp(28px, 4.8vw, 48px); }
+.spell li { display: flex; align-items: center; gap: 0.4em; margin: 0.12em 0; }
+.spell .n {
+  flex: none; display: inline-grid; place-items: center;
+  width: 1.05em; height: 1.05em; border-radius: 50%;
+  font-size: 0.5em; font-weight: 700; color: #ffffff; background: var(--c-mark);
+}
+.hero:not(.hero-night) .spell { display: inline-block; text-align: left; color: var(--heading); }
+.hero-night .spell { color: #ffffff; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Writer, Runner, Worker, Controller */
+.roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 960px) { .roles { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .roles { grid-template-columns: 1fr; } }
+.role { border: 1px solid var(--line); border-left: 3px solid var(--c-mark, var(--line)); border-radius: var(--radius); padding: 20px 22px; background: var(--bg); }
+.role.soon { border-style: dashed; border-left-style: solid; background: var(--bg-soft); }
+.role-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.role-head .i { color: var(--c, var(--accent)); }
+.role-head b { font-size: 19px; }
+.role-head span { color: var(--fg-muted); font-size: 14px; }
+.role p .tag { font-style: normal; font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
+.role p { margin: 0; color: var(--fg-muted); font-size: 15px; }
