@@ -55,7 +55,9 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
 3. `Release` ワークフロー（`.github/workflows/release.yml`）が Windows でビルドし、Release を公開します。タグと `Cargo.toml` のバージョンが違うとき、署名鍵が登録されていないとき（上の「最初の準備」）は止まります
    - リリースノートは `CHANGELOG.md` のうち、見出しにそのバージョンがある節（例：`## [0.2.0] - 2026-11-06`）です。なければ `CHANGELOG.md` へのリンクになります
    - ハイフン付きのバージョン（`0.2.0-beta.1`）はプレリリースになり、インストール済みの Writer は更新しません
+   - リリースには `spellsheet.mcpb`（MCP サーバーの [MCP Bundle](https://github.com/modelcontextprotocol/mcpb)。`spellsheet.exe` と、インストーラーと同じ `node\`・`browser-adapter\`・`ocr\` フォルダー）と、[MCP Registry](https://registry.modelcontextprotocol.io/) に載せるための `server.json`（Bundle の SHA-256 入り）も付きます（`scripts/build-mcpb.mjs`）
    - インストーラーは実行結果のページにも `installers-<バージョン>` として 14 日間残ります
+4. MCP Registry に載せるには、リリースから `server.json` をダウンロードし、[`mcp-publisher`](https://github.com/modelcontextprotocol/registry/releases) で `mcp-publisher login github` のあと、`server.json` のあるフォルダーで `mcp-publisher publish` を実行します。名前 `io.github.<持ち主>/spellsheet` はリポジトリの持ち主で決まるため、サインインするアカウントはその GitHub Organization の公開メンバーである必要があります
 
 リリースのビルドを変える Pull Request（ワークフロー・`apps/studio/scripts/`・Tauri の設定）では、同じビルドを試しに走らせます。何も公開せず、インストーラーを実行結果のページに残すので、タグを付ける前に手で入れて確かめられます。署名鍵がなければ使い捨ての鍵で署名します。
 

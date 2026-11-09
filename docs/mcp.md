@@ -53,6 +53,10 @@ In Writer, **Settings → AI → MCP server registration → Cursor → Add to C
 }
 ```
 
+### MCP Bundle (other clients)
+
+Each release also has `spellsheet.mcpb`, an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) with `spellsheet.exe` and the Node.js, browser adapter and OCR files the installer ships, so it works without installing Writer. Clients that take bundles (Claude Desktop and others) install it from the file; clients that read the [MCP Registry](https://registry.modelcontextprotocol.io/) find it there. It runs on Windows 10/11 (x64) only, and uses the same workspace as Writer, so installing Writer too lets you see and review what the AI builds.
+
 ### Options
 
 | Option | Default | Description |

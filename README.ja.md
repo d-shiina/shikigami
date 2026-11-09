@@ -29,6 +29,10 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 3. AI にフローの作成を依頼するには、Writer 上部の「AI チャット」（Ctrl+J）を開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「Claude Code をインストールする」のようなボタンを押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「変更を承諾」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
 
+インストーラーと `spellsheet.exe` はまだコード署名がないため（[Code signing policy](CODE_SIGNING_POLICY.md)）、初回に Windows SmartScreen の警告が出ることがあります。「詳細情報」→「実行」で進めてください。
+
+**MCP クライアントだけで使う場合**：各リリースには、同じ MCP サーバーを MCP Bundle にした `spellsheet.mcpb` も付いています（Windows 10/11 x64 専用）。Bundle や [MCP Registry](https://registry.modelcontextprotocol.io/) からサーバーを入れるクライアントで使えます。AI が組んだものを見て確認するのは Writer です。[docs/ja/mcp.md](docs/ja/mcp.md) を参照してください。
+
 以下は開発者向けの情報です。
 
 画面の見方・フローのフォルダーの中身・テストケース・フローの渡し方・AI の準備など、業務で使う人向けの説明は[製品マニュアル](https://spellsheet.github.io/manual/)にあります。原稿は [apps/manual](apps/manual/) です。

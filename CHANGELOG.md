@@ -6,6 +6,10 @@
 
 ## 未リリース
 
+### 主な変更
+
+- リリースに `spellsheet.mcpb`（MCP サーバーを MCP Bundle にしたもの、Windows 10/11 x64）と、MCP Registry に載せるための `server.json` を付けるようにしました。Claude Desktop など Bundle を受け付ける AI クライアントは、Writer を入れなくてもこのファイルから SpellSheet の MCP サーバーを入れられます
+
 ### 変更
 
 - フローの画面の下にあった「見本」の欄と、GitHub のチュートリアル（docs/tutorials）をなくしました。初めての人は「何を自動化しますか？」の欄から AI に頼んで始めます。見本の完成版のフローは、CI が最後まで実行して確かめるテスト用として `examples/tutorials/` に残しています

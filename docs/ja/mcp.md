@@ -53,6 +53,10 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 }
 ```
 
+### MCP Bundle（そのほかのクライアント）
+
+各リリースには `spellsheet.mcpb` も付いています。`spellsheet.exe` と、インストーラーと同じ Node.js・ブラウザアダプター・OCR のファイルを [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) にしたもので、Writer を入れなくても動きます。Bundle を受け付けるクライアント（Claude Desktop など）はこのファイルから、[MCP Registry](https://registry.modelcontextprotocol.io/) を読むクライアントはそこから入れられます。Windows 10/11（x64）専用です。作業フォルダーは Writer と同じなので、Writer も入れておくと AI が組んだものを見て確認できます。
+
 ### オプション
 
 | オプション | 既定 | 説明 |
