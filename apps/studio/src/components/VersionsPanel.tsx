@@ -1,3 +1,4 @@
+import { ArrowRight, Undo2 } from "lucide-react";
 import type { DiffKind, FlowDiff, StepTypeDef, VersionSummary } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
@@ -57,7 +58,7 @@ function DiffView({ diff, defs }: { diff: FlowDiff; defs: Map<string, StepTypeDe
                 <div key={f.field} className="flex flex-wrap items-baseline gap-x-1.5">
                   <dt className="text-slate-500">{f.field.replace(/^params\./, "")}</dt>
                   <dd className="text-shu-600 line-through decoration-shu-500/50">{formatValue(f.before)}</dd>
-                  <span className="text-slate-400">→</span>
+                  <ArrowRight size={11} className="shrink-0 self-center text-slate-400" aria-hidden="true" />
                   <dd className="text-moegi-500">{formatValue(f.after)}</dd>
                 </div>
               ))}
@@ -190,7 +191,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
           </button>
           <button
             type="button"
-            className={confirm ? "font-semibold text-shu-600" : "text-slate-500 hover:text-shu-600"}
+            className={`inline-flex items-center gap-1 ${confirm ? "font-semibold text-shu-600" : "text-slate-500 hover:text-shu-600"}`}
             onClick={() => {
               if (!confirm) return setConfirm(true);
               setConfirm(false);
@@ -198,7 +199,8 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
             }}
             onBlur={() => setConfirm(false)}
           >
-            ↶ {confirm ? t.confirmRestoreAgain : t.restore}
+            <Undo2 size={12} aria-hidden="true" />
+            {confirm ? t.confirmRestoreAgain : t.restore}
           </button>
           {!published && (
             <button type="button" className="text-slate-500 hover:text-moegi-500" onClick={() => void publish(version.number)}>

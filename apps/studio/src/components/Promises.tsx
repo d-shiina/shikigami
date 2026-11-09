@@ -2,7 +2,7 @@
 // change (test cases in business words), whether the flow keeps them, and
 // the person's answer to whether each promise is right.
 import type { Evidence, TestCase } from "@spellsheet/schema";
-import { Play } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Play, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
@@ -104,8 +104,9 @@ export function Promises({
       )}
       {older.length > 0 && (
         <div>
-          <button type="button" onClick={() => setShowOlder(!showOlder)} className="text-[11px] text-slate-500 hover:text-ink">
-            {showOlder ? "▾" : "▸"} {t.promises.older(older.length)}
+          <button type="button" onClick={() => setShowOlder(!showOlder)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink">
+            {showOlder ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+            {t.promises.older(older.length)}
             {olderBroken > 0 && <span className="font-semibold text-shu-600">{t.promises.olderBroken(olderBroken)}</span>}
           </button>
           {showOlder && (
@@ -176,7 +177,7 @@ function PromiseRow({
   const word = { kept: t.promises.kept, broken: t.promises.broken, unchecked: t.promises.unchecked }[state];
   const errorStep = promise.testCase.expect?.errorStep;
   const chip = (on: boolean, tone: string) =>
-    `rounded-md border px-2.5 text-[12px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+    `inline-flex items-center gap-1 rounded-md border px-2.5 text-[12px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
   const label = (text: string) => <span className="mr-1.5 text-[11px] text-slate-500 @min-[720px]:hidden">{text}</span>;
   return (
     <div className={`${ROW} border-b border-slate-100 px-1 py-2.5 text-[12.5px] leading-relaxed ${state === "broken" ? "bg-shu-50/40" : ""}`}>
@@ -196,14 +197,14 @@ function PromiseRow({
         {label(t.promises.then)}
         {terms.then}
         {errorStep && (
-          <button type="button" onClick={() => goTo(errorStep)} className="ml-1 text-[11px] text-brand-600 hover:underline">
-            ›
+          <button type="button" onClick={() => goTo(errorStep)} className="ml-1 inline-flex align-middle text-brand-600 hover:text-brand-700">
+            <ChevronRight size={12} aria-hidden="true" />
           </button>
         )}
       </div>
       <div className="min-w-0">
-        <span className={`rounded-md px-1.5 text-[11px] leading-[20px] font-bold whitespace-nowrap ${KEPT_STYLE[state]}`}>
-          {state === "kept" ? "✓ " : state === "broken" ? "× " : ""}
+        <span className={`inline-flex items-center gap-1 rounded-md px-1.5 text-[11px] leading-[20px] font-bold whitespace-nowrap ${KEPT_STYLE[state]}`}>
+          {state === "kept" ? <Check size={11} strokeWidth={2.5} aria-hidden="true" /> : state === "broken" ? <X size={11} strokeWidth={2.5} aria-hidden="true" /> : null}
           {word}
         </span>
         {kept && !kept.passed && kept.mismatches.length > 0 && (
@@ -230,7 +231,7 @@ function PromiseRow({
           <>
             <span className="mr-auto self-center text-[11.5px] text-slate-600 @min-[720px]:hidden">{t.promises.isRight}</span>
             <button type="button" onClick={() => onAnswer(answer === "ok" ? null : "ok")} className={chip(answer === "ok", "border-moegi-500 text-moegi-500")}>
-              {answer === "ok" ? "✓ " : ""}
+              {answer === "ok" && <Check size={12} strokeWidth={2.25} aria-hidden="true" />}
               {t.promises.right}
             </button>
             <button

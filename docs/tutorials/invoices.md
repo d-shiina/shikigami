@@ -40,7 +40,7 @@ The AI reads the template's names first. The finished sample:
 
 ## 3. Check and publish
 
-Under "To review", check that `output/請求書/` and `output/請求一覧.xlsx` are listed as what it touches. The invoices from the AI's test runs are on the "Output" shelf to open and read. Then "Review and publish".
+Under "To review", check that `output/請求書/` and `output/請求一覧.xlsx` are listed as what it touches. The invoices from the AI's test runs are on the "Output" shelf to open and read. Then "Accept changes".
 
 ## 4. Try it
 

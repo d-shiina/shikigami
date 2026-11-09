@@ -4,7 +4,7 @@ import { nodeIcon } from "../../lib/nodeIcons";
 import type { Step, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
-import { Maximize2, MessageSquareText } from "lucide-react";
+import { ArrowLeft, ArrowRight, CircleX, Maximize2, MessageSquareText, TriangleAlert } from "lucide-react";
 import { openAsk, useAgentApiMaybe, useAgentMaybe } from "../../agent";
 import { t } from "../../lib/i18n";
 import { GROUP } from "../../lib/stepTypes";
@@ -36,13 +36,13 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
     const s = findStep(flow?.steps ?? [], id);
     return s?.name || s?.type || id;
   };
-  const item = (l: DataLink, other: string, arrow: string) => (
+  const item = (l: DataLink, other: string, Arrow: typeof ArrowLeft) => (
     <li key={`${l.from}${l.to}${l.variable}${l.toHandle}`} className="flex items-center gap-1.5 py-0.5 text-[11px]">
       <span style={{ color: TYPE_COLOR[vars.get(l.variable) ?? "any"] }}>
         <VarIcon size={11} />
       </span>
       <span className="font-mono font-semibold">{l.variable}</span>
-      <span className="text-slate-400">{arrow}</span>
+      <Arrow size={11} className="shrink-0 text-slate-400" aria-hidden="true" />
       {other.startsWith("@") ? (
         <span className="truncate text-slate-600">{nameOf(other)}</span>
       ) : (
@@ -56,12 +56,12 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
     <Section title={t.props.links}>
       {incoming.length > 0 && (
         <Row label={t.props.receives}>
-          <ul className="pt-1">{incoming.map((l) => item(l, l.from, "←"))}</ul>
+          <ul className="pt-1">{incoming.map((l) => item(l, l.from, ArrowLeft))}</ul>
         </Row>
       )}
       {outgoing.length > 0 && (
         <Row label={t.props.passes}>
-          <ul className="pt-1">{outgoing.map((l) => item(l, l.to, "→"))}</ul>
+          <ul className="pt-1">{outgoing.map((l) => item(l, l.to, ArrowRight))}</ul>
         </Row>
       )}
     </Section>
@@ -223,8 +223,13 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
         {issues.length > 0 && (
           <ul className="mt-2 space-y-1 rounded-lg border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
             {issues.map((i) => (
-              <li key={`${i.code}${i.path}${i.message}`}>
-                {i.severity === "warning" ? "⚠" : "✕"} {issueText(i, flow)}
+              <li key={`${i.code}${i.path}${i.message}`} className="flex gap-1">
+                {i.severity === "warning" ? (
+                  <TriangleAlert size={12} className="mt-[1px] shrink-0" aria-hidden="true" />
+                ) : (
+                  <CircleX size={12} className="mt-[1px] shrink-0" aria-hidden="true" />
+                )}
+                <span>{issueText(i, flow)}</span>
               </li>
             ))}
           </ul>

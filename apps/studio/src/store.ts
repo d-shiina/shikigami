@@ -576,6 +576,8 @@ export type StudioState = {
   decideApproval(id: string, approve: boolean): Promise<void>;
   loadPickRequests(): Promise<void>;
   cancelPickRequest(id: string): Promise<void>;
+  /** A wait by hand (login): the person says they finished. */
+  finishPickRequest(id: string): Promise<void>;
   setPolicyOpen(open: boolean): void;
   /** Returns true when saved. */
   savePolicy(policy: Policy): Promise<boolean>;
@@ -2003,7 +2005,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.flowId = env.flowId;
               run.revision = env.revision;
-              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`, null, undefined, { mark: "start", node: null });
+              push("info", `${env.flowName}${t.runMsg.atRevision(env.revision)}`, null, undefined, { mark: "start", node: null });
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
@@ -2046,7 +2048,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.evidence = null;
               states[env.stepId] = env.reason === "error" ? "failed" : "paused";
               if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId, path, {
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? t.runMsg.pausedOnError : t.runMsg.paused, env.stepId, path, {
                 mark: "pause",
                 node: run.trace.open.at(-1) ?? null,
               });
@@ -2065,7 +2067,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 run.inner = { ...run.inner, [key]: states };
               } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
               if (env.revision != null && pause?.callPath.length === 0) run.revision = env.revision;
-              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`, null, undefined, {
+              push("info", `${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`, null, undefined, {
                 mark: "resume",
                 node: run.trace.open.at(-1) ?? null,
               });
@@ -2077,7 +2079,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;
-              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`, null, undefined, { mark: "end", node: null });
+              push(env.status === "succeeded" ? "info" : "error", `${t.status[env.status]}${t.runMsg.took(env.durationMs)}`, null, undefined, { mark: "end", node: null });
               break;
           }
           return { run, human, secretFix, reveal, ...moved };
@@ -2208,6 +2210,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async cancelPickRequest(id) {
         try {
           await api.cancelPickRequest(id);
+        } catch (e) {
+          set({ error: message(e) });
+        }
+        await get().loadPickRequests();
+      },
+
+      async finishPickRequest(id) {
+        try {
+          await api.finishPickRequest(id);
         } catch (e) {
           set({ error: message(e) });
         }

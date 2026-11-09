@@ -1,3 +1,4 @@
+import { Hand } from "lucide-react";
 import type { ApprovalRequest } from "@spellsheet/schema";
 import { useState } from "react";
 import { useStudio } from "../context";
@@ -36,7 +37,7 @@ export function ApprovalDialog() {
         className="max-h-[85vh] w-[480px] space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-dialog"
       >
         <div className="flex items-center gap-2">
-          <span aria-hidden>✋</span>
+          <Hand size={18} strokeWidth={1.75} className="shrink-0 text-slate-600" aria-hidden="true" />
           <h2 className="text-lg font-bold">{t.approvalAsked}</h2>
           {waiting.length > 1 && <span className="ml-auto text-xs text-slate-500">{t.approvalOthers(waiting.length - 1)}</span>}
         </div>

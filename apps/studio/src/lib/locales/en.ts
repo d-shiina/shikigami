@@ -432,6 +432,11 @@ export const en: Dict = {
   pickHow: (candidates: number) =>
     `Switch to the browser window and click the element. The click does not reach the page, so nothing is pressed.${candidates > 1 ? ` The candidates it is torn between are numbered 1–${candidates}.` : ""} If you are not sure, press "Not sure" in the browser or decline here.`,
   pickCancel: "Decline",
+  humanAsked: "The AI waits for you in the browser",
+  humanHow:
+    "Switch to the browser window and do it there. Press \"Done\" when you have finished; it also goes on by itself once the page it waits for shows.",
+  humanDone: "Done",
+  humanCancel: "Stop waiting",
   approvalSummary: (action: string, flow: string | null, types: string[], risk: string) =>
     `${action}${flow ? ` "${flow}"` : ""} (${types.length > 0 ? `${types.join(", ")}, ` : ""}${risk.toLowerCase()})`,
   approvalLater: "Later",
@@ -988,6 +993,7 @@ export const en: Dict = {
     open: "Open",
     moreSteps: (n: number) => `…${n} more nodes (Open shows all)`,
     stoppedHere: "An error occurred here",
+    secretMark: "Secret",
     pausedHere: "Paused here",
     note: "Note",
     /** The tag on the frame around a loop, if, … and its blocks. */
@@ -1283,7 +1289,7 @@ export const en: Dict = {
   recording: {
     record: "Record",
     recordTitle: "Record what you do in desktop apps or in the browser",
-    bannerTitle: "● Recording ({n})  Click here to finish",
+    bannerTitle: "Recording ({n})  Click here to finish",
     bannerHint: "Recording clicks, text typed into fields and keys (record the browser with Browser)",
     browserBannerHint: "Recording clicks, typing, choices, check boxes and Enter",
     where: "Record in",
@@ -1584,13 +1590,14 @@ export const en: Dict = {
     nextChangeTitle: "Next change (N)",
     allEdits: (n: number) => `All ${n} AI edits`,
     revertTitle: "Back to before the AI's changes (recorded as a new change)",
-    revertAll: "Revert",
+    revertAll: "Reject changes",
     sendBackTitle: "Write a reason and have the AI fix it (the changes stay for now)",
     sendBack: "Send back…",
-    keep: "Review and publish",
+    keep: "Accept changes",
     unanswered: (n: number) => ` (${n} open)`,
     whatChanges: "What changes",
     seen: (seen: number, total: number) => `${seen} of ${total} seen`,
+    seenMark: "Seen",
     before: "Before",
     after: "After",
     showInFlow: "Show in flow",
@@ -1960,6 +1967,7 @@ export const en: Dict = {
     restoreHint: "When off, a completed run leaves Writer small with the result in the band. Errors and stops always bring Writer back",
   },
   shell: {
+    openNow: "Open now",
     aiChat: "AI chat",
     recentFlows: "Recent flows",
     pin: "Pin to the top",

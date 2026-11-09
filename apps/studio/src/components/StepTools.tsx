@@ -1,5 +1,6 @@
 // Move, extract and delete for the selected step, shown beside it in both the
 // flow chart and the procedure: actions on one step sit on that step.
+import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import type { Step } from "@spellsheet/schema";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -29,11 +30,11 @@ export function StepTools({ step }: { step: Step }) {
         )}
         {count <= 1 && (
           <>
-            <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
-              ↑
+            <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL} aria-label={t.moveUp}>
+              <ArrowUp size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
-            <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
-              ↓
+            <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL} aria-label={t.moveDown}>
+              <ArrowDown size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
             <span className="mx-0.5 h-4 w-px bg-slate-200" />
           </>
@@ -48,8 +49,8 @@ export function StepTools({ step }: { step: Step }) {
           {t.shell.extract}
         </button>
         <span className="mx-0.5 h-4 w-px bg-slate-200" />
-        <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`}>
-          ✕
+        <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`} aria-label={t.delete}>
+          <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
       {extracting && (

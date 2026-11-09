@@ -107,7 +107,7 @@
             <p class="label">02　人が読んで直せる</p>
             <h3>フローは、紙の手順書のように読めます</h3>
             <p>どのフローも、A4 の手順書として開けます。1 手順ずつ、日本語の説明と操作する直前の画面の写真が並びます。業務の担当者が「この順番で合っているか」を自分の目で確かめられます。</p>
-            <p>AI がフローを変えたときは、何がどう変わったかを 1 枚のレポートで確かめ、よければ「確定」します。確定した版だけが、ほかの人の実行や自動実行に使われます。</p>
+            <p>AI がフローを変えたときは、何がどう変わったかを 1 枚のレポートで確かめ、よければ「変更を承諾」します。承諾して確定した版だけが、ほかの人の実行や自動実行に使われます。</p>
             <ul class="ticks">
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>小さな直しは、その場で手で直せます</li>
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>ボタンや入力欄は「画面から選ぶ」でクリックして指定できます</li>
@@ -127,7 +127,7 @@
             <p>AI を使うのは作るときと直すときだけです。確定したフローは PC の中だけで動くので、毎日動かしても AI の料金は増えず、毎回同じ手順で動きます。</p>
             <p>スケジュールやフォルダーにファイルが置かれたときに自動で動かせて、失敗したときなどは Teams や Slack に知らせます。ログイン情報は Windows の資格情報マネージャーに保管し、AI には名前しか渡しません。</p>
           </div>
-          <div class="pc" role="img" aria-label="作る、確かめて確定する、動かす、のすべてが社内の PC の中で行われる図">
+          <div class="pc" role="img" aria-label="作る、読んで承諾する、動かす、のすべてが社内の PC の中で行われる図">
             <div class="pc-title"><svg class="i i-sm"><use href="assets/icons.svg#monitor"/></svg>社内の Windows PC</div>
             <div class="pc-flow">
               <div class="pc-box c-cyan">
@@ -136,8 +136,8 @@
               </div>
               <div class="pc-arrow"><svg class="i"><use href="assets/icons.svg#arrow-right"/></svg></div>
               <div class="pc-box c-green">
-                <b><svg class="i i-sm"><use href="assets/icons.svg#clipboard-check"/></svg>確かめて確定</b>
-                <span>変更を読み、よければ確定。確定した版だけが動きます</span>
+                <b><svg class="i i-sm"><use href="assets/icons.svg#clipboard-check"/></svg>読んで承諾</b>
+                <span>変更を読み、よければ承諾。確定した版だけが動きます</span>
               </div>
               <div class="pc-arrow"><svg class="i"><use href="assets/icons.svg#arrow-right"/></svg></div>
               <div class="pc-box c-orange">
@@ -180,8 +180,8 @@
             <p>Writer の「何を自動化しますか？」に、やりたいことをふだんの業務の言葉で書きます。AI が画面を確かめながらフローを組みます。</p>
           </div>
           <div class="step">
-            <h3>読んで確かめ、確定する</h3>
-            <p>フロー図や手順書で中身を読み、「ここから実行」で試します。違うところは AI に頼むか、その場で直します。よければ確定します。</p>
+            <h3>読んで試し、承諾する</h3>
+            <p>フロー図や手順書で中身を読み、「ここから実行」で試します。違うところは AI に頼むか、その場で直します。よければ変更を承諾し、確定版にします。</p>
           </div>
           <div class="step">
             <h3>毎日動かす</h3>
@@ -195,7 +195,7 @@
     <section id="apps">
       <div class="wrap">
         <h2>Writer・Runner・Worker・Controller</h2>
-        <p class="sub">作る人、使う人、無人の PC、まとめて見る人。それぞれに合った画面があります。Writer・Runner・Worker は 1 つのインストーラーにまとめて入っています。</p>
+        <p class="sub">作る人、使う人、無人の PC、まとめて見る人。それぞれに合った SpellSheet Writer・SpellSheet Runner・SpellSheet Worker・SpellSheet Controller があります。Writer・Runner・Worker は 1 つのインストーラーにまとめて入っています。</p>
         <div class="roles">
           <div class="role c-cyan">
             <div class="role-head"><svg class="i"><use href="assets/icons.svg#pencil"/></svg><b>Writer</b><span>作る人</span></div>
@@ -235,7 +235,7 @@
         <div class="faq">
           <details>
             <summary>本当に無料ですか？</summary>
-            <p>はい。本体（Writer・実行画面・無人実行・スケジュール・フローの受け渡し）は Apache-2.0 のオープンソースで、すべて無料です。一度無料で出した機能を、あとから有料にすることはしません。AI で作るときの AI の料金だけは、お使いの AI サービスの契約によります。</p>
+            <p>はい。本体（Writer・Runner・Worker、スケジュール、フローの受け渡し）は Apache-2.0 のオープンソースで、すべて無料です。一度無料で出した機能を、あとから有料にすることはしません。AI で作るときの AI の料金だけは、お使いの AI サービスの契約によります。</p>
           </details>
           <details>
             <summary>AI の契約は必要ですか？</summary>

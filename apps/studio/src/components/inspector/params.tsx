@@ -3,7 +3,7 @@
 import type { Step, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
-import { Boxes, Crosshair, Image as ImageIcon, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, Image as ImageIcon, KeyRound, ScanSearch, X } from "lucide-react";
 import { api, type SecretField } from "../../lib/api";
 import { locale, t } from "../../lib/i18n";
 import { choiceLabel, paramLabel, plainHint, referencedVariables, TYPE_COLOR } from "../../lib/nodeRows";
@@ -99,9 +99,10 @@ function TextOrSecretField({
             key={m}
             type="button"
             onClick={() => setMode(m)}
-            className={`rounded-md px-2 py-0.5 ${mode === m ? "bg-slate-100 font-medium text-ink ring-1 ring-slate-300" : "text-slate-500 hover:bg-slate-100"}`}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 ${mode === m ? "bg-slate-100 font-medium text-ink ring-1 ring-slate-300" : "text-slate-500 hover:bg-slate-100"}`}
           >
-            {m === "text" ? t.secretText : `🔑 ${t.secretUse}`}
+            {m === "secret" && <KeyRound size={12} aria-hidden="true" />}
+            {m === "text" ? t.secretText : t.secretUse}
           </button>
         ))}
       </div>
@@ -721,11 +722,12 @@ function RecordList({
           <ObjectFields schema={schema} value={item} labels={labels} onChange={(next) => set(index, next)} />
           <button
             type="button"
-            className="absolute right-1 top-1 rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            className="absolute right-1 top-1 rounded p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
             title={t.props.removeItem}
+            aria-label={t.props.removeItem}
             onClick={() => set(index, null)}
           >
-            ×
+            <X size={12} />
           </button>
         </div>
       ))}

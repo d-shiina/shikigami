@@ -65,7 +65,7 @@
     show("[data-version-line]");
     text("[data-version-text]", "版 " + version);
     text("[data-version-plain]", version);
-    if (release.published) text("[data-date]", formatDate(release.published) + " 公開");
+    if (release.published) text("[data-date]", formatDate(release.published) + " リリース");
     if (mb) {
       text("[data-size]", "約 " + mb + " MB");
       text("[data-size-mb]", String(mb));

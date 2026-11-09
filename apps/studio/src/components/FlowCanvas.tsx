@@ -21,7 +21,7 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { ChevronDown, ChevronRight, CornerDownLeft, Plus, StickyNote } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, ChevronUp, CornerDownLeft, KeyRound, Minus, Pause, Plus, StickyNote, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -83,7 +83,7 @@ import {
   TYPE_COLOR,
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
-import { plain, sentence, typeTitle } from "../lib/sentence";
+import { plain, secretName, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
 import { HALF, HoverPreview } from "./HoverPreview";
 import { openImageValue } from "./ImageViewer";
@@ -796,6 +796,7 @@ function NodeRow({ row, vars, run, stepId, sheet }: { row: Row; vars: Map<string
         <FileValue file={row.file} sheet={sheet} />
       ) : (
         <ParamValue row={row} parts={parts}>
+          {secretName(row.raw) && <KeyRound size={12} className="shrink-0 text-slate-500" aria-label={t.flow.secretMark} />}
           <ValueText value={row.value} refs={row.refs} color={typeColor} run={run} stepId={stepId} />
         </ParamValue>
       )}
@@ -863,12 +864,12 @@ function FileValue({ file, sheet }: { file: NonNullable<Extract<Row, { kind: "pa
   );
 }
 
-const INNER_MARK: Record<StepRunState, { text: string; className: string }> = {
-  running: { text: "●", className: "text-accent-500 animate-pulse" },
-  succeeded: { text: "✓", className: "text-moegi-600" },
-  paused: { text: "❚❚", className: "text-mizu-500" },
-  failed: { text: "✕", className: "text-shu-600" },
-  skipped: { text: "–", className: "text-slate-400" },
+const INNER_MARK: Record<StepRunState, React.ReactNode> = {
+  running: <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-500" />,
+  succeeded: <Check size={12} strokeWidth={2.25} className="text-moegi-600" />,
+  paused: <Pause size={12} strokeWidth={2.25} className="text-mizu-500" />,
+  failed: <X size={12} strokeWidth={2.25} className="text-shu-600" />,
+  skipped: <Minus size={12} className="text-slate-400" />,
 };
 
 /**
@@ -906,7 +907,10 @@ function CallBar({ call }: { call: CallView }) {
             }}
             data-call-toggle
           >
-            {call.unfolded ? `${t.flow.fold} ▴` : `${t.flow.unfold} ▾`}
+            <span className="flex items-center gap-0.5">
+              {call.unfolded ? t.flow.fold : t.flow.unfold}
+              {call.unfolded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </span>
           </button>
           <button
             type="button"
@@ -917,7 +921,10 @@ function CallBar({ call }: { call: CallView }) {
               void open(call.target);
             }}
           >
-            {t.flow.open} ↗
+            <span className="flex items-center gap-0.5">
+              {t.flow.open}
+              <ArrowUpRight size={12} />
+            </span>
           </button>
         </span>
       )}
@@ -942,7 +949,7 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
           <div key={item.id} style={{ height: INNER_LINE_H, paddingLeft: item.depth * 12 }} className="flex items-center gap-1.5 text-[12px]" title={text}>
             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
             <span className={`truncate ${item.step.disabled ? "text-slate-400 line-through" : "text-slate-700"}`}>{text}</span>
-            {state && <span className={`ml-auto shrink-0 text-[11px] ${INNER_MARK[state].className}`}>{INNER_MARK[state].text}</span>}
+            {state && <span className="ml-auto flex shrink-0 items-center">{INNER_MARK[state]}</span>}
           </div>
         );
       })}
@@ -1021,11 +1028,12 @@ function StepNode({ data }: StepNodeProps) {
       <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
         <span
-          className={`absolute top-full left-1 z-10 mt-1.5 rounded-lg px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
+          className={`absolute top-full left-1 z-10 mt-1.5 flex items-center gap-1 rounded-lg px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
             data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
           }`}
         >
-          {data.runState === "failed" ? `✕ ${t.flow.stoppedHere}` : `❚❚ ${t.flow.pausedHere}`}
+          {data.runState === "failed" ? <X size={12} strokeWidth={2.5} /> : <Pause size={12} strokeWidth={2.5} />}
+          {data.runState === "failed" ? t.flow.stoppedHere : t.flow.pausedHere}
         </span>
       )}
       {data.note && (
@@ -1686,14 +1694,14 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
         title={t.diveUp}
         aria-label={t.diveUp}
         onClick={() => leave(chain.length - 1)}
-        className="shrink-0 rounded-md px-1.5 leading-[22px] text-slate-600 hover:bg-slate-100"
+        className="flex h-[22px] shrink-0 items-center rounded-md px-1.5 text-slate-600 hover:bg-slate-100"
       >
-        ↑
+        <ArrowUp size={14} />
       </button>
       <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1">
         {levels.map((level, depth) => (
           <span key={depth} className="flex max-w-[14em] min-w-0 items-center gap-1">
-            {depth > 0 && <span className="shrink-0 text-slate-400">›</span>}
+            {depth > 0 && <ChevronRight size={12} className="shrink-0 text-slate-400" />}
             {depth < chain.length ? (
               <button
                 type="button"
@@ -1717,9 +1725,10 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
         type="button"
         onClick={() => void open(shown.id)}
         title={t.diveOpen}
-        className="ml-1 shrink-0 rounded-md border border-slate-300 bg-sheet px-2 leading-[20px] text-[11px] font-medium text-ink hover:bg-slate-100"
+        className="ml-1 flex shrink-0 items-center gap-0.5 rounded-md border border-slate-300 bg-sheet px-2 leading-[20px] text-[11px] font-medium text-ink hover:bg-slate-100"
       >
-        {t.diveOpenLabel} ↗
+        {t.diveOpenLabel}
+        <ArrowUpRight size={12} />
       </button>
     </div>
   );

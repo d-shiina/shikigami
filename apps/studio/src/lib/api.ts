@@ -180,7 +180,11 @@ export type SecretRequest = {
   missing: { registered: boolean; fields: SecretField[]; sites: string[] };
 };
 
-/** An AI waiting for the person to point at something in the browser (ask_user_to_pick). */
+/**
+ * An AI waiting for the person in the browser: to point at something
+ * (ask_user_to_pick, `kind: "pick"`), or to finish something by hand such as
+ * a login while its test_step waits (`kind: "human"`).
+ */
 export type PickRequest = {
   id: string;
   /** Written by the AI: shown as its words. */
@@ -188,6 +192,9 @@ export type PickRequest = {
   url?: string;
   /** How many elements the AI outlined with numbers on the page. */
   candidates: number;
+  kind?: "pick" | "human";
+  /** The person already pressed 「終わりました」. */
+  done?: boolean;
   requestedAt: string;
 };
 
@@ -329,6 +336,7 @@ export const api = {
   /** AI clients waiting for the person to point at something in the browser. */
   listPickRequests: () => call<PickRequest[]>("list_pick_requests"),
   cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
+  finishPickRequest: (id: string) => call<void>("finish_pick_request", { id }),
   /** Writes the flow as a `.spx` file (default choices) to the Downloads folder; returns its path. */
   exportFlow: (id: string) => call<string>("export_flow", { id }),
   /** What handing the flow over would put in the file (「渡す」). */

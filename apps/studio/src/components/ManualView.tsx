@@ -2,7 +2,7 @@
 // run from Studio (docs/design/manual.md). 「編集する」 switches to the
 // editable outline (StoryView).
 import type { Flow, PublishedState, Step, VersionSummary } from "@spellsheet/schema";
-import { AppWindow, Clock, Download, EyeOff, Lightbulb, Maximize2, MessageSquareText, Pencil, Play, Repeat, RotateCw, Split, TriangleAlert, Workflow } from "lucide-react";
+import { AppWindow, Clock, Download, EyeOff, Lightbulb, Maximize2, MessageSquareText, Pencil, Play, Repeat, RotateCw, Split, TriangleAlert, Workflow, X } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
 import { currentChat } from "../agent";
@@ -1045,13 +1045,13 @@ function MaskEditor({
             <button
               key={i}
               type="button"
-              aria-label="×"
+              aria-label={t.delete}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setBoxes(boxes.filter((_, j) => j !== i))}
-              className="absolute grid h-5 w-5 place-items-center rounded-full bg-sheet text-[12px] text-slate-600 shadow"
+              className="absolute grid h-5 w-5 place-items-center rounded-full bg-sheet text-slate-600 shadow"
               style={{ left: (b.x + b.width) * k - 10, top: b.y * k - 10 }}
             >
-              ×
+              <X size={12} aria-hidden="true" />
             </button>
           ))}
           {drawing && (

@@ -84,7 +84,8 @@ const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 /** A setting as one line, whole. */
 function fullText(key: string, value: unknown, type?: string): string {
   const secret = secretName(value);
-  if (secret) return `🔑 ${secret}`;
+  // The chart puts a key icon before it (`FlowCanvas`).
+  if (secret) return secret;
   if (typeof value === "string" && type && extensionChoiceLabel(type, key, value)) return choiceLabel(key, value, type);
   if (typeof value === "string" && t.paramNames.choices[key]?.[value]) return choiceLabel(key, value);
   if (key === "target" || key === "to") return targetText(value);

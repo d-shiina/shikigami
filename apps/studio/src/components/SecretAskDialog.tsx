@@ -1,3 +1,4 @@
+import { KeyRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
@@ -175,7 +176,7 @@ export function SecretAskDialog() {
         className="max-h-[85vh] w-[440px] overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-dialog"
       >
         <div className="mb-3 flex items-center gap-2">
-          <span aria-hidden>🔑</span>
+          <KeyRound size={18} strokeWidth={1.75} className="shrink-0 text-slate-600" aria-hidden="true" />
           <h2 className="text-lg font-bold">{t.secretAskTitle}</h2>
           {requests.length > 1 && <span className="ml-auto text-xs text-slate-500">{t.secretAskOthers(requests.length - 1)}</span>}
         </div>

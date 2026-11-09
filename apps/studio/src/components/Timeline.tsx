@@ -1,3 +1,4 @@
+import { ArrowRight, Check, Undo2 } from "lucide-react";
 import type { HistoryEntry } from "@spellsheet/schema";
 import { useMemo } from "react";
 import { useStudio } from "../context";
@@ -82,7 +83,7 @@ export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: bool
                   {d.before !== undefined && (
                     <dd className="text-shu-600 line-through decoration-shu-500/50">{formatValue(d.before)}</dd>
                   )}
-                  {d.before !== undefined && <span className="text-slate-400">→</span>}
+                  {d.before !== undefined && <ArrowRight size={11} className="shrink-0 self-center text-slate-400" aria-hidden="true" />}
                   <dd className="text-moegi-500">{formatValue(d.after)}</dd>
                 </div>
               ))}
@@ -117,18 +118,20 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
         <button
           type="button"
           onClick={() => approve(entry.revision)}
-          className="flex-1 rounded-lg bg-primary px-2 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
         >
-          ✓ {t.approve}
+          <Check size={12} strokeWidth={2.25} aria-hidden="true" />
+          {t.approve}
         </button>
         <button
           type="button"
           onClick={() => revert(entry)}
           disabled={blocker !== null}
           title={blocker ?? undefined}
-          className="flex-1 rounded-lg border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
         >
-          ↶ {t.revert}
+          <Undo2 size={12} aria-hidden="true" />
+          {t.revert}
         </button>
       </div>
     </li>
@@ -162,9 +165,10 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
           <button
             type="button"
             onClick={() => revert(entry)}
-            className="mt-1 hidden text-xs text-slate-500 group-hover:inline hover:text-shu-600"
+            className="mt-1 hidden items-center gap-1 text-xs text-slate-500 group-hover:inline-flex hover:text-shu-600"
           >
-            ↶ {t.revertThis}
+            <Undo2 size={12} aria-hidden="true" />
+            {t.revertThis}
           </button>
         )}
       </div>

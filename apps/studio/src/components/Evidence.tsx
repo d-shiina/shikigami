@@ -1,6 +1,7 @@
 // What the AI left behind to show its work: why it changed things, the test
 // runs it did, and the screens it looked at. Also the note a person sends
 // back. All of it is read from Core (review_timeline); nothing is kept here.
+import { Check, Square, X } from "lucide-react";
 import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@spellsheet/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -106,10 +107,10 @@ export function Explanations({ entries }: { entries: HistoryEntry[] }) {
   );
 }
 
-const RUN_STATUS: Record<string, { mark: string; label: () => string; style: string }> = {
-  succeeded: { mark: "✓", label: () => t.status.succeeded, style: "bg-moegi-100 text-moegi-500" },
-  failed: { mark: "×", label: () => t.status.failed, style: "bg-shu-50 text-shu-600" },
-  cancelled: { mark: "■", label: () => t.evidence.aborted, style: "bg-slate-100 text-slate-600" },
+const RUN_STATUS: Record<string, { mark: React.ReactNode; label: () => string; style: string }> = {
+  succeeded: { mark: <Check size={11} strokeWidth={2.5} aria-hidden="true" />, label: () => t.status.succeeded, style: "bg-moegi-100 text-moegi-500" },
+  failed: { mark: <X size={11} strokeWidth={2.5} aria-hidden="true" />, label: () => t.status.failed, style: "bg-shu-50 text-shu-600" },
+  cancelled: { mark: <Square size={9} fill="currentColor" aria-hidden="true" />, label: () => t.evidence.aborted, style: "bg-slate-100 text-slate-600" },
 };
 
 /** The AI's test runs, newest first. The first one answers "does it work now?". */
@@ -124,13 +125,14 @@ export function TestRuns({ runs, revision }: { runs: TestRun[]; revision: number
   return (
     <ul className="space-y-1">
       {[...runs].reverse().map((run, i) => {
-        const status = RUN_STATUS[run.status] ?? { mark: "・", label: () => run.status, style: "bg-slate-100 text-slate-600" };
+        const status = RUN_STATUS[run.status] ?? { mark: null, label: () => run.status, style: "bg-slate-100 text-slate-600" };
         const current = run.revision === revision;
         return (
           <li key={run.runId} className={`rounded-lg border px-2.5 py-1.5 ${i === 0 ? "border-slate-200 bg-sheet" : "border-transparent"}`}>
             <div className="flex items-center gap-2 text-[12px]">
-              <span className={`rounded-md px-1.5 text-[11px] font-bold ${status.style}`}>
-                {status.mark} {status.label()}
+              <span className={`flex items-center gap-1 rounded-md px-1.5 text-[11px] font-bold ${status.style}`}>
+                {status.mark}
+                {status.label()}
               </span>
               <span className={current ? "text-slate-600" : "text-amber-700"}>
                 {current ? t.evidence.onCurrent : t.evidence.onOlder(run.revision)}
@@ -252,7 +254,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
             </button>
           </div>
           <button type="button" onClick={onClose} className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label={t.close}>
-            ✕
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
         {(item.stepIds ?? []).length > 0 && (
@@ -333,10 +335,10 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
             <button
               type="button"
               onClick={() => setNotes(notes.filter((_, j) => j !== i))}
-              className="ml-auto px-1 text-[12px] text-slate-400 hover:text-shu-600"
+              className="ml-auto p-0.5 text-slate-400 hover:text-shu-600"
               aria-label={t.evidence.removeNote}
             >
-              ✕
+              <X size={12} aria-hidden="true" />
             </button>
           </div>
           <textarea

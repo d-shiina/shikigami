@@ -133,7 +133,7 @@ export async function record(page: Page, options: RecordOptions): Promise<Record
         binding: BINDING,
         mark: MARK,
         banner: frame === main,
-        title: options.title ?? (options.lang === "en" ? "● Recording ({n})  Click here to finish" : "● 記録中（{n} 件）　ここをクリックして終了"),
+        title: options.title ?? (options.lang === "en" ? "Recording ({n})  Click here to finish" : "記録中（{n} 件）　ここをクリックして終了"),
         hint: options.hint ?? "",
         count: actions.length - 1,
       })
@@ -296,6 +296,7 @@ function install({ hostId, binding, mark, banner, title, hint, count }: InstallA
       padding:8px 14px;border-radius:8px;background:#fff;color:#1e2a4a;border:2px solid #d64545;
       box-shadow:0 6px 24px rgba(20,40,80,.25);cursor:pointer;user-select:none}
     .bar b{display:block;font-size:13px;color:#b42318}
+    .bar b::before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:#d64545;vertical-align:1px}
     .bar span{display:block;font-size:12px;color:#4a5670;margin-top:2px}
   </style><div class="bar" role="button"><b></b><span></span></div>`;
   const bar = root.querySelector(".bar") as HTMLElement;

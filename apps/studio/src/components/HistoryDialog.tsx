@@ -2,6 +2,7 @@
 // kept of it (versions, sharing). Opened from the revision in the flow
 // bar, since both are about how the flow got to this revision; neither is
 // a property of what is selected, so they stay out of the inspector.
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -58,7 +59,7 @@ export function HistoryDialog() {
             aria-label={t.close}
             title={`${t.close} (Esc)`}
           >
-            ✕
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{tab === "timeline" ? <Timeline /> : <VersionsPanel />}</div>
