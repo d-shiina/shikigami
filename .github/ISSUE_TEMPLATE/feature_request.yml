@@ -1,0 +1,21 @@
+name: 機能の提案 / Feature request
+description: こうなると助かる、という提案 / Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: 自動化したい業務 / The work you want to automate
+      description: どんな業務で、いま何に困っているか / What the work is and what gets in the way today
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: こうなるとよい / What would help
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: いまの回避策 / Workarounds today
