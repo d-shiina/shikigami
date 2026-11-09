@@ -868,9 +868,21 @@
               "id": "set",
               "required": false,
               "takesValue": true,
-              "repeatable": false,
+              "repeatable": true,
               "global": false,
               "long": "set"
+            },
+            {
+              "id": "reset",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "reset",
+              "values": [
+                "true",
+                "false"
+              ]
             }
           ]
         }
