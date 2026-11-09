@@ -6,6 +6,10 @@
 
 ## 未リリース
 
+### 主な変更
+
+- リリースに `spellsheet.mcpb`（MCP サーバーを MCP Bundle にしたもの、Windows 10/11 x64）と、MCP Registry に載せるための `server.json` を付けるようにしました。Claude Desktop など Bundle を受け付ける AI クライアントは、Writer を入れなくてもこのファイルから SpellSheet の MCP サーバーを入れられます
+
 ## [0.1.21] - 2026-11-10
 
 ### 主な変更

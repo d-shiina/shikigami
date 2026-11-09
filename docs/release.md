@@ -55,7 +55,9 @@ If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`,
 3. The `Release` workflow (`.github/workflows/release.yml`) builds on Windows and publishes the release. It stops if the tag and the `Cargo.toml` version differ, or if the signing key is not registered (one-time setup above)
    - Release notes are the `CHANGELOG.md` section whose heading has the version (for example `## [0.2.0] - 2026-11-06`); without one they link to `CHANGELOG.md`
    - A version with a hyphen (`0.2.0-beta.1`) becomes a pre-release, which installed copies of SpellSheet Writer do not update to
+   - The release also gets `spellsheet.mcpb` (the MCP server as an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb): `spellsheet.exe` with the same `node\`, `browser-adapter\` and `ocr\` folders the installer ships) and `server.json`, its entry for the [MCP Registry](https://registry.modelcontextprotocol.io/) with the bundle's SHA-256 (`scripts/build-mcpb.mjs`)
    - The installers are also kept on the run page as the `installers-<version>` artifact for 14 days
+4. To list the version in the MCP Registry, download `server.json` from the release and publish it with [`mcp-publisher`](https://github.com/modelcontextprotocol/registry/releases): `mcp-publisher login github`, then `mcp-publisher publish` in the folder that holds `server.json`. The name `io.github.<owner>/spellsheet` follows the repository's owner, so the account that signs in must be a public member of that GitHub organization
 
 A pull request that changes the release build (the workflow, `apps/studio/scripts/`, the Tauri configuration) runs the same build as a trial: it publishes nothing and leaves the installers on the run page, so they can be installed by hand before tagging. Without the signing key it signs with a throwaway key.
 
