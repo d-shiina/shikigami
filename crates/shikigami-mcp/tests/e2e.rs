@@ -24,9 +24,12 @@ struct Harness {
 }
 
 async fn start(options: ServerOptions) -> Harness {
+    start_with(Runtime::new(), options).await
+}
+
+async fn start_with(runtime: Runtime, options: ServerOptions) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
-    let runtime = Runtime::new();
     let service = Arc::new(FlowService::new(
         FileStore::open(&root).unwrap(),
         runtime.registry().clone(),
@@ -1253,5 +1256,170 @@ async fn only_the_writer_chat_gets_ask_user_to_choose() {
         assert!(is_error);
         assert_eq!(value["code"], "INVALID_PARAMS");
     }
+    h.client.cancel().await.unwrap();
+}
+
+/// A browser whose browser.waitForHuman waits until Writer's 「終わりました」
+/// reaches it (inspect `endHuman`), or until the step is stopped.
+mod by_hand {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use shikigami_core::{RiskLevel, StepCategory, StepTypeDef};
+    use shikigami_runtime::{
+        ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
+    };
+    use tokio::sync::Notify;
+
+    use super::*;
+
+    #[derive(Default)]
+    pub struct Shared {
+        pub finished: Notify,
+        /// The step saw the stop itself (it is dropped instead, as a real one).
+        pub stopped: AtomicBool,
+    }
+
+    pub struct FakeBrowser(pub Arc<Shared>);
+    struct Wait(Arc<Shared>);
+
+    impl ActionHandler for Wait {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            Box::pin(async move {
+                input.request_human("GitHub にログインしてください");
+                tokio::select! {
+                    () = self.0.finished.notified() => Ok(Value::Null),
+                    () = input.cancel.cancelled() => {
+                        self.0.stopped.store(true, Ordering::SeqCst);
+                        Err(StepError::permanent("CANCELLED", "cancelled"))
+                    }
+                }
+            })
+        }
+    }
+
+    impl Adapter for FakeBrowser {
+        fn name(&self) -> &str {
+            "browser"
+        }
+
+        fn install(&self, builder: RuntimeBuilder) -> RuntimeBuilder {
+            let def = StepTypeDef {
+                targets: Vec::new(),
+                step_type: "browser.waitForHuman".into(),
+                category: StepCategory::Browser,
+                label: "手動操作の待機".into(),
+                description: String::new(),
+                params_schema: json!({ "type": "object" }),
+                blocks: vec![],
+                has_output: false,
+                expression_params: vec![],
+                binds_variables: vec![],
+                risk: RiskLevel::Safe,
+                examples: vec![],
+                resources: vec![],
+                secret_params: vec![],
+                default_timeout_ms: Some(300_000),
+                deprecated: None,
+                plugin: None,
+                path_params: Vec::new(),
+            };
+            builder.register(def, Wait(self.0.clone()))
+        }
+
+        fn inspect<'a>(
+            &'a self,
+            _session: &'a str,
+            params: Value,
+        ) -> BoxFuture<'a, Result<Value, StepError>> {
+            Box::pin(async move {
+                if params["action"] == "endHuman" && params["how"] == "person" {
+                    self.0.finished.notify_one();
+                }
+                Ok(json!({ "title": "ダッシュボード", "url": "https://github.com/" }))
+            })
+        }
+    }
+
+    pub async fn harness() -> (Harness, Arc<Shared>) {
+        let shared = Arc::new(Shared::default());
+        let browser: Arc<dyn Adapter> = Arc::new(FakeBrowser(shared.clone()));
+        let runtime = Runtime::builder().adapter(browser.as_ref()).build();
+        let h = start_with(
+            runtime,
+            ServerOptions {
+                adapters: vec![browser],
+                ..ServerOptions::default()
+            },
+        )
+        .await;
+        (h, shared)
+    }
+
+    /// What Writer does: waits for the request to show, then answers it.
+    pub async fn answer(root: &std::path::Path, finish: bool) {
+        let store = FileStore::open(root).unwrap();
+        let picks = shikigami_core::PickRequestStore::new(store.local_root());
+        for _ in 0..200 {
+            if let Some(r) = picks.pending().unwrap().first() {
+                assert_eq!(r.kind, shikigami_core::PickKind::Human);
+                assert_eq!(r.message, "GitHub にログインしてください");
+                if finish {
+                    picks.finish(&r.id).unwrap();
+                } else {
+                    picks.cancel(&r.id).unwrap();
+                }
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the wait by hand never showed in Writer");
+    }
+
+    pub fn gone(root: &std::path::Path) -> bool {
+        let store = FileStore::open(root).unwrap();
+        shikigami_core::PickRequestStore::new(store.local_root())
+            .pending()
+            .unwrap()
+            .is_empty()
+    }
+}
+
+#[tokio::test]
+async fn a_wait_by_hand_ends_when_the_person_says_so_in_writer() {
+    let (h, shared) = by_hand::harness().await;
+    let step = json!({ "type": "browser.waitForHuman", "params": { "until": { "role": "heading", "name": "Dashboard" } } });
+    let (out, ()) = tokio::join!(
+        h.ok("test_step", json!({ "step": step })),
+        by_hand::answer(&h.root, true)
+    );
+    assert_eq!(out["status"], "succeeded", "{out}");
+    assert!(
+        out["hint"].as_str().unwrap().contains("終わりました"),
+        "{out}"
+    );
+    // The AI sees the page the person left, to pick a better `until`.
+    assert_eq!(out["state"]["title"], "ダッシュボード");
+    assert!(!shared.stopped.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(by_hand::gone(&h.root));
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_wait_by_hand_stopped_in_writer_tells_the_ai() {
+    let (h, shared) = by_hand::harness().await;
+    let step = json!({ "type": "browser.waitForHuman", "params": { "until": { "role": "heading", "name": "Dashboard" } } });
+    let (out, ()) = tokio::join!(
+        h.call("test_step", json!({ "step": step })),
+        by_hand::answer(&h.root, false)
+    );
+    let (_, out) = out;
+    assert_eq!(out["status"], "cancelled", "{out}");
+    assert!(
+        out["hint"].as_str().unwrap().contains("待つのをやめる"),
+        "{out}"
+    );
+    // The run drops the waiting step rather than letting it finish.
+    assert!(!shared.stopped.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(by_hand::gone(&h.root));
     h.client.cancel().await.unwrap();
 }

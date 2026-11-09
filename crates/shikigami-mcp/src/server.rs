@@ -12,8 +12,8 @@ use shikigami_core::approval::Redeem;
 use shikigami_core::{
     Actor, ActorKind, AiAction, ApprovalId, ApprovalStore, CaseOutcome, ChangeNote, Decision,
     EditOp, ErrorPayload, EvidenceDetail, FlowId, FlowService, NewApproval, NewFlow,
-    NewObservation, NewVersion, ObservationId, ObservationSource, PickRequestStore, Policy,
-    RiskLevel, RunId, StepId, TestRun,
+    NewObservation, NewVersion, ObservationId, ObservationSource, PickAnswer, PickRequestStore,
+    Policy, RiskLevel, RunId, StepId, TestRun,
 };
 use shikigami_runtime::record::{self, RunRecorder};
 use shikigami_runtime::{
@@ -2095,6 +2095,7 @@ impl ShikigamiMcp {
             tokio::select! {
                 r = &mut pick => break r,
                 () = tokio::time::sleep(PICK_POLL) => {
+                    wait.touch();
                     if !cancelled_in_studio && !wait.is_open() {
                         // Studio cancelled: press わからない on the page so the pick returns.
                         cancelled_in_studio = true;
@@ -2203,6 +2204,15 @@ impl ShikigamiMcp {
                 shikigami_runtime::drafts::DraftSource::Ai,
             )
         });
+        let by_hand = step.step_type == WAIT_FOR_HUMAN;
+        if by_hand {
+            // The AI holds its turn while the person works: never longer than this.
+            step.timeout_ms = Some(
+                step.timeout_ms
+                    .unwrap_or(DEFAULT_HUMAN_TEST_MS)
+                    .clamp(1_000, MAX_HUMAN_TEST_MS),
+            );
+        }
         let single = shikigami_runtime::single::flow_for(
             step,
             self.inner.runtime.registry(),
@@ -2211,7 +2221,7 @@ impl ShikigamiMcp {
         )
         .map_err(|m| err("UNKNOWN_STEP_TYPE", m))?;
 
-        let handle = self
+        let mut handle = self
             .inner
             .runtime
             .start(
@@ -2232,13 +2242,54 @@ impl ShikigamiMcp {
                 message: e.message,
                 details: e.details,
             })?;
-        let report = handle
-            .wait_with(|event| {
-                if let Some(draft) = draft.as_mut() {
-                    draft.on_event(&event.event);
+        // The AI client gave up on the call (its stop button, a timeout):
+        // the step stops too instead of waiting on in the background.
+        let stop_on_drop = StopOnDrop(Some(handle.stopper()));
+        // A wait by hand shows in Writer, which can end it 「終わりました」 or
+        // stop it 「待つのをやめる」, and calls the person when Writer is behind.
+        let mut human: Option<shikigami_core::PickWait> = None;
+        let mut ended_by = None;
+        loop {
+            tokio::select! {
+                event = handle.next_event() => {
+                    let Some(event) = event else { break };
+                    if let Some(draft) = draft.as_mut() {
+                        draft.on_event(&event.event);
+                    }
+                    match &event.event {
+                        RunEvent::HumanActionRequired { message, dialog: false, .. } if by_hand => {
+                            human = self.inner.picks.open_human(message).ok();
+                        }
+                        RunEvent::StepFinished { .. } => human = None,
+                        _ => {}
+                    }
                 }
-            })
-            .await;
+                () = tokio::time::sleep(PICK_POLL), if human.is_some() => {
+                    let Some(wait) = human.as_ref() else { continue };
+                    wait.touch();
+                    match wait.answer() {
+                        PickAnswer::Waiting => {}
+                        PickAnswer::Done => {
+                            ended_by = Some(PickAnswer::Done);
+                            human = None;
+                            let mut end = json!({ "action": "endHuman", "how": "person" });
+                            if let Some(context) = &context {
+                                end["context"] = context.clone();
+                            }
+                            let _ = self.inspect("browser", end).await;
+                        }
+                        PickAnswer::Cancelled => {
+                            ended_by = Some(PickAnswer::Cancelled);
+                            human = None;
+                            handle.cancel();
+                        }
+                    }
+                }
+            }
+        }
+        drop(human);
+        let report = handle.wait().await;
+        stop_on_drop.disarm();
         if let Some(draft) = draft {
             draft.finish();
         }
@@ -2246,6 +2297,30 @@ impl ShikigamiMcp {
 
         let output = single.result(&report.outputs);
         let mut result = json!({ "status": report.status, "output": output });
+        if by_hand {
+            let hint = match (ended_by, report.status) {
+                (Some(PickAnswer::Done), RunStatus::Succeeded) => Some(
+                    "The person pressed 終わりました in Writer before `until` showed. Look at `state`: if it is the page after the login, use something it lists as `until` in the flow (the one given never appeared).",
+                ),
+                (Some(PickAnswer::Cancelled), _) => Some(
+                    "The person stopped the wait in Writer (待つのをやめる). The browser is left as it was. Ask them in chat how to go on instead of trying again.",
+                ),
+                (_, RunStatus::Failed)
+                    if report
+                        .error
+                        .as_ref()
+                        .is_some_and(|e| e.code == "HUMAN_TIMEOUT") =>
+                {
+                    Some(
+                        "Nobody finished within the limit, or `until` never showed. Look at `state`: if the person did log in, `until` names something that page does not show; use what `state` lists. Otherwise ask them in chat before waiting again.",
+                    )
+                }
+                _ => None,
+            };
+            if let Some(hint) = hint {
+                result["hint"] = json!(hint);
+            }
+        }
         if report.status != RunStatus::Succeeded {
             result["error"] = json!(report.error);
             // A step from inside a flow, tried without the values it reads.
@@ -2833,6 +2908,27 @@ fn check_choices(p: &AskUserToChooseParams) -> Result<(), ErrorPayload> {
 const DEFAULT_PICK_WAIT_MS: u64 = 120_000;
 /// How often ask_user_to_pick looks whether Studio cancelled the request.
 const PICK_POLL: Duration = Duration::from_millis(500);
+/// test_step browser.waitForHuman: how long the person has by default, and at most.
+const DEFAULT_HUMAN_TEST_MS: u64 = 300_000;
+const MAX_HUMAN_TEST_MS: u64 = 600_000;
+const WAIT_FOR_HUMAN: &str = "browser.waitForHuman";
+
+/// Stops a run when the call waiting on it is dropped (the client cancelled).
+struct StopOnDrop(Option<shikigami_runtime::Stopper>);
+
+impl StopOnDrop {
+    fn disarm(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        if let Some(stopper) = self.0.take() {
+            stopper.stop();
+        }
+    }
+}
 
 /// How often request_secret looks whether the user registered the login.
 const SECRET_POLL: Duration = Duration::from_millis(500);

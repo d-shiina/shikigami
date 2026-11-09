@@ -576,6 +576,8 @@ export type StudioState = {
   decideApproval(id: string, approve: boolean): Promise<void>;
   loadPickRequests(): Promise<void>;
   cancelPickRequest(id: string): Promise<void>;
+  /** A wait by hand (login): the person says they finished. */
+  finishPickRequest(id: string): Promise<void>;
   setPolicyOpen(open: boolean): void;
   /** Returns true when saved. */
   savePolicy(policy: Policy): Promise<boolean>;
@@ -2208,6 +2210,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async cancelPickRequest(id) {
         try {
           await api.cancelPickRequest(id);
+        } catch (e) {
+          set({ error: message(e) });
+        }
+        await get().loadPickRequests();
+      },
+
+      async finishPickRequest(id) {
+        try {
+          await api.finishPickRequest(id);
         } catch (e) {
           set({ error: message(e) });
         }

@@ -432,6 +432,11 @@ export const en: Dict = {
   pickHow: (candidates: number) =>
     `Switch to the browser window and click the element. The click does not reach the page, so nothing is pressed.${candidates > 1 ? ` The candidates it is torn between are numbered 1–${candidates}.` : ""} If you are not sure, press "Not sure" in the browser or decline here.`,
   pickCancel: "Decline",
+  humanAsked: "The AI waits for you in the browser",
+  humanHow:
+    "Switch to the browser window and do it there. Press \"Done\" when you have finished; it also goes on by itself once the page it waits for shows.",
+  humanDone: "Done",
+  humanCancel: "Stop waiting",
   approvalSummary: (action: string, flow: string | null, types: string[], risk: string) =>
     `${action}${flow ? ` "${flow}"` : ""} (${types.length > 0 ? `${types.join(", ")}, ` : ""}${risk.toLowerCase()})`,
   approvalLater: "Later",

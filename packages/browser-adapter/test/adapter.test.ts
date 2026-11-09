@@ -317,6 +317,23 @@ describe("pointing at the page", () => {
     await person.shutdown();
   });
 
+  it("ends a wait by hand when the person says they finished, or when it is stopped", async () => {
+    // A page that never shows: only the person can end it.
+    const until = { role: "heading", name: "どこにもない見出し" };
+    const done = person.call("waitForHuman", { ...r, until, timeoutMs: 20_000 });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(await person.call("endHuman", { ...r, how: "person" })).toEqual({ ended: true });
+    expect(await done).toBeNull();
+
+    const stopped = person.call("waitForHuman", { ...r, until, timeoutMs: 20_000 });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(await person.call("endHuman", r)).toEqual({ ended: true });
+    expect((await failure(stopped)).code).toBe("CANCELLED");
+    // The page is still open as it was.
+    expect(await person.call("isVisible", { ...r, target: { role: "heading", name: "受注一覧" } })).toBe(true);
+    expect(await person.call("endHuman", r)).toEqual({ ended: false });
+  });
+
   /** Starts a pick, then plays the person clicking `target` once the banner is up. */
   async function pointAt(target: Record<string, unknown>, extra: Record<string, unknown> = {}) {
     const asked = person.call("pick", { ...r, message: "出荷するボタンを押してください", timeoutMs: 5000, ...extra });

@@ -160,6 +160,13 @@ pub fn list_pick_requests(state: State<'_, AppState>) -> CmdResult<Vec<PickReque
     Ok(PickRequestStore::new(state.service.store().local_root()).pending()?)
 }
 
+/// The person says they finished what an AI's test_step waits for by hand
+/// (log in): the step ends even when the page it waits for never shows.
+#[tauri::command]
+pub fn finish_pick_request(state: State<'_, AppState>, id: PickId) -> CmdResult<()> {
+    Ok(PickRequestStore::new(state.service.store().local_root()).finish(&id)?)
+}
+
 /// The person declines: the AI's banner in the browser closes and it is told so.
 #[tauri::command]
 pub fn cancel_pick_request(state: State<'_, AppState>, id: PickId) -> CmdResult<()> {

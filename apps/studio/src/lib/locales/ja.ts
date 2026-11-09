@@ -432,6 +432,11 @@ export const ja = {
   pickHow: (candidates: number) =>
     `ブラウザのウィンドウに切り替えて、対象の部品をクリックしてください。クリックはページに送られないため、ボタンが押されることはありません。${candidates > 1 ? `候補には 1〜${candidates} の番号が付いています。` : ""}判断できない場合は、ブラウザの「わからない」またはここで拒否できます。`,
   pickCancel: "指定せずに拒否",
+  humanAsked: "AI がブラウザでの操作を待っています",
+  humanHow:
+    "ブラウザのウィンドウに切り替えて操作してください。終わったら「終わりました」を押してください。目印の画面が出れば自動で進みます。",
+  humanDone: "終わりました",
+  humanCancel: "待つのをやめる",
   approvalSummary: (action: string, flow: string | null, types: string[], risk: string) =>
     `${action}${flow ? `「${flow}」` : ""}（${types.length > 0 ? `${types.join("、")}・` : ""}${risk}）`,
   approvalLater: "後で",
