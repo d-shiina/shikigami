@@ -34,6 +34,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { startFileDrag, useFileDrag } from "./FileDrag";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
+import { baseNameRange, textAsk } from "../lib/ask";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { cleanUp, imageOf, unusedParts } from "../lib/imageParts";
 import { partUses } from "../lib/parts";
@@ -164,8 +165,24 @@ function useFileMenu() {
         label: t.project.menu.rename,
         icon: PenLine,
         run: () => {
-          const name = window.prompt(t.project.renamePrompt, nameOf(path));
-          if (name && name !== nameOf(path)) void p.rename(path, `${path.slice(0, path.lastIndexOf("/") + 1)}${name}`);
+          const old = nameOf(path);
+          const folder = path.slice(0, path.lastIndexOf("/") + 1);
+          const ask = t.project.renameAsk;
+          void textAsk({
+            title: ask.title(old),
+            label: ask.label,
+            value: old,
+            select: baseNameRange(old),
+            confirm: ask.confirm,
+            check: (typed) => {
+              const name = typed.trim();
+              if (/[\\/:*?"<>|]/.test(name)) return ask.badChar;
+              const taken = p.files?.files.some((f) => f.path.toLowerCase() === `${folder}${name}`.toLowerCase());
+              return name !== old && taken ? ask.taken(name) : null;
+            },
+          }).then((name) => {
+            if (name && name !== old) void p.rename(path, `${folder}${name}`);
+          });
         },
       },
       !isFolder && { label: t.project.menu.remove, icon: Trash2, danger: true, run: () => void p.remove(path) },

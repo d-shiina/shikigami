@@ -42,7 +42,12 @@ export const en: Dict = {
   secretKeyMissing:
     "This workspace's secrets were registered on another PC or by another Windows user, so they cannot be read here. Reset them and register again.",
   secretReset: "Reset and register again",
-  secretConfirmReset: "Delete all secrets and saved sign-in states of this workspace?",
+  secretResetAsk: {
+    title: "Delete all secrets and register them again?",
+    body: (n: number) =>
+      `This deletes ${n > 0 ? `the ${n} secret${n === 1 ? "" : "s"}` : "all secrets"} and saved sign-in states of this workspace. It cannot be undone. Register the secrets you use again afterwards.`,
+    confirm: "Delete all",
+  },
   secretUse: "Secret",
   secretText: "Text",
   secretChoose: "(choose a secret)",
@@ -74,8 +79,10 @@ export const en: Dict = {
   secretOauthExpired: "Expired",
   secretOauthNotSignedIn: "Not signed in (running the “Sign in (OAuth)” node signs in)",
   secretSignOut: "Sign out",
-  secretConfirmSignOut: (name: string) =>
-    `Delete the saved sign-in of "${name}" (OAuth tokens and browser login)? It signs in again the next time it is used.`,
+  secretSignOutAsk: {
+    title: (name: string) => `Sign out of "${name}"?`,
+    body: "This deletes the saved OAuth tokens and browser login. It signs in again the next time this secret is used.",
+  },
   secretPage: {
     used: "In use",
     usage: "Used by flows",
@@ -160,6 +167,9 @@ export const en: Dict = {
   extracted: (name: string) => `Moved into the new flow "${name}"`,
   close: "Close",
   cancel: "Cancel",
+  ask: {
+    empty: "Type something",
+  },
   secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets in the sidebar and pick it in the input node",
   flows: "Flows",
   newFlow: "New flow",
@@ -184,6 +194,16 @@ export const en: Dict = {
   memoPlaceholder: "What this node does, or what to watch out for (optional)",
   delete: "Delete",
   confirmDelete: "Move this flow to the trash?",
+  deleteFlowAsk: {
+    title: (name: string) => `Delete the flow "${name}"?`,
+    titleMany: (n: number) => `Delete ${n} flows?`,
+    body: "It moves to the trash. A published version stops running, and so does its automation.",
+    typeName: (name: string) => `To confirm, type the flow name "${name}"`,
+    typeWord: (word: string) => `To confirm, type "${word}"`,
+    word: "delete",
+    confirm: "Delete",
+    confirmMany: (n: number) => `Delete ${n}`,
+  },
   noFlows: "No flows",
   noSelection: "Pick a flow from the list",
   undo: "Undo",
@@ -887,7 +907,13 @@ export const en: Dict = {
       rename: "Rename",
       remove: "Delete (to the trash)",
     },
-    renamePrompt: "New name",
+    renameAsk: {
+      title: (name: string) => `Rename "${name}"`,
+      label: "New name",
+      confirm: "Rename",
+      badChar: "A name cannot contain \\ / : * ? \" < > |",
+      taken: (name: string) => `"${name}" already exists`,
+    },
     added: (n: number, folder: string) => `Added ${n} to ${folder}`,
     sheet: {
       settings: "Settings",
@@ -918,7 +944,12 @@ export const en: Dict = {
       duplicate: (name: string) => `"${name}" appears twice`,
       log: "Run log",
       text: "Text",
-      discard: "Discard the changes and close?",
+      closeAsk: {
+        title: (name: string) => `Save the changes to "${name}"?`,
+        body: "Your changes to this file are lost if you don't save them.",
+        save: "Save",
+        dontSave: "Don't save",
+      },
     },
   },
   outline: {
@@ -1992,7 +2023,10 @@ export const en: Dict = {
     loadError: "Load error",
     checkUpdate: "Check for update",
     uninstall: "Uninstall",
-    confirmUninstall: (name: string) => `Uninstall "${name}"? Flows using its nodes fail validation until it is installed again.`,
+    uninstallAsk: {
+      title: (name: string) => `Uninstall "${name}"?`,
+      body: "Flows using this extension's nodes fail validation until it is installed again.",
+    },
     latest: (name: string, v: string) => `"${name}" is up to date (v${v})`,
     restartNeeded: "Changes take effect after Writer restarts.",
     restart: "Restart",

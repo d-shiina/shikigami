@@ -11,6 +11,7 @@ import { copyText, menuFor, openMenu } from "../lib/contextMenu";
 import { agent, api, type ScheduleView } from "../lib/api";
 import { describeWhen } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
+import { deleteFlowsAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 import { projectApi } from "../project";
 import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
@@ -323,7 +324,14 @@ export function FlowsPage() {
       { label: t.exportFlow, icon: Download, run: () => void exportMany([s.id]) },
       { label: t.menu.copyId, icon: Copy, run: () => copyText(s.id) },
       "-",
-      { label: t.delete, icon: Trash2, danger: true, confirm: t.menu.confirmDelete, run: () => void remove(s.id) },
+      {
+        label: `${t.delete}…`,
+        icon: Trash2,
+        danger: true,
+        run: () => void deleteFlowsAsk([s.name]).then((yes) => {
+          if (yes) void remove(s.id);
+        }),
+      },
     ] as const;
 
   const exportMany = async (ids: string[]) => {
@@ -599,9 +607,10 @@ export function FlowsPage() {
               <BulkButton
                 icon={Trash2}
                 danger
-                label={t.delete}
-                confirmLabel={l.confirmDeleteMany(pickedIds.length)}
+                label={`${t.delete}…`}
                 onClick={async () => {
+                  const names = pickedIds.map((id) => summaries.find((s) => s.id === id)?.name ?? id);
+                  if (!(await deleteFlowsAsk(names))) return;
                   for (const id of pickedIds) await remove(id);
                   setPicked(new Set());
                 }}

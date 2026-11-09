@@ -10,6 +10,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { ApiError } from "./lib/api";
+import type { AskAnswer } from "./lib/ask";
 import { isErrorPayload } from "@shikigami/schema";
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -170,6 +171,8 @@ export type ProjectState = {
   onChanged(id: string): Promise<void>;
   openFile(path: string): Promise<void>;
   closeSheet(): void;
+  /** Closes the sheet, asking first when hand-edited text would be lost. */
+  leaveSheet(): Promise<void>;
   /** Edits the sheet's text; saved with `saveSheet`. */
   editSheet(text: string): void;
   /** Edits the settings form; saved on its own a moment later. */
@@ -197,7 +200,14 @@ function message(e: unknown): string {
 
 const nameOf = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
-export function createProjectStore(api: ProjectApi, labels: { added: (n: number, folder: string) => string; discard: () => string }): StoreApi<ProjectState> {
+/** What the store needs from the screen: the words of a notice, and the question for unsaved edits. */
+export interface ProjectUi {
+  added: (n: number, folder: string) => string;
+  /** Asked before hand-edited text is left: "confirm" saves it first, "other" drops it, "cancel" stays. */
+  unsaved: (path: string) => Promise<AskAnswer>;
+}
+
+export function createProjectStore(api: ProjectApi, labels: ProjectUi): StoreApi<ProjectState> {
   let panelOpen = true;
   try {
     panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) !== "closed";
@@ -217,6 +227,17 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       }
     };
     const report = (count: number, folder: string) => set({ notice: labels.added(count, folder) });
+    /**
+     * Asks about the hand-edited sheet of flow `id` and saves it when told to;
+     * true when the caller may go on. The answer can come after another flow or
+     * file was opened (the AI made a flow, say): then nothing is saved or
+     * opened for a question that no longer applies.
+     */
+    const askUnsaved = async (id: string, path: string): Promise<boolean> => {
+      const answer = await labels.unsaved(path);
+      if (answer === "cancel" || get().flowId !== id || get().sheet?.path !== path) return false;
+      return answer === "other" || (await get().saveSheet());
+    };
     return {
       flowId: null,
       files: null,
@@ -267,10 +288,12 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
           if (sheet.path === path) return;
           // The settings form saves as it is typed; only hand-edited text can be lost.
           if (sheet.config && !sheet.raw) await get().saveSheet();
-          else if (!(globalThis.confirm?.(labels.discard()) ?? true)) return;
+          else if (!(await askUnsaved(id, sheet.path))) return;
         }
         try {
           const text = await api.readText(id, path);
+          // Another flow opened while the file was read: its sheet is not this file's.
+          if (get().flowId !== id) return;
           set({ sheet: { path, text, saved: text, config: parseConfig(text), raw: false }, error: null });
         } catch (e) {
           // Too large or not text after all: its app shows it.
@@ -280,6 +303,16 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       closeSheet() {
         set({ sheet: null });
+      },
+      async leaveSheet() {
+        const id = get().flowId;
+        const sheet = get().sheet;
+        if (!id || !sheet) return;
+        if (sheet.text !== sheet.saved) {
+          if (sheet.config && !sheet.raw) await get().saveSheet();
+          else if (!(await askUnsaved(id, sheet.path))) return;
+        }
+        if (get().flowId === id && get().sheet?.path === sheet.path) set({ sheet: null });
       },
       editSheet(text) {
         const sheet = get().sheet;

@@ -9,6 +9,7 @@ import { CloudUpload, Puzzle, RefreshCw, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useStudioApi } from "../context";
 import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry } from "../lib/api";
+import { confirmAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 import { EXTENSION_ICONS } from "../lib/nodeIcons";
 
@@ -481,7 +482,10 @@ export function ExtensionsPage() {
                     ext={ext}
                     onToggle={(on) => void act(() => extensionsApi.setEnabled(ext.name, on))}
                     onUpdate={() => void checkUpdate(ext)}
-                    onUninstall={() => window.confirm(e.confirmUninstall(ext.label)) && void act(() => extensionsApi.uninstall(ext.name))}
+                    onUninstall={async () => {
+                      const yes = await confirmAsk({ title: e.uninstallAsk.title(ext.label), body: e.uninstallAsk.body, confirm: e.uninstall, danger: true });
+                      if (yes) void act(() => extensionsApi.uninstall(ext.name));
+                    }}
                   />
                 ))}
               </ul>

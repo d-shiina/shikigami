@@ -764,7 +764,8 @@ export function BulkButton({
       type="button"
       onBlur={() => setConfirming(false)}
       onClick={async () => {
-        if (danger && !confirming) return setConfirming(true);
+        // A danger with its own dialog (no confirmLabel) asks there instead of on the button.
+        if (danger && confirmLabel && !confirming) return setConfirming(true);
         setConfirming(false);
         await onClick();
       }}
