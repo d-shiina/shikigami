@@ -1096,7 +1096,7 @@ async fn ai_puts_files_in_the_flow_folder_and_runs_with_relative_paths() {
         .ok("run_flow", json!({ "flowId": id, "waitMs": 5000 }))
         .await;
     assert_eq!(run["report"]["status"], "succeeded", "{run}");
-    let logs: Vec<_> = std::fs::read_dir(h.root.join("flows").join(&id).join("logs"))
+    let logs: Vec<_> = std::fs::read_dir(h.root.join("flows").join("設定を読む").join("logs"))
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();

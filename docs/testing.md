@@ -9,7 +9,7 @@ So that you do not have to check by hand that a flow still gives the same result
 One file per case in the flow folder's `tests/`. The file name without `.json` is the case's name.
 
 ```text
-flows/<flow id>/
+flows/<flow name>/
   flow.json
   input/
   tests/

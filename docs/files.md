@@ -23,7 +23,7 @@ Crate `spellsheet-files`. Works without installing anything and is tested off Wi
 Each flow is a folder in the workspace, and its files live next to it:
 
 ```text
-flows/<id>/
+flows/<flow name>/
   flow.json   the flow
   input/          files the flow reads (Excel, CSV…)
   config/         settings files people change without touching the flow
@@ -37,7 +37,9 @@ flows/<id>/
 - `work/` is emptied when a run starts. Set `settings.keepWork: true` on the flow to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
 - Bundles (`export_flow`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
 - `spellsheet run orders.spellsheet.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
-- Older workspaces with `flows/<id>.json` are moved into folders when the workspace is opened.
+- The folder is named after the flow (characters Windows does not allow, `\ / : * ? " < > |`, become their full-width forms; cut at 60 characters). Renaming the flow renames the folder; when a file in it is open, the folder is renamed the next time the workspace is opened. The flow's ID stays in `flow.json`, and calls, schedules and run records point at the ID, so renaming breaks nothing.
+- Two flows cannot have the same name (case does not count). A new, duplicated or imported flow whose name is taken gets ` (2)`; renaming a flow to a taken name fails with `DUPLICATE_FLOW_NAME`.
+- Folders named by ID (`flows/<id>/`, up to 0.1.20) and older `flows/<id>.json` files are moved to folders named after the flows when the workspace is opened. When two flows already share a name, the later one's folder becomes `name (2)`.
 - Add files from Writer, from the AI (`write_project_file`), or with `spellsheet flow add-file <id> <file> --to input`.
 
 ### Settings files

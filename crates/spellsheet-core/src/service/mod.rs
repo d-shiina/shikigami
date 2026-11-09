@@ -475,6 +475,9 @@ impl FlowService {
         if self.store.exists(&flow.id) {
             return Err(CoreError::FlowAlreadyExists(flow.id));
         }
+        // Names are unique (each names its flow's folder): a new flow whose
+        // name is taken gets a number, like a copied file in Explorer.
+        flow.name = self.store.free_flow_name(&flow.name, None);
         self.store.save(&flow)?;
         self.store.remove_undo(&flow.id)?;
         let entry = HistoryEntry {

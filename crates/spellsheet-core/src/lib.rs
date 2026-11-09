@@ -11,6 +11,7 @@ pub mod chat;
 pub mod distribution;
 pub mod error;
 pub mod expr;
+pub mod flow_folders;
 pub mod ids;
 pub mod migrate;
 pub mod model;

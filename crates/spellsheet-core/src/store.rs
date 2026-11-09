@@ -5,7 +5,7 @@
 //! ```text
 //! <root>/                                 shared part (may live on a file server)
 //!   workspace.json                         optional manifest (`"shared": true`)
-//!   flows/<flow-id>/               one folder per flow (its project)
+//!   flows/<flow name>/             one folder per flow (its project), see crate::flow_folders
 //!     flow.json                        the canonical flow document
 //!     input/ config/ templates/ output/ work/   files the flow works with
 //!   versions/<flow-id>/<number>.json   named versions (snapshots)
@@ -45,6 +45,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use crate::error::{CoreError, CoreResult};
+use crate::flow_folders;
 use crate::ids::{FlowId, ObservationId, StepId};
 use crate::migrate;
 use crate::model::Flow;
@@ -145,6 +146,8 @@ pub struct FileStore {
     root: PathBuf,
     local: PathBuf,
     shared: bool,
+    /// Where each flow's folder was last found (checked before use).
+    folders: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<FlowId, PathBuf>>>,
 }
 
 /// Optional `<root>/workspace.json`.
@@ -252,8 +255,10 @@ impl FileStore {
             root,
             local,
             shared,
+            folders: Default::default(),
         };
         store.migrate_flat_files();
+        store.name_folders();
         Ok(store)
     }
 
@@ -293,6 +298,167 @@ impl FileStore {
                 Err(e) => {
                     tracing::warn!(path = %from.display(), error = %e, "could not move flow into its folder");
                 }
+            }
+        }
+    }
+
+    /// Renames flow folders to their flows' names (folders named by the ID
+    /// before, or after a rename that could not move the folder then).
+    /// A name another folder holds gets a number (`名前 (2)`). What cannot
+    /// be renamed now stays and is tried again next time.
+    fn name_folders(&self) {
+        let flows = self.flows_dir();
+        let misnamed: Vec<_> = flow_folders::scan(&flows)
+            .into_iter()
+            .filter(|f| {
+                !flow_folders::same_folder(&f.folder(), &flow_folders::folder_name(&f.name))
+            })
+            .collect();
+        if misnamed.is_empty() {
+            return;
+        }
+        let Ok(_lock) = self.lock() else {
+            return;
+        };
+        for f in misnamed {
+            let wanted = flow_folders::folder_name(&f.name);
+            let name = flow_folders::free_name(&wanted, |n| {
+                flow_folders::occupant(&flows, &flow_folders::folder_name(n), Some(&f.dir))
+                    .is_some()
+            });
+            let to = flows.join(flow_folders::folder_name(&name));
+            if flow_folders::same_folder(&flow_folders::file_name(&to), &f.folder()) {
+                continue;
+            }
+            match fs::rename(&f.dir, &to) {
+                Ok(()) => self.remember(&f.id, &to),
+                Err(e) => {
+                    tracing::warn!(from = %f.dir.display(), to = %to.display(), error = %e, "could not name the flow's folder after it yet");
+                }
+            }
+        }
+    }
+
+    fn remember(&self, id: &FlowId, dir: &Path) {
+        let mut folders = self.folders.lock().unwrap_or_else(|e| e.into_inner());
+        folders.insert(id.clone(), dir.to_path_buf());
+    }
+
+    /// The folder of the flow with this ID, wherever it is under `flows/`.
+    fn find_folder(&self, id: &FlowId) -> Option<flow_folders::FlowFolder> {
+        if !id.is_well_formed() {
+            return None;
+        }
+        let cached = {
+            let folders = self.folders.lock().unwrap_or_else(|e| e.into_inner());
+            folders.get(id).cloned()
+        };
+        // Checked: another process may have renamed or replaced it.
+        let quick = [cached, Some(self.flows_dir().join(id.as_str()))];
+        for dir in quick.into_iter().flatten() {
+            if let Some(f) = flow_folders::read(&dir).filter(|f| &f.id == id) {
+                return Some(f);
+            }
+        }
+        let all = flow_folders::scan(&self.flows_dir());
+        let mut folders = self.folders.lock().unwrap_or_else(|e| e.into_inner());
+        for f in &all {
+            folders.insert(f.id.clone(), f.dir.clone());
+        }
+        all.into_iter().find(|f| &f.id == id)
+    }
+
+    /// Every flow's ID and name, from its folder or old flat file.
+    pub fn flow_names(&self) -> Vec<(FlowId, String)> {
+        let mut out: Vec<(FlowId, String)> = flow_folders::scan(&self.flows_dir())
+            .into_iter()
+            .map(|f| {
+                self.remember(&f.id, &f.dir);
+                (f.id, f.name)
+            })
+            .collect();
+        if let Ok(entries) = fs::read_dir(self.flows_dir()) {
+            for path in entries.flatten().map(|e| e.path()) {
+                if let Some(id) = flat_flow_id(&path)
+                    && !out.iter().any(|(i, _)| i == &id)
+                    && let Ok(flow) = self.load(&id)
+                {
+                    out.push((id, flow.name));
+                }
+            }
+        }
+        out
+    }
+
+    /// Every flow's ID.
+    pub fn flow_ids(&self) -> Vec<FlowId> {
+        self.flow_names().into_iter().map(|(id, _)| id).collect()
+    }
+
+    /// `name`, or `name (2)`, `name (3)`, … when another flow has it.
+    pub fn free_flow_name(&self, name: &str, except: Option<&FlowId>) -> String {
+        let names: Vec<String> = self
+            .flow_names()
+            .into_iter()
+            .filter(|(id, _)| Some(id) != except)
+            .map(|(_, n)| n)
+            .collect();
+        let flows = self.flows_dir();
+        flow_folders::free_name(name, |n| {
+            names.iter().any(|m| flow_folders::same_name(m, n))
+                || flow_folders::occupant(&flows, &flow_folders::folder_name(n), None).is_some()
+        })
+    }
+
+    /// The folder `flow` is saved in: named after it. Moves the folder when
+    /// the name changed; refuses a name another flow has.
+    fn folder_for_save(&self, flow: &Flow) -> CoreResult<PathBuf> {
+        let flows = self.flows_dir();
+        let wanted = flow_folders::folder_name(&flow.name);
+        let current = self.find_folder(&flow.id);
+        let taken_by_other = |except: Option<&Path>| {
+            flow_folders::occupant(&flows, &wanted, except).is_some()
+                || flow_folders::scan(&flows)
+                    .iter()
+                    .any(|f| f.id != flow.id && flow_folders::same_name(&f.name, &flow.name))
+        };
+        let Some(current) = current else {
+            if taken_by_other(None) {
+                return Err(CoreError::DuplicateFlowName(flow.name.trim().to_owned()));
+            }
+            return Ok(flows.join(wanted));
+        };
+        let folder = current.folder();
+        if flow_folders::same_folder(&folder, &wanted) {
+            if folder != wanted {
+                // Only the case changed.
+                let to = flows.join(&wanted);
+                if fs::rename(&current.dir, &to).is_ok() {
+                    self.remember(&flow.id, &to);
+                    return Ok(to);
+                }
+            }
+            return Ok(current.dir);
+        }
+        if taken_by_other(Some(&current.dir)) {
+            // Kept under another folder name since the folders were named
+            // (two flows had this name then): fine while it keeps it.
+            if flow_folders::same_name(&current.name, &flow.name) {
+                return Ok(current.dir);
+            }
+            return Err(CoreError::DuplicateFlowName(flow.name.trim().to_owned()));
+        }
+        let to = flows.join(&wanted);
+        match fs::rename(&current.dir, &to) {
+            Ok(()) => {
+                self.remember(&flow.id, &to);
+                Ok(to)
+            }
+            Err(e) => {
+                // A file in it is open (e.g. output in Excel): the folder
+                // keeps its name until the workspace is opened again.
+                tracing::warn!(from = %current.dir.display(), to = %to.display(), error = %e, "could not rename the flow's folder yet");
+                Ok(current.dir)
             }
         }
     }
@@ -369,15 +535,19 @@ impl FileStore {
         }
     }
 
-    /// `flows/<id>/flow.json`.
+    /// `flows/<flow name>/flow.json`.
     pub fn flow_path(&self, id: &FlowId) -> PathBuf {
         self.project_dir(id).join(crate::project::FLOW_FILE)
     }
 
     /// The flow's own folder: its document and the files it works with.
-    /// Relative paths in its steps are resolved from here.
+    /// Relative paths in its steps are resolved from here. For a flow that
+    /// does not exist (yet), `flows/<id>`.
     pub fn project_dir(&self, id: &FlowId) -> PathBuf {
-        self.flows_dir().join(id.as_str())
+        match self.find_folder(id) {
+            Some(f) => f.dir,
+            None => self.flows_dir().join(id.as_str()),
+        }
     }
 
     /// `flows/<id>.json`, the layout before flow folders.
@@ -433,21 +603,9 @@ impl FileStore {
 
     /// Loads every flow; unreadable files are skipped and logged.
     pub fn load_all(&self) -> CoreResult<Vec<Flow>> {
-        let mut ids = std::collections::BTreeSet::new();
-        for entry in fs::read_dir(self.flows_dir())? {
-            let path = entry?.path();
-            let id = if path.is_dir() {
-                if !path.join(crate::project::FLOW_FILE).is_file() {
-                    continue;
-                }
-                path.file_name().and_then(|s| s.to_str()).map(FlowId::new)
-            } else {
-                flat_flow_id(&path)
-            };
-            ids.extend(id);
-        }
+        fs::read_dir(self.flows_dir())?;
         let mut out = Vec::new();
-        for id in ids {
+        for id in self.flow_ids() {
             let path = self.project_dir(&id);
             match self.load(&id) {
                 Ok(s) => out.push(s),
@@ -465,8 +623,10 @@ impl FileStore {
         self.checked(id)?;
         let mut json = serde_json::to_vec_pretty(flow)?;
         json.push(b'\n');
-        fs::create_dir_all(self.project_dir(id))?;
-        write_atomic(&self.flow_path(id), &json)?;
+        let dir = self.folder_for_save(flow)?;
+        fs::create_dir_all(&dir)?;
+        write_atomic(&dir.join(crate::project::FLOW_FILE), &json)?;
+        self.remember(id, &dir);
         self.ensure_project_folders(id);
         // Written by an older build after the folder existed: the folder
         // copy is now the current one.

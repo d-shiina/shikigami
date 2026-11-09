@@ -340,7 +340,7 @@ In a shared workspace, `history/` and `runs/` are kept on each PC ([design/shari
 ```text
 <workspace>/            default: SPELLSHEET_HOME > workspace in config.json > %LOCALAPPDATA%\SpellSheet\workspace
   workspace.json        optional. {"shared": true} makes it a shared workspace
-  flows/<id>.json   flows (source of truth)
+  flows/<name>/flow.json   flows (source of truth; folder named after the flow, see files.md)
   versions/<id>/<n>.json  named versions (immutable snapshots)
   history/<id>/journal.jsonl  change journal (append-only, audit)
   history/<id>/undo.json      Undo/Redo stack

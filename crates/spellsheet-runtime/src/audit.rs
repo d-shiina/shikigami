@@ -116,11 +116,15 @@ fn actor(a: &Actor) -> (String, Option<String>) {
 /// The flows this PC has a journal for (deleted ones too) or the
 /// workspace holds now.
 fn flow_ids(store: &FileStore) -> Vec<FlowId> {
-    let mut ids: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = store
+        .flow_ids()
+        .into_iter()
+        .map(|id| id.as_str().to_owned())
+        .collect();
+    // Folders under `flows/` are named after the flows, not their IDs.
     for dir in [
         store.local_root().join("history"),
         store.root().join("versions"),
-        store.root().join("flows"),
     ] {
         if let Ok(entries) = fs::read_dir(dir) {
             for e in entries.flatten() {
