@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpellSheet Writer</title>
+    <!-- The start-up screen (src-tauri/src/splash.rs): shown while Writer loads, then closed. -->
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b131b; }
+      body {
+        font-family: "Inter Variable", "Noto Sans JP Variable", "Yu Gothic UI", "Segoe UI", sans-serif;
+        color: #f4f6f8;
+        user-select: none;
+        cursor: default;
+      }
+      .art { position: absolute; inset: 0; overflow: hidden; }
+      /* Light from the mark's own colours, behind it. */
+      .glow {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(circle at 74% 30%, rgba(31, 111, 184, 0.42), transparent 42%),
+          radial-gradient(circle at 86% 74%, rgba(240, 120, 40, 0.24), transparent 38%),
+          radial-gradient(circle at 56% 82%, rgba(60, 160, 110, 0.20), transparent 40%),
+          radial-gradient(circle at 60% 18%, rgba(30, 190, 200, 0.18), transparent 36%);
+      }
+      .mark {
+        position: absolute; width: 560px; height: 560px; right: -110px; top: -86px;
+        animation: arrive 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      /* Keeps the words readable over the mark. */
+      .shade {
+        position: absolute; inset: 0;
+        background: linear-gradient(90deg, #0b131b 0%, rgba(11, 19, 27, 0.92) 30%, rgba(11, 19, 27, 0.2) 62%, transparent 80%),
+          linear-gradient(0deg, rgba(11, 19, 27, 0.75) 0%, transparent 34%);
+      }
+      .words { position: absolute; left: 44px; bottom: 54px; animation: rise 0.9s 0.15s cubic-bezier(0.16, 1, 0.3, 1) both; }
+      .name { font-size: 15px; font-weight: 500; letter-spacing: 0.02em; color: rgba(244, 246, 248, 0.7); }
+      h1 { font-size: 44px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; margin-top: 2px; }
+      .tagline { font-size: 14px; color: rgba(244, 246, 248, 0.78); margin-top: 12px; }
+      .foot {
+        position: absolute; left: 44px; right: 44px; bottom: 22px;
+        display: flex; justify-content: space-between; font-size: 11px; color: rgba(244, 246, 248, 0.5);
+      }
+      /* Still working: a thin line along the bottom edge. */
+      .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+      .bar i {
+        position: absolute; top: 0; bottom: 0; width: 30%;
+        background: linear-gradient(90deg, transparent, #3aa0e6, #f08a3c, transparent);
+        animation: sweep 1.6s ease-in-out infinite;
+      }
+      @keyframes arrive { from { opacity: 0; transform: rotate(-28deg) scale(0.92); } to { opacity: 1; transform: none; } }
+      @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      @keyframes sweep { from { left: -30%; } to { left: 100%; } }
+      @media (prefers-reduced-motion: reduce) {
+        .mark, .words { animation: none; }
+        .bar i { animation: none; left: 0; width: 100%; opacity: 0.4; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="art">
+      <div class="glow"></div>
+      <img class="mark" src="/splash-art.webp" alt="" draggable="false" />
+      <div class="shade"></div>
+    </div>
+    <div class="words">
+      <div class="name">SpellSheet</div>
+      <h1>Writer</h1>
+      <div class="tagline" id="tagline">AI が作り、AI なしで動く</div>
+    </div>
+    <div class="foot"><span id="status">起動しています</span><span id="version"></span></div>
+    <div class="bar"><i></i></div>
+    <script type="module" src="/src/splash.ts"></script>
+  </body>
+</html>

@@ -597,7 +597,12 @@ export function App() {
   const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), unsaved: unsavedAsk }), []);
 
   useEffect(() => {
-    void store.getState().init();
+    // Writer's window stays hidden behind the start-up screen until the
+    // flows are on screen, so nobody sees a white window or an empty list first.
+    void store
+      .getState()
+      .init()
+      .finally(() => setTimeout(() => void api.startupReady().catch(() => {}), 0));
     // While the AI asked in the pane works, Studio follows it: a flow it
     // has just made opens, and the chart pans to the nodes it adds. Only
     // changes from outside count, so the person's own edits never move the view.

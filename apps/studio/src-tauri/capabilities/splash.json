@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "splash",
+  "description": "The start-up screen (splash.rs): a picture only, it calls nothing.",
+  "windows": ["splash"],
+  "permissions": []
+}
