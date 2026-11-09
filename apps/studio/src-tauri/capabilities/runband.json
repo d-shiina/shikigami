@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "runband",
+  "description": "The run band shown while Writer is minimised for a run (run_band.rs): core events only. Pausing, stopping and bringing Writer back go through Shikigami commands.",
+  "windows": ["runband"],
+  "permissions": ["core:default"]
+}

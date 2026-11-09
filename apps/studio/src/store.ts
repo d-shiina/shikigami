@@ -1,5 +1,6 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (flow, validation, undo state).
+import { loadBandSettings } from "./lib/bandSettings";
 import { unsetParams } from "./lib/nodeRows";
 import { valuesBefore } from "./lib/startAt";
 import { missingInputs } from "./lib/runInputs";
@@ -1729,6 +1730,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const runId = await api.run(flow.id, options?.inputs, {
             breakpoints,
             step: options?.step ?? false,
+            band: loadBandSettings(),
             ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
           });
           set((s) => ({

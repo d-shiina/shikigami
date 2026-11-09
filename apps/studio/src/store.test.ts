@@ -1,3 +1,4 @@
+import { BAND_DEFAULTS } from "./lib/bandSettings";
 import type {
   ApprovalRequest,
   EditOp,
@@ -454,7 +455,7 @@ describe("studio store", () => {
     await store.getState().runTo("s2");
     expect(store.getState().trying).toBe("s2");
     // The node itself is a breakpoint, on top of the ones the person set.
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: false, band: BAND_DEFAULTS });
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s2", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1 });
@@ -534,7 +535,7 @@ describe("studio store", () => {
     store.getState().toggleBreakpoint("s1");
     expect(store.getState().breakpoints).toEqual({ scn_a: ["s2"] });
     await store.getState().startRun({ step: true });
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true, band: BAND_DEFAULTS });
     // A running run of this flow picks up changes at once.
     store.getState().toggleBreakpoint("s3");
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
@@ -556,7 +557,7 @@ describe("studio store", () => {
     expect(store.getState().askInputs).toEqual({ flowId: "scn_a", options: { stopAt: "s1" } });
     expect(store.getState().trying).toBe("s1");
     await store.getState().answerInputs({ company: "株式会社まるちゃ" });
-    expect(run).toHaveBeenCalledWith("scn_a", { company: "株式会社まるちゃ" }, { breakpoints: ["s1"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", { company: "株式会社まるちゃ" }, { breakpoints: ["s1"], step: false, band: BAND_DEFAULTS });
     expect(store.getState().askInputs).toBeNull();
     // 「ここから実行」 starts with the earlier run's values: nothing to ask.
     run.mockClear();
@@ -630,7 +631,7 @@ describe("studio store", () => {
     await store.getState().open("scn_a");
     store.getState().toggleBreakpoint("x", "scn_b");
     await store.getState().startRun();
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false, band: BAND_DEFAULTS });
     store.getState().setFollowRun(false);
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "x", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1, callPath: ["c1"] } as unknown as RunEventEnvelope);

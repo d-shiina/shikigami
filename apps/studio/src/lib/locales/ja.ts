@@ -1895,6 +1895,23 @@ export const ja = {
     by: (who: string, added: boolean) => `${who}が${added ? "追加" : "変更"}`,
     direction: { input: "受け取る", output: "返す", inOut: "受け取って返す", local: "使う" },
   },
+  band: {
+    title: "実行中のフロー",
+    elapsed: (time: string) => `${time} 経過`,
+    pause: "一時停止",
+    stop: "中止",
+    writer: "Writer に戻す",
+    close: "閉じる",
+    waiting: "操作を待っています",
+    paused: "一時停止中",
+    result: { succeeded: "完了しました", failed: "エラーで中断しました", cancelled: "中止しました" } as Record<string, string>,
+    settingsSection: "実行",
+    shrink: "画面を操作するフローの実行中は Writer を小さくする",
+    shrinkHint:
+      "デスクトップやブラウザーを操作するフローを実行すると Writer を最小化し、画面の下端にノードを横に並べた帯を出します。帯は画面の撮影に写らず、クリックする位置に重なるときは上端へよけます",
+    restore: "実行が終わったら Writer を元に戻す",
+    restoreHint: "オフにすると、完了したときは帯に結果を出したまま Writer は小さいままにします。エラーや中止のときは必ず戻します",
+  },
   shell: {
     aiChat: "AI チャット",
     recentFlows: "最近のフロー",

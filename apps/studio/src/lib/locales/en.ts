@@ -1895,6 +1895,23 @@ export const en: Dict = {
     by: (who: string, added: boolean) => `${added ? "Added" : "Changed"} by ${who}`,
     direction: { input: "Takes", output: "Returns", inOut: "Takes and returns", local: "Uses" },
   },
+  band: {
+    title: "Running flow",
+    elapsed: (time: string) => `${time} elapsed`,
+    pause: "Pause",
+    stop: "Stop",
+    writer: "Back to Writer",
+    close: "Close",
+    waiting: "Waiting for you",
+    paused: "Paused",
+    result: { succeeded: "Completed", failed: "Stopped with an error", cancelled: "Stopped" } as Record<string, string>,
+    settingsSection: "Running",
+    shrink: "Make Writer small while a flow works on the screen",
+    shrinkHint:
+      "Running a flow that works on the desktop or in a browser minimizes Writer and shows a band with the nodes in a row at the bottom of the screen. The band is left out of screen captures and moves to the top when a click would land on it",
+    restore: "Bring Writer back when the run ends",
+    restoreHint: "When off, a completed run leaves Writer small with the result in the band. Errors and stops always bring Writer back",
+  },
   shell: {
     aiChat: "AI chat",
     recentFlows: "Recent flows",

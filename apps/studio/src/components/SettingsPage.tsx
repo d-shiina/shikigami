@@ -3,11 +3,12 @@
 // is about, or becomes a new section here (and in SECTIONS), never a button
 // elsewhere. Laid out like Windows 11 / VS Code settings: the sections are
 // listed on the left, the settings fill the width on the right, one row each.
-import { Blocks, Bot, FolderOpen, Info, type LucideIcon, Monitor, ShieldCheck } from "lucide-react";
+import { Blocks, Bot, FolderOpen, Info, type LucideIcon, Monitor, Play, ShieldCheck } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgent } from "../agent";
 import { useStudio } from "../context";
 import { extensionsApi } from "../lib/api";
+import { type BandSettings, loadBandSettings, saveBandSettings } from "../lib/bandSettings";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
 import { AboutSection, McpSetupRow } from "./AppMenu";
@@ -16,7 +17,7 @@ import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
 import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
 
-const IDS = ["workspace", "display", "policy", "agent", "extensions", "about"] as const;
+const IDS = ["workspace", "display", "run", "policy", "agent", "extensions", "about"] as const;
 type SectionId = (typeof IDS)[number];
 
 function sections(): { id: SectionId; title: string; icon: LucideIcon; body: () => ReactNode }[] {
@@ -28,6 +29,7 @@ function sections(): { id: SectionId; title: string; icon: LucideIcon; body: () 
         </div>
       ) },
     { id: "display", title: t.shell.displaySection, icon: Monitor, body: () => <DisplaySection /> },
+    { id: "run", title: t.band.settingsSection, icon: Play, body: () => <RunSection /> },
     { id: "policy", title: t.policy, icon: ShieldCheck, body: () => <PolicySection /> },
     { id: "agent", title: t.shell.agentSection, icon: Bot, body: () => <AgentSection /> },
     { id: "extensions", title: t.extensions.place, icon: Blocks, body: () => <CustomNodesSection /> },
@@ -47,6 +49,36 @@ function DisplaySection() {
         <div className="flex">
           <ThemeSwitch labeled />
         </div>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
+/** How Writer makes way for a run that works on the screen (the run band). */
+function RunSection() {
+  const [settings, setSettings] = useState<BandSettings>(loadBandSettings);
+  const change = (next: BandSettings) => {
+    setSettings(next);
+    saveBandSettings(next);
+  };
+  return (
+    <SettingsGroup>
+      <SettingsRow label={t.band.shrink} hint={t.band.shrinkHint} htmlFor="settings-band-shrink">
+        <input
+          id="settings-band-shrink"
+          type="checkbox"
+          checked={settings.shrink}
+          onChange={(e) => change({ ...settings, shrink: e.target.checked })}
+        />
+      </SettingsRow>
+      <SettingsRow label={t.band.restore} hint={t.band.restoreHint} htmlFor="settings-band-restore">
+        <input
+          id="settings-band-restore"
+          type="checkbox"
+          checked={settings.restoreAtEnd}
+          disabled={!settings.shrink}
+          onChange={(e) => change({ ...settings, restoreAtEnd: e.target.checked })}
+        />
       </SettingsRow>
     </SettingsGroup>
   );
