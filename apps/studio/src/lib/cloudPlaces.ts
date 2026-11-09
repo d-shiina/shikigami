@@ -81,6 +81,21 @@ function topOf(steps: Step[], target: Step): Step | null {
   return steps.find((s) => s === target || [...walkSteps(Object.values(s.blocks ?? {}).flat())].includes(target)) ?? null;
 }
 
+/** The control step whose block holds `target`, or null at the top level. */
+function parentOf(steps: Step[], target: Step): Step | null {
+  for (const step of walkSteps(steps)) {
+    if (Object.values(step.blocks ?? {}).some((children) => children.includes(target))) return step;
+  }
+  return null;
+}
+
+/**
+ * Blocks whose steps run whenever the block's own step does (every turn of a
+ * loop, every branch of a group): an upload may move out of them. Out of an
+ * if, a switch or a try it may not: there the file is written only sometimes.
+ */
+const ALWAYS_RUN = new Set(["control.forEach", "control.repeat", "control.while", "control.group", "control.parallel"]);
+
 /** The top-level path params of a step (texts or lists of texts). */
 function pathKeys(step: Step, types: StepTypeDef[]): string[] {
   const def = types.find((t) => t.type === step.type);
@@ -156,8 +171,21 @@ export function cloudChange(args: {
     });
   };
 
+  // The nodes the change is about: the readers of the file, or the writers into output/.
+  const same = (v: unknown) => file !== null && typeof v === "string" && norm(v).toLowerCase() === norm(file).toLowerCase();
+  const users = [...walkSteps(tree)].filter(
+    (step) =>
+      step.id &&
+      pathKeys(step, types).some((key) => texts(step.params?.[key]).some((v) => (file !== null ? same(v) : norm(v).toLowerCase().startsWith("output/")))),
+  );
+  if (users.length === 0) return null;
+  // Nodes reused for the settings and the sign-in must run before the first of them.
+  const firstUse = Math.min(...users.map((u) => tree.indexOf(topOf(tree, u) ?? u)));
+  const early = (s: Step) => tree.indexOf(s) < firstUse;
+
   // The settings, read at the top of the flow.
-  let reader = tree.find((s) => s.type === "config.read" && typeof s.params?.path === "string" && norm(s.params.path) === configPath) ?? null;
+  let reader =
+    tree.find((s) => s.type === "config.read" && typeof s.params?.path === "string" && norm(s.params.path) === configPath && early(s)) ?? null;
   let variable = reader?.saveAs ?? "";
   if (!reader || !variable) {
     const taken = new Set([...(flow.variables ?? []).map((v) => v.name), ...[...walkSteps(tree)].map((s) => s.saveAs ?? "")]);
@@ -182,7 +210,7 @@ export function cloudChange(args: {
   const setting = `{{ ${variable}.${name} }}`;
 
   // The sign-in, after the settings (one at the top is reused).
-  let signIn = tree.find((s) => s.type === "oauth.signIn" && s.params?.secret === secret) ?? null;
+  let signIn = tree.find((s) => s.type === "oauth.signIn" && s.params?.secret === secret && early(s)) ?? null;
   if (!signIn) {
     signIn = {
       type: "oauth.signIn",
@@ -204,12 +232,11 @@ export function cloudChange(args: {
     // input/east/orders.csv → work/east/orders.csv: two files of the same name stay apart.
     const local = `work/${norm(file).replace(/^input\//i, "")}`;
     let count = 0;
-    for (const step of walkSteps(tree)) {
+    for (const step of users) {
       if (!step.id) continue;
       const patch: Record<string, unknown> = {};
       for (const key of pathKeys(step, types)) {
         const value = step.params?.[key];
-        const same = (v: unknown) => typeof v === "string" && norm(v).toLowerCase() === norm(file).toLowerCase();
         if (same(value)) patch[key] = local;
         else if (Array.isArray(value) && value.some(same)) patch[key] = value.map((v) => (same(v) ? local : v));
       }
@@ -222,7 +249,6 @@ export function cloudChange(args: {
         });
       }
     }
-    if (count === 0) return null;
     // Downloads already added (another file) stay before this one.
     let after: Step = ready;
     for (const s of tree.slice(tree.indexOf(ready) + 1)) {
@@ -242,20 +268,22 @@ export function cloudChange(args: {
 
   // Writing: each file under output/, after the last node that names it.
   const last = new Map<string, Step>();
-  for (const step of walkSteps(tree)) {
-    if (!step.id) continue;
+  for (const step of users) {
     for (const key of pathKeys(step, types)) {
       for (const v of texts(step.params?.[key])) {
         if (norm(v).toLowerCase().startsWith("output/")) last.set(norm(v), step);
       }
     }
   }
-  if (last.size === 0) return null;
   for (const [path, step] of last) {
-    // A literal path is sent once, after the top-level node holding its last
-    // writer (not on every turn of a loop); a path built with {{ }} may use
-    // the loop's variables, so it is sent right after that node.
-    const anchor = path.includes("{{") ? step : (topOf(tree, step) ?? step);
+    // A literal path is sent once, after the loop holding its last writer
+    // (not on every turn), but never out of an if, a switch or a try, where
+    // the file is written only sometimes. A path built with {{ }} may use the
+    // loop's variables, so it is sent right after that node.
+    let anchor = step;
+    if (!path.includes("{{")) {
+      for (let parent = parentOf(tree, anchor); parent && ALWAYS_RUN.has(parent.type); parent = parentOf(tree, anchor)) anchor = parent;
+    }
     const fileName = path.split("/").pop() ?? path;
     insert(
       {

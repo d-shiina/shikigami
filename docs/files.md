@@ -103,7 +103,7 @@ The flow then has:
 
 Where the file is in Box is the setting `orders_box` (`text`), so the receiver of the flow changes the setting only. The first run opens the Box sign-in page; later runs stay signed in ([oauth.md](oauth.md)).
 
-**Write to cloud storage** sends each file written into `output/` with `box.upload` (a new version when the name is taken), after the last node that writes it. A file written inside a loop is sent once after the loop unless its path has `{{ }}`. The files stay in `output/` too.
+**Write to cloud storage** sends each file written into `output/` with `box.upload` (a new version when the name is taken), after the last node that writes it. A file written inside a loop is sent once after the loop unless its path has `{{ }}`; one written inside an if, a switch or a try is sent inside that branch. The files stay in `output/` too.
 
 The Box custom node (`box.list`, `box.download`, `box.upload`) comes with Writer; when it is not installed yet, the dialog installs it and Writer restarts.
 

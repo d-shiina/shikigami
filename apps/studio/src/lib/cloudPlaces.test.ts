@@ -135,6 +135,45 @@ describe("cloudChange", () => {
     expect(change?.ops.find((o) => o.op === "addStep" && o.step.type === "box.download")).toMatchObject({ step: { params: { to: "work/east/orders.csv" } } });
   });
 
+  it("does not reuse a sign-in or settings node that runs after the first reader", () => {
+    const change = cloudChange({
+      ...base,
+      flow: flow([
+        { id: "a", type: "excel.readRows", params: { path: "input/b.xlsx" } },
+        { id: "r", type: "config.read", params: { path: "config/settings.json" }, saveAs: "conf" },
+        { id: "s", type: "oauth.signIn", params: { secret: "Box" } },
+      ]),
+      file: "input/b.xlsx",
+      target: "1",
+      name: "bのBox",
+    });
+    const adds = change!.ops.filter((o) => o.op === "addStep");
+    expect(adds.map((o) => [o.step.type, o.position])).toEqual([
+      ["config.read", { index: 0 }],
+      ["oauth.signIn", { index: 1 }],
+      ["box.download", { index: 2 }],
+    ]);
+  });
+
+  it("keeps the upload inside an if, where the file is written only sometimes", () => {
+    const change = cloudChange({
+      ...base,
+      flow: flow([
+        {
+          id: "if",
+          type: "control.if",
+          params: { condition: "{{ true }}" },
+          blocks: { then: [{ id: "w", type: "file.writeCsv", params: { path: "output/a.csv" } }] },
+        },
+      ]),
+      file: null,
+      target: "1",
+      name: "out",
+    });
+    const upload = change!.ops.find((o) => o.op === "addStep" && o.step.type === "box.upload");
+    expect(upload).toMatchObject({ position: { parentId: "if", block: "then", index: 1 } });
+  });
+
   it("does nothing when no node uses the file", () => {
     expect(cloudChange({ ...base, flow: flow([]), file: null, target: "x", name: "n" })).toBeNull();
   });
