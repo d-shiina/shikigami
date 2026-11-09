@@ -530,6 +530,14 @@ pub struct TestStepParams {
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
     /// `id` may be omitted.
     pub step: Step,
+    /// Values for the variables the step reads, by name, as they would be at
+    /// that point of a run, e.g. { "row": { "顧客名": "山田商事", "_row": 2 } }
+    /// for a step inside control.forEach with itemVar "row". Lets a step that
+    /// uses {{ }} or an expression be tried as it is written in the flow,
+    /// instead of a copy with the values typed in. Not for secrets: logins go
+    /// in params as { "secret": … }.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub variables: Map<String, Value>,
     #[serde(flatten)]
     pub approval: ApprovalArgs,
     /// The flow the step is for: relative paths (input/orders.xlsx) are

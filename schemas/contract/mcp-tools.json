@@ -1944,6 +1944,10 @@
           "step": {
             "$ref": "#/$defs/Step"
           },
+          "variables": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "approvalId": {
             "type": [
               "string",
