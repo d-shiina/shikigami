@@ -1,6 +1,6 @@
 //! Where a flow's files come from: the files it reads from its `input/`
 //! folder that are not there yet, and the places outside its folder it
-//! names (a file server, a Box Drive or OneDrive folder).
+//! names (a file server, a folder synced with cloud storage).
 //!
 //! Writer asks "where should this be read from?" for each missing file,
 //! the AI hears about them from `list_project_files`, and sharing lists the
@@ -213,14 +213,23 @@ pub fn place_kind(path: &str) -> PlaceKind {
         return PlaceKind::FileServer;
     }
     let lower = p.to_lowercase();
-    // The folders the sync apps make in a user's profile: `Box`,
-    // `OneDrive`, `OneDrive - 会社名`, `Dropbox`, `Google Drive`.
+    // The folders the sync apps make: `Box`, `OneDrive`, `OneDrive - 会社名`,
+    // `Dropbox`, `iCloudDrive`, and Google Drive's `G:\マイドライブ` (or the
+    // older `Google Drive` in the profile).
     let synced = lower.split('\\').any(|part| {
-        part == "box"
-            || part == "dropbox"
-            || part == "google drive"
-            || part == "onedrive"
-            || part.starts_with("onedrive - ")
+        matches!(
+            part,
+            "box"
+                | "dropbox"
+                | "google drive"
+                | "my drive"
+                | "マイドライブ"
+                | "共有ドライブ"
+                | "shared drives"
+                | "icloud drive"
+                | "iclouddrive"
+                | "onedrive"
+        ) || part.starts_with("onedrive - ")
     });
     if synced {
         PlaceKind::Cloud

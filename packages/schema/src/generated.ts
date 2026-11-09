@@ -2214,7 +2214,7 @@ export interface ProjectFiles {
   /**
    * Files the flow reads from `input/` that are not there yet: ask the
    * person where they come from (put the file in `input/`, or read it
-   * from a file server or a synced Box / OneDrive folder set in
+   * from a file server or a folder synced with cloud storage set in
    * `config/`).
    */
   needed?: NeededFile[];

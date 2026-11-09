@@ -30,6 +30,8 @@ describe("placeKind", () => {
   it("tells file servers and synced folders from local drives", () => {
     expect(placeKind("\\\\fs01\\経理\\a.xlsx")).toBe("fileServer");
     expect(placeKind("C:\\Users\\taro\\OneDrive - 例\\a.xlsx")).toBe("cloud");
+    expect(placeKind("G:\\マイドライブ\\経理\\a.xlsx")).toBe("cloud");
+    expect(placeKind("C:\\Users\\taro\\Dropbox\\a.xlsx")).toBe("cloud");
     expect(placeKind("D:\\work\\a.xlsx")).toBe("local");
   });
 });

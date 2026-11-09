@@ -93,7 +93,7 @@ function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: un
 
 /**
  * A folder: typed, or picked in Explorer. A folder inside the user's own
- * profile (a Box Drive or OneDrive folder) is kept as %USERPROFILE%\…, so
+ * profile (a Box Drive, OneDrive or Dropbox folder) is kept as %USERPROFILE%\…, so
  * the setting fits everyone who runs the flow.
  */
 function FolderInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {

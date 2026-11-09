@@ -4010,7 +4010,7 @@
           }
         },
         "needed": {
-          "description": "Files the flow reads from `input/` that are not there yet: ask the\nperson where they come from (put the file in `input/`, or read it\nfrom a file server or a synced Box / OneDrive folder set in\n`config/`).",
+          "description": "Files the flow reads from `input/` that are not there yet: ask the\nperson where they come from (put the file in `input/`, or read it\nfrom a file server or a folder synced with cloud storage set in\n`config/`).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/NeededFile"

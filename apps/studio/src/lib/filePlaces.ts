@@ -1,5 +1,6 @@
 // Reading the flow's files from somewhere other than its own folder: a file
-// server (\\server\share), or a Box Drive / OneDrive folder on the PC.
+// server (\\server\share), or a folder synced with cloud storage (Box
+// Drive, OneDrive, Google Drive, Dropbox) on the PC.
 //
 // The place is kept as a folder setting in config/settings.json, never
 // written into the nodes, so whoever receives the flow changes one setting
@@ -40,7 +41,7 @@ export function placeKind(path: string): "fileServer" | "cloud" | "local" {
   const synced = p
     .toLowerCase()
     .split("\\")
-    .some((part) => ["box", "dropbox", "google drive", "onedrive"].includes(part) || part.startsWith("onedrive - "));
+    .some((part) => ["box", "dropbox", "google drive", "my drive", "マイドライブ", "共有ドライブ", "shared drives", "icloud drive", "iclouddrive", "onedrive"].includes(part) || part.startsWith("onedrive - "));
   return synced ? "cloud" : "local";
 }
 

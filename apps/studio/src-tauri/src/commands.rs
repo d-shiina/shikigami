@@ -704,7 +704,20 @@ pub fn sync_folders() -> SyncFolders {
         }
     };
     if let Some(home) = &profile {
-        add("Box".into(), std::path::Path::new(home).join("Box"));
+        let home = std::path::Path::new(home);
+        for name in ["Box", "Dropbox", "Google Drive", "iCloudDrive"] {
+            add(name.into(), home.join(name));
+        }
+    }
+    // Google Drive for desktop shows the drive as a drive letter (G: by
+    // default) holding マイドライブ / My Drive and 共有ドライブ / Shared drives.
+    for letter in 'D'..='Z' {
+        for name in ["マイドライブ", "My Drive", "共有ドライブ", "Shared drives"] {
+            add(
+                "Google Drive".into(),
+                std::path::PathBuf::from(format!("{letter}:\\{name}")),
+            );
+        }
     }
     // OneDrive sets these for the personal and the work account.
     for var in ["OneDriveCommercial", "OneDrive", "OneDriveConsumer"] {
