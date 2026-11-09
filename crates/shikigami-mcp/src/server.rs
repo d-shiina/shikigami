@@ -2144,21 +2144,22 @@ impl ShikigamiMcp {
         }
         // The AI names no result variable: it gets the result as `output`.
         step.save_as = None;
-        let context = step.params.get("context").cloned();
+        // The params as the run sees them, with the given variables filled
+        // in, for showing the target and looking at the result: `context:
+        // "{{ ctx }}"` names the context the step actually ran in.
+        let raw = Value::Object(step.params.clone());
+        let shown = shikigami_core::expr::render_value(&raw, &variables).unwrap_or(raw);
+        let context = shown.get("context").cloned();
         // Workbook steps: the workbook the step read or changed.
-        let workbook = step.params.get("path").cloned();
-        let window = step
-            .params
-            .get("target")
-            .and_then(|t| t.get("window"))
-            .cloned();
+        let workbook = shown.get("path").cloned();
+        let window = shown.get("target").and_then(|t| t.get("window")).cloned();
         let adapter = step
             .step_type
             .split_once('.')
             .map(|(prefix, _)| prefix.to_owned());
         // Show the person watching the browser what is about to be touched.
         if adapter.as_deref() == Some("browser")
-            && let Some(target) = step.params.get("target").filter(|t| t.is_object())
+            && let Some(target) = shown.get("target").filter(|t| t.is_object())
         {
             self.show_target(&step.step_type, target, context.as_ref())
                 .await;
