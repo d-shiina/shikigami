@@ -18,6 +18,8 @@ import type {
   PackageManifest,
   PackageOptions,
   PackagePlan,
+  DistributionFolder,
+  DistributionView,
   PackagePreview,
   NewFlow,
   NewVersion,
@@ -337,6 +339,13 @@ export const api = {
   previewPackage: (file: FlowFile) => call<PackagePreview>("preview_package", { file }),
   /** Imports a flow file (`.spx`, an older bundle or a flow JSON file). */
   importPackage: (file: FlowFile, onConflict?: ImportConflict) => call<ImportOutcome>("import_package", { file, onConflict }),
+  /** The 配布フォルダー this PC looks at. */
+  distributionFolders: () => call<DistributionFolder[]>("distribution_folders"),
+  setDistributionFolders: (folders: DistributionFolder[]) => call<DistributionFolder[]>("set_distribution_folders", { folders }),
+  /** What each 配布フォルダー holds now, against the flows here. */
+  scanDistribution: () => call<DistributionView[]>("scan_distribution"),
+  /** Puts the published version into a 配布フォルダー; returns the file. */
+  placeInDistribution: (id: string, folder: string) => call<string>("place_in_distribution", { id, folder }),
   /** Shows a file selected in Explorer. */
   revealFile: (path: string) => call<void>("reveal_file", { path }),
   /** The `.spx` file opened from Explorer that is waiting to be shown, once. */

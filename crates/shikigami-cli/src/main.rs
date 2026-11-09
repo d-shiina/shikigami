@@ -50,6 +50,10 @@ enum Command {
     /// Workspace location and sharing.
     #[command(subcommand)]
     Workspace(WorkspaceCmd),
+    /// 配布フォルダー: shared folders where people put published versions
+    /// (`.spx`) for each other. The list of folders is this PC's own.
+    #[command(subcommand)]
+    Distribution(DistributionCmd),
     /// Run a flow (by ID or JSON file) without GUI or AI. A flow in
     /// the workspace runs its published version (see `version publish`).
     Run {
@@ -338,6 +342,26 @@ enum ApprovalCmd {
     Approve { id: String },
     /// Refuse one request.
     Deny { id: String },
+}
+
+#[derive(Subcommand)]
+enum DistributionCmd {
+    /// The folders this PC looks at.
+    List,
+    /// Look at a folder too, e.g. `add 経理課 \\fs01\経理\SpellSheet`.
+    Add { name: String, path: String },
+    /// Stop looking at a folder (its files stay).
+    Remove { name: String },
+    /// What each folder holds against this workspace (new, update, latest, older), as JSON.
+    Check,
+    /// Put the published version of a flow in a folder as `<name> v<n>.spx`.
+    Put {
+        /// Flow ID.
+        id: String,
+        /// Folder name (as added); may be left out when there is only one.
+        #[arg(long)]
+        folder: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -644,6 +668,10 @@ fn real_main() -> Result<ExitCode> {
         Command::Approval(cmd) => {
             let svc = open_service()?;
             approval_cmd(&ApprovalStore::new(svc.store().local_root()), cmd).map_err(core_err)?;
+        }
+        Command::Distribution(cmd) => {
+            let svc = open_service()?;
+            distribution_cmd(&svc, cmd)?;
         }
         Command::Workspace(WorkspaceCmd::Info) => {
             let svc = open_service()?;
@@ -1964,4 +1992,63 @@ fn session_cmd(cmd: &SessionCmd) -> Result<ExitCode> {
             }
         }
     }
+}
+
+fn distribution_cmd(svc: &FlowService, cmd: &DistributionCmd) -> anyhow::Result<()> {
+    use shikigami_core::distribution::DistributionFolder;
+    match cmd {
+        DistributionCmd::List => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.distribution_folders()?)?
+            );
+        }
+        DistributionCmd::Add { name, path } => {
+            let mut folders = svc.distribution_folders()?;
+            folders.push(DistributionFolder {
+                name: name.clone(),
+                path: path.clone(),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.set_distribution_folders(folders)?)?
+            );
+        }
+        DistributionCmd::Remove { name } => {
+            let folders = svc.distribution_folders()?;
+            if !folders.iter().any(|f| &f.name == name) {
+                anyhow::bail!("no distribution folder named {name}");
+            }
+            let left = folders.into_iter().filter(|f| &f.name != name).collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.set_distribution_folders(left)?)?
+            );
+        }
+        DistributionCmd::Check => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.scan_distribution()?)?
+            );
+        }
+        DistributionCmd::Put { id, folder } => {
+            let folders = svc.distribution_folders()?;
+            let name = match (folder, folders.as_slice()) {
+                (Some(name), _) => name.clone(),
+                (None, [only]) => only.name.clone(),
+                (None, []) => {
+                    anyhow::bail!("no distribution folder yet; add one with `distribution add`")
+                }
+                (None, _) => {
+                    anyhow::bail!("several distribution folders; choose one with --folder")
+                }
+            };
+            let by = std::env::var("USERNAME")
+                .or_else(|_| std::env::var("USER"))
+                .ok();
+            let path = svc.place_in_distribution(&FlowId::new(id.as_str()), &name, by)?;
+            println!("{}", path.display());
+        }
+    }
+    Ok(())
 }

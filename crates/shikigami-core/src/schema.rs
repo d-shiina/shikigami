@@ -95,6 +95,8 @@ struct Api {
     package_plan: crate::package::PackagePlan,
     package_options: crate::package::PackageOptions,
     package_preview: crate::package::PackagePreview,
+    distribution_folder: crate::distribution::DistributionFolder,
+    distribution_view: crate::distribution::DistributionView,
     extract_outcome: ExtractOutcome,
     import_conflict: ImportConflict,
     workspace_info: WorkspaceInfo,

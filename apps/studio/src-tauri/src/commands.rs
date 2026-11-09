@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use shikigami_core::distribution::{DistributionFolder, DistributionView};
 use shikigami_core::package::{PackageManifest, PackageOptions, PackagePlan, PackagePreview};
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
@@ -282,6 +283,48 @@ fn write_package_file(
 }
 
 /// Shows a file selected in Explorer.
+/// The 配布フォルダー this PC looks at.
+#[tauri::command]
+pub fn distribution_folders(state: State<'_, AppState>) -> CmdResult<Vec<DistributionFolder>> {
+    Ok(state.service.distribution_folders()?)
+}
+
+#[tauri::command]
+pub fn set_distribution_folders(
+    state: State<'_, AppState>,
+    folders: Vec<DistributionFolder>,
+) -> CmdResult<Vec<DistributionFolder>> {
+    Ok(state.service.set_distribution_folders(folders)?)
+}
+
+/// What each 配布フォルダー holds now. Reading a file server can be slow,
+/// so it runs off the main thread.
+#[tauri::command]
+pub async fn scan_distribution(state: State<'_, AppState>) -> CmdResult<Vec<DistributionView>> {
+    let service = state.service.clone();
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || service.scan_distribution())
+            .await
+            .map_err(|e| err("INTERNAL", e.to_string()))??,
+    )
+}
+
+/// Puts the published version of a flow into a 配布フォルダー.
+#[tauri::command]
+pub async fn place_in_distribution(
+    state: State<'_, AppState>,
+    id: FlowId,
+    folder: String,
+) -> CmdResult<String> {
+    let service = state.service.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        service.place_in_distribution(&id, &folder, windows_user())
+    })
+    .await
+    .map_err(|e| err("INTERNAL", e.to_string()))??;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn reveal_file(path: String) -> CmdResult<()> {
     let result = if cfg!(windows) {

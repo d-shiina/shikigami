@@ -16,6 +16,7 @@ import { stepLabel, t } from "../lib/i18n";
 const base = "h-8 rounded-md px-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const primary = `${base} bg-primary text-on-primary hover:bg-primary-hover disabled:opacity-50`;
 const quiet = `${base} text-slate-600 hover:bg-slate-100`;
+const secondary = `${base} border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-sheet`;
 const small = "h-7 shrink-0 rounded-md border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-primary";
 
 const ICON = { plugin: Puzzle, secret: KeyRound, site: Globe, app: AppWindow } satisfies Record<CheckKind, unknown>;
@@ -29,7 +30,7 @@ function kb(size: number): string {
 const pluginName = (key: string) => key.replace(/^plugin:/, "");
 
 /** The veil and the sheet; Esc and a click outside cancel, Tab stays inside, focus comes back. */
-function Modal({ label, onCancel, wide, children }: { label: string; onCancel: () => void; wide?: boolean; children: React.ReactNode }) {
+export function Modal({ label, onCancel, wide, children }: { label: string; onCancel: () => void; wide?: boolean; children: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const before = document.activeElement as HTMLElement | null;
@@ -44,7 +45,7 @@ function Modal({ label, onCancel, wide, children }: { label: string; onCancel: (
       e.preventDefault();
       onCancel();
     } else if (e.key === "Tab") {
-      const items = [...(box.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)") ?? [])];
+      const items = [...(box.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled)") ?? [])];
       if (items.length === 0) return;
       const at = items.indexOf(document.activeElement as HTMLElement);
       const next = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : at === items.length - 1 ? 0 : at + 1;
@@ -119,8 +120,16 @@ export function HandOffDialog() {
   const close = useStudio((s) => s.closeHandOff);
   const exportPackage = useStudio((s) => s.exportPackage);
   const openHandOff = useStudio((s) => s.openHandOff);
+  const folders = useStudio((s) => s.distribution.folders);
+  const checkDistribution = useStudio((s) => s.checkDistribution);
+  const placeInDistribution = useStudio((s) => s.placeInDistribution);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [folder, setFolder] = useState("");
+  const opened = !!plan;
+  useEffect(() => {
+    if (opened) void checkDistribution();
+  }, [opened, checkDistribution]);
   useEffect(() => {
     setPicked(new Set((plan?.files ?? []).filter((f) => f.includedByDefault).map(fileKey)));
   }, [plan]);
@@ -149,6 +158,14 @@ export function HandOffDialog() {
     const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, only });
     setBusy(false);
     if (out) void api.revealFile(out.path).catch(() => {});
+  };
+  const d = t.distribution;
+  const target = folders.some((f) => f.name === folder) ? folder : (folders[0]?.name ?? "");
+  const canPlace = !!published && !current;
+  const place = async () => {
+    setBusy(true);
+    await placeInDistribution(plan.flowId, target);
+    setBusy(false);
   };
   return (
     <Modal label={h.title(plan.name)} onCancel={close}>
@@ -211,13 +228,38 @@ export function HandOffDialog() {
           </p>
         </section>
       </div>
-      <footer className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-700">
-        <button type="button" className={quiet} onClick={close}>
-          {t.cancel}
-        </button>
-        <button type="button" className={primary} onClick={() => void save()} disabled={busy} data-autofocus>
-          {h.save}
-        </button>
+      <footer className="flex items-center gap-2 border-t border-slate-100 px-5 py-3">
+        {folders.length > 0 && (
+          // Only a published version goes to a 配布フォルダー: others take it in from there.
+          <div className="flex min-w-0 items-center gap-1.5" title={canPlace ? undefined : d.placeOnlyPublished}>
+            {folders.length > 1 && (
+              <select
+                aria-label={d.title}
+                value={target}
+                onChange={(e) => setFolder(e.target.value)}
+                disabled={!canPlace || busy}
+                className="h-8 max-w-[140px] min-w-0 rounded-md border border-slate-300 bg-sheet px-2 text-[13px] text-ink disabled:opacity-50"
+              >
+                {folders.map((f) => (
+                  <option key={f.name} value={f.name}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button type="button" className={secondary} disabled={!canPlace || busy} onClick={() => void place()}>
+              {folders.length > 1 ? d.place : d.placeIn(target)}
+            </button>
+          </div>
+        )}
+        <div className="ml-auto flex gap-2">
+          <button type="button" className={quiet} onClick={close}>
+            {t.cancel}
+          </button>
+          <button type="button" className={primary} onClick={() => void save()} disabled={busy} data-autofocus>
+            {h.save}
+          </button>
+        </div>
       </footer>
     </Modal>
   );
@@ -327,7 +369,7 @@ export function ReceiveSheet() {
           )}
         </h2>
         {manifest.flow.description && <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{manifest.flow.description}</p>}
-        <dl className="my-3 flex flex-wrap gap-x-6 gap-y-1 border-y border-slate-100 py-2.5 dark:border-slate-700">
+        <dl className="my-3 flex flex-wrap gap-x-6 gap-y-1 border-y border-slate-100 py-2.5">
           {[
             [manifest.flow.stepCount, r.steps],
             [manifest.subflows?.length ?? 0, r.subflows],
@@ -402,7 +444,7 @@ export function ReceiveSheet() {
           <p className="mt-2.5 text-xs leading-relaxed text-slate-500">{r.note}</p>
         </section>
       </div>
-      <footer className="flex justify-end gap-2 border-t border-slate-100 px-6 py-3 dark:border-slate-700">
+      <footer className="flex justify-end gap-2 border-t border-slate-100 px-6 py-3">
         <button type="button" className={quiet} onClick={close}>
           {t.cancel}
         </button>

@@ -9,6 +9,7 @@ import { useAgent } from "../agent";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
 import { AboutSection, McpSetupRow } from "./AppMenu";
+import { DistributionSettings } from "./Distribution";
 import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
 import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
@@ -18,7 +19,12 @@ type SectionId = (typeof IDS)[number];
 
 function sections(): { id: SectionId; title: string; icon: LucideIcon; body: () => ReactNode }[] {
   return [
-    { id: "workspace", title: t.shell.workspaceSection, icon: FolderOpen, body: () => <WorkspaceSection /> },
+    { id: "workspace", title: t.shell.workspaceSection, icon: FolderOpen, body: () => (
+        <div className="space-y-6">
+          <WorkspaceSection />
+          <DistributionSettings />
+        </div>
+      ) },
     { id: "display", title: t.shell.displaySection, icon: Monitor, body: () => <DisplaySection /> },
     { id: "policy", title: t.policy, icon: ShieldCheck, body: () => <PolicySection /> },
     { id: "agent", title: t.shell.agentSection, icon: Bot, body: () => <AgentSection /> },
