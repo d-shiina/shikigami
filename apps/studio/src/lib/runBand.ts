@@ -5,13 +5,16 @@
 // branches (if, try, …) shows only the branch it took, once it has taken one.
 //
 // Pure: the band feeds it the run's events and draws what comes back.
-import type { RunEventEnvelope, RunStatus, Step, StepTypeDef } from "@shikigami/schema";
+import type { RunEventEnvelope, RunReport, RunStatus, Step, StepTypeDef } from "@shikigami/schema";
 import { LOOP_TYPES } from "./stepTypes";
 import type { StepClock } from "../store";
 
 export type BandState = {
-  /** Events seen (by seq), so a replay and the live ones do not count twice. */
-  seen: Set<number>;
+  /**
+   * The last event taken in (its seq): events come in order (the replay,
+   * then the live ones), so an older or equal one was already counted.
+   */
+  lastSeq: number;
   /** Steps finished in the current round of every loop they are in. */
   done: Set<string>;
   failed: Set<string>;
@@ -32,7 +35,7 @@ export type BandState = {
 };
 
 export const emptyBand = (): BandState => ({
-  seen: new Set(),
+  lastSeq: -1,
   done: new Set(),
   failed: new Set(),
   running: [],
@@ -88,8 +91,8 @@ function find(steps: Step[], id: string): Step | undefined {
  * thing taken from them is a request to a person.
  */
 export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[], now = Date.now()): BandState {
-  if (state.seen.has(env.seq)) return state;
-  const next: BandState = { ...state, seen: new Set(state.seen).add(env.seq) };
+  if (env.seq <= state.lastSeq) return state;
+  const next: BandState = { ...state, lastSeq: env.seq };
   const at = Date.parse(env.at);
   const when = Number.isNaN(at) ? now : at;
   const inner = (env.callPath ?? []).length > 0;
@@ -213,6 +216,25 @@ export function bandItems(steps: Step[], state: BandState, defs: Map<string, Ste
       ];
     });
   return build(steps);
+}
+
+/**
+ * The end of a run from its report: for a replay cut short (a long run
+ * keeps only its first events), so the band still shows how it ended.
+ */
+export function bandEnded(state: BandState, report: RunReport): BandState {
+  if (state.finishedAt !== null) return state;
+  const at = Date.parse(report.finishedAt);
+  const from = Date.parse(report.startedAt);
+  return {
+    ...state,
+    status: report.status,
+    running: [],
+    human: null,
+    humanAt: null,
+    startedAt: state.startedAt ?? (Number.isNaN(from) ? null : from),
+    finishedAt: Number.isNaN(at) ? Date.now() : at,
+  };
 }
 
 /** The step the band keeps in view: the innermost running one, else the last one passed. */

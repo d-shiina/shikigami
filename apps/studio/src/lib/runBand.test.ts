@@ -1,6 +1,6 @@
-import type { RunEventEnvelope, Step, StepTypeDef } from "@shikigami/schema";
+import type { RunEventEnvelope, RunReport, Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { bandItems, bandStep, type BandState, emptyBand, focusStep } from "./runBand";
+import { bandEnded, bandItems, bandStep, type BandState, emptyBand, focusStep } from "./runBand";
 
 const steps: Step[] = [
   { id: "open", type: "excel.open", params: {} },
@@ -110,6 +110,16 @@ describe("the run band", () => {
     const once = started("open");
     const state = bandStep(bandStep(emptyBand(), once, steps), finished("open"), steps);
     expect(bandStep(state, once, steps)).toBe(state);
+  });
+
+  it("takes the end from the report when the replay was cut short", () => {
+    const state = bandEnded(play([started("open")]), {
+      status: "failed",
+      startedAt: "2026-11-09T05:00:00Z",
+      finishedAt: "2026-11-09T05:10:00Z",
+    } as unknown as RunReport);
+    expect(state).toMatchObject({ status: "failed", running: [] });
+    expect(state.finishedAt).toBe(Date.parse("2026-11-09T05:10:00Z"));
   });
 
   it("keeps the result when the run ends", () => {

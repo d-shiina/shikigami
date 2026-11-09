@@ -11,7 +11,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";
 import { laneLabel, loopRoundsText } from "../lib/keywords";
 import { nodeIcon } from "../lib/nodeIcons";
-import { type BandItem, type BandState, bandItems, bandStep, emptyBand, focusStep } from "../lib/runBand";
+import { type BandItem, type BandState, bandEnded, bandItems, bandStep, emptyBand, focusStep } from "../lib/runBand";
 import { clockView } from "../lib/runClock";
 import { LOOP_TYPES } from "../lib/stepTypes";
 import { plain, sentence, typeTitle } from "../lib/sentence";
@@ -67,6 +67,9 @@ export function RunBand() {
         const record = await bandApi.record(run.runId).catch(() => null);
         if (!live) return;
         for (const env of [...(record?.events ?? []), ...queue].sort((a, b) => a.seq - b.seq)) apply(env);
+        // A long run's record keeps only its first events: its end comes from the report.
+        const report = record?.report;
+        if (report) setState((st) => bandEnded(st, report));
       } finally {
         // A run the band no longer shows leaves its events alone.
         if (live) {
