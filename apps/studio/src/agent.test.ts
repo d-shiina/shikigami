@@ -329,9 +329,13 @@ describe("agent store", () => {
     await store.getState().send("Aを直して", { id: "scn_a", name: "A" });
     store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "見ています" });
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess_a" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "フローを読みました" });
+    // Kept as it grows, not only when the reply is done.
+    await new Promise((r) => setTimeout(r, 1100));
     const again = createAgentStore(fakeAgent());
     again.getState().focus({ id: "scn_a", name: "A" });
     const chat = now(again.getState());
+    expect(chat.items[1]).toMatchObject({ parts: [{ kind: "text", text: "見ています" }, { kind: "text", text: "フローを読みました" }] });
     expect(chat.items[1]).toMatchObject({ role: "ai", status: "done", message: "Writer を閉じたため、ここで止まりました" });
     expect(chat.turnId).toBeNull();
     vi.unstubAllGlobals();
@@ -409,6 +413,11 @@ describe("agent store", () => {
     expect(items.map((i) => i.role)).toEqual(["person", "ai", "person", "ai"]);
     expect(items[2]).toMatchObject({ text: "やっぱりExcelで", note: undefined });
     expect(now(store.getState())).toMatchObject({ turnId: "turn_2" });
+    // A retry sends the same message again, note included.
+    store.getState().onEvent({ turnId: "turn_2", kind: "done", ok: false, message: "失敗", costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(now(store.getState()).turnId).toBeNull());
+    await store.getState().retry(chatId);
+    expect(vi.mocked(api.send).mock.calls[2]![0].message).toBe(last.message);
   });
 
   it("stopping with a message waiting sends it at once as a correction", async () => {

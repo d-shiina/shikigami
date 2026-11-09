@@ -264,8 +264,18 @@ const empty = (c: Chat) => c.items.length === 0 && !c.sessionId && !isBusy(c) &&
 export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
   return createStore<AgentState>()((set, get) => {
     const chat = (id: string) => get().chats.find((c) => c.id === id);
+    // The conversation is kept as it grows, so closing Writer mid-reply loses little.
+    let saving: ReturnType<typeof setTimeout> | null = null;
+    const saveSoon = () => {
+      if (saving) return;
+      saving = setTimeout(() => {
+        saving = null;
+        save(get().chats);
+      }, 1000);
+    };
     const update = (id: string, change: (c: Chat) => Chat) => {
       set({ chats: get().chats.map((c) => (c.id === id ? change(c) : c)) });
+      saveSoon();
     };
     /** Changes the reply a turn is writing now (its last one: a message read meanwhile starts another). */
     const updateTurn = (turnId: string, change: (item: Extract<ChatItem, { role: "ai" }>) => ChatItem) => {
@@ -354,9 +364,14 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       const left = (chat(chatId)?.items ?? []).filter((i): i is Extract<ChatItem, { role: "person" }> => i.role === "person" && i.note === "waiting");
       if (left.length === 0 || isBusy(chat(chatId))) return false;
       const ids = new Set(left.map((i) => i.id));
-      update(chatId, (c) => ({ ...c, items: c.items.map((i) => (i.role === "person" && ids.has(i.id) ? { ...i, note: undefined } : i)) }));
-      const text = left.map((i) => i.text).join("\n\n");
-      return dispatch(chatId, `${wasStopped ? INTERRUPT_NOTE : AFTER_NOTE}\n\n${text}`, left.at(-1)!.flow);
+      const lastId = left.at(-1)!.id;
+      const prompt = `${wasStopped ? INTERRUPT_NOTE : AFTER_NOTE}\n\n${left.map((i) => i.text).join("\n\n")}`;
+      // The last of them carries the whole message, so a retry sends all of it again.
+      update(chatId, (c) => ({
+        ...c,
+        items: c.items.map((i) => (i.role === "person" && ids.has(i.id) ? { ...i, note: undefined, ...(i.id === lastId ? { prompt } : {}) } : i)),
+      }));
+      return dispatch(chatId, prompt, left.at(-1)!.flow);
     };
     /** After a turn: learns which messages the AI read, then sends the rest. */
     const settleNotes = async (chatId: string, turnId: string, wasStopped: boolean) => {
