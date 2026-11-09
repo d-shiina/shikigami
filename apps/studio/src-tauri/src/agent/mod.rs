@@ -336,10 +336,11 @@ fn choice_of(input: &Value) -> Option<AgentEvent> {
         && (2..=4).contains(&options.len())
         && options
             .iter()
-            .all(|o| !o.label.is_empty() && labels.insert(o.label.clone()));
+            .all(|o| !o.label.is_empty() && labels.insert(o.label.clone()))
+        && args.recommended.is_none_or(|i| i < options.len());
     fits.then(|| AgentEvent::Choice {
         question,
-        recommended: args.recommended.filter(|&i| i < options.len()),
+        recommended: args.recommended,
         options,
         reason: args
             .reason
@@ -1606,11 +1607,11 @@ mod tests {
     #[test]
     fn reads_choice_arguments_given_as_text() {
         let args = json!(
-            r#"{"question":"どちら？","options":[{"label":"A"},{"label":"B"}],"recommended":5}"#
+            r#"{"question":"どちら？","options":[{"label":"A"},{"label":"B"}],"recommended":1}"#
         );
         assert!(matches!(
             AgentEvent::tool("ask_user_to_choose".into(), Some(&args)),
-            AgentEvent::Choice { recommended: None, ref options, .. } if options.len() == 2
+            AgentEvent::Choice { recommended: Some(1), ref options, .. } if options.len() == 2
         ));
     }
 
@@ -1621,6 +1622,7 @@ mod tests {
             json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "A" }] }),
             json!({ "question": " ", "options": [{ "label": "A" }, { "label": "B" }] }),
             json!({ "question": "どちら？", "options": [{ "label": "1" }, { "label": "2" }, { "label": "3" }, { "label": "4" }, { "label": "5" }] }),
+            json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "B" }], "recommended": 2 }),
         ] {
             assert_eq!(
                 AgentEvent::tool("ask_user_to_choose".into(), Some(&args)),
