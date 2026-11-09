@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { chooseAsk, confirmAsk, textAsk, useAsk } from "../lib/ask";
+import { chooseAsk, confirmAsk, deleteFlowsAsk, textAsk, useAsk } from "../lib/ask";
+import { setLocale } from "../lib/i18n";
 import { AskDialog } from "./AskDialog";
 
 afterEach(() => {
@@ -77,6 +78,34 @@ describe("AskDialog", () => {
     fireEvent.change(input, { target: { value: " 注文.csv " } });
     fireEvent.submit(input.closest("form")!);
     expect(await name).toBe("注文.csv");
+  });
+
+  it("deletes a flow only once its name is typed", async () => {
+    setLocale("ja", false);
+    render(<AskDialog />);
+    const yes = act(() => deleteFlowsAsk(["請求書の作成"]));
+    const input = (await screen.findByRole("textbox")) as HTMLInputElement;
+    const main = screen.getByRole("button", { name: "削除" }) as HTMLButtonElement;
+    expect(input.value).toBe("");
+    expect(main.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "請求書の" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    fireEvent.change(input, { target: { value: "請求書の作成" } });
+    expect(main.disabled).toBe(false);
+    fireEvent.submit(input.closest("form")!);
+    expect(await yes).toBe(true);
+  });
+
+  it("deletes several flows once 「削除」 is typed, and not when cancelled", async () => {
+    setLocale("ja", false);
+    render(<AskDialog />);
+    const yes = act(() => deleteFlowsAsk(["受注", "出荷"]));
+    expect((await screen.findByRole("alertdialog")).textContent).toContain("出荷");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "削除" } });
+    expect((screen.getByRole("button", { name: "2 件を削除" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    expect(await yes).toBe(false);
   });
 
   it("shows one question at a time, in the order asked", async () => {

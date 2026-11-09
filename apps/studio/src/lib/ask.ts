@@ -42,6 +42,15 @@ export interface TextAsk {
   cancel?: string;
   /** Why the typed text cannot be used, or null when it can; checked as the user types. */
   check?: (value: string) => string | null;
+  /**
+   * The text the user has to type before the main button works (a flow's name
+   * before deleting it, as GitHub asks for a repository's). The field starts
+   * empty and shows it greyed; nothing is called wrong while typing.
+   */
+  expect?: string;
+  /** Names shown in a box above the field: what the question is about, when it is several things. */
+  items?: string[];
+  danger?: boolean;
 }
 
 type Pending = (ConfirmAsk & { answer: (a: AskAnswer) => void }) | (TextAsk & { answer: (value: string | null) => void });
@@ -81,6 +90,23 @@ export function textAsk(ask: Omit<TextAsk, "kind">): Promise<string | null> {
 export function baseNameRange(name: string): [number, number] {
   const dot = name.lastIndexOf(".");
   return [0, dot > 0 ? dot : name.length];
+}
+
+/** Before a flow (or several) goes to the trash: the user types the flow's name, or 「削除」 for several, first. */
+export function deleteFlowsAsk(names: string[]): Promise<boolean> {
+  const ask = t.deleteFlowAsk;
+  const one = names.length === 1 ? (names[0] ?? null) : null;
+  const word = one ?? ask.word;
+  return textAsk({
+    title: one !== null ? ask.title(one) : ask.titleMany(names.length),
+    body: ask.body,
+    items: one !== null ? undefined : names,
+    label: one !== null ? ask.typeName(one) : ask.typeWord(ask.word),
+    value: "",
+    expect: word,
+    confirm: one !== null ? ask.confirm : ask.confirmMany(names.length),
+    danger: true,
+  }).then((typed) => typed !== null);
 }
 
 /** Before hand-edited text in a project file is left: save it, drop it, or stay. */

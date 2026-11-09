@@ -13,7 +13,7 @@ import { t } from "../lib/i18n";
 
 const base = "h-8 rounded-md px-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const primary = `${base} bg-primary text-on-primary hover:bg-primary-hover disabled:opacity-50 disabled:hover:bg-primary`;
-const danger = `${base} bg-shu-600 text-on-primary hover:bg-shu-500 focus-visible:outline-shu-600`;
+const danger = `${base} bg-shu-600 text-on-primary hover:bg-shu-500 focus-visible:outline-shu-600 disabled:opacity-40 disabled:hover:bg-shu-600`;
 const secondary = `${base} border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50`;
 const quiet = `${base} text-slate-600 hover:bg-slate-100`;
 
@@ -63,11 +63,14 @@ export function AskDialog() {
     if (ask.kind === "text") ask.answer(null);
     else ask.answer("cancel");
   };
-  const problem = ask.kind === "text" ? (ask.check?.(value) ?? (value.trim() === "" ? t.ask.empty : null)) : null;
+  const expected = ask.kind === "text" && ask.expect !== undefined;
+  const problem = ask.kind === "text" && !expected ? (ask.check?.(value) ?? (value.trim() === "" ? t.ask.empty : null)) : null;
+  // Typed exactly (spaces at the ends aside), or nothing called wrong yet.
+  const ready = ask.kind === "text" && expected ? value.trim() === ask.expect!.trim() : !(touched && problem);
   const send = () => {
     if (ask.kind !== "text") return;
     setTouched(true);
-    if (problem) return;
+    if (problem || !ready) return;
     settle(ask);
     ask.answer(value.trim());
   };
@@ -124,6 +127,15 @@ export function AskDialog() {
               send();
             }}
           >
+            {ask.items && ask.items.length > 0 && (
+              <ul className="mb-3 max-h-32 overflow-y-auto rounded border border-slate-200 bg-paper px-3 py-1.5 text-[13px] text-ink">
+                {ask.items.map((item, i) => (
+                  <li key={`${i}-${item}`} className="truncate py-0.5">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            )}
             <label className="block space-y-1">
               {ask.label && <span className="text-xs font-medium text-slate-600">{ask.label}</span>}
               <input
@@ -134,6 +146,7 @@ export function AskDialog() {
                   touched && problem ? "border-shu-500 focus:border-shu-500" : "border-slate-300 focus:border-primary"
                 }`}
                 value={value}
+                placeholder={ask.expect}
                 spellCheck={false}
                 autoComplete="off"
                 onChange={(e) => {
@@ -142,14 +155,18 @@ export function AskDialog() {
                 }}
               />
             </label>
+            {expected ? (
+              <div className="h-1" />
+            ) : (
             <p className={`mt-1 min-h-[18px] text-xs ${touched && problem ? "text-shu-600" : "text-transparent"}`} role="status">
               {touched && problem ? problem : " "}
             </p>
+            )}
             <div className="mt-3 flex justify-end gap-2">
               <button type="button" className={quiet} onClick={cancel}>
                 {ask.cancel ?? t.cancel}
               </button>
-              <button type="submit" className={primary} disabled={touched && !!problem}>
+              <button type="submit" className={ask.danger ? danger : primary} disabled={!ready}>
                 {ask.confirm}
               </button>
             </div>
