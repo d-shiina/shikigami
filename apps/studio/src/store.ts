@@ -13,6 +13,9 @@ import type {
   HistoryEntry,
   ImportConflict,
   LogLevel,
+  PackageOptions,
+  PackagePlan,
+  PackagePreview,
   PauseReason,
   ReviewTimeline,
   RunError,
@@ -34,6 +37,8 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   type Api,
   ApiError,
+  type ExportedPackage,
+  type FlowFile,
   type RunEvidence,
   type SecretField,
   type SecretInfo,
@@ -399,6 +404,10 @@ export type StudioState = {
   workspace: WorkspaceInfo | null;
   /** A file whose flow already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
+  /** The 「渡す」 dialog: what handing the flow over would put in the file. */
+  handOff: PackagePlan | null;
+  /** A flow file being looked at before it is imported (opened from Explorer, dropped, chosen). */
+  received: { file: FlowFile; preview: PackagePreview; away: boolean } | null;
   /** The dialog for an answer pasted from an AI chat without MCP: a new flow, or into the open one. */
   pasteOpen: "new" | "into" | null;
   /** Registered secrets (names, user names, sites; never values). */
@@ -555,6 +564,20 @@ export type StudioState = {
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
   exportFlow(): Promise<void>;
+  /** Opens the 「渡す」 dialog for flow `id`. */
+  openHandOff(id: string): Promise<void>;
+  closeHandOff(): void;
+  /** Writes the flow as a `.spx` file; the path, or null when it failed (said in `error`). */
+  exportPackage(id: string, options: PackageOptions): Promise<ExportedPackage | null>;
+  /** Shows what a flow file holds and what this PC needs, before importing it. */
+  receiveFile(file: FlowFile): Promise<void>;
+  closeReceived(): void;
+  /** Sets the file aside while the person adds what it needs (a login, an extension, a site). */
+  stepAwayFromReceived(): void;
+  /** Back to the file: checks again what this PC still needs. */
+  backToReceived(): Promise<void>;
+  /** Imports the file shown by receiveFile and opens the flow. True once it is in. */
+  importReceived(onConflict?: ImportConflict): Promise<boolean>;
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
@@ -1050,6 +1073,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       dive: [],
       workspace: null,
       pendingImport: null,
+      handOff: null,
+      received: null,
       pasteOpen: null,
       secrets: [],
       secretKeyLocation: "",
@@ -2280,6 +2305,66 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({ notice: `${t.exported}: ${path}`, error: null });
         } catch (e) {
           set({ error: message(e) });
+        }
+      },
+
+      async openHandOff(id) {
+        try {
+          set({ handOff: await api.packagePlan(id), error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      closeHandOff() {
+        set({ handOff: null });
+      },
+
+      async exportPackage(id, options) {
+        try {
+          const out = await api.exportPackage(id, options);
+          set({ handOff: null, notice: `${t.handOff.saved}: ${out.path}`, error: null });
+          return out;
+        } catch (e) {
+          set({ error: message(e) });
+          return null;
+        }
+      },
+
+      async receiveFile(file) {
+        try {
+          set({ received: { file, preview: await api.previewPackage(file), away: false }, error: null });
+        } catch (e) {
+          set({ received: null, error: message(e) });
+        }
+      },
+
+      closeReceived() {
+        set({ received: null });
+      },
+
+      stepAwayFromReceived() {
+        const received = get().received;
+        if (received) set({ received: { ...received, away: true } });
+      },
+
+      async backToReceived() {
+        const received = get().received;
+        if (received) await get().receiveFile(received.file);
+      },
+
+      async importReceived(onConflict) {
+        const received = get().received;
+        if (!received) return false;
+        try {
+          const outcome = await api.importPackage(received.file, onConflict);
+          applyOutcome(outcome);
+          set({ received: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.flow.name}`, error: null });
+          await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
         }
       },
 

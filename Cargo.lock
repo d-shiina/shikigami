@@ -4832,11 +4832,13 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
  "time",
  "tracing",
  "uuid",
+ "zip 9.1.3",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, FolderOutput, History, PanelRight, Search } from "lucide-react";
+import { CircleCheck, CircleDashed, FolderOutput, History, PanelRight, Search, Send } from "lucide-react";
 
 const CHIP = "flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px]";
 import { useStudio } from "../context";
@@ -120,6 +120,7 @@ export function FlowTitle() {
   const open = useProjectMaybe((p) => p.open, null);
   const place = useStudio((s) => s.place);
   const setPlace = useStudio((s) => s.setPlace);
+  const openHandOff = useStudio((s) => s.openHandOff);
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
@@ -150,6 +151,16 @@ export function FlowTitle() {
           <FolderOutput size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
+      {/* Handing it to another person or PC as one file. */}
+      <button
+        type="button"
+        onClick={() => void openHandOff(flow.id)}
+        title={t.handOff.open}
+        aria-label={t.handOff.open}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
+      >
+        <Send size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
       {/* The revision opens how the flow got here: its record and versions. */}
       <button
         type="button"

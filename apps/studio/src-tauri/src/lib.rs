@@ -10,6 +10,7 @@ mod debug;
 mod extensions;
 mod instance;
 mod manual;
+mod opened;
 mod picker;
 mod runner;
 mod schedules;
@@ -92,6 +93,9 @@ pub fn run() {
         .manage(extensions::Extensions::default())
         .setup(move |app| {
             fit_to_screen(app);
+            if let Some(path) = opened::spx_arg(std::env::args()) {
+                opened::remember(None, path);
+            }
             if let Err(e) = tray::create(app.handle()) {
                 // Only a shortcut: Studio works without it.
                 tracing::warn!(error = %e, "cannot show the tray icon");
@@ -171,6 +175,12 @@ pub fn run() {
             commands::read_clipboard_text,
             commands::cancel_pick_request,
             commands::export_flow,
+            commands::package_plan,
+            commands::export_package,
+            commands::preview_package,
+            commands::import_package,
+            commands::reveal_file,
+            opened::take_opened_file,
             manual::get_manual,
             manual::manual_image,
             manual::save_manual_masks,

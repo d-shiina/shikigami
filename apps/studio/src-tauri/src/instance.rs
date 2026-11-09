@@ -41,6 +41,12 @@ fn started_again(app: &AppHandle, args: Vec<String>, _cwd: String) {
     if tray::wants_tray(args.iter().cloned()) {
         tray::stay_in_tray();
     }
+    // A `.spx` opened from Explorer: Writer shows it before importing.
+    if let Some(path) = crate::opened::spx_arg(args.iter().cloned()) {
+        show_studio_later(app);
+        crate::opened::remember(Some(app), path);
+        return;
+    }
     match again(&args) {
         Again::Runner => show_runner_later(app),
         Again::Studio => show_studio_later(app),

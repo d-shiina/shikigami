@@ -10,6 +10,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 |---|---|---|
 | フローのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | 保存済みのフロー、共有ワークスペース |
 | 名前付きの版・バンドル（`*.shikigami.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
+| `.spx` ファイル（`manifest.json`、`format: spellsheet.package`、`formatVersion`） | `package.rs` → `schemas/api.schema.json` | フローを人や別の PC に渡す |
 | 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | フロー、AI が覚えた書き方 |
 | MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
 | エラーコード（`code` と `retryable`） | `CoreError::code`、各ノードのエラー | AI の修正、`onError`・リトライの判断 |

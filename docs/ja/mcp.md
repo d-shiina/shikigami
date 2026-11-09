@@ -68,7 +68,7 @@ args = ["mcp"]
 |  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
 |  | `list_versions` / `get_version` | 名前付きの版の一覧と、版のスナップショット |
 |  | `diff_versions` | 版どうし・版と現在の差分（ノード ID 単位。既定は「最新の版 → 現在」） |
-|  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く） |
+|  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く）。`path` を渡すと、人や別の PC に渡す `.spx` ファイルを書く。既定は公開中の版（`current` で今の内容）、`include_input` で `input/` のファイルも入れる。既にあるファイルは上書きしない（[設計](../design/sharing-versioning.md)） |
 |  | `list_project_files` / `read_project_file` | フローのフォルダー（入力・設定・ひな形・出力・作業・ログ）のファイル一覧と、テキストファイルの中身（[files.md](files.md#フローのフォルダー)） |
 |  | `list_secrets` | Writer で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 |  | `get_policy` | ワークスペースの `policy.json`：許可するサイト・アプリ、AI の操作の承認（allow / ask / deny）。書き換えるツールはない（[policy.md](policy.md)） |
@@ -79,7 +79,7 @@ args = ["mcp"]
 |  | `undo` / `redo` | Writer・CLI と共通の Undo スタック |
 |  | `delete_flow` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き。他のフローから呼ばれていると `FLOW_IN_USE`。既定で人の承認が要る（下の「承認」） |
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
-|  | `import_flow` | バンドルかフロー文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブフローもいっしょに取り込む |
+|  | `import_flow` | バンドル・フロー文書・`.spx` ファイル（`path`）を取り込む。`check: true` なら取り込まずに、この PC に足りないもの（拡張機能・ログイン情報・許可されていないサイトやアプリ）と同じ ID のフローとの違いだけを返す。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブフローもいっしょに取り込む。取り込んだフローは公開されない |
 |  | `extract_subflow` | 同じブロックに並んだノードを新しいフローに切り出し、`flow.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](../design/subflows.md)） |
 |  | `write_project_file` / `delete_project_file` | フローのフォルダーにファイルを置く（`text`、またはこの PC のファイルを `copyFrom`。置き換えは `overwrite`）/ ごみ箱へ移す |
 |  | `save_test_case` | テストケースを保存（`tests/<名前>.json`：`description`・`inputs`・`expect`。置き換えは `overwrite`）。`description` は業務の言葉の約束として書く：Writer の確認パネルは AI が保存したケースを「約束」として結果と一緒に見せる。入力変数でない名前とシークレットの入力は断る（[testing.md](testing.md)） |

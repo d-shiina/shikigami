@@ -68,7 +68,7 @@ args = ["mcp"]
 |  | `get_run_status` / `get_run_logs` / `list_runs` | Status of a run, its final report, and its event log (`afterSeq` for what is new, `variable` for one variable's changes only) |
 |  | `list_versions` / `get_version` | Named versions, and a version's snapshot |
 |  | `diff_versions` | Differences between versions, or a version and now (by node ID; by default "latest version → now") |
-|  | `export_flow` | The flow, its versions and the subflows it calls, as one bundle (without defaults of secret variables) |
+|  | `export_flow` | The flow, its versions and the subflows it calls, as one bundle (without defaults of secret variables). With `path`, writes a `.spx` file to hand to another person or PC instead: the published version by default (`current` for the content now), `include_input` for files in `input/`; it never overwrites a file ([design](design/sharing-versioning.md)) |
 |  | `list_project_files` / `read_project_file` | The files in the flow's folder (input, config, templates, output, work, logs), and a text file's contents ([files.md](files.md#the-flows-folder)) |
 |  | `list_secrets` | Names, sites and set fields of the secrets registered in Writer (never the values; see [secrets.md](secrets.md)) |
 |  | `get_policy` | The workspace's `policy.json`: the allowed sites and apps, and what the AI may do (allow / ask / deny). No tool changes it ([policy.md](policy.md)) |
@@ -79,7 +79,7 @@ args = ["mcp"]
 |  | `undo` / `redo` | The Undo stack shared with Writer and the CLI |
 |  | `delete_flow` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `FLOW_IN_USE` while another flow calls it. Needs a person's approval by default (see "Approval" below) |
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
-|  | `import_flow` | Import a bundle or a flow document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along |
+|  | `import_flow` | Import a bundle, a flow document, or a `.spx` file (`path`). `check: true` only reports what this PC is missing (extensions, secrets, sites and apps not allowed) and how it differs from a flow with the same ID. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along. An imported flow is not published |
 |  | `extract_subflow` | Move consecutive nodes of one block into a new flow and replace them with a single `flow.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subflows.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the flow's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
 |  | `save_test_case` | Save a test case (`tests/<name>.json`: `description`, `inputs` and `expect`; `overwrite` to replace). Write `description` as a promise in business words: Writer's review shows the cases an AI saved as its promises, with their results. Unknown or secret inputs are refused ([testing.md](testing.md)) |

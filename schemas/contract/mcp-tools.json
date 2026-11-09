@@ -680,6 +680,24 @@
               "boolean",
               "null"
             ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "includeInput": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         }
       },
@@ -959,6 +977,18 @@
         "type": "object",
         "properties": {
           "bundle": {},
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "check": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "onConflict": {
             "anyOf": [
               {
@@ -969,10 +999,7 @@
               }
             ]
           }
-        },
-        "required": [
-          "bundle"
-        ]
+        }
       },
       "class": "write"
     },
