@@ -1447,7 +1447,7 @@ impl ShikigamiMcp {
                         .summaries()
                         .map(|list| list.into_iter().map(|s| s.name).collect())
                         .unwrap_or_default();
-                    return Ok(to_value(&self.svc().preview_package(&bytes, &secrets)?));
+                    return Ok(to_value(&self.svc().preview_file(&bytes, &secrets)?));
                 }
                 shikigami_core::service::file_to_bundle_value(&bytes)?
             }

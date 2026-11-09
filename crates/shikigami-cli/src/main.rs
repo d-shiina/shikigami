@@ -1065,7 +1065,7 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
                     .list()
                     .map(|list| list.into_iter().map(|s| s.name).collect())
                     .unwrap_or_default();
-                let preview = svc.preview_package(&bytes, &secrets)?;
+                let preview = svc.preview_file(&bytes, &secrets)?;
                 println!("{}", serde_json::to_string_pretty(&preview)?);
                 return Ok(());
             }

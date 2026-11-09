@@ -228,6 +228,9 @@ fn old_json_bundles_still_import() {
     let json = serde_json::to_vec(&bundle).unwrap();
     let to = tempfile::tempdir().unwrap();
     let other = service_at(to.path());
+    // The check before importing works on them too.
+    let preview = other.preview_file(&json, &[]).unwrap();
+    assert_eq!(preview.manifest.flow.name, "請求書の集計");
     let imported = other.import_file(&json, None, ai()).unwrap();
     assert_eq!(imported.outcome.flow.name, "請求書の集計");
 }
