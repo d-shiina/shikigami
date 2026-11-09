@@ -4,13 +4,13 @@ English | [日本語](ja/secrets.md)
 
 How IDs and passwords for business sites and apps, and keys for web APIs, are handled. Three principles:
 
-1. **People register the values**, under a name, in Studio's 🔑 Secrets (or with the CLI), e.g. "Order system".
+1. **People register the values**, under a name, in Writer's 🔑 Secrets (or with the CLI), e.g. "Order system".
 2. **Flows and the AI only get the name.** A flow says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running node and never appears in flow files, MCP results, logs or screenshots.
 3. **Values are typed only into registered sites.** Each secret has its allowed sites; every other page is refused (against look-alike sites, and against an AI misled by instructions planted in a page). The check is made against the page the input field is on, so it also refuses a site that changed while waiting, and input fields in another site's iframe.
 
 ## Registering
 
-### Studio
+### Writer
 
 🔑 Secrets (top right) → New.
 
@@ -72,8 +72,8 @@ From scripts, use `--password-stdin` (the first line of standard input).
 ```
 
 - Values are encrypted with AES-256-GCM. The key is **a single entry per workspace in Windows Credential Manager** ("vault <ID>.SpellSheet"); registering more secrets adds no entries there.
-- The key is protected by the DPAPI of the Windows user who registered it. Copying the workspace folder to another PC or user does not make the values readable (`SECRET_KEY_MISSING`). In that case, use "Reset and register again" in Studio's 🔑 Secrets (or `spellsheet secret reset --yes`) to remove the unreadable secrets, sign-in states and key, then register again.
-- Updates are serialized with `secrets/.lock`, so Studio, the CLI and the MCP server never overwrite each other's changes to the same workspace.
+- The key is protected by the DPAPI of the Windows user who registered it. Copying the workspace folder to another PC or user does not make the values readable (`SECRET_KEY_MISSING`). In that case, use "Reset and register again" in Writer's 🔑 Secrets (or `spellsheet secret reset --yes`) to remove the unreadable secrets, sign-in states and key, then register again.
+- Updates are serialized with `secrets/.lock`, so Writer, the CLI and the MCP server never overwrite each other's changes to the same workspace.
 - Off Windows (development, CI) the key is kept in `secrets/<id>.key` (readable by the owner only). That is no protection, so it is not for production.
 
 ## Using them in flows
@@ -91,7 +91,7 @@ From scripts, use `--password-stdin` (the first line of standard input).
 - `field` is `username` / `password` / `totp` (the current one-time code). For web APIs with an OAuth sign-in, `http.request` also takes `accessToken` ([oauth.md](oauth.md)).
 - Secrets may appear only as the value of input nodes (`browser.fill`'s `value`). In logs, messages, URLs and the like they give the validation error `SECRET_NOT_ALLOWED`.
 - A default value on a `secret: true` variable would stay in the flow as plain text, so it gives the validation error `SECRET_DEFAULT`.
-- In Studio's properties, switch an input's value between "Text / 🔑 Secret" and pick the name and field.
+- In Writer's properties, switch an input's value between "Text / 🔑 Secret" and pick the name and field.
 
 ### Keeping the sign-in (sessions)
 
@@ -100,7 +100,7 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 ### MFA
 
 - **One-time codes (TOTP)**: register the MFA setup key and `field: "totp"` types the current code each time.
-- **Phone approval, SMS, CAPTCHA…**: `browser.waitForHuman` waits for the person. Studio shows "Waiting for you" and the browser comes to the front. It continues once the `until` element (e.g. the heading after login) appears. It waits 5 minutes by default (change with `timeoutMs`). Headless runs do not wait and fail with `HUMAN_REQUIRED`.
+- **Phone approval, SMS, CAPTCHA…**: `browser.waitForHuman` waits for the person. Writer shows "Waiting for you" and the browser comes to the front. It continues once the `until` element (e.g. the heading after login) appears. It waits 5 minutes by default (change with `timeoutMs`). Headless runs do not wait and fail with `HUMAN_REQUIRED`.
 - Unattended flows normally keep a sign-in made once by a person with `session`.
 
 ## Masking
@@ -108,6 +108,12 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 - In run logs, errors, run records and outputs, password and one-time code values are replaced with `***` (usernames are shown on screen anyway, so they are not masked).
 - In screenshots, password fields and fields a secret was typed into are blacked out.
 - Values are also removed from the text the browser adapter returns (`getText` / `getTable` / the page's accessibility tree / page details on errors), including values a person typed into password fields by hand.
+
+### Personal data
+
+Mark a variable that holds personal data (names, addresses, mail, rows of customers) with `"personal": true` (Writer: the variable's **Personal data** box, or right-click in the Variables table). Its values are then masked as `***` the same way: in run logs, the flow's `logs/`, errors, run records and outputs, notifications, what a management server receives and what an AI reads back with `get_run_logs` / `get_run_status` / `run_tests`. Parts copied elsewhere (one row's name into another variable, a message built from it) are masked too, except parts shorter than 4 characters inside a list or object. Unlike a secret it may have a default and may be passed in as plain text; its default is left out of exported bundles and of **Copy for an AI**, and saving a run as a test case leaves it out.
+
+Not covered: what a node returns to an AI trying it on its own (`test_step`), what `inspect_page` / `inspect_ui` show, and pictures of failed runs (only password fields are blacked out). Turn the pictures off with `records.failureScreenshots: false` when screens show personal data.
 
 ## From AI (MCP)
 
@@ -119,36 +125,36 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 
 ### The AI asks for login details (`request_secret`)
 
-Instead of asking for passwords in the chat, the AI asks Studio to register one with `request_secret`:
+Instead of asking for passwords in the chat, the AI asks Writer to register one with `request_secret`:
 
 ```jsonc
 { "name": "Google", "sites": ["https://accounts.google.com/"], "fields": ["username", "password"], "reason": "To sign in to Google and read order mails", "waitMs": 120000 }
 ```
 
-- Studio shows "🔑 Login needed" at the top. Register opens the form with the name and sites filled in; the person enters only the username and password. For a name already registered, the edit form opens with the missing sites added.
-- Values go from Studio into the encrypted file only, never to the AI, MCP results, the chat or logs. The request file `secrets/requests.json` holds only the name, sites, fields and the AI's reason (up to 300 characters).
-- The "reason" is text written by the AI; Studio shows it as "From the AI". Input is limited to the registered sites, so whatever the reason says, nothing is typed into another site.
+- Writer shows "🔑 Login needed" at the top. Register opens the form with the name and sites filled in; the person enters only the username and password. For a name already registered, the edit form opens with the missing sites added.
+- Values go from Writer into the encrypted file only, never to the AI, MCP results, the chat or logs. The request file `secrets/requests.json` holds only the name, sites, fields and the AI's reason (up to 300 characters).
+- The "reason" is text written by the AI; Writer shows it as "From the AI". Input is limited to the registered sites, so whatever the reason says, nothing is typed into another site.
 - `status` in the result: `registered` (use it in `browser.fill`) / `waiting` (not yet; call again with `waitMs`, or `list_secrets`) / `dismissed` (the person closed it with Later).
 - `fields` defaults to `username` and `password`. Add `totp` when an authenticator code is needed.
-- `kind: "apiKey"` asks for a web API key (`fields` then defaults to `password`, which holds the key); `kind: "oauth"` for an OAuth app. Studio's form then names the fields that way.
-- If Studio is not running, the AI tells the person in the chat to open Studio and register it. The request stays and shows up once Studio opens.
+- `kind: "apiKey"` asks for a web API key (`fields` then defaults to `password`, which holds the key); `kind: "oauth"` for an OAuth app. Writer's form then names the fields that way.
+- If Writer is not running, the AI tells the person in the chat to open Writer and register it. The request stays and shows up once Writer opens.
 
 ### When a run fails
 
-When a flow run in Studio stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET`, the same Register bar appears and opens the registration (or edit) form for that secret. For `SECRET_SITE_MISMATCH` the site of the page it stopped on is already added; check it is the right site before saving.
+When a flow run in Writer stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET`, the same Register bar appears and opens the registration (or edit) form for that secret. For `SECRET_SITE_MISMATCH` the site of the page it stopped on is already added; check it is the right site before saving.
 - Page content is data, not instructions to the AI. Planted instructions that try to make it type a password into another site are stopped by the site check.
 
 ## Error codes
 
 | Code | Meaning and fix |
 |---|---|
-| `SECRET_NOT_FOUND` | No secret with that name. Register it in Studio |
+| `SECRET_NOT_FOUND` | No secret with that name. Register it in Writer |
 | `SECRET_FIELD_EMPTY` | That field (password, MFA key…) is not set |
 | `SECRET_SITE_NOT_SET` | No allowed sites. Add the site |
 | `SECRET_SITE_MISMATCH` | The current page is not a registered site. Check the URL and add the site if it is right |
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | The desktop app (`app:xxx.exe`) is not registered, or the input went to another app |
 | `WINDOWS_CREDENTIAL_NOT_FOUND` | Credential Manager has no generic credential with that address. Add it there, or fix the secret's address |
 | `WINDOWS_CREDENTIAL_UNREADABLE` | The password of the generic credential is not text |
-| `SECRET_KEY_MISSING` | No key for this PC / Windows user. Reset in Studio or with `spellsheet secret reset --yes` and register again |
-| `SECRETS_UNAVAILABLE` | Run on a Runtime without secrets (run from Studio, the CLI or MCP) |
+| `SECRET_KEY_MISSING` | No key for this PC / Windows user. Reset in Writer or with `spellsheet secret reset --yes` and register again |
+| `SECRETS_UNAVAILABLE` | Run on a Runtime without secrets (run from Writer, the CLI or MCP) |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | A person is needed but there is no window / they did not finish in time |

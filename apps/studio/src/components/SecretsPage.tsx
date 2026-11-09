@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
 import { relativeTime } from "../lib/changes";
+import { confirmAsk } from "../lib/ask";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
@@ -277,7 +278,10 @@ function SecretForm({
                 <button
                   type="button"
                   className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
-                  onClick={() => window.confirm(t.secretConfirmSignOut(oauth.name)) && void signOut(oauth.name)}
+                  onClick={async () => {
+                    const yes = await confirmAsk({ title: t.secretSignOutAsk.title(oauth.name), body: t.secretSignOutAsk.body, confirm: t.secretSignOut, danger: true });
+                    if (yes) void signOut(oauth.name);
+                  }}
                 >
                   {t.secretSignOut}
                 </button>
@@ -612,7 +616,10 @@ function KeyMissing({ secrets }: { secrets: SecretInfo[] }) {
       <button
         type="button"
         className="mt-4 h-8 rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
-        onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
+        onClick={async () => {
+          const ask = t.secretResetAsk;
+          if (await confirmAsk({ title: ask.title, body: ask.body(secrets.length), confirm: ask.confirm, danger: true })) void resetSecrets();
+        }}
       >
         {t.secretReset}
       </button>

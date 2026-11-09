@@ -11,17 +11,18 @@ import { api, type ScheduleView, manualApi } from "../lib/api";
 import { locale, t } from "../lib/i18n";
 import {
   buildManual,
-  type Chapter,
   cropOf,
   type Drafts,
   type ManualDoc,
-  type ManualItem,
   type ManualManifest,
   type ManualShot,
   type ManualStep,
   type Mask,
   type MaskBox,
   maskStale,
+  type Page,
+  type PageBlock,
+  pagesOf,
   type Rect,
   type Scene,
 } from "../lib/manual";
@@ -105,7 +106,89 @@ type Ctx = {
   onWhole: (shot: ManualShot) => void;
   onDiffers: (step: ManualStep) => void;
   onShow: (step: ManualStep) => void;
+  /** 「業務どおり」 ticked, by step key (this PC only). */
+  checks: Record<string, boolean>;
+  onCheck: (key: string, on: boolean) => void;
+  /** Moves the desk to a page. */
+  onPage: (n: number) => void;
 };
+
+const CHECKS_KEY = "shikigami.studio.manualChecks.";
+
+/** The 「業務どおり」 ticks of a flow: a convenience on this PC, kept in the browser. */
+function useChecks(flowId: string | undefined) {
+  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    let read: Record<string, boolean> = {};
+    try {
+      read = flowId ? (JSON.parse(localStorage.getItem(CHECKS_KEY + flowId) ?? "{}") as Record<string, boolean>) : {};
+    } catch {
+      read = {};
+    }
+    setChecks(read);
+  }, [flowId]);
+  const onCheck = (key: string, on: boolean) =>
+    setChecks((now) => {
+      const next = { ...now };
+      if (on) next[key] = true;
+      else delete next[key];
+      try {
+        if (flowId) localStorage.setItem(CHECKS_KEY + flowId, JSON.stringify(next));
+      } catch {
+        // Not kept: the ticks last until Studio closes.
+      }
+      return next;
+    });
+  return { checks, onCheck };
+}
+
+/** The page most in view on the desk. */
+function useActivePage(desk: React.RefObject<HTMLDivElement | null>, count: number): number {
+  const [active, setActive] = useState(1);
+  useEffect(() => {
+    const root = desk.current;
+    if (!root) return;
+    const seen = new Map<number, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(Number((e.target as HTMLElement).dataset.page), e.intersectionRatio);
+        let best = 1;
+        let ratio = -1;
+        for (const [n, r] of seen) if (r > ratio || (r === ratio && n < best)) [best, ratio] = [n, r];
+        setActive(best);
+      },
+      { root, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
+    );
+    for (const el of root.querySelectorAll("[data-page]")) observer.observe(el);
+    return () => observer.disconnect();
+  }, [desk, count]);
+  return active;
+}
+
+/** A4 sheet width in CSS pixels, and the desk's side padding (px-6). */
+const SHEET_WIDTH = 794;
+const DESK_PADDING = 24;
+
+/**
+ * How much to shrink the sheets so a whole page width fits the desk, like a PDF viewer's
+ * "fit to width". Never enlarges: at full size the sheet keeps its print proportions.
+ */
+function useSheetFit(desk: React.RefObject<HTMLDivElement | null>, count: number): number {
+  const [fit, setFit] = useState(1);
+  useEffect(() => {
+    const root = desk.current;
+    if (!root) return;
+    const measure = () => {
+      const room = root.clientWidth - DESK_PADDING * 2;
+      if (room > 0) setFit(Math.min(1, Math.round((room / SHEET_WIDTH) * 1000) / 1000));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [desk, count]);
+  return fit;
+}
 
 export function ManualView({ onView }: { onView: (view: View) => void }) {
   const flow = useStudio((s) => s.flow);
@@ -116,7 +199,10 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const testing = useStudio((s) => s.stepTest?.running ?? false);
   const revision = useStudio((s) => s.flow?.revision);
   const agent = useAgentApi();
-  const [editing, setEditing] = useState(false);
+  const editing = useStudio((s) => s.manualEditing);
+  const setEditing = useStudio((s) => s.setManualEditing);
+  // Leaving the 手順書 leaves its editing too.
+  useEffect(() => () => setEditing(false), [setEditing]);
   const [manifest, setManifest] = useState<ManualManifest | null>(null);
   const [masks, setMasks] = useState<Record<string, Mask>>({});
   const [drafts, setDrafts] = useState<Drafts>({});
@@ -153,6 +239,11 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
   const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts) : null), [flow, defs, manifest, subflows, masks, drafts]);
+  const pages = useMemo(() => (doc ? pagesOf(doc) : []), [doc]);
+  const desk = useRef<HTMLDivElement>(null);
+  const active = useActivePage(desk, editing ? 0 : pages.length);
+  const fit = useSheetFit(desk, editing ? 0 : pages.length);
+  const { checks, onCheck } = useChecks(flowId);
 
   if (!flow || !doc) return <StoryView />;
   if (editing) {
@@ -181,6 +272,9 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
     urls,
     want,
     masks,
+    checks,
+    onCheck,
+    onPage: (n) => desk.current?.querySelector(`[data-page="${n}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
     onMask: setMasking,
     onWhole: setWhole,
     onDiffers: (step) => {
@@ -200,68 +294,82 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const when = schedules.map((s) => describeWhen(s.when));
 
   return (
-    <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24">
-      <article className="mx-auto max-w-[940px] rounded-lg border border-slate-200 bg-sheet px-11 py-9 shadow-sheet" data-manual>
-        <h1 className="text-[24px] font-semibold">{doc.title}</h1>
-        <div className="mt-1.5 mb-5 flex flex-wrap items-center gap-2.5 text-[12.5px] text-slate-500">
-          {made ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-moegi-500" />
-              <span>{made}</span>
-            </>
-          ) : doc.drafts > 0 ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-slate-400" />
-              <span>{t.manual.draftsOnly}</span>
-            </>
-          ) : (
-            <span>{t.manual.noRun}</span>
-          )}
-          <span className="ml-auto flex gap-2">
-            <ToolButton icon={made ? RotateCw : Play} label={made ? t.manual.retake : t.manual.runNow} title={t.manual.retakeTitle} disabled={running} onClick={() => void startRun()} />
-            <ToolButton icon={Download} label={t.manual.export} onClick={() => setExporting(true)} />
-            <ToolButton icon={Pencil} label={t.manual.edit} title={t.manual.editTitle} onClick={() => setEditing(true)} />
-          </span>
+    <div className="@container/manual h-full min-h-0">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] @[40rem]/manual:grid-cols-[196px_minmax(0,1fr)]">
+        <div className="hidden @[40rem]/manual:contents">
+          <PageList pages={pages} active={active} ctx={ctx} />
         </div>
-        {doc.description && <p className="mb-4 text-[15px] leading-[1.85] text-slate-600">{doc.description}</p>}
-        <Facts doc={doc} when={when} />
-        {doc.missing > 0 && (manifest || doc.drafts > 0) && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
-        {made && doc.drafts > 0 && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}
-        <Toc chapters={doc.chapters} />
-        {doc.chapters.map((c) => (
-          <ChapterSection key={c.number} chapter={c} ctx={ctx} />
-        ))}
-        {doc.pictures > 0 && <p className="mt-10 text-right text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
-      </article>
-      {masking && (
-        <MaskEditor
-          shot={masking}
-          url={urls[masking.file]}
-          mask={masks[masking.key]}
-          onCancel={() => setMasking(null)}
-          onSave={(mask) => {
-            saveMasks({ ...masks, [masking.key]: mask });
-            setMasking(null);
-          }}
-        />
-      )}
-      {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
-      {exporting && <ExportDialog doc={doc} flowId={flow.id} made={made} when={when} masks={masks} onClose={() => setExporting(false)} />}
+        <div ref={desk} className="relative min-h-0 overflow-y-auto bg-[var(--manual-desk)] px-6 pb-16" data-manual>
+          <div className="@container/bar sticky top-0 z-10 -mx-6 mb-2 bg-[var(--manual-desk)]/95 px-6 py-2.5 text-[12.5px] text-slate-500 backdrop-blur-sm">
+            <div className="flex items-center gap-2.5">
+              {made ? (
+                <BarNote dot="bg-moegi-500" text={made} />
+              ) : doc.drafts > 0 ? (
+                <BarNote dot="bg-slate-400" text={t.manual.draftsOnly} />
+              ) : (
+                <BarNote text={t.manual.noRun} />
+              )}
+              <span className="ml-auto flex shrink-0 gap-2">
+                <ToolButton icon={made ? RotateCw : Play} label={made ? t.manual.retake : t.manual.runNow} title={t.manual.retakeTitle} disabled={running} onClick={() => void startRun()} />
+                <ToolButton icon={Download} label={t.manual.export} onClick={() => setExporting(true)} />
+                <ToolButton icon={Pencil} label={t.manual.edit} title={t.manual.editTitle} onClick={() => setEditing(true)} />
+              </span>
+            </div>
+          </div>
+          <div style={{ zoom: fit }}>
+            {pages.map((page) => (
+              <Sheet key={page.number} page={page} total={pages.length} title={doc.title} made={made}>
+                {page.kind === "cover" ? (
+                  <Cover doc={doc} made={made} when={when} pages={pages} showMissing={doc.missing > 0 && (manifest !== null || doc.drafts > 0)} />
+                ) : (
+                  <BodyPage page={page} ctx={ctx} />
+                )}
+              </Sheet>
+            ))}
+          </div>
+        </div>
+        {masking && (
+          <MaskEditor
+            shot={masking}
+            url={urls[masking.file]}
+            mask={masks[masking.key]}
+            onCancel={() => setMasking(null)}
+            onSave={(mask) => {
+              saveMasks({ ...masks, [masking.key]: mask });
+              setMasking(null);
+            }}
+          />
+        )}
+        {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
+        {exporting && <ExportDialog doc={doc} flowId={flow.id} made={made} when={when} masks={masks} onClose={() => setExporting(false)} />}
+      </div>
     </div>
   );
 }
 
+/** What the screens on the desk came from. Wraps to two lines at most; the whole text is on hover. */
+function BarNote({ dot, text }: { dot?: string; text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2.5" title={text}>
+      {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
+      <span className="line-clamp-2 min-w-0 break-words">{text}</span>
+    </span>
+  );
+}
+
+/** A button on the bar above the sheets. When the bar is narrow only the icon stays; the name moves to the hover text. */
 function ToolButton({ icon: Icon, label, title, disabled, onClick }: { icon: typeof Play; label: string; title?: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
-      title={title}
+      title={title ? `${label}\n${title}` : label}
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-2.5 py-1 text-[13px] text-ink enabled:hover:bg-paper disabled:opacity-50"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] whitespace-nowrap text-ink enabled:hover:bg-paper disabled:opacity-50 @[36rem]/bar:px-2.5"
     >
-      <Icon size={14} strokeWidth={1.75} />
-      {label}
+      <Icon size={14} strokeWidth={1.75} className="shrink-0" />
+      <span className="hidden @[36rem]/bar:inline">{label}</span>
     </button>
   );
 }
@@ -285,27 +393,111 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
   );
 }
 
-function Toc({ chapters }: { chapters: Chapter[] }) {
+/** The list of sheets beside the desk: where each screen is, which one is in view. */
+function PageList({ pages, active, ctx }: { pages: Page[]; active: number; ctx: Ctx }) {
+  useEffect(() => {
+    document.querySelector(`[data-page-item="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
   return (
-    <ol className="mt-6 mb-2" aria-label={t.manual.contents}>
-      {chapters.map((c) => (
-        <li key={c.number} className="flex items-baseline gap-3 py-1.5 text-[14.5px]">
-          <Num n={c.number} />
+    <nav aria-label={t.manual.pages} className="min-h-0 overflow-y-auto border-r border-slate-200 bg-paper px-2 py-3">
+      <h4 className="mb-2 ml-2 text-[12px] font-medium text-slate-500">{t.manual.pages}</h4>
+      {pages.map((page) => {
+        const shot = page.kind === "body" ? page.shot : null;
+        // A picture with hidden parts stays out of the thumbnail: at this size the boxes would not hide anything reliably.
+        const masked = shot ? (ctx.masks[shot.key]?.boxes.length ?? 0) > 0 : false;
+        const url = shot && !masked ? ctx.urls[shot.file] : undefined;
+        return (
           <button
+            key={page.number}
             type="button"
-            className="text-left hover:underline"
-            onClick={() => document.getElementById(`manual-c${c.number}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            data-page-item={page.number}
+            onClick={() => ctx.onPage(page.number)}
+            className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12px] ${page.number === active ? "bg-brand-50 text-ink" : "text-slate-600 hover:bg-slate-100"}`}
           >
-            {c.title}
+            <span className="relative h-[42px] w-[30px] shrink-0 overflow-hidden rounded-[2px] border border-slate-300 bg-sheet shadow-[0_1px_1px_rgb(0_0_0/0.05)]">
+              <span className="absolute top-[5px] left-[4px] h-[2px] w-[18px] bg-slate-400" />
+              {url ? (
+                <img src={url} alt="" className="absolute top-[11px] left-[3px] w-[22px] border border-slate-200" />
+              ) : (
+                <>
+                  <span className="absolute top-[11px] left-[4px] h-[2px] w-[12px] bg-slate-300" />
+                  <span className="absolute top-[16px] left-[4px] h-[2px] w-[16px] bg-slate-300" />
+                  <span className="absolute top-[21px] left-[4px] h-[2px] w-[10px] bg-slate-300" />
+                </>
+              )}
+            </span>
+            <span className="min-w-0 leading-[1.35]">
+              {page.number}
+              <small className="block truncate text-[11.5px] text-slate-500">
+                {page.kind === "cover" ? t.manual.cover : shortTitle(page.title)}
+              </small>
+            </span>
           </button>
-          {c.alongside.length > 0 && <span className="text-[12.5px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
-          <span className="ml-auto shrink-0 text-[12.5px] text-slate-500">
-            {c.screens > 0 ? t.manual.screens(c.screens) : t.manual.noScreen}
-            {c.loops ? `・${t.manual.loop}` : ""}
-          </span>
-        </li>
-      ))}
-    </ol>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** 「サンプル商事 受注管理システム - ログイン」 → 「ログイン」: the part that changes from screen to screen. */
+function shortTitle(title: string): string {
+  const parts = title.split(/\s+[-|–—:：]\s+/);
+  return parts.length > 1 ? (parts.at(-1) ?? title) : title;
+}
+
+/** One A4 sheet on the desk: the flow's name above, the page number below. */
+function Sheet({ page, total, title, made, children }: { page: Page; total: number; title: string; made: string | null; children: React.ReactNode }) {
+  return (
+    <section
+      data-page={page.number}
+      className="relative mx-auto mb-7 flex min-h-[1123px] w-[794px] scroll-mt-14 flex-col bg-sheet px-12 pt-10 pb-14 shadow-[0_1px_2px_rgb(20_30_50/0.08),0_8px_24px_rgb(20_30_50/0.08)]"
+    >
+      {page.kind === "body" && (
+        <header className="mb-5 flex items-baseline justify-between gap-4 border-b-[1.5px] border-ink pb-1.5 text-[12px] text-slate-500">
+          <b className="truncate font-semibold text-ink">{title}</b>
+          {made && <span className="shrink-0">{made}</span>}
+        </header>
+      )}
+      {children}
+      <footer className="absolute inset-x-12 bottom-5 flex justify-between text-[11px] text-slate-400">
+        <span>{t.manual.madeWith}</span>
+        <span>{t.manual.pageOf(page.number, total)}</span>
+      </footer>
+    </section>
+  );
+}
+
+function Cover({ doc, made, when, pages, showMissing }: { doc: ManualDoc; made: string | null; when: string[]; pages: Page[]; showMissing: boolean }) {
+  const firstPage = (n: number) => pages.find((p) => p.kind === "body" && p.chapter.number === n && p.first)?.number;
+  return (
+    <>
+      <p className="mt-16 text-[12.5px] tracking-wide text-slate-500">{t.manual.title}</p>
+      <h1 className="mt-1 mb-2 text-[26px] leading-snug font-semibold">{doc.title}</h1>
+      <p className="mb-6 text-[12.5px] text-slate-500">{made ?? (doc.drafts > 0 ? t.manual.draftsOnly : t.manual.noRun)}</p>
+      {doc.description && <p className="mb-6 text-[14.5px] leading-[1.85] text-slate-700">{doc.description}</p>}
+      <Facts doc={doc} when={when} />
+      {showMissing && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
+      {made && doc.drafts > 0 && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}
+      <h2 className="mt-9 mb-2 text-[14px] font-semibold">{t.manual.contents}</h2>
+      <ol aria-label={t.manual.contents}>
+        {doc.chapters.map((c) => (
+          <li key={c.number} className="flex items-baseline gap-3 border-b border-dotted border-slate-300 py-2 text-[14px]">
+            <Num n={c.number} />
+            <span>
+              {c.title}
+              {c.alongside.length > 0 && <span className="ml-2 text-[12px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
+              <span className="block text-[12px] text-slate-500">
+                {c.screens > 0 ? t.manual.screens(c.screens) : t.manual.noScreen}
+                {c.loops ? `・${t.manual.loop}` : ""}
+              </span>
+            </span>
+            <span className="ml-auto shrink-0 text-[12.5px] text-slate-500 tabular-nums">{firstPage(c.number) ?? ""}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-6 text-[12.5px] leading-[1.7] text-slate-500">✎ {t.manual.checkHint}</p>
+      {doc.pictures > 0 && <p className="mt-auto pt-8 text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
+    </>
   );
 }
 
@@ -319,26 +511,27 @@ function Num({ n, big }: { n: number; big?: boolean }) {
   );
 }
 
-function ChapterSection({ chapter, ctx }: { chapter: Chapter; ctx: Ctx }) {
-  return (
-    <section id={`manual-c${chapter.number}`} className="scroll-mt-4">
-      <h2 className="mt-10 mb-1.5 flex items-center gap-3 text-[19px] font-semibold">
-        <Num n={chapter.number} big />
-        {chapter.title}
-      </h2>
-      {chapter.alongside.length > 0 && <p className="mb-3 ml-10 text-[13px] text-slate-500">{t.manual.alongsideNote(chapter.alongside)}</p>}
-      <div className="ml-10">
-        <Items items={chapter.items} ctx={ctx} />
-      </div>
-    </section>
-  );
-}
-
-function Items({ items, ctx }: { items: ManualItem[]; ctx: Ctx }) {
+function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: Ctx }) {
+  const { chapter } = page;
   return (
     <>
-      {items.map((item, i) => (
-        <ItemView key={i} item={item} ctx={ctx} />
+      {page.first ? (
+        <>
+          <h2 className="mb-1 flex items-center gap-3 text-[20px] font-semibold">
+            <Num n={chapter.number} big />
+            {chapter.title}
+          </h2>
+          {chapter.alongside.length > 0 && <p className="mb-4 ml-10 text-[12.5px] text-slate-500">{t.manual.alongsideNote(chapter.alongside)}</p>}
+          {chapter.alongside.length === 0 && <div className="mb-4" />}
+        </>
+      ) : (
+        <p className="mb-4 text-[12.5px] text-slate-500">
+          {chapter.number}. {chapter.title}
+          {t.manual.continued}
+        </p>
+      )}
+      {page.blocks.map((block, i) => (
+        <BlockView key={i} block={block} ctx={ctx} />
       ))}
     </>
   );
@@ -353,62 +546,65 @@ function Taken({ taken }: { taken: boolean | null }) {
   );
 }
 
-function ItemView({ item, ctx }: { item: ManualItem; ctx: Ctx }) {
-  switch (item.kind) {
-    case "scene":
-      return <SceneCard scene={item} ctx={ctx} />;
-    case "action":
-      return (
-        <ol className="mb-2">
-          <StepRow step={item.step} ctx={ctx} />
-        </ol>
-      );
-    case "quiet":
-      return (
-        <div className="mb-3 flex items-start gap-2 text-[13px] leading-[1.7] text-slate-500">
-          <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-slate-100">
-            <Workflow size={11} />
-          </span>
-          <div>
-            <b className="font-semibold text-slate-600">{t.manual.quiet}</b>　{item.texts.join("・")}
-          </div>
-        </div>
-      );
-    case "branch":
-      return (
-        <div className={item.taken === false ? "opacity-70" : ""}>
-          <div
-            className="mb-2.5 inline-flex items-center gap-2 rounded-md border px-2.5 py-0.5 text-[13px]"
+function BlockView({ block, ctx }: { block: PageBlock; ctx: Ctx }) {
+  const inset = { paddingLeft: block.depth * 18 };
+  if (block.kind === "label") {
+    const item = block.item;
+    const more = block.continued ? t.manual.continued : "";
+    return (
+      <div style={inset} className={`mb-2.5 ${item.kind === "branch" && item.taken === false ? "opacity-70" : ""}`}>
+        {item.kind === "branch" ? (
+          <span
+            className="inline-flex items-center gap-2 rounded-md border px-2.5 py-0.5 text-[13px]"
             style={{ background: "var(--flow-decide-fill)", borderColor: "var(--flow-decide-line)" }}
           >
-            ◆ {item.label} <Taken taken={item.taken} />
-          </div>
-          <Items items={item.items} ctx={ctx} />
-        </div>
-      );
-    case "loop":
-      return (
-        <div className="mb-4 border-l-[3px] border-slate-300 py-0.5 pl-4">
-          <div className="mb-2.5 flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
+            ◆ {item.label}
+            {more}
+            <Taken taken={item.taken} />
+          </span>
+        ) : item.kind === "loop" ? (
+          <span className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
             ↻ {item.label}
+            {more}
             {item.times !== null && <span className="text-[12.5px] font-normal text-slate-500">{t.manual.loopTimes(item.times)}</span>}
-          </div>
-          <Items items={item.items} ctx={ctx} />
-        </div>
-      );
-    case "group":
-      return (
-        <div className="mb-3">
-          <div className="mb-2 text-[14px] font-semibold">{item.label}</div>
-          <Items items={item.items} ctx={ctx} />
-        </div>
-      );
+          </span>
+        ) : (
+          <span className="text-[14px] font-semibold">
+            {item.label}
+            {more}
+          </span>
+        )}
+      </div>
+    );
   }
+  const item = block.item;
+  return (
+    <div style={inset} className={block.depth > 0 ? "border-l-2 border-slate-200" : ""}>
+      <div className={block.depth > 0 ? "pl-3" : ""}>
+        {item.kind === "scene" ? (
+          <SceneCard scene={item} ctx={ctx} />
+        ) : item.kind === "action" ? (
+          <ol className="mb-3">
+            <StepRow step={item.step} ctx={ctx} />
+          </ol>
+        ) : (
+          <div className="mb-3 flex items-start gap-2 text-[13px] leading-[1.7] text-slate-500">
+            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-slate-100">
+              <Workflow size={11} />
+            </span>
+            <div>
+              <b className="font-semibold text-slate-600">{t.manual.quiet}</b>　{item.texts.join("・")}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function StepRow({ step, ctx }: { step: ManualStep; ctx: Ctx }) {
   return (
-    <li className="group/step relative flex gap-2.5 border-b border-dashed border-slate-200 py-2 last:border-b-0">
+    <li className="group/step relative flex gap-2.5 border-b border-slate-200 py-2.5">
       <span className="mt-0.5 grid h-[21px] w-[21px] shrink-0 place-items-center rounded-full bg-primary text-[12px] font-bold text-on-primary">{step.number}</span>
       <div className="min-w-0 flex-1 text-[14px] leading-[1.65]">
         {step.text}
@@ -436,6 +632,15 @@ function StepRow({ step, ctx }: { step: ManualStep; ctx: Ctx }) {
           </button>
         </span>
       </div>
+      <label title={t.manual.asExpectedTitle} className="flex w-[84px] shrink-0 cursor-pointer items-start justify-end gap-1.5 pt-[3px] text-[12px] text-slate-500">
+        {t.manual.asExpected}
+        <input
+          type="checkbox"
+          checked={ctx.checks[step.key] ?? false}
+          onChange={(e) => ctx.onCheck(step.key, e.target.checked)}
+          className="mt-[1px] h-4 w-4 accent-[var(--color-moegi-600)]"
+        />
+      </label>
     </li>
   );
 }
@@ -458,8 +663,8 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
   const shot = scene.shot;
   const mask = shot ? ctx.masks[shot.key] : undefined;
   return (
-    <div className="mb-3.5 overflow-hidden rounded-lg border border-slate-200">
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[12.5px] text-slate-500">
+    <div className="mb-5">
+      <div className="mb-1.5 flex items-center gap-2 text-[12.5px] text-slate-500">
         <Camera size={13} />
         <b className="font-semibold text-ink">{t.manual.screenOf(scene.title, scene.app === "desktop")}</b>
         {shot?.draft && (
@@ -473,7 +678,7 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
             type="button"
             title={t.manual.hideTitle}
             onClick={() => ctx.onMask(shot)}
-            className="ml-auto inline-flex items-center gap-1 rounded-[5px] px-1.5 text-slate-600 hover:bg-slate-200"
+            className="ml-auto inline-flex items-center gap-1 rounded-[5px] px-1.5 text-slate-600 hover:bg-slate-100"
           >
             <EyeOff size={13} />
             {t.manual.hide}
@@ -481,27 +686,33 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
           </button>
         )}
       </div>
-      <div className={shot ? "grid grid-cols-[1.45fr_1fr]" : ""}>
-        {shot ? (
+      {shot ? (
+        <div className="overflow-hidden border border-slate-300">
           <ShotFrame shot={shot} marks={sceneMarks(scene)} ctx={ctx} />
-        ) : (
-          <p className="px-3.5 pt-2.5 text-[12px] text-slate-400">{t.manual.noPicture}</p>
-        )}
-        <ol className="px-3.5 py-2">
-          {[...scene.steps, null].map((s, i) => (
-            <SceneRows key={s?.key ?? "end"} waits={scene.waits.filter((w) => w.at === i)} step={s} ctx={ctx} />
-          ))}
-        </ol>
-      </div>
+        </div>
+      ) : (
+        <p className="text-[12px] text-slate-400">{t.manual.noPicture}</p>
+      )}
+      <ol className="mt-2 border-t border-slate-200">
+        {[...scene.steps, null].map((s, i) => (
+          <SceneRows key={s?.key ?? "end"} waits={scene.waits.filter((w) => w.at === i)} step={s} ctx={ctx} />
+        ))}
+      </ol>
     </div>
   );
 }
 
-/** Boxes over a picture: what is hidden (blurred or black). */
-function MaskBoxes({ boxes, crop, k }: { boxes: MaskBox[]; crop: Rect; k: number }) {
+/**
+ * Boxes over a picture: what is hidden (blurred or black). The values the
+ * page showed (`regions`: fields, cells, "label  value" rows) are blurred
+ * here too, as the 書き出し does by default, so what is on the screen is
+ * what goes out and a screen shared from here does not show them either.
+ */
+function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Rect[]; crop: Rect; k: number }) {
+  const all: MaskBox[] = [...(regions ?? []).map((r) => ({ ...r, kind: "blur" as const })), ...boxes];
   return (
     <>
-      {boxes.map((b, i) => (
+      {all.map((b, i) => (
         <span
           key={i}
           className={`absolute ${b.kind === "black" ? "bg-slate-900" : "bg-slate-200/50 backdrop-blur-[6px]"}`}
@@ -531,7 +742,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
   const url = ctx.urls[shot.file];
   const mask = ctx.masks[shot.key];
   return (
-    <div ref={box} className="relative overflow-hidden border-r border-slate-200 bg-paper" style={{ height: k > 0 ? crop.height * k : 200 }}>
+    <div ref={box} className="relative overflow-hidden bg-paper" style={{ height: k > 0 ? crop.height * k : 200 }}>
       {url && k > 0 && (
         <>
           <img
@@ -540,7 +751,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             className="absolute max-w-none"
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
-          <MaskBoxes boxes={mask?.boxes ?? []} crop={crop} k={k} />
+          <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={crop} k={k} />
           {marks.map((m, i) => (
             <span
               key={m.number ?? `wait-${i}`}
@@ -604,7 +815,7 @@ function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string
     <Overlay onClose={onClose} label={t.manual.whole}>
       <div className="relative" style={{ width: shot.width * k, height: shot.height * k }}>
         {url && <img src={url} alt="" className="absolute inset-0 h-full w-full" />}
-        <MaskBoxes boxes={mask?.boxes ?? []} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+        <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
       </div>
     </Overlay>
   );
@@ -670,7 +881,7 @@ function MaskEditor({
           }}
         >
           {url && <img src={url} alt="" draggable={false} className={`absolute inset-0 h-full w-full ${hidden ? "opacity-30" : ""}`} />}
-          <MaskBoxes boxes={boxes} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+          <MaskBoxes boxes={boxes} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
           {boxes.map((b, i) => (
             <button
               key={i}

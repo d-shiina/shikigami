@@ -217,11 +217,16 @@ pub(crate) struct Turn<'a> {
 /// stdin), after writing the files it reads its settings from.
 pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<String>, Env)> {
     let session = turn.session.filter(|s| !s.is_empty());
-    let server_args = [
+    let mut server_args = vec![
         "--workspace".to_owned(),
         turn.workspace.display().to_string(),
         "mcp".to_owned(),
     ];
+    // The pane shows ask_user_to_choose as a card; an agent of its own
+    // (`command`) prints only text, so it does not get that tool.
+    if kind != AgentKind::Command {
+        server_args.push("--writer-chat".to_owned());
+    }
     let mut env = Vec::new();
     let args = match kind {
         AgentKind::ClaudeCode | AgentKind::Command => {
@@ -442,10 +447,6 @@ fn str_of(v: &Value, key: &str) -> Option<String> {
     v.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn summary(input: Option<&Value>) -> Option<String> {
-    input.and_then(|i| str_of(i, "summary"))
-}
-
 /// Text of an MCP result's `content` (a string or text parts).
 pub(crate) fn content_text(content: Option<&Value>) -> String {
     match content {
@@ -479,12 +480,7 @@ impl CodexStream {
                     return Vec::new();
                 }
                 str_of(&item, "tool")
-                    .map(|name| {
-                        vec![AgentEvent::Tool {
-                            name,
-                            detail: summary(item.get("arguments")),
-                        }]
-                    })
+                    .map(|name| vec![AgentEvent::tool(name, item.get("arguments"))])
                     .unwrap_or_default()
             }
             Some("item.completed") => match item_type {
@@ -568,10 +564,7 @@ impl GeminiStream {
                     if let Some(id) = str_of(&v, "tool_id") {
                         self.tools.insert(id, name.clone());
                     }
-                    out.push(AgentEvent::Tool {
-                        name,
-                        detail: summary(v.get("parameters")),
-                    });
+                    out.push(AgentEvent::tool(name, v.get("parameters")));
                 }
                 out
             }
@@ -663,10 +656,7 @@ impl CopilotStream {
                     if let Some(id) = str_of(request, "toolCallId") {
                         self.tools.insert(id, name.clone());
                     }
-                    out.push(AgentEvent::Tool {
-                        name,
-                        detail: summary(request.get("arguments")),
-                    });
+                    out.push(AgentEvent::tool(name, request.get("arguments")));
                 }
                 out
             }
@@ -752,7 +742,9 @@ mod tests {
         assert!(joined.contains(
             "mcp_servers.shikigami.command='C:\\Program Files\\Shikigami\\shikigami.exe'"
         ));
-        assert!(joined.contains("mcp_servers.shikigami.args=['--workspace','D:\\work','mcp']"));
+        assert!(joined.contains(
+            "mcp_servers.shikigami.args=['--workspace','D:\\work','mcp','--writer-chat']"
+        ));
         assert!(joined.contains("default_tools_approval_mode='approve'"));
         assert!(joined.ends_with("resume t1 -"));
         assert_eq!(

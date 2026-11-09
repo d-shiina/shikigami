@@ -10,13 +10,14 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 |---|---|---|
 | フローのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | 保存済みのフロー、共有ワークスペース |
 | 名前付きの版・バンドル（`*.shikigami.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
+| `.spx` ファイル（`manifest.json`、`format: spellsheet.package`、`formatVersion`） | `package.rs` → `schemas/api.schema.json` | フローを人や別の PC に渡す |
 | 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | フロー、AI が覚えた書き方 |
 | MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
 | エラーコード（`code` と `retryable`） | `CoreError::code`、各ノードのエラー | AI の修正、`onError`・リトライの判断 |
 | CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/shikigami-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
 | プラグインのマニフェストと JSON-RPC（`manifestVersion`） | [design/plugins.md](../design/plugins.md) | プラグインの作者 |
 
-約束ではないもの：Studio の画面、内部の Rust API（クレートは公開していません）、ログ・エラーの文章（`message` と `hint` は言い回しを変えます）、`list_step_types` などの説明文、ワークスペース内のローカル領域（取り消し履歴・実行記録の置き方）。
+約束ではないもの：Writer の画面、内部の Rust API（クレートは公開していません）、ログ・エラーの文章（`message` と `hint` は言い回しを変えます）、`list_step_types` などの説明文、ワークスペース内のローカル領域（取り消し履歴・実行記録の置き方）。
 
 ## 2. 変えてよいこと・いけないこと
 
@@ -48,7 +49,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 - ファイル・名前付きの版・バンドルの中のフロー・サブフローは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
 - 移行したフローは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません
 - 未来の版は読み込みません（黙って項目を落とすと、保存したときに消えるため）
-- `metadata` の中の知らないキーは保持します（Studio や外部ツールのメモ用）
+- `metadata` の中の知らないキーは保持します（Writer や外部ツールのメモ用）
 
 テスト：`migrate.rs` に「前の版のファイルが今の版で読めること」のテストを、移行ごとに足してください。
 

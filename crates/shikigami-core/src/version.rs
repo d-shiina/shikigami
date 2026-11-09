@@ -383,9 +383,10 @@ pub fn ops_to_match(current: &Flow, target: &Flow) -> Vec<EditOp> {
     ops
 }
 
-/// Removes values that must not leave this PC: defaults of secret variables.
+/// Removes values that must not leave this PC: defaults of secret and
+/// personal variables.
 pub fn strip_secrets(flow: &mut Flow) {
-    for var in flow.variables.iter_mut().filter(|v| v.secret) {
+    for var in flow.variables.iter_mut().filter(|v| v.masked()) {
         var.default = None;
     }
 }

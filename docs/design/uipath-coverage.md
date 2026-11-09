@@ -43,6 +43,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | Invoke Workflow File | サブフロー（別スレッドで実装中） | 🔜 |
 | Comment | ノードの `name`・メモ | ✅ |
 | Get Credential / Get Asset | シークレット（`{ "secret": … }`） | ✅ |
+| Inject Js Script | `browser.runScript`（ページの中だけ、`dangerous`） | ✅ |
 | Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | ✅ / 🔜 |
 
 ### 文字列（Text / String 系アクティビティと VB.NET の String メソッド）

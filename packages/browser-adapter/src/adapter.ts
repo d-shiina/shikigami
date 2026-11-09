@@ -14,7 +14,8 @@ import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog
 
 import { cancelPick, highlight, pick } from "./pick.ts";
 import { record, stopRecording } from "./record.ts";
-import { AdapterError, describe, locate, type Target } from "./targets.ts";
+import { fieldRegions, type Region } from "./regions.ts";
+import { AdapterError, describe, locate, scope, type Frame, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
   /** Browser channel, e.g. "msedge" or "chrome". */
@@ -176,6 +177,8 @@ export class Adapter {
           return await this.scroll(params);
         case "getAttribute":
           return await this.getAttribute(params);
+        case "runScript":
+          return await this.runScript(params);
         case "switchTab":
           return await this.switchTab(params);
         case "closeTab":
@@ -655,6 +658,95 @@ export class Adapter {
   }
 
   /**
+   * Runs `script` (the body of an async function) in the page, or in the
+   * frame of `target` / `frame`, with `args` and `element` (the target, or
+   * null) in scope. Returns what it returns, secrets masked.
+   */
+  private async runScript(params: Params): Promise<unknown> {
+    const script = typeof params.script === "string" ? params.script : "";
+    if (!script.trim()) throw new AdapterError("INVALID_PARAMS", "script is required, e.g. \"return document.title;\"");
+    const session = this.session(params);
+    const timeout = this.limit(params);
+    const hasTarget = params.target !== undefined && params.target !== null;
+    const locator = hasTarget
+      ? locate(session.page, params.target as Target)
+      : scope(session.page, params.frame as Frame | undefined).locator(":root");
+    // Waiting for the element (or the frame's document) fails as ELEMENT_NOT_FOUND like other steps.
+    const element = await locator.elementHandle({ timeout });
+    const frame = await element.ownerFrame();
+    if (!frame) throw new AdapterError("BROWSER_ERROR", "the element's frame is gone");
+    // Compiled through DevTools, so pages whose CSP forbids eval still run it.
+    const source = `(async (args, element) => {\n${script}\n})`;
+    let compiled: Awaited<ReturnType<typeof frame.evaluateHandle>>;
+    try {
+      compiled = await frame.evaluateHandle(source);
+    } catch (error) {
+      throw await this.scriptError(session, error);
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const running = element.evaluate(
+        (el, [fn, args, withElement]) => {
+          const call = fn as unknown as (args: unknown, element: Element | null) => Promise<unknown>;
+          return call(args, withElement ? el : null).then(function plain(value: unknown): unknown {
+            // Only JSON-like values leave the page: elements, functions and the like become null.
+            if (value === undefined || value === null || typeof value === "function" || typeof value === "symbol") return null;
+            if (typeof value === "bigint") return value.toString();
+            if (typeof value === "number") return Number.isFinite(value) ? value : null;
+            if (typeof value !== "object") return value;
+            if (value instanceof Date) return value.toISOString();
+            if (Array.isArray(value)) return value.map(plain);
+            const proto = Object.getPrototypeOf(value);
+            if (proto !== Object.prototype && proto !== null) return null;
+            return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, plain(v)]));
+          });
+        },
+        [compiled, params.args ?? null, hasTarget] as const,
+      );
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AdapterError("SCRIPT_TIMEOUT", `the script did not finish within ${timeout} ms`, {
+                details: { hint: "Make the script return sooner (a promise that never settles waits forever), or raise the step's timeoutMs." },
+              }),
+            ),
+          timeout,
+        );
+      });
+      const value = await Promise.race([running.catch(async (error: unknown) => Promise.reject(await this.scriptError(session, error))), timedOut]);
+      return await this.redactDeep(session, value);
+    } finally {
+      clearTimeout(timer);
+      await compiled.dispose().catch(() => {});
+      await element.dispose().catch(() => {});
+    }
+  }
+
+  /** A script's exception or syntax error, as SCRIPT_ERROR with its own message. */
+  private async scriptError(session: Session, error: unknown): Promise<AdapterError> {
+    if (error instanceof AdapterError) return error;
+    const raw = error instanceof Error ? error.message : String(error);
+    // "elementHandle.evaluate: Error: boom\n    at ..." → "Error: boom"; a script may throw what a password field holds.
+    const message = await this.redact(session, (raw.split("\n")[0] ?? raw).replace(/^[\w.]+: /, ""));
+    return new AdapterError("SCRIPT_ERROR", `the script failed: ${message}`, {
+      details: { hint: "Fix the script. It is the body of an async function: end with `return <value>`; `args` and `element` are in scope." },
+    });
+  }
+
+  /** Masks secrets (and what is typed in password fields) in every text of a value. */
+  private async redactDeep(session: Session, value: unknown): Promise<unknown> {
+    const typed = await this.typedPasswords(session);
+    const walk = (v: unknown): unknown => {
+      if (typeof v === "string") return this.mask(session, v, typed);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [this.mask(session, k, typed), walk(x)]));
+      return v;
+    };
+    return walk(value);
+  }
+
+  /**
    * Makes another tab of the context current: the newest one whose title or
    * address contains `title` / `url`, or the `index`-th in opening order.
    * Waits for it to open (a popup a click just asked for).
@@ -762,7 +854,7 @@ export class Adapter {
             secret: secret.name,
             page: origin,
             sites: secret.sites,
-            hint: "This page is not one of the secret's registered sites. Check that the URL is right; if it is, call request_secret with this name and the page's address so Studio asks the user to add it.",
+            hint: "This page is not one of the secret's registered sites. Check that the URL is right; if it is, call request_secret with this name and the page's address so Writer asks the user to add it.",
           },
         });
       }
@@ -922,21 +1014,7 @@ export class Adapter {
       mark = await element.boundingBox({ timeout: 800 }).catch(() => null);
     }
     const viewport = page.viewportSize() ?? (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
-    const regions = await page
-      .evaluate((max) => {
-        const out: { x: number; y: number; width: number; height: number }[] = [];
-        const fields = document.querySelectorAll(
-          "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=image]), textarea, select, [contenteditable=''], [contenteditable=true], td",
-        );
-        for (const el of fields) {
-          if (out.length >= max) break;
-          const r = el.getBoundingClientRect();
-          if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
-          out.push({ x: r.left, y: r.top, width: r.width, height: r.height });
-        }
-        return out;
-      }, 400)
-      .catch(() => []);
+    const regions = await this.regions(page);
     // Password fields, secrets and what the run typed are covered in one
     // soft grey: the 手順書 says in words what goes in them.
     await page.screenshot({
@@ -952,6 +1030,55 @@ export class Adapter {
     const scroll = await page.evaluate(() => [window.scrollX, window.scrollY]).catch(() => [0, 0]);
     const view = `${page.url()} @${scroll.join(",")}`;
     return { path, width: viewport.width, height: viewport.height, mark, regions, title, view };
+  }
+
+  /**
+   * Where the values are on the visible part of the page (fields, cells,
+   * "label  value" rows), in the main page and in the frames inside it, for
+   * the 手順書 to blur. A frame that cannot be read is left out, not the picture.
+   */
+  private async regions(page: Page): Promise<Region[]> {
+    const MAX = 800;
+    const out: Region[] = await page.evaluate(fieldRegions, MAX).catch(() => []);
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame() || out.length >= MAX) continue;
+      try {
+        const element = await frame.frameElement();
+        const box = await element.boundingBox();
+        if (!box || box.width < 2 || box.height < 2) continue;
+        // Where the frame's page starts inside its element (border and
+        // padding) and how much the element is scaled on the screen.
+        const inset = await element.evaluate((el) => {
+          const e = el as HTMLElement;
+          const style = getComputedStyle(e);
+          const padLeft = parseFloat(style.paddingLeft) || 0;
+          const padTop = parseFloat(style.paddingTop) || 0;
+          return {
+            left: e.clientLeft + padLeft,
+            top: e.clientTop + padTop,
+            width: e.clientWidth - padLeft - (parseFloat(style.paddingRight) || 0),
+            height: e.clientHeight - padTop - (parseFloat(style.paddingBottom) || 0),
+            outerWidth: e.offsetWidth,
+            outerHeight: e.offsetHeight,
+          };
+        });
+        const sx = inset.outerWidth > 0 ? box.width / inset.outerWidth : 1;
+        const sy = inset.outerHeight > 0 ? box.height / inset.outerHeight : 1;
+        const view = { x: box.x + inset.left * sx, y: box.y + inset.top * sy, width: inset.width * sx, height: inset.height * sy };
+        const inner = await frame.evaluate(fieldRegions, MAX - out.length);
+        for (const r of inner) {
+          // Cut to the frame: what scrolls out of it is not on the picture.
+          const x0 = Math.max(view.x, view.x + r.x * sx);
+          const y0 = Math.max(view.y, view.y + r.y * sy);
+          const x1 = Math.min(view.x + view.width, view.x + (r.x + r.width) * sx);
+          const y1 = Math.min(view.y + view.height, view.y + (r.y + r.height) * sy);
+          if (x1 - x0 >= 2 && y1 - y0 >= 2) out.push({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+        }
+      } catch {
+        // A frame that went away or is not ready: its values are not blurred.
+      }
+    }
+    return out;
   }
 
   /** True when `target` is (or becomes, within `waitMs`) visible; never throws for a missing element. */
@@ -1197,7 +1324,7 @@ export class Adapter {
     if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
       result.login = {
         site: originOf(page.url()),
-        hint: "This page asks for a login. Never ask the user for the password in chat: use a registered secret (list_secrets; browser.fill value { \"secret\": \"<name>\", \"field\": \"password\" }). If none fits, call request_secret with a name and this site so Studio asks the user to register one, or let the user log in by hand with browser.waitForHuman.",
+        hint: "This page asks for a login. Never ask the user for the password in chat: use a registered secret (list_secrets; browser.fill value { \"secret\": \"<name>\", \"field\": \"password\" }). If none fits, call request_secret with a name and this site so Writer asks the user to register one, or let the user log in by hand with browser.waitForHuman.",
       };
     }
     return result;
@@ -1205,11 +1332,20 @@ export class Adapter {
 
   /** Replaces secret values (and whatever is typed in password fields, even by hand) with ***. */
   private async redact(session: Session, text: string): Promise<string> {
-    const typed = await session.page
-      .locator(PASSWORD_FIELDS)
-      .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
-      .catch(() => [] as string[]);
-    return this.mask(session, text, typed);
+    return this.mask(session, text, await this.typedPasswords(session));
+  }
+
+  /** What is typed in the password fields of the page and all its frames now (even by hand). */
+  private async typedPasswords(session: Session): Promise<string[]> {
+    const perFrame = await Promise.all(
+      session.page.frames().map((frame) =>
+        frame
+          .locator(PASSWORD_FIELDS)
+          .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
+          .catch(() => [] as string[]),
+      ),
+    );
+    return perFrame.flat();
   }
 
   private mask(session: Session, text: string, extra: string[] = []): string {

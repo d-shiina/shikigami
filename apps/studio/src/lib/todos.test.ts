@@ -67,7 +67,7 @@ describe("text for the AI", () => {
     expect(text).toContain('"format": "shikigami.answer"');
   });
 
-  it("hands the flow over without what Studio owns", () => {
+  it("hands the flow over without what Writer owns", () => {
     const answer = JSON.parse(flowForChat(flow)) as { flow: Record<string, unknown> };
     expect(Object.keys(answer.flow)).toEqual(["name", "parts", "steps"]);
     expect(handOffText(flow)).toContain("```json");
@@ -78,6 +78,13 @@ describe("text for the AI", () => {
     const text = flowForChat(withSecret);
     expect(text).not.toContain("hunter2");
     expect(text).toContain('"default": 3');
+  });
+
+  it("leaves out the default of personal data", () => {
+    const withPersonal = { ...flow, variables: [{ name: "顧客名", type: "string", personal: true, default: "山田花子" }] } as Flow;
+    const text = flowForChat(withPersonal);
+    expect(text).not.toContain("山田花子");
+    expect(text).toContain('"personal": true');
   });
 });
 

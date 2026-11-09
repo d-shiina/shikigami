@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { activity, type AgentState, createAgentStore, currentChat } from "./agent";
+import { activity, type AgentState, createAgentStore, currentChat, openAsk } from "./agent";
 import type { AgentApi, AgentInfo } from "./lib/api";
 
 function fakeStorage() {
@@ -50,6 +50,32 @@ describe("agent store", () => {
     expect(api.send).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: null }));
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "codex-1" });
     expect(now(store.getState())).toMatchObject({ sessionId: "codex-1", agent: "codex" });
+  });
+
+  it("shows the AI's choices as a card and the next message answers it", async () => {
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${(api.send as ReturnType<typeof vi.fn>).mock.calls.length}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("在庫切れの扱いを足して", { id: "scn_a", name: "A" });
+    store.getState().onEvent({
+      turnId: "turn_1",
+      kind: "choice",
+      question: "在庫切れの注文はどうしますか？",
+      options: [
+        { label: "飛ばして一覧に残す", description: "出荷できた分だけ進めます。" },
+        { label: "そこで止めて人に聞く", description: null },
+      ],
+      recommended: 0,
+      reason: null,
+    });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    expect(now(store.getState()).items[1]).toMatchObject({ parts: [{ kind: "choice", recommended: 0, answer: null }] });
+
+    await store.getState().send("飛ばして一覧に残す", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith(expect.objectContaining({ message: "飛ばして一覧に残す" }));
+    const items = now(store.getState()).items;
+    expect(items[1]).toMatchObject({ parts: [{ kind: "choice", answer: "飛ばして一覧に残す" }] });
+    expect(items[2]).toMatchObject({ role: "person", text: "飛ばして一覧に残す", answers: true });
   });
 
   it("keeps a conversation with the AI that ran it when the AI is switched mid-turn", async () => {
@@ -385,5 +411,19 @@ describe("agent store", () => {
     expect(store.getState().install).toEqual({ phase: "stopping" });
     store.getState().onInstallEvent({ kind: "cancelled" });
     expect(store.getState().install).toEqual({ phase: "idle" });
+  });
+
+  it("asks about a node in that flow's conversation, even while another one is shown", async () => {
+    fakeStorage();
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    store.getState().focus({ id: "scn_a", name: "A" });
+    store.getState().newChat({ id: "scn_b", name: "B" });
+    expect(now(store.getState()).flowId).toBe("scn_b");
+
+    openAsk(store, { about: { id: "scn_a", name: "A" }, draft: "「受注を読む」を直して" });
+    expect(now(store.getState())).toMatchObject({ flowId: "scn_a", draft: "「受注を読む」を直して" });
+    expect(store.getState().open).toBe(true);
   });
 });

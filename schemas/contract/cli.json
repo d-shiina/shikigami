@@ -65,6 +65,18 @@
                 "update",
                 "copy"
               ]
+            },
+            {
+              "id": "check",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "check",
+              "values": [
+                "true",
+                "false"
+              ]
             }
           ]
         },
@@ -89,12 +101,48 @@
               "short": "o"
             },
             {
+              "id": "current",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "current",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "all_versions",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "all-versions",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
               "id": "no_versions",
               "required": false,
               "takesValue": false,
               "repeatable": false,
               "global": false,
               "long": "no-versions",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "with_input",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "with-input",
               "values": [
                 "true",
                 "false"
@@ -476,6 +524,72 @@
               "repeatable": false,
               "global": false,
               "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "distribution",
+      "subcommands": [
+        {
+          "name": "list"
+        },
+        {
+          "name": "add",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "path",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "check"
+        },
+        {
+          "name": "put",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "folder",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "folder"
             }
           ]
         }
@@ -996,7 +1110,7 @@
       ]
     },
     {
-      "name": "agent",
+      "name": "worker",
       "subcommands": [
         {
           "name": "run"
@@ -1390,6 +1504,18 @@
           "repeatable": true,
           "global": false,
           "long": "allow"
+        },
+        {
+          "id": "writer_chat",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "writer-chat",
+          "values": [
+            "true",
+            "false"
+          ]
         }
       ]
     }

@@ -13,9 +13,11 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use shikigami_core::RunId;
+use std::collections::HashMap;
 
-use crate::event::{RunEventEnvelope, RunReport};
+use shikigami_core::{FlowId, RunId, StepId};
+
+use crate::event::{RunEvent, RunEventEnvelope, RunReport, StepOutcome};
 
 pub struct RunRecorder {
     workspace: PathBuf,
@@ -134,6 +136,67 @@ pub fn list_runs(workspace: &Path) -> std::io::Result<Vec<RunId>> {
     ids.sort();
     ids.reverse();
     Ok(ids)
+}
+
+/// Most records [`step_times`] looks through for runs of the flow.
+const STEP_TIMES_SCAN: usize = 200;
+
+/// How long each step of a flow usually takes, in ms: the median of the
+/// times it succeeded in the last `runs` finished runs of the flow (each
+/// pass of a loop counts). Steps of called flows are left out. Studio
+/// shows a running step's progress against it.
+pub fn step_times(workspace: &Path, flow_id: &FlowId, runs: usize) -> HashMap<StepId, u64> {
+    let mut samples: HashMap<StepId, Vec<u64>> = HashMap::new();
+    let mut found = 0;
+    for run_id in list_runs(workspace)
+        .unwrap_or_default()
+        .into_iter()
+        .take(STEP_TIMES_SCAN)
+    {
+        if found >= runs {
+            break;
+        }
+        let Ok(dir) = run_dir(workspace, &run_id) else {
+            continue;
+        };
+        // Runs still going (or left behind) have no report yet.
+        if !dir.join("report.json").is_file() || run_flow(&dir).as_ref() != Some(flow_id) {
+            continue;
+        }
+        let Ok(events) = read_events(workspace, &run_id) else {
+            continue;
+        };
+        found += 1;
+        for env in events {
+            if let RunEvent::StepFinished {
+                step_id,
+                outcome: StepOutcome::Succeeded,
+                duration_ms,
+                ..
+            } = env.event
+                && env.call_path.is_empty()
+            {
+                samples.entry(step_id).or_default().push(duration_ms);
+            }
+        }
+    }
+    samples
+        .into_iter()
+        .map(|(id, mut times)| {
+            times.sort_unstable();
+            (id, times[times.len() / 2])
+        })
+        .collect()
+}
+
+/// The flow a recorded run ran, from its first event.
+fn run_flow(dir: &Path) -> Option<FlowId> {
+    let file = File::open(dir.join("events.jsonl")).ok()?;
+    let line = BufReader::new(file).lines().next()?.ok()?;
+    match serde_json::from_str::<RunEventEnvelope>(&line).ok()?.event {
+        RunEvent::RunStarted { flow_id, .. } => Some(flow_id),
+        _ => None,
+    }
 }
 
 /// Error code of runs whose process ended before they did (power loss, a
@@ -267,7 +330,8 @@ fn started_ms(run_id: &RunId) -> Option<u64> {
 }
 
 /// Deletes run records the workspace's `records` settings no longer keep
-/// (older than `keepDays`, beyond the newest `keepRuns`). Runs still going
+/// (older than `keepDays`, 90 days when left out, beyond the newest
+/// `keepRuns`). Runs still going
 /// (no `report.json` yet) and `keep` are never deleted. Returns how many
 /// were removed; failures are logged and skipped.
 pub fn prune(
@@ -275,10 +339,11 @@ pub fn prune(
     records: &shikigami_core::policy::RecordsPolicy,
     keep: &[RunId],
 ) -> usize {
-    if records.keep_days.is_none() && records.keep_runs.is_none() {
+    let keep_days = records.days_kept();
+    if keep_days.is_none() && records.keep_runs.is_none() {
         return 0;
     }
-    if let Some(days) = records.keep_days {
+    if let Some(days) = keep_days {
         crate::audit::prune_mcp_log(workspace, days);
     }
     let Ok(ids) = list_runs(workspace) else {
@@ -291,9 +356,7 @@ pub fn prune(
             .unwrap_or_default(),
     )
     .unwrap_or(u64::MAX);
-    let cutoff = records
-        .keep_days
-        .map(|days| now_ms.saturating_sub(u64::from(days) * 86_400_000));
+    let cutoff = keep_days.map(|days| now_ms.saturating_sub(u64::from(days) * 86_400_000));
     let mut removed = 0;
     for (index, id) in ids.iter().enumerate() {
         let too_many = records
@@ -406,6 +469,77 @@ mod interrupted_tests {
         assert!(close_interrupted(tmp.path()).is_empty());
         assert!(read_report(tmp.path(), &going).unwrap().is_none());
     }
+
+    fn finished(
+        run_id: &RunId,
+        seq: u64,
+        step: &str,
+        ms: u64,
+        call_path: Vec<shikigami_core::StepId>,
+    ) -> RunEventEnvelope {
+        RunEventEnvelope {
+            run_id: run_id.clone(),
+            seq,
+            at: time::OffsetDateTime::now_utc(),
+            call_path,
+            event: RunEvent::StepFinished {
+                step_id: shikigami_core::StepId::new(step),
+                step_type: "flow.delay".into(),
+                outcome: crate::event::StepOutcome::Succeeded,
+                duration_ms: ms,
+                error: None,
+                will_retry: false,
+            },
+        }
+    }
+
+    #[test]
+    fn step_times_are_the_median_of_finished_runs_of_the_flow() {
+        let tmp = tempfile::tempdir().unwrap();
+        for times in [[100, 4000], [300, 6000], [200, 5000]] {
+            let id = RunId::generate();
+            let mut recorder = RunRecorder::create(tmp.path(), &id).unwrap();
+            recorder.write_event(&started(&id)).unwrap();
+            recorder
+                .write_event(&finished(&id, 1, "s1", times[0], Vec::new()))
+                .unwrap();
+            recorder
+                .write_event(&finished(&id, 2, "s2", times[1], Vec::new()))
+                .unwrap();
+            // A step of a called flow with the same id is not this flow's.
+            recorder
+                .write_event(&finished(
+                    &id,
+                    3,
+                    "s1",
+                    90_000,
+                    vec![shikigami_core::StepId::new("c1")],
+                ))
+                .unwrap();
+            fs::write(
+                tmp.path()
+                    .join("runs")
+                    .join(id.as_str())
+                    .join("report.json"),
+                "{}",
+            )
+            .unwrap();
+        }
+        // A run still going does not count.
+        let going = RunId::generate();
+        let mut live = RunRecorder::create(tmp.path(), &going).unwrap();
+        live.write_event(&started(&going)).unwrap();
+        live.write_event(&finished(&going, 1, "s1", 9_000_000, Vec::new()))
+            .unwrap();
+
+        let times = step_times(tmp.path(), &FlowId::new("scn_a"), 5);
+        assert_eq!(times.get(&shikigami_core::StepId::new("s1")), Some(&200));
+        assert_eq!(times.get(&shikigami_core::StepId::new("s2")), Some(&5000));
+        // The two newest runs only.
+        let times = step_times(tmp.path(), &FlowId::new("scn_a"), 2);
+        assert_eq!(times.get(&shikigami_core::StepId::new("s1")), Some(&300));
+        assert!(step_times(tmp.path(), &FlowId::new("scn_b"), 5).is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -430,11 +564,34 @@ mod prune_tests {
     }
 
     #[test]
-    fn keeps_everything_without_limits() {
+    fn keeps_everything_with_keep_days_zero() {
         let tmp = tempfile::tempdir().unwrap();
         record(tmp.path(), &id_at(1, 1), true);
-        assert_eq!(prune(tmp.path(), &RecordsPolicy::default(), &[]), 0);
+        let forever = RecordsPolicy {
+            keep_days: Some(0),
+            ..RecordsPolicy::default()
+        };
+        assert_eq!(prune(tmp.path(), &forever, &[]), 0);
         assert_eq!(list_runs(tmp.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn keeps_ninety_days_by_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap();
+        let day = 86_400_000;
+        let old = record(tmp.path(), &id_at(now - 91 * day, 1), true);
+        let recent = record(tmp.path(), &id_at(now - 89 * day, 2), true);
+        assert_eq!(prune(tmp.path(), &RecordsPolicy::default(), &[]), 1);
+        let left = list_runs(tmp.path()).unwrap();
+        assert_eq!(left, vec![recent]);
+        assert!(!left.contains(&old));
     }
 
     #[test]
@@ -481,7 +638,12 @@ mod prune_tests {
     fn a_finishing_run_prunes_others_but_not_itself() {
         let tmp = tempfile::tempdir().unwrap();
         let policy = tmp.path().join("policy.json");
-        fs::write(&policy, r#"{ "records": { "keepRuns": 1 } }"#).unwrap();
+        // keepDays 0: these ids are from 1970, so only keepRuns decides.
+        fs::write(
+            &policy,
+            r#"{ "records": { "keepRuns": 1, "keepDays": 0 } }"#,
+        )
+        .unwrap();
         let older = record(tmp.path(), &id_at(1, 1), true);
         let mine = RunId::new(id_at(2, 2));
         let newer = record(tmp.path(), &id_at(3, 3), true);

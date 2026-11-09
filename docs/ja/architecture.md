@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph local[ユーザーのPC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
-    STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
+    STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]
@@ -59,8 +59,8 @@ flowchart LR
 | `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
 | `spellsheet mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
 | `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
-| `spellsheet agent` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
-| `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いたエージェントに渡す（署名付き HTTP、[remote.md](remote.md)） |
+| `spellsheet worker` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
+| `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いた Worker に渡す（署名付き HTTP、[remote.md](remote.md)） |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
 
 Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
@@ -101,8 +101,8 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`spellsheet mcp` で起動）
 │  ├─ shikigami-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
 │  ├─ shikigami-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
-│  ├─ shikigami-agent/    `spellsheet agent`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
-│  ├─ shikigami-manager/  `spellsheet manager`：エージェントがジョブを取りに行く管理サーバー
+│  ├─ shikigami-agent/    `spellsheet worker`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
+│  ├─ shikigami-manager/  `spellsheet manager`：Worker がジョブを取りに行く管理サーバー
 │  ├─ shikigami-browser/  browser.*（Node サイドカーのクライアント）
 │  ├─ shikigami-desktop/  desktop.*（UI Automation）
 │  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
@@ -418,7 +418,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 |---|---|---|
 | 任意コード実行 | フローに汎用スクリプト実行を持たせない。式言語は副作用なしの許可関数のみ（`len`, `contains` 等）。ネスト深さ制限で DoS も防止 | **P1 済** |
 | パス・トラバーサル | フロー/実行 ID は `[A-Za-z0-9_-]{1,128}` のみ受理し、ファイル名に使う前に検査 | **P1 済** |
-| ログへの機密混入 | `secret` 変数とシークレットの値をログ・エラー・イベント・出力記録で `***` にマスク。スクリーンショットのパスワード欄を塗りつぶし、AI に返すページ情報からも消す | **済** |
+| ログへの機密混入 | `secret`・`personal` 変数とシークレットの値をログ・エラー・イベント・出力記録で `***` にマスク（[secrets.md](secrets.md#個人情報)）。実行記録とログは既定で 90 日残す（`records.keepDays`）。スクリーンショットのパスワード欄を塗りつぶし、AI に返すページ情報からも消す | **済** |
 | 誤操作の不可逆性 | フロー削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
 | Studio の権限 | Tauri capability は `core:default` のみ。ファイル・シェル系プラグインを有効にしない。CSP 設定 | **P1 済** |
 | MCP 接続のアクセス制御 | 既定 stdio（起動した AI クライアントのみ接続可）。HTTP は localhost＋トークン＋Origin 検証 | P2 |

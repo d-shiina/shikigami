@@ -152,12 +152,74 @@ fn clean_downloads(dir: &Path, current_version: &str) {
     }
 }
 
-#[tauri::command]
-pub fn app_info(app: AppHandle) -> AppInfo {
-    let cli_path = install_dir()
+/// The CLI that MCP clients run: the one installed with Studio, else the
+/// one the AI pane uses (next to Studio, as `target/debug` in development,
+/// or on PATH), so the settings always show how to register it.
+fn installed_cli() -> Option<String> {
+    install_dir()
         .map(|dir| dir.join(CLI_EXE))
         .filter(|p| !cfg!(debug_assertions) && p.is_file())
-        .map(|p| p.display().to_string());
+        .or_else(crate::agent::cli_path)
+        .map(|p| p.display().to_string())
+}
+
+/// Cursor's "add MCP server" link for the installed CLI
+/// (`cursor://anysphere.cursor-deeplink/mcp/install`): Cursor shows the
+/// server and asks before adding it, so nobody edits `mcp.json` by hand.
+fn cursor_install_url(cli: &str) -> String {
+    use base64::Engine as _;
+    let config = serde_json::json!({ "command": cli, "args": ["mcp"] }).to_string();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(config);
+    // Standard base64 in a query: only +, / and = need escaping.
+    let query = encoded
+        .replace('+', "%2B")
+        .replace('/', "%2F")
+        .replace('=', "%3D");
+    format!("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config={query}")
+}
+
+/// Opens Cursor's "add MCP server" prompt for the installed CLI. The link is
+/// built here from the install folder, never taken from the page.
+#[tauri::command]
+pub fn open_cursor_mcp_install() -> CmdResult<()> {
+    let Some(cli) = installed_cli() else {
+        return Err(err("NOT_FOUND", "SpellSheet のコマンドが見つかりません"));
+    };
+    // Without Cursor nothing handles cursor://, and Windows answers the link
+    // by opening Explorer instead; say so and leave the copy below to use.
+    if !cursor_link_handled() {
+        return Err(err(
+            "NOT_FOUND",
+            "この PC に Cursor が見つかりません。Cursor を入れてからもう一度押すか、下の内容を mcp.json に書いてください",
+        ));
+    }
+    crate::agent::open_external(&cursor_install_url(&cli))
+}
+
+/// Whether some program (Cursor) is registered for `cursor://` links:
+/// `HKEY_CLASSES_ROOT\cursor` with a "URL Protocol" value, per user or for
+/// the machine.
+#[cfg(windows)]
+fn cursor_link_handled() -> bool {
+    use std::os::windows::process::CommandExt as _;
+    std::process::Command::new("reg")
+        .args(["query", r"HKCR\cursor", "/v", "URL Protocol"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[cfg(not(windows))]
+fn cursor_link_handled() -> bool {
+    true
+}
+
+#[tauri::command]
+pub fn app_info(app: AppHandle) -> AppInfo {
+    let cli_path = installed_cli();
     AppInfo {
         version: app.package_info().version.to_string(),
         updates_enabled: updates_enabled(&app),
@@ -424,5 +486,30 @@ mod tests {
         assert_eq!(read(&node), "v1");
         assert!(!dir.path().join("node/node-0.1.0.exe.old").exists());
         Ok(())
+    }
+
+    #[test]
+    fn cursor_link_carries_the_cli_as_its_command() {
+        use base64::Engine as _;
+        let url = cursor_install_url(r"C:\Program Files\SpellSheet\spellsheet.exe");
+        let config = url
+            .strip_prefix("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config=")
+            .unwrap();
+        assert!(!config.contains(['+', '/', '=']));
+        let config = config
+            .replace("%2B", "+")
+            .replace("%2F", "/")
+            .replace("%3D", "=");
+        let json: serde_json::Value = serde_json::from_slice(
+            &base64::engine::general_purpose::STANDARD
+                .decode(config)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            json["command"],
+            r"C:\Program Files\SpellSheet\spellsheet.exe"
+        );
+        assert_eq!(json["args"], serde_json::json!(["mcp"]));
     }
 }

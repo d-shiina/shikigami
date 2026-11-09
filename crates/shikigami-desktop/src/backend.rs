@@ -288,7 +288,7 @@ pub trait Backend: Send + Sync + 'static {
         match &options.engine {
             Some(OcrEngine::Windows) => Box::pin(async { Err(unsupported()) }),
             Some(OcrEngine::Other(name)) => other_recognize(name, image, options.clone()),
-            _ => paddle_recognize(image, options.accurate),
+            _ => paddle_recognize(image, options.accurate, options.kind),
         }
     }
 
@@ -310,6 +310,8 @@ pub struct OcrOptions {
     /// PaddleOCR's larger models: much better on handwriting, several
     /// times slower. Always PaddleOCR.
     pub accurate: bool,
+    /// What the field holds: PaddleOCR reads only its characters.
+    pub kind: Option<crate::ocr_fit::TextKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -453,12 +455,13 @@ pub fn other_recognize(
 pub fn paddle_recognize(
     image: Bitmap,
     accurate: bool,
+    kind: Option<crate::ocr_fit::TextKind>,
 ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
     Box::pin(async move {
         tokio::task::spawn_blocking(move || {
             crate::paddle::engine_for(accurate)
                 .map_err(|reason| crate::paddle::unavailable(&reason))?
-                .recognize(&image)
+                .recognize_kind(&image, kind)
         })
         .await
         .map_err(|e| StepError::new("OCR_FAILED", format!("PaddleOCR stopped: {e}")))?

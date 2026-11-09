@@ -151,7 +151,7 @@ impl ActionInput {
     pub fn secret_provider(&self) -> Result<&Arc<dyn SecretProvider>, StepError> {
         self.secrets.as_ref().ok_or_else(|| {
             StepError::permanent("SECRETS_UNAVAILABLE", "this runtime has no secret store")
-                .with_details(json!({ "hint": "Run the flow from Studio, the CLI or the MCP server of a workspace." }))
+                .with_details(json!({ "hint": "Run the flow from Writer, the CLI or the MCP server of a workspace." }))
         })
     }
 

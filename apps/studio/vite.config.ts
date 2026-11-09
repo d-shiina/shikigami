@@ -15,6 +15,8 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    // Writer, and the start-up screen shown while Writer loads (src-tauri/src/splash.rs).
+    rollupOptions: { input: { main: "index.html", splash: "splash.html" } },
   },
   test: {
     environment: "node",

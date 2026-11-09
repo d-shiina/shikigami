@@ -16,7 +16,7 @@ Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-
 ```
 
 - variables[].type: string, number, boolean, object, array or any. direction: input (given when the run starts), output (returned), inOut, local (default). A secret: true variable is masked in logs.
-- parts: screen parts the person picks in Studio (see "The screen" in the instructions). app: browser or desktop.
+- parts: screen parts the person picks in Writer (see "The screen" in the instructions). app: browser or desktop.
 - settings (optional): defaultTimeoutMs per step, defaultRetry { "maxAttempts": 3, "backoffMs": 1000 }, onError "fail" or "continue", keepWork.
 
 ## A step
@@ -38,7 +38,7 @@ Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-
 
 ## The screen
 
-A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
+A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Writer and Writer fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
 
 ## Expression functions
 
@@ -316,6 +316,21 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"browser.press","params":{"target":{"label":"検索"},"key":"Enter"}}`
 
+#### browser.runScript (JavaScript の実行)
+
+Runs JavaScript in the current page and returns what it returns. `script` is the body of an async function: use `return` for the result and `await` freely. Inside it, `args` is the value of `args` (pass flow values here, e.g. { "code": "{{ order.code }}" }; never write {{ }} inside `script`, a value with a quote would break the code) and `element` is the element `target` points at (null without `target`). `frame` runs it inside that iframe when there is no `target` (with `target`, its own frame is used). Output: the return value (text, number, true/false, null, arrays and objects of them; elements and functions come back as null). Waits for a returned promise up to the step's timeoutMs, then fails with SCRIPT_TIMEOUT; an exception or a syntax error fails with SCRIPT_ERROR and its message. Use it only when no other browser.* step can do the job (a value kept in the page's JavaScript, a hidden state, a calculation on many elements): reading text, attributes and tables, clicking and typing have their own steps, which read better and survive page changes. It runs only inside the page, never on the PC; registered secrets cannot be passed in, and secret values typed on the page are returned as ***.
+
+Params:
+- `script`*: text — 実行する JavaScript（async 関数の中身。結果は return で返す。args・element が使える）
+- `args`: any — スクリプトに渡す値（args として使える）。フローの値はここに {{ }} で入れる
+- `target`: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `frame`: { name: text, title: text, src: text, css: text, nth: whole number, frame: { name: text, title: text, src: text, css: text, nth: whole number, frame: object } } — 要素が入っている iframe（フレームセットのフレームも）。inspect_page の frames に出る name / title / src で指定する
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Output: yes (saveAs)
+Example: `{"type":"browser.runScript","name":"画面の受注件数を読む","params":{"script":"return window.app.orders.length;"},"saveAs":"orderCount"}`
+Example: `{"type":"browser.runScript","name":"選んだ行の受注番号を集める","params":{"script":"return [...element.querySelectorAll('tr.selected')].map(tr => tr.dataset.code);","target":{"role":"table","name":"受注"}},"saveAs":"codes"}`
+Example: `{"type":"browser.runScript","name":"検索 API を呼ぶ","params":{"script":"const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();","args":{"code":"{{ order.code }}"}},"saveAs":"detail"}`
+
 #### browser.screenshot (スクリーンショット)
 
 Saves a PNG of the page to `path` (absolute; `fullPage: true` for the whole page). Output: the path.
@@ -416,7 +431,7 @@ Example: `{"type":"clipboard.set","params":{"text":"{{ join(map(rows, r => r.cod
 
 #### config.read (設定ファイル読み込み)
 
-Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: "..." }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.
+Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Writer) into an object of its values, e.g. { 締め日: 25, 送り先: "..." }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.
 
 Params:
 - `path`*: text [path] — フローのフォルダーからの相対パス（例: input/in.csv、output/result.csv）、または絶対パス（C:\work\in.csv）
@@ -692,7 +707,7 @@ Example: `{"type":"desktop.press","name":"保存（Ctrl+S）","params":{"target"
 
 #### desktop.readText (文字認識（OCR）)
 
-Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: "windows"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height, confidence?, unsure? }], engine, warning? } (places in window pixels; engine is "paddle", "paddle-accurate", "windows" or an added engine's name, and warning says when the default fell back to Windows OCR; confidence is 0–1 and unsure lists the positions in text of characters read with low confidence, where the engine says). With table: true it also splits the table on the picture into rows and columns by its ruled lines (or, without lines, by the gaps between columns of text): cells (every row as a list of texts) and rows (the rows after headerRow, default 1, as records named by its cells: e.g. {{ invoice.rows[0].金額 }}). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.
+Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: "windows"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height, confidence?, unsure? }], engine, warning? } (places in window pixels; engine is "paddle", "paddle-accurate", "windows" or an added engine's name, and warning says when the default fell back to Windows OCR; confidence is 0–1 and unsure lists the positions in text of characters read with low confidence, where the engine says). With table: true it also splits the table on the picture into rows and columns by its ruled lines (or, without lines, by the gaps between columns of text): cells (every row as a list of texts) and rows (the rows after headerRow, default 1, as records named by its cells: e.g. {{ invoice.rows[0].金額 }}). textKind (number, amount, date, phone, alphanumeric, katakana) makes PaddleOCR read only the characters such a field holds, and candidates snaps each line to the nearest of the texts listed (staff names, product names), keeping what was read as lines[].read (and candidate: true): both help most with handwriting. For apps whose elements inspect_ui does not show; use desktop.getValue where it does.
 
 Params:
 - `target`: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
@@ -702,8 +717,12 @@ Params:
 - `accurate`: true | false — 高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）
 - `table`: true | false — 表の読み取り：罫線（なければ文字の並び）で表を行と列に分け、出力に cells（行ごとの文字の並び）と rows（見出しの行の名前で引ける各行）を足す
 - `headerRow`: whole number — 見出しの行：表の何行目が見出しか（既定 1、0 で見出しなし）。table と使う
+- `textKind`: "any" | "number" | "amount" | "date" | "phone" | "alphanumeric" | "katakana" — 文字の種類：欄に入る文字の種類。PaddleOCR はその種類の文字だけから選んで読む（手書きの 0 と O、1 と l などの読み違いが減る）。ほかのエンジンでは読んだ後で種類外の文字を除く。全角の数字・英字は半角に直す
+- `candidates`: list of text — 候補：入りうる文字の一覧（担当者名・品名など）。読んだ行を一番近い候補に直す（半分以上違う、または同じくらい近い候補が 2 つあるときは直さない）。元の読みは lines[].read に残る
 Output: yes (saveAs)
 Example: `{"type":"desktop.readText","name":"請求書の明細を読む","params":{"file":"{{ outDir }}\\請求書.png","table":true},"saveAs":"invoice"}`
+Example: `{"type":"desktop.readText","name":"手書きの金額欄を読む","params":{"file":"{{ outDir }}\\伝票.png","accurate":true,"textKind":"amount"},"saveAs":"amount"}`
+Example: `{"type":"desktop.readText","name":"手書きの担当者名を読む","params":{"file":"{{ outDir }}\\伝票.png","accurate":true,"candidates":["山田 太郎","佐藤 花子","鈴木 一郎"]},"saveAs":"staff"}`
 Example: `{"type":"desktop.readText","name":"合計欄を読む","params":{"target":{"window":{"title":"Citrix"},"region":{"x":620,"y":410,"width":180,"height":32}}},"saveAs":"total"}`
 Example: `{"type":"desktop.readText","name":"請求書画像を読む","params":{"file":"{{ outDir }}\\請求書.png"},"saveAs":"total"}`
 

@@ -22,7 +22,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 ## 準備（Box の例）
 
 1. プロバイダでアプリを作り（Box：開発者コンソール → Platform App の作成 → ユーザー認証（OAuth 2.0））、**リダイレクト URL**（例：`https://www.example.com/`）を登録します。Client ID と Client secret を控え、必要なスコープを付けます。
-2. Studio の 🔑 シークレット → 新しく登録：
+2. Writer の 🔑 シークレット → 新しく登録：
 
    | 項目 | 内容 |
    |---|---|
@@ -49,7 +49,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 { "type": "log.message", "params": { "message": "{{ join(map(res.body.entries, e => e.name), ', ') }}" } }
 ```
 
-初回は Box のサインイン画面が開きます。人がサインインして「アクセスを許可」を押すまで、Studio には「操作を待っています」と出ます。2 回目からは `oauth.signIn` が人なしですぐ終わります（`via: "saved"` か `"refreshed"`）。
+初回は Box のサインイン画面が開きます。人がサインインして「アクセスを許可」を押すまで、Writer には「操作を待っています」と出ます。2 回目からは `oauth.signIn` が人なしですぐ終わります（`via: "saved"` か `"refreshed"`）。
 
 ## `oauth.signIn` のパラメーター
 
@@ -62,7 +62,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 | `scope` | 空白区切りのスコープ（プロバイダが求めるとき） |
 | `authorizeParams` | 認可ページに付ける追加のパラメーター。例：`{ "prompt": "consent", "access_type": "offline" }`（Google でリフレッシュトークンをもらうとき） |
 | `pkce` | PKCE を受け付けないプロバイダのときだけ `false`（既定 `true`） |
-| `message` | Studio で人に頼む文 |
+| `message` | Writer で人に頼む文 |
 | `context` | ブラウザの作業領域（既定 `default`） |
 
 人を待つのは既定で 5 分です（`timeoutMs`）。Client secret はトークン要求の本文で送ります（`client_secret_post`）。
@@ -70,10 +70,10 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 ## トークン
 
 - ワークスペースに暗号化して保存します（`secrets/oauth/`。鍵はシークレットと同じ。[secrets.md](secrets.md)）。出力・ログ・MCP の結果には出ず、アクセストークンはパスワードと同じく伏せ字になります。
-- `http.request` は、アクセストークンの残りが 2 分を切っていれば更新してから使います（更新できないトークンは本当に切れるまで使います）。更新は同じワークスペースの Studio・CLI・MCP サーバーをまたいで 1 つずつ行うので、更新のたびにリフレッシュトークンが変わるプロバイダ（Box など）でも失いません。
+- `http.request` は、アクセストークンの残りが 2 分を切っていれば更新してから使います（更新できないトークンは本当に切れるまで使います）。更新は同じワークスペースの Writer・CLI・MCP サーバーをまたいで 1 つずつ行うので、更新のたびにリフレッシュトークンが変わるプロバイダ（Box など）でも失いません。
 - 保存したトークンを使い回すのは、Client ID・`tokenUrl` が同じで、`scope` が許可済みの範囲に収まるときだけです。スコープを増やすともう一度サインインします。
 - リフレッシュトークンが受け付けられなくなると、`http.request` は `OAUTH_SIGN_IN_REQUIRED` で止まり、次の `oauth.signIn` で人がもう一度サインインします。フローの最初に `oauth.signIn` を置いておけば、そこでサインインできます。
-- Studio のシークレットに「OAuth サインイン済み」と「サインアウト」、アクセストークンの有効期限・最後に取得した日時・自動で更新されるかが出ます。CLI は `spellsheet secret logout <名前>`。Client ID を変えると古いトークンは使われず、シークレットを削除するとトークンも消えます。
+- Writer のシークレットに「OAuth サインイン済み」と「サインアウト」、アクセストークンの有効期限・最後に取得した日時・自動で更新されるかが出ます。CLI は `spellsheet secret logout <名前>`。Client ID を変えると古いトークンは使われず、シークレットを削除するとトークンも消えます。
 - `list_secrets` では、トークンが保存されているシークレットに `signedIn: true` が付きます。
 
 ## 無人実行

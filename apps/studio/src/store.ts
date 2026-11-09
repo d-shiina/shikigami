@@ -1,5 +1,6 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (flow, validation, undo state).
+import { loadBandSettings } from "./lib/bandSettings";
 import { unsetParams } from "./lib/nodeRows";
 import { valuesBefore } from "./lib/startAt";
 import { missingInputs } from "./lib/runInputs";
@@ -13,6 +14,11 @@ import type {
   HistoryEntry,
   ImportConflict,
   LogLevel,
+  PackageOptions,
+  PackagePlan,
+  DistributionFolder,
+  DistributionView,
+  PackagePreview,
   PauseReason,
   ReviewTimeline,
   RunError,
@@ -34,6 +40,8 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   type Api,
   ApiError,
+  type ExportedPackage,
+  type FlowFile,
   type RunEvidence,
   type SecretField,
   type SecretInfo,
@@ -76,6 +84,9 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  * the page of all flows, "flows" the editor of the open one.
  */
 export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "extensions" | "settings";
+
+/** A new flow the AI is making: the conversation that asked for it, and what was asked. */
+export type Drafting = { chatId: string; title: string; request: string };
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues" | "tests";
@@ -237,6 +248,16 @@ export type RunState = {
   inner: Record<string, Record<string, StepRunState>>;
   /** The step each call path started last (a control step stays running while its blocks run). */
   innerLatest: Record<string, string>;
+  /**
+   * How far each loop got (`loopRound` / `loopEnded`), by `loopKey`: the
+   * frame shows it, during the run and after. A loop inside another one
+   * shows its latest pass.
+   */
+  loops: Record<string, LoopRun>;
+  /** When each step's latest attempt began and what it waits for, by `clockKey`: the clock on a running node. */
+  clocks: Record<string, StepClock>;
+  /** When the run paused (ms since the epoch): a resume moves the clocks on by the pause, as the runtime's timeouts do. */
+  pausedAt: number | null;
   /** The flow revision it runs (a resume can move it to a newer one). */
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
@@ -244,6 +265,21 @@ export type RunState = {
   /** Stop was pressed and the run has not ended yet. */
   stopping: boolean;
 };
+
+/** How far a loop got in a run: its round now (from 1), out of how many when known, and how it ended. */
+export type LoopRun = { round: number; total: number | null; ended: boolean; leftEarly: boolean };
+
+/** Key of a loop in `RunState.loops`: the calls it ran inside and its step. */
+export const loopKey = (path: string[], stepId: string): string => `${path.join("/")}|${stepId}`;
+
+/**
+ * A running step's clock: when its attempt began (ms since the epoch), how
+ * long it waits on purpose (a delay) and when it gives up (its timeout).
+ */
+export type StepClock = { since: number; waitMs: number | null; limitMs: number | null };
+
+/** Key of a step in `RunState.clocks`: the calls it ran inside and its step. */
+export const clockKey = (path: string[], stepId: string): string => `${path.join("/")}|${stepId}`;
 
 /** The `flow.call` steps a run event happened inside (outermost first). */
 const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
@@ -340,11 +376,15 @@ export type StudioState = {
   tested: Record<string, Record<string, unknown>>;
   /** While running, keep the running step in view. */
   followRun: boolean;
+  /** How long each step of a flow usually takes (ms), from its latest runs: a running node's progress. */
+  stepTimes: { flowId: string; times: Record<string, number> } | null;
   /** Steps to pause before, per flow (this PC only). */
   breakpoints: Record<string, string[]>;
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
   folded: Record<string, string[]>;
   outlineOpen: boolean;
+  /** The 手順書 is open for editing (its outline), not read as sheets: the right pane may show. */
+  manualEditing: boolean;
   /**
    * The right pane kept open by hand. Without it the pane opens only while a
    * node or part is selected, so the chart (or the 変数 table) has the room.
@@ -359,6 +399,11 @@ export type StudioState = {
   paletteAt: InsertAt | null;
   paletteAnchor: PaletteAnchor | null;
   place: Place;
+  /**
+   * A new flow asked of the AI and not made yet: the editor shows it being
+   * made (DraftingFlow) until the flow appears and opens in its place.
+   */
+  drafting: Drafting | null;
   /** The panel under the chart (run log, issues); null when closed. */
   bottom: BottomTab | null;
   /** The flow's record and versions, opened from its revision. */
@@ -385,6 +430,12 @@ export type StudioState = {
   workspace: WorkspaceInfo | null;
   /** A file whose flow already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
+  /** The 「渡す」 dialog: what handing the flow over would put in the file. */
+  handOff: PackagePlan | null;
+  /** 配布フォルダー: the registered folders, what they held when last looked at, and whether their list is open. */
+  distribution: { folders: DistributionFolder[]; views: DistributionView[] | null; open: boolean };
+  /** A flow file being looked at before it is imported (opened from Explorer, dropped, chosen). */
+  received: { file: FlowFile; preview: PackagePreview; away: boolean } | null;
   /** The dialog for an answer pasted from an AI chat without MCP: a new flow, or into the open one. */
   pasteOpen: "new" | "into" | null;
   /** Registered secrets (names, user names, sites; never values). */
@@ -423,6 +474,7 @@ export type StudioState = {
   /** Moves to the previous / next step the AI changed (review desk). */
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
+  setManualEditing(on: boolean): void;
   setOutlineOpen(open: boolean): void;
   /** Keeps the right pane open (the flow's settings when nothing is selected), or closes it. */
   setInspectorOpen(open: boolean): void;
@@ -430,6 +482,8 @@ export type StudioState = {
   showFlowProps(): void;
   /** Also keeps `reviewing` and `secretsOpen` in step. */
   setPlace(place: Place): void;
+  /** Shows a new flow the AI is making in the editor (null: stops showing it). */
+  showDrafting(drafting: Drafting | null): void;
   setBottom(tab: BottomTab | null): void;
   setHistoryOpen(open: boolean, tab?: "timeline" | "versions"): void;
   /** Name, description and run settings of the open flow. */
@@ -540,6 +594,28 @@ export type StudioState = {
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
   exportFlow(): Promise<void>;
+  /** Opens the 「渡す」 dialog for flow `id`. */
+  /** Opens (or re-plans) 渡す for the published version ("auto") or the current content. */
+  openHandOff(id: string, content?: "auto" | "current"): Promise<void>;
+  closeHandOff(): void;
+  /** Reads the registered 配布フォルダー and looks through them (quietly: a folder that cannot be opened says so in its view). */
+  checkDistribution(): Promise<void>;
+  setDistributionFolders(folders: DistributionFolder[]): Promise<boolean>;
+  openDistribution(): void;
+  closeDistribution(): void;
+  /** Puts the published version of a flow into a 配布フォルダー. True once it is there. */
+  placeInDistribution(id: string, folder: string, only?: { flowId: string; path: string }[]): Promise<boolean>;
+  /** Writes the flow as a `.spx` file; the path, or null when it failed (said in `error`). */
+  exportPackage(id: string, options: PackageOptions): Promise<ExportedPackage | null>;
+  /** Shows what a flow file holds and what this PC needs, before importing it. */
+  receiveFile(file: FlowFile): Promise<void>;
+  closeReceived(): void;
+  /** Sets the file aside while the person adds what it needs (a login, an extension, a site). */
+  stepAwayFromReceived(): void;
+  /** Back to the file: checks again what this PC still needs. */
+  backToReceived(): Promise<void>;
+  /** Imports the file shown by receiveFile and opens the flow. True once it is in. */
+  importReceived(onConflict?: ImportConflict): Promise<boolean>;
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
@@ -734,6 +810,9 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   starts: [],
   inner: {},
   innerLatest: {},
+  loops: {},
+  clocks: {},
+  pausedAt: null,
   revision: null,
   trailHidden: false,
   stopping: false,
@@ -1009,9 +1088,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       stepTest: null,
       tested: {},
       followRun: true,
+      stepTimes: null,
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
+      manualEditing: false,
       inspectorOpen: loadFlag(INSPECTOR_KEY, false),
       paletteOpen: false,
       searchOpen: false,
@@ -1019,6 +1100,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       paletteAt: null,
       paletteAnchor: null,
       place: "library",
+      drafting: null,
       bottom: null,
       historyOpen: false,
       historyTab: "timeline",
@@ -1033,6 +1115,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       dive: [],
       workspace: null,
       pendingImport: null,
+      handOff: null,
+      distribution: { folders: [], views: null, open: false },
+      received: null,
       pasteOpen: null,
       secrets: [],
       secretKeyLocation: "",
@@ -1174,6 +1259,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({
             // Opened from the library (or by the AI while it shows): show it in the editor.
             ...(get().place === "library" ? { place: "flows" as const } : {}),
+            drafting: null,
             flow,
             validation,
             canUndo: undo.canUndo,
@@ -1282,6 +1368,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ followRun: on });
       },
 
+      setManualEditing(on) {
+        set({ manualEditing: on });
+      },
+
       setOutlineOpen(open) {
         saveFlag(OUTLINE_KEY, open);
         set({ outlineOpen: open });
@@ -1299,9 +1389,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setPlace(place) {
-        set({ place, reviewing: place === "review", secretsOpen: place === "secrets", historyOpen: false });
+        set({ place, drafting: null, reviewing: place === "review", secretsOpen: place === "secrets", historyOpen: false });
         if (place === "secrets") void get().loadSecrets();
         else set({ secretPrefill: null });
+      },
+
+      showDrafting(drafting) {
+        if (!drafting) {
+          if (get().drafting) set({ drafting: null, ...(get().place === "flows" && !get().flow ? { place: "library" as const } : {}) });
+          return;
+        }
+        // The flow open before is saved as it is edited, so nothing is lost by putting it down.
+        set({ drafting, place: "flows", flow: null, validation: null, selection: null, range: null, editing: null, reviewing: false, secretsOpen: false, historyOpen: false, dive: [] });
       },
 
       setBottom(tab) {
@@ -1641,9 +1740,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ askInputs: null });
         try {
           const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
+          // From the runs before this one (a run counts once it has ended).
+          if (get().stepTimes?.flowId !== flow.id) set({ stepTimes: null });
+          void Promise.resolve()
+            .then(() => api.stepTimes(flow.id))
+            .then(
+              (times) => set({ stepTimes: { flowId: flow.id, times } }),
+              () => undefined,
+            );
           const runId = await api.run(flow.id, options?.inputs, {
             breakpoints,
             step: options?.step ?? false,
+            band: loadBandSettings(),
             ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
           });
           set((s) => ({
@@ -1825,10 +1933,42 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             else if (diveChain(s.flow, s.called, path).length === path.length) dive = path;
           }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
+          // How far each loop got, in the open flow or a called one.
+          // A loop starting again (another pass of a loop around it, a retry) starts with nothing to show.
+          if (env.type === "stepStarted" && run.loops[loopKey(path, env.stepId)]) {
+            const { [loopKey(path, env.stepId)]: _, ...rest } = run.loops;
+            run.loops = rest;
+          }
+          if (env.type === "loopRound" || env.type === "loopEnded") {
+            const ended = env.type === "loopEnded";
+            run.loops = {
+              ...run.loops,
+              [loopKey(path, env.stepId)]: {
+                round: ended ? env.rounds : env.round,
+                total: env.total ?? null,
+                ended,
+                leftEarly: ended && env.leftEarly === true,
+              },
+            };
+            return { run, ...moved };
+          }
           // A value changed while paused (by the person) shows at the pause.
           const edited = asVariableChange(env);
           if (edited && run.pause && edited.iteration == null && callKey(path) === callKey(run.pause.callPath)) {
             run.pause = { ...run.pause, variables: { ...run.pause.variables, [edited.variable]: edited.value } };
+          }
+          if (env.type === "paused") run.pausedAt = Date.parse(env.at) || Date.now();
+          if (env.type === "resumed" && run.pausedAt !== null) {
+            const paused = Math.max(0, (Date.parse(env.at) || Date.now()) - run.pausedAt);
+            run.clocks = Object.fromEntries(Object.entries(run.clocks).map(([key, clock]) => [key, { ...clock, since: clock.since + paused }]));
+            run.pausedAt = null;
+          }
+          if (env.type === "stepStarted") {
+            const since = Date.parse(env.at);
+            run.clocks = {
+              ...run.clocks,
+              [clockKey(path, env.stepId)]: { since: Number.isNaN(since) ? Date.now() : since, waitMs: env.waitMs ?? null, limitMs: env.limitMs ?? null },
+            };
           }
           if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
             // Inside a called flow: its steps and variables are not the
@@ -2240,6 +2380,111 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({ notice: `${t.exported}: ${path}`, error: null });
         } catch (e) {
           set({ error: message(e) });
+        }
+      },
+
+      async openHandOff(id, content) {
+        try {
+          set({ handOff: await api.packagePlan(id, content), error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      closeHandOff() {
+        set({ handOff: null });
+      },
+
+      async checkDistribution() {
+        try {
+          const folders = await api.distributionFolders();
+          const views = folders.length > 0 ? await api.scanDistribution() : [];
+          set((s) => ({ distribution: { ...s.distribution, folders, views } }));
+        } catch {
+          // Looking is a convenience: nothing to say when it fails (e.g. outside Writer).
+        }
+      },
+
+      async setDistributionFolders(folders) {
+        try {
+          const saved = await api.setDistributionFolders(folders);
+          set((s) => ({ distribution: { ...s.distribution, folders: saved }, error: null }));
+          void get().checkDistribution();
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      openDistribution() {
+        set((s) => ({ distribution: { ...s.distribution, open: true } }));
+        void get().checkDistribution();
+      },
+
+      closeDistribution() {
+        set((s) => ({ distribution: { ...s.distribution, open: false } }));
+      },
+
+      async placeInDistribution(id, folder, only) {
+        try {
+          await api.placeInDistribution(id, folder, only);
+          set({ handOff: null, notice: t.distribution.placed(folder), error: null });
+          void get().checkDistribution();
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      async exportPackage(id, options) {
+        try {
+          const out = await api.exportPackage(id, options);
+          set({ handOff: null, notice: `${t.handOff.saved}: ${out.path}`, error: null });
+          return out;
+        } catch (e) {
+          set({ error: message(e) });
+          return null;
+        }
+      },
+
+      async receiveFile(file) {
+        try {
+          set({ received: { file, preview: await api.previewPackage(file), away: false }, error: null });
+        } catch (e) {
+          set({ received: null, error: message(e) });
+        }
+      },
+
+      closeReceived() {
+        set({ received: null });
+      },
+
+      stepAwayFromReceived() {
+        const received = get().received;
+        if (received) set({ received: { ...received, away: true } });
+      },
+
+      async backToReceived() {
+        const received = get().received;
+        if (received) await get().receiveFile(received.file);
+      },
+
+      async importReceived(onConflict) {
+        const received = get().received;
+        if (!received) return false;
+        try {
+          const outcome = await api.importPackage(received.file, onConflict);
+          applyOutcome(outcome);
+          set({ received: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.flow.name}`, error: null });
+          await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          // A version from a 配布フォルダー is now here: its notice goes.
+          if (get().distribution.folders.length > 0) void get().checkDistribution();
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
         }
       },
 

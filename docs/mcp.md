@@ -2,9 +2,9 @@
 
 English | [日本語](ja/mcp.md)
 
-`spellsheet mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
+`spellsheet mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Writer, so AI edits show up in Writer immediately and can be undone there. It also runs on its own, without a GUI.
 
-![An MCP edit showing up in Studio](assets/studio-mcp-edit.png)
+![An MCP edit showing up in Writer](assets/studio-mcp-edit.png)
 
 ## Connecting
 
@@ -38,6 +38,8 @@ args = ["mcp"]
 
 ### Cursor
 
+In Writer, **Settings → AI → MCP server registration → Cursor → Add to Cursor** opens Cursor's own "add MCP server" prompt with the installed CLI filled in, so nothing is edited by hand. The same place shows the commands for Claude Code, Codex, Gemini CLI and GitHub Copilot. To write the file yourself instead:
+
 `.cursor/mcp.json` (project) or `~/.cursor/mcp.json`:
 
 ```json
@@ -52,7 +54,7 @@ args = ["mcp"]
 
 | Option | Default | Description |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace` (change with `SPELLSHEET_HOME`) | The workspace. Point it at the same place as Studio and changes show up in both |
+| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace` (change with `SPELLSHEET_HOME`) | The workspace. Point it at the same place as Writer and changes show up in both |
 | `--allow read,write,run` | All three | Which tool classes to expose. For read-only access: `--allow read` |
 
 ## Tools
@@ -63,32 +65,32 @@ args = ["mcp"]
 |  | `get_flow` | The flow (with node IDs) and whether Undo/Redo is possible. While a person has sent it back, `feedback` (the reason and notes on nodes). Inputs and outputs of flows called with `flow.call` (`subflows`), and the flows that call this one (`calledBy`) |
 |  | `validate_flow` | Validates a saved flow (`flowId`) or an unsaved document (`flow`). Returns every error with a JSON Pointer |
 |  | `list_step_types` / `get_step_schema` | Available node types, the JSON Schema of their params, and examples to copy (`examples`) |
-|  | `get_history` | Who (Studio / MCP client name / CLI) changed what and when, with the AI's explanation (`summary`) and the nodes touched (`stepIds`) |
+|  | `get_history` | Who (Writer / MCP client name / CLI) changed what and when, with the AI's explanation (`summary`) and the nodes touched (`stepIds`) |
 |  | `get_review` | What the review desk shows: changes since the last approval, the AI's test runs, the screens it relied on, and reviews (reasons for sending back). [Design](design/review-evidence.md) |
 |  | `get_run_status` / `get_run_logs` / `list_runs` | Status of a run, its final report, and its event log (`afterSeq` for what is new, `variable` for one variable's changes only) |
 |  | `list_versions` / `get_version` | Named versions, and a version's snapshot |
 |  | `diff_versions` | Differences between versions, or a version and now (by node ID; by default "latest version → now") |
-|  | `export_flow` | The flow, its versions and the subflows it calls, as one bundle (without defaults of secret variables) |
+|  | `export_flow` | The flow, its versions and the subflows it calls, as one bundle (without defaults of secret variables). With `path`, writes a `.spx` file to hand to another person or PC instead: the published version by default (`current` for the content now), `include_input` for files in `input/`; it never overwrites a file ([design](design/sharing-versioning.md)) |
 |  | `list_project_files` / `read_project_file` | The files in the flow's folder (input, config, templates, output, work, logs), and a text file's contents ([files.md](files.md#the-flows-folder)) |
-|  | `list_secrets` | Names, sites and set fields of the secrets registered in Studio (never the values; see [secrets.md](secrets.md)) |
+|  | `list_secrets` | Names, sites and set fields of the secrets registered in Writer (never the values; see [secrets.md](secrets.md)) |
 |  | `get_policy` | The workspace's `policy.json`: the allowed sites and apps, and what the AI may do (allow / ask / deny). No tool changes it ([policy.md](policy.md)) |
 | write | `create_flow` | Create a flow (node IDs optional) |
 |  | `update_flow` | Apply several EditOps atomically as one revision |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | Single edits |
-|  | (common edit arguments) | `summary`: what the change does, in plain words (first line: what the flow now does differently; shown as the review's heading). `checks`: questions only a person can answer (assumptions), one each, up to 10; Studio shows them with OK / No. `observations`: the `observationId`s of the screens it is based on |
-|  | `undo` / `redo` | The Undo stack shared with Studio and the CLI |
+|  | (common edit arguments) | `summary`: what the change does, in plain words (first line: what the flow now does differently; shown as the review's heading). `checks`: questions only a person can answer (assumptions), one each, up to 10; Writer shows them with OK / No. `observations`: the `observationId`s of the screens it is based on |
+|  | `undo` / `redo` | The Undo stack shared with Writer and the CLI |
 |  | `delete_flow` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `FLOW_IN_USE` while another flow calls it. Needs a person's approval by default (see "Approval" below) |
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
-|  | `import_flow` | Import a bundle or a flow document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along |
+|  | `import_flow` | Import a bundle, a flow document, or a `.spx` file (`path`). `check: true` only reports what this PC is missing (extensions, secrets, sites and apps not allowed) and how it differs from a flow with the same ID. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along. An imported flow is not published |
 |  | `extract_subflow` | Move consecutive nodes of one block into a new flow and replace them with a single `flow.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subflows.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the flow's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
-|  | `save_test_case` | Save a test case (`tests/<name>.json`: `description`, `inputs` and `expect`; `overwrite` to replace). Write `description` as a promise in business words: Studio's review shows the cases an AI saved as its promises, with their results. Unknown or secret inputs are refused ([testing.md](testing.md)) |
-|  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
+|  | `save_test_case` | Save a test case (`tests/<name>.json`: `description`, `inputs` and `expect`; `overwrite` to replace). Write `description` as a promise in business words: Writer's review shows the cases an AI saved as its promises, with their results. Unknown or secret inputs are refused ([testing.md](testing.md)) |
+|  | `request_secret` | Ask the person for login details. Writer shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Writer and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_flow` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_flow` | Cancel a run |
 |  | `run_tests` | Run the flow's test cases (`tests/`, all or `cases`) with the work in progress and compare each with what it expects: `passed`, `failed`, `cases[]` with `mismatches[]` ([testing.md](testing.md)). Waits until all have run; approval as for `run_flow` |
 | browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId`. `image: true` also returns the screenshot to the AI |
-|  | `ask_user_to_pick` | When the AI cannot tell which element is meant, the person clicks it in the browser (the click does not reach the page) and it comes back as a `target`. Studio shows the request and can decline it ([browser.md](browser.md)) |
+|  | `ask_user_to_pick` | When the AI cannot tell which element is meant, the person clicks it in the browser (the click does not reach the page) and it comes back as a `target`. Writer shows the request and can decline it ([browser.md](browser.md)) |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
 | try | `test_step` | Run one node on the spot and return its output (for a browser node also the page after it, for a desktop node the window it worked on). Does not change the flow. Saves the result as evidence and returns an `observationId` |
 
@@ -103,8 +105,8 @@ args = ["mcp"]
 
 Operations that the workspace's `policy.json` sets to `ask` (by default `run_flow` and `test_step` with a node of risk `dangerous`, and `delete_flow`) do not run straight away.
 
-1. The tool returns `APPROVAL_REQUIRED` with the request's ID in `details.approvalId`. Studio shows the request (on the CLI, `spellsheet approval list`).
-2. The AI tells the person what it wants to do. Once the person clicks "Approve" in Studio, calling the same tool again with `approvalId` runs it, once. `approvalWaitMs` waits for the answer; `approvalReason` is shown to the person with the request.
+1. The tool returns `APPROVAL_REQUIRED` with the request's ID in `details.approvalId`. Writer shows the request (on the CLI, `spellsheet approval list`).
+2. The AI tells the person what it wants to do. Once the person clicks "Approve" in Writer, calling the same tool again with `approvalId` runs it, once. `approvalWaitMs` waits for the answer; `approvalReason` is shown to the person with the request.
 3. Different content gives `APPROVAL_MISMATCH`, a used approval `APPROVAL_USED`, a refusal `APPROVAL_DENIED`, and a `deny` operation `POLICY_DENIED`. Sites and apps outside the allowed ones give `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`.
 
 See [policy.md](policy.md).
@@ -121,7 +123,7 @@ The flow changes themselves (EditOps and their inverses) are recorded with the c
 
 ## Verified and limits
 
-- **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Studio open shows up in Studio, and Studio's Undo is recorded in the history as Studio.
+- **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Writer open shows up in Writer, and Writer's Undo is recorded in the history as Writer.
 - **Not yet verified**: a conversation where Claude Code actually builds a flow with the tools, connecting from Codex / Cursor, and running on real Windows machines.
 - Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `spellsheet run` for long or unattended runs.
 - Per-client tool permissions are not implemented (there is the server-wide `--allow` and the workspace-wide `policy.json`).

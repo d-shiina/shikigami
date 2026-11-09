@@ -1,15 +1,18 @@
 // The one column on the left, as in Linear and Notion: the workspace at the
-// top (where the work is stored), then the places: the flow library with
-// the open flow under it, what waits for review, logins, and settings at
-// the foot, apart from the work. Lists live in their places, not here. Runs
+// top (where the work is stored), then the places (the flow library, what
+// waits for review, runs, logins), the flows worked on lately
+// (pinned first), and settings at the foot, apart from the work. Custom nodes (added nodes, code: plugins) are
+// managed from Settings, not here: few PCs have any. Lists live in their places, not here. Runs
 // (schedules now, run history next) are one row here. The AI is not a place
-// but a helper on whatever is open, so it is not here: its button sits at the
-// window's top right and its chat opens on the right (AgentButton).
+// but a helper on whatever is open, so it is not here: its button sits in the
+// window's bar beside the search, and its chat opens on the right (ShellBar).
 //
 // Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
 // as a strip, as Linear and VS Code do: the places stay one click away and
 // their counts stay in sight. Hovering an icon names it.
-import { AppWindow, Blocks, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
+import { AppWindow, FolderClosed, Pin, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
 import { SIDEBAR_MINI } from "../lib/fit";
 import { t } from "../lib/i18n";
@@ -94,6 +97,104 @@ function MiniItem({ icon: Icon, label, on, onClick, count, tone, dot, busy, titl
   );
 }
 
+const RECENT_KEY = "shikigami.studio.recent";
+const PINS_KEY = "shikigami.studio.pins";
+const RECENT_MAX = 6;
+
+function readIds(key: string): string[] {
+  try {
+    const raw = JSON.parse(globalThis.localStorage?.getItem(key) ?? "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function writeIds(key: string, ids: string[]) {
+  try {
+    globalThis.localStorage?.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Only a remembered preference.
+  }
+}
+
+/**
+ * The flows the person works on, as Linear keeps favourites and Notion
+ * recent pages: pinned first, then the last ones opened. The window shows one
+ * flow at a time, so a row switches the editor to it; the library page keeps
+ * the whole list. A dot says what is happening in it (running, the AI at work).
+ */
+function RecentFlows() {
+  const flow = useStudio((s) => s.flow);
+  const place = useStudio((s) => s.place);
+  const summaries = useStudio((s) => s.summaries);
+  const open = useStudio((s) => s.open);
+  const setPlace = useStudio((s) => s.setPlace);
+  const run = useStudio((s) => s.run);
+  const aiFlows = useAgent((s) => s.chats.filter((c) => c.turnId).map((c) => c.flowId).join("\n")).split("\n");
+  const [recent, setRecent] = useState(() => readIds(RECENT_KEY));
+  const [pins, setPins] = useState(() => readIds(PINS_KEY));
+  useEffect(() => {
+    if (!flow) return;
+    setRecent((now) => {
+      const next = [flow.id, ...now.filter((id) => id !== flow.id)].slice(0, 20);
+      writeIds(RECENT_KEY, next);
+      return next;
+    });
+  }, [flow?.id]);
+  const togglePin = (id: string) => {
+    const next = pins.includes(id) ? pins.filter((p) => p !== id) : [...pins, id];
+    setPins(next);
+    writeIds(PINS_KEY, next);
+  };
+  const name = new Map(summaries.map((f) => [f.id, f.name] as const));
+  // Pins of flows gone from this workspace (deleted, or another workspace) take no room.
+  const shownPins = pins.filter((id) => name.has(id));
+  const rest = recent.filter((id) => !pins.includes(id) && name.has(id)).slice(0, Math.max(0, RECENT_MAX - shownPins.length));
+  const rows = [...shownPins, ...rest];
+  if (rows.length === 0) return null;
+  const running = run && (run.status === "running" || run.status === "paused") ? run.flowId : null;
+  return (
+    <div className="pt-4">
+      <div className="px-2 pb-1 text-[11px] font-medium text-slate-400">{t.shell.recentFlows}</div>
+      {rows.map((id) => {
+        const on = place === "flows" && flow?.id === id;
+        const pinned = pins.includes(id);
+        const state = running === id ? "bg-accent-500 animate-pulse motion-reduce:animate-none" : aiFlows.includes(id) ? "bg-brand-500 animate-pulse motion-reduce:animate-none" : null;
+        return (
+          <div key={id} className={`group flex h-8 items-center rounded-lg ${on ? "bg-slate-200/70" : "hover:bg-slate-100"}`}>
+            <button
+              type="button"
+              onClick={() => {
+                // To the editor from any place, as the library opens flows.
+                setPlace("flows");
+                if (flow?.id !== id) void open(id);
+              }}
+              aria-current={on ? "page" : undefined}
+              title={name.get(id)}
+              className={`flex h-full min-w-0 flex-1 items-center gap-2 pr-1 pl-2 text-left text-[13px] ${on ? "font-semibold text-ink" : "text-slate-600 group-hover:text-ink"}`}
+            >
+              <span className="relative grid h-4 w-4 shrink-0 place-items-center">
+                <Workflow size={14} strokeWidth={1.75} className={on ? "text-ink" : "text-slate-500"} aria-hidden="true" />
+                {state && <span className={`absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full ring-2 ring-frame ${state}`} />}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{name.get(id)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => togglePin(id)}
+              aria-label={pinned ? t.shell.unpin : t.shell.pin}
+              title={pinned ? t.shell.unpin : t.shell.pin}
+              className={`mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-ink focus-visible:opacity-100 ${pinned ? "" : "opacity-0 group-hover:opacity-100"}`}
+            >
+              <Pin size={13} strokeWidth={1.75} className={pinned ? "fill-current" : ""} aria-hidden="true" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The folder the flows live in; the full path and the change are in Settings. */
 function Workspace() {
   const workspace = useStudio((s) => s.workspace);
@@ -104,9 +205,9 @@ function Workspace() {
       type="button"
       onClick={() => setPlace("settings")}
       title={workspace ? t.bar.workspaceTitle(workspace.root, workspace.localRoot) : undefined}
-      className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-[13px] font-semibold text-ink hover:bg-slate-100"
+      className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-[13px] font-medium text-slate-700 hover:bg-slate-100 hover:text-ink"
     >
-      <img src="/mark.png" alt="" className="h-5 w-5 shrink-0" draggable={false} />
+      <FolderClosed size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
       <span className="truncate">{name}</span>
       {workspace?.shared && <span className="shrink-0 rounded-sm bg-mizu-100 px-1 text-[10px] font-normal text-mizu-500">{t.workspaceShared}</span>}
     </button>
@@ -136,7 +237,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
   const store = useStudioApi();
   return (
     <aside aria-label={t.shell.places} style={{ width: mini ? SIDEBAR_MINI : width }} className="relative z-20 flex h-full shrink-0 flex-col bg-frame">
-      {/* The top of the window: room to drag it by, level with the title bar. */}
+      {/* The workspace heads the column; the app's name is above it, in the window's bar. */}
       <div data-tauri-drag-region className={`flex h-10 shrink-0 items-center gap-1 select-none ${mini ? "justify-center" : "pr-1.5 pl-2"}`}>
         {!mini && <Workspace />}
         <button
@@ -151,8 +252,8 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
       </div>
       <nav className={`flex-1 pt-1 ${mini ? "space-y-1 px-1.5" : "space-y-px px-2"}`}>
         <Item icon={LayoutList} label={t.flows} on={place === "library"} onClick={go("library")} mini={mini} />
-        {/* The open flow, under the library it came from: the way back to the editor. */}
-        {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent mini={mini} />}
+        {/* Folded, only the open flow stays: the way back to the editor. */}
+        {mini && flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent mini={mini} />}
         <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} mini={mini} />
         <Item icon={CalendarClock} label={t.runs.place} on={place === "runs"} onClick={go("runs")} title={t.runs.placeTitle} mini={mini} />
         <Item
@@ -165,7 +266,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
           title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
           mini={mini}
         />
-        <Item icon={Blocks} label={t.extensions.place} on={place === "extensions"} onClick={go("extensions")} title={t.extensions.placeTitle} mini={mini} />
+        {!mini && <RecentFlows />}
       </nav>
       <div className={mini ? "space-y-1 px-1.5 py-1.5" : "space-y-px px-2 py-1.5"}>
         {/* Another window, not a place: the published scenarios for the people who only run them. */}
@@ -173,7 +274,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
         <Item
           icon={Settings2}
           label={t.shell.settings}
-          on={place === "settings"}
+          on={place === "settings" || place === "extensions"}
           onClick={go("settings")}
           dot={update !== null}
           title={update ? `${t.updateAvailable} v${update}` : t.shell.settings}

@@ -1,4 +1,4 @@
-// The 「拡張機能」 place (docs/extensions.md): extensions installed on this
+// The 「カスタム ノード」 page (code: extensions / plugins), opened from Settings and the palette (docs/extensions.md): extensions installed on this
 // PC, as in VS Code: turn one on or off, check for an update, uninstall it,
 // or install one from a zip file, an https URL, a GitHub repository or the
 // catalog (a JSON index whose URL is set here). Installing shows what the
@@ -9,6 +9,7 @@ import { CirclePause, CirclePlay, CloudUpload, Puzzle, RefreshCw, Trash2, Triang
 import { useCallback, useEffect, useState } from "react";
 import { useStudioApi } from "../context";
 import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry } from "../lib/api";
+import { confirmAsk } from "../lib/ask";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { EXTENSION_ICONS } from "../lib/nodeIcons";
@@ -567,11 +568,16 @@ export function ExtensionsPage() {
     act(async () => {
       for (const ext of exts) if (ext.managed && ext.enabled !== on) await extensionsApi.setEnabled(ext.name, on);
     });
-  const uninstall = (exts: InstalledExtension[]) =>
-    act(async () => {
+  const uninstall = async (exts: InstalledExtension[]) => {
+    const one = exts.length === 1 ? exts[0] : undefined;
+    // Flows using them stop validating, so ask in the app's dialog first, saying so.
+    const yes = await confirmAsk({ title: one ? e.uninstallAsk.title(one.label) : e.uninstallMany(exts.length), body: e.uninstallAsk.body, confirm: e.uninstall, danger: true });
+    if (!yes) return;
+    await act(async () => {
       for (const ext of exts) if (ext.managed) await extensionsApi.uninstall(ext.name);
       setSelected(new Set());
     });
+  };
   const columns = installedColumns((ext, on) => void setEnabled([ext], on));
   const view = useTableView(columns, { storageKey: "shikigami.studio.extensions.sort", initialSort: { column: "name", descending: false } });
   const q = query.trim().toLowerCase();
@@ -591,7 +597,7 @@ export function ExtensionsPage() {
     ext.source && { label: e.checkUpdate, icon: RefreshCw, run: () => void checkUpdate(ext) },
     ext.managed && { label: ext.enabled ? e.disable : e.enable, icon: ext.enabled ? CirclePause : CirclePlay, run: () => void setEnabled([ext], !ext.enabled) },
     ext.managed && "-",
-    ext.managed && { label: e.uninstall, icon: Trash2, danger: true, confirm: e.confirmUninstallOnce, run: () => void uninstall([ext]) },
+    ext.managed && { label: e.uninstall, icon: Trash2, danger: true, run: () => void uninstall([ext]) },
   ];
   const formOpen = installing !== null || !!preview;
   return (
@@ -685,7 +691,7 @@ export function ExtensionsPage() {
                   <SelectionBar count={picked.length} onClear={() => setSelected(new Set())}>
                     <BulkButton icon={CirclePlay} label={e.enable} onClick={() => setEnabled(picked, true)} />
                     <BulkButton icon={CirclePause} label={e.disable} onClick={() => setEnabled(picked, false)} />
-                    <BulkButton icon={Trash2} danger label={e.uninstall} confirmLabel={e.uninstallMany(picked.length)} onClick={() => uninstall(picked)} />
+                    <BulkButton icon={Trash2} label={e.uninstall} onClick={() => uninstall(picked)} />
                   </SelectionBar>
                 </>
               )}

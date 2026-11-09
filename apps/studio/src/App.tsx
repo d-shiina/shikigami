@@ -1,11 +1,13 @@
+import { DistributionDialog } from "./components/Distribution";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
-import { AgentButton } from "./components/AgentButton";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
+import { AskDialog } from "./components/AskDialog";
+import { unsavedAsk } from "./lib/ask";
 import { PickRequestCard } from "./components/PickRequestCard";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
@@ -17,11 +19,13 @@ import { AiPasteDialog } from "./components/AiPasteDialog";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
+
 import { FileSheet } from "./components/FileSheet";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
-import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
+import { ReviewFoot, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
+import { useReviewView } from "./lib/reviewView";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
@@ -30,9 +34,11 @@ import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { DraftingFlow } from "./components/DraftingFlow";
 import { FlowsPage } from "./components/FlowsPage";
+import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
 import { Sidebar } from "./components/Sidebar";
-import { AiActivity, StatusBar } from "./components/StatusBar";
+import { AiButton, Brand, SearchBar } from "./components/ShellBar";
 import { ManualView } from "./components/ManualView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
@@ -42,10 +48,13 @@ import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
-import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
-import { lastAdded, shouldFollow, stepIds } from "./lib/followAi";
+import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
+
+/** The desk's left gutter, the files column and the gap after it. */
+const OUTLINE_BESIDE_FILES = 12 + 264 + 12;
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -162,6 +171,8 @@ function Editor({
   view,
   onView,
   list,
+  report,
+  foot,
   right,
   rightWidth,
   grip,
@@ -169,6 +180,10 @@ function Editor({
   view: View;
   onView: (view: View) => void;
   list?: React.ReactNode;
+  /** Shown instead of the flow (the review desk's report). */
+  report?: React.ReactNode;
+  /** Kept under the flow, above what the run did (the review desk's verdict). */
+  foot?: React.ReactNode;
   right: React.ReactNode | null;
   rightWidth: number;
   grip: Grip;
@@ -176,7 +191,6 @@ function Editor({
   const hasFlow = useStudio((s) => s.flow !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   const projectOpen = useProject((s) => s.panelOpen);
-  const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
       {/* A node opened full size covers the chart and the right pane. */}
@@ -184,39 +198,60 @@ function Editor({
       <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
         <div className="@container relative min-h-0 flex-1">
-          {view === "story" ? (
+          {report ? (
+            report
+          ) : view === "story" ? (
             <ManualView onView={onView} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {/* The flow's files float over the left of the chart; the outline sits beside them. */}
+              {/*
+                The flow's files and its outline lie on the desk left of the sheet, one column:
+                the files above, the outline under them taking the rest of the height.
+              */}
               {hasFlow && projectOpen && (
-                <div className="absolute top-3 bottom-3 left-3 z-10">
-                  <ProjectPanel />
+                <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
+                  <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
+                    <ProjectPanel />
+                  </div>
+                  {outlineOpen && <OutlinePanel />}
                 </div>
               )}
-              {hasFlow && <OutlinePanel left={outlineLeft} />}
-              {/* The outline unfolds from this corner, so its button sits there. */}
-              {hasFlow && !outlineOpen && (
-                <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
-                  {!projectOpen && <ProjectButton />}
+              {/*
+                With the files folded away their button keeps its place at the top of the column,
+                and the outline, when open, hangs under it; nothing one panel does hides the other's button.
+              */}
+              {hasFlow && !projectOpen && (
+                <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
+                  <div className="flex w-max gap-2">
+                    <ProjectButton />
+                    {!outlineOpen && <OutlineButton />}
+                    {!outlineOpen && <SearchButton />}
+                  </div>
+                  {outlineOpen && <OutlinePanel />}
+                </div>
+              )}
+              {/* The outline unfolds under the files, so its button waits beside them. */}
+              {hasFlow && projectOpen && !outlineOpen && (
+                <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
                   <OutlineButton />
                   <SearchButton />
                 </div>
               )}
             </ReactFlowProvider>
           )}
-          {view !== "variables" && hasFlow && <FlowSearch />}
+          {!report && view !== "variables" && hasFlow && <FlowSearch />}
           <FileSheet />
-          {/* Clear of the zoom controls in the bottom-left corner. The 手順書 shows it only while editing. */}
-          {view === "flow" && (
+          {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
+          {!report && view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
             </div>
           )}
         </div>
+        {foot}
         <RunPausePanel />
         <BottomPanel />
       </main>
@@ -280,26 +315,43 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
 }
 
-/** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
-function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+/**
+ * The review desk: what waits, and the open flow's AI change as a report on
+ * one sheet of paper. The chart, procedure and variables are one switch away,
+ * with the verdict kept under them.
+ */
+function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   const hasFlow = useStudio((s) => s.flow !== null);
+  const view = useReviewView((s) => s.view);
+  const setView = useReviewView((s) => s.setView);
+  const reading = view === "report" ? "flow" : view;
+  // A link to a node (a change, an effect, a promise's error step, a log line) or a followed run
+  // reveals it on the chart: from the report, that means switching to the chart to show it.
+  const revealed = useStudio((s) => s.reveal?.seq ?? 0);
+  const lastRevealed = useRef(revealed);
+  useEffect(() => {
+    if (revealed === lastRevealed.current) return;
+    lastRevealed.current = revealed;
+    if (useReviewView.getState().view === "report") setView("flow");
+  }, [revealed, setView]);
+  // Ctrl+F searches the flow: from the report, that means switching to the chart where it shows.
+  const searched = useStudio((s) => s.searchAsked);
+  const lastSearched = useRef(searched);
+  useEffect(() => {
+    if (searched === lastSearched.current) return;
+    lastSearched.current = searched;
+    if (useReviewView.getState().view === "report") setView("flow");
+  }, [searched, setView]);
   return (
     <Editor
-      view={view}
-      onView={onView}
+      view={reading}
+      onView={setView}
       list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
+      report={view === "report" && hasFlow ? <ReviewReport /> : undefined}
+      foot={hasFlow ? <ReviewFoot report={view === "report"} /> : undefined}
       rightWidth={sizes.right}
       grip={grip}
-      right={
-        !fit.right || !hasFlow ? null : (
-          <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
-            <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 text-[12px] font-semibold">{t.reviewTab}</div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <ReviewPanel />
-            </div>
-          </aside>
-        )
-      }
+      right={fit.right && hasFlow && view !== "report" ? <Inspector /> : null}
     />
   );
 }
@@ -319,13 +371,20 @@ function Shell() {
   }, [focusAgent, openId, openName]);
   const [width, measure] = useWidth();
   const hasFlow = useStudio((s) => s.flow !== null);
+  const drafting = useStudio((s) => s.drafting !== null);
   const editing = place === "flows" || place === "review";
   // The right pane takes room only while it has something to say: the node or part picked on the
   // chart, or the flow's settings kept open by hand. The 変数 table edits in place, so it never has
-  // one. The review desk's verdict always stays.
+  // one.
   const inspectorOpen = useStudio((s) => s.inspectorOpen);
   const picked = useStudio((s) => s.selection?.kind === "step" || s.selection?.kind === "part");
-  const rightOpen = place === "review" || (view !== "variables" && (inspectorOpen || picked));
+  // On the review desk the report fills the editor; the chart opened from it works as in the editor.
+  const reviewView = useReviewView((s) => s.view);
+  const shownView = place === "review" ? reviewView : view;
+  // The 手順書 is read as sheets with nothing beside them; editing its outline brings the pane back.
+  const manualEditing = useStudio((s) => s.manualEditing);
+  const rightOpen =
+    shownView !== "report" && shownView !== "variables" && (shownView !== "story" || manualEditing) && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
@@ -363,90 +422,110 @@ function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-  return (
-    <div className="flex h-full flex-col bg-frame">
-      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
-        {showSidebar && (
-          <div className="relative flex">
-            <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
-            {grip("sidebar")}
-          </div>
-        )}
-        {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
-        {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
-        {!showSidebar && peek && (
-          <Peek onClose={() => setPeek(false)}>
-            <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
-          </Peek>
-        )}
-        {/* The window buttons keep to a thin strip of the window's ground, in its corner as on any
-            Windows window; the work under it floats, framed and rounded, title bar and all, as in Linear,
-            and the AI's chat floats beside it as a panel of its own. */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div data-tauri-drag-region className="flex h-8 shrink-0 justify-end select-none">
-            {/* What the AI is doing, by the button that opens it, seen from every place. */}
-            <span className="flex min-w-0 items-center text-[11px] text-slate-500">
-              <AiActivity />
-            </span>
-            <AgentButton />
-            <WindowControls />
-          </div>
-          <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5">
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-            <TitleBar view={view} onView={setView} />
-            <HumanBanner />
-            <Banner />
-            <div className="flex min-h-0 flex-1">
-              {/* With nothing open, the editor has nothing to show: the library does. */}
-              {(place === "library" || (place === "flows" && !hasFlow)) && (
-                <div className="min-w-0 flex-1">
-                  <FlowsPage />
-                </div>
-              )}
-              {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-              {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-              {place === "runs" && (
-                <div className="min-w-0 flex-1">
-                  <RunsPage />
-                </div>
-              )}
-              {place === "secrets" && (
-                <div className="min-w-0 flex-1">
-                  <SecretsPage />
-                </div>
-              )}
-              {place === "extensions" && (
-                <div className="min-w-0 flex-1">
-                  <ExtensionsPage />
-                </div>
-              )}
-              {place === "settings" && (
-                <div className="min-w-0 flex-1">
-                  <SettingsPage />
-                </div>
-              )}
-            </div>
-          </div>
-          {/* The AI's chat floats on the window's ground beside the work, under the button that
-              opens it: it is not part of any place (it makes new flows too), so it is not in the
-              work's frame. Kept mounted while closed, so an unsent draft survives (it draws nothing then). */}
-          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
-            <AgentPane width={fit.agent} />
-            {fit.agent > 0 && grip("agent")}
-          </div>
-          </div>
+  const work = (
+    <div className="flex min-h-0 flex-1">
+      {/* With nothing open, the editor has nothing to show: the library does. */}
+      {place === "flows" && !hasFlow && drafting && <DraftingFlow />}
+      {(place === "library" || (place === "flows" && !hasFlow && !drafting)) && (
+        <div className="min-w-0 flex-1">
+          <FlowsPage />
         </div>
-      </div>
-      <StatusBar />
+      )}
+      {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+      {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+      {place === "runs" && (
+        <div className="min-w-0 flex-1">
+          <RunsPage />
+        </div>
+      )}
+      {place === "secrets" && (
+        <div className="min-w-0 flex-1">
+          <SecretsPage />
+        </div>
+      )}
+      {place === "extensions" && (
+        <div className="min-w-0 flex-1">
+          <ExtensionsPage />
+        </div>
+      )}
+      {place === "settings" && (
+        <div className="min-w-0 flex-1">
+          <SettingsPage />
+        </div>
+      )}
+    </div>
+  );
+  const sidebarColumn = (
+    <>
+      {showSidebar && (
+        <div className="relative flex">
+          <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
+          {grip("sidebar")}
+        </div>
+      )}
+      {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
+      {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
+      {!showSidebar && peek && (
+        <Peek onClose={() => setPeek(false)}>
+          <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
+        </Peek>
+      )}
+    </>
+  );
+  const dialogs = (
+    <>
       <CommandPalette />
       <HistoryDialog />
       <AiPasteDialog />
       <SecretAskDialog />
       <RunInputsDialog />
       <ApprovalDialog />
+      <AskDialog />
+      <HandOffDialog />
+      <DistributionDialog />
+      <ReceiveSheet />
+      <OpenedFiles />
       <PickRequestCard />
       <ContextMenu />
       <FileDragLayer />
+    </>
+  );
+  // The window's own bar along the top, as Windows apps and VS Code: the
+  // app's name at the left, the search over everything in the middle with the
+  // AI beside it (VS Code keeps Copilot by its command center), and the
+  // window buttons in the corner. The work floats under it, framed, as in Linear.
+  return (
+    <div className="flex h-full flex-col bg-frame">
+      <div data-tauri-drag-region className="relative flex h-10 shrink-0 items-center select-none">
+        <div data-tauri-drag-region style={{ width: showSidebar ? sizes.sidebar : SIDEBAR_MINI }} className={`flex shrink-0 items-center ${showSidebar ? "pl-2" : "justify-center"}`}>
+          <Brand compact={!showSidebar} />
+        </div>
+        <span data-tauri-drag-region className="flex-1 self-stretch" />
+        <div className="absolute top-1/2 left-1/2 flex w-[clamp(320px,44vw,620px)] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5">
+          <SearchBar onToggleSidebar={toggleSidebar} />
+          <AiButton />
+        </div>
+        <WindowControls />
+      </div>
+      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
+        {sidebarColumn}
+        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 pr-1.5 pb-1.5">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+            <TitleBar view={view} onView={setView} />
+            <HumanBanner />
+            <Banner />
+            {work}
+          </div>
+          {/* The AI's chat floats on the window's ground beside the work: it is not part of any
+              place (it makes new flows too), so it is not in the work's frame. Kept mounted while
+              closed, so an unsent draft survives (it draws nothing then). */}
+          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
+            <AgentPane width={fit.agent} />
+            {fit.agent > 0 && grip("agent")}
+          </div>
+        </div>
+      </div>
+      {dialogs}
     </div>
   );
 }
@@ -518,13 +597,24 @@ export function App() {
   // Sentences name a node's part by its label (`{ part: "btnSave" }` → 部品「保存ボタン」).
   setPartLookup((name) => store.getState().flow?.parts?.[name]);
   const agentStore = useMemo(() => createAgentStore(agent), []);
-  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
+  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), unsaved: unsavedAsk }), []);
 
   useEffect(() => {
-    void store.getState().init();
+    // Writer's window stays hidden behind the start-up screen until the
+    // flows are on screen, so nobody sees a white window or an empty list first.
+    void store
+      .getState()
+      .init()
+      .finally(() => setTimeout(() => void api.startupReady().catch(() => {}), 0));
     // While the AI asked in the pane works, Studio follows it: a flow it
     // has just made opens, and the chart pans to the nodes it adds. Only
     // changes from outside count, so the person's own edits never move the view.
+    // Text typed by hand into a project file and not saved yet: opening another flow (or none)
+    // would drop it, so the AI's new flow does not take the screen over it.
+    const handEdited = () => {
+      const sheet = projectStore.getState().sheet;
+      return !!sheet && sheet.text !== sheet.saved && (!sheet.config || sheet.raw);
+    };
     const followChange = async (id: string) => {
       const before = store.getState();
       const known = before.summaries.some((s) => s.id === id);
@@ -536,7 +626,7 @@ export function App() {
       // The pane and the status bar already say the AI is at work; a notice per edit is noise.
       if (now.notice === t.externalChange) store.setState({ notice: null });
       let opened = false;
-      if (shouldFollow(id, known, working, now)) {
+      if (shouldFollow(id, known, working, now) && !handEdited()) {
         await now.open(id);
         opened = store.getState().flow?.id === id;
         const name = store.getState().flow?.name;
@@ -559,10 +649,26 @@ export function App() {
       agent.onInstall((e) => agentStore.getState().onInstallEvent(e)),
     ];
     void agentStore.getState().init();
+    // Asked for a new flow, the editor shows it being made at once, so the person
+    // watches it from the request on; following then opens the flow in its place.
+    const stopDrafting = agentStore.subscribe((a, prev) => {
+      const s = store.getState();
+      const asked = askedForFlow(prev.chats, a.chats);
+      if (asked) {
+        if (mayDraft(s.place, isActive(s.run) || handEdited())) s.showDrafting(asked);
+        return;
+      }
+      const drafting = s.drafting;
+      if (!drafting) return;
+      const chat = a.chats.find((c) => c.id === drafting.chatId);
+      if (draftingOver(chat)) s.showDrafting(null);
+    });
     // The files follow the open flow, and the watcher's word that its folder changed.
     void projectStore.getState().load(store.getState().flow?.id ?? null);
     const stopProject = store.subscribe((s, prev) => {
       if (s.flow?.id !== prev.flow?.id) void projectStore.getState().load(s.flow?.id ?? null);
+      // Any flow opened (the one made, or another) takes the place of the one being made.
+      if (s.flow && s.drafting) store.setState({ drafting: null });
     });
     unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
@@ -602,6 +708,11 @@ export function App() {
         debugKey(e, store.getState());
         return;
       }
+      if (mod && e.key === ",") {
+        e.preventDefault();
+        store.getState().setPlace("settings");
+        return;
+      }
       if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
         agentStore.getState().setOpen(!agentStore.getState().open);
@@ -612,6 +723,9 @@ export function App() {
         if (store.getState().flow) store.getState().setPaletteOpen(!store.getState().paletteOpen);
         return;
       }
+      // On the review's report the chart is not shown: arrows, Home/End and the rest scroll and
+      // act on the paper, never on nodes nobody sees.
+      if (store.getState().place === "review" && useReviewView.getState().view === "report") return;
       // Nodes: copy, cut, paste and duplicate. Text selected on the page keeps
       // the window's own copy.
       const letter = e.key.toLowerCase();
@@ -646,6 +760,7 @@ export function App() {
       window.removeEventListener("focus", onFocus);
       stopAttention();
       stopProject();
+      stopDrafting();
       for (const p of unlisten) void p.then((off) => off());
     };
   }, [store, agentStore, projectStore]);

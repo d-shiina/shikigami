@@ -37,12 +37,13 @@ const STDERR_TAIL: usize = 2000;
 pub(crate) const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
-You are an AI called from inside SpellSheet Studio (RPA for Windows). You are talking with the person using Studio.
+You are an AI called from inside SpellSheet Writer (RPA for Windows). You are talking with the person using Writer.
 - Read, edit and test-run flows only with the shikigami MCP tools. Files and commands are not available.
-- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Studio shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Studio's review, where a person checks what they do.
-- The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Studio has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
+- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Writer shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Writer's review, where a person checks what they do.
+- The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Writer has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
 - When asked to fix something that was sent back, read the feedback in get_flow (details in get_review), fix it as noted, and briefly report what you fixed.
-- Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Studio.
+- When the work depends on a decision only the person can make and you see 2 to 4 ways (how to handle a case, which way to build it), call ask_user_to_choose with the question, the answers (a short label and one sentence on what happens) and the one you recommend, instead of listing them in your reply. Writer shows them as a card. Then end your turn without repeating them; the answer comes as the next message. Do not use it for yes/no confirmations of what you were asked to do, or when one way is clearly right.
+- Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Writer.
 - Reply briefly, in the language the person writes in (Japanese or English): what you did, and what the person should do next.";
 
 type CmdResult<T> = Result<T, ErrorPayload>;
@@ -235,6 +236,14 @@ pub enum AgentEvent {
     ToolFailed {
         message: String,
     },
+    /// The agent asked the person to choose (ask_user_to_choose): the pane
+    /// shows a card, and the answer goes back as the next message.
+    Choice {
+        question: String,
+        options: Vec<ChoiceOption>,
+        recommended: Option<usize>,
+        reason: Option<String>,
+    },
     /// The agent created a flow, so a conversation that began without
     /// one now belongs to it.
     Created {
@@ -250,7 +259,39 @@ pub enum AgentEvent {
     },
 }
 
+/// One answer on an ask_user_to_choose card.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChoiceOption {
+    pub label: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
 impl AgentEvent {
+    /// The event for a Shikigami tool call with its arguments: a card for
+    /// ask_user_to_choose, otherwise the call with its summary.
+    pub(crate) fn tool(name: String, input: Option<&Value>) -> Self {
+        // Some agents give the arguments as JSON text.
+        let parsed = match input {
+            Some(Value::String(text)) => serde_json::from_str::<Value>(text).ok(),
+            other => other.cloned(),
+        };
+        let input = parsed.as_ref();
+        if name == CHOOSE_TOOL
+            && let Some(choice) = input.and_then(choice_of)
+        {
+            return choice;
+        }
+        Self::Tool {
+            name,
+            detail: input
+                .and_then(|i| i.get("summary"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        }
+    }
+
     fn done(ok: bool, message: Option<String>, cost_usd: Option<f64>) -> Self {
         let needs_login = !ok && message.as_deref().is_some_and(is_login_error);
         Self::Done {
@@ -260,6 +301,52 @@ impl AgentEvent {
             needs_login,
         }
     }
+}
+
+/// The MCP tool whose call the pane shows as a card to choose from.
+pub(crate) const CHOOSE_TOOL: &str = "ask_user_to_choose";
+
+/// The card for an ask_user_to_choose call, when its arguments make one
+/// (the server refuses the rest, and the agent then tries again).
+fn choice_of(input: &Value) -> Option<AgentEvent> {
+    #[derive(Deserialize)]
+    struct Args {
+        question: String,
+        options: Vec<ChoiceOption>,
+        #[serde(default)]
+        recommended: Option<usize>,
+        #[serde(default)]
+        reason: Option<String>,
+    }
+    let args: Args = serde_json::from_value(input.clone()).ok()?;
+    let question = args.question.trim().to_owned();
+    let options: Vec<ChoiceOption> = args
+        .options
+        .into_iter()
+        .map(|o| ChoiceOption {
+            label: o.label.trim().to_owned(),
+            description: o
+                .description
+                .map(|d| d.trim().to_owned())
+                .filter(|d| !d.is_empty()),
+        })
+        .collect();
+    let mut labels = std::collections::HashSet::new();
+    let fits = !question.is_empty()
+        && (2..=4).contains(&options.len())
+        && options
+            .iter()
+            .all(|o| !o.label.is_empty() && labels.insert(o.label.clone()))
+        && args.recommended.is_none_or(|i| i < options.len());
+    fits.then(|| AgentEvent::Choice {
+        question,
+        recommended: args.recommended,
+        options,
+        reason: args
+            .reason
+            .map(|r| r.trim().to_owned())
+            .filter(|r| !r.is_empty()),
+    })
 }
 
 /// An agent's wording when it cannot use the account, e.g. Claude Code's
@@ -322,7 +409,7 @@ pub fn agent_info() -> AgentInfo {
         )),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
         (Some(_), None) => Some(
-            "shikigami コマンド（MCP サーバー）が見つかりません。Studio と同じフォルダに置いてください。"
+            "shikigami コマンド（MCP サーバー）が見つかりません。Writer と同じフォルダに置いてください。"
                 .to_owned(),
         ),
         _ => None,
@@ -950,6 +1037,11 @@ pub fn agent_open_url(url: String) -> CmdResult<()> {
 
 /// Hands an address already checked by the caller to the default browser.
 fn agent_open_any(url: &str) -> CmdResult<()> {
+    open_external(url)
+}
+
+/// Hands an address built by Studio itself to Windows (browser or protocol handler).
+pub(crate) fn open_external(url: &str) -> CmdResult<()> {
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("explorer");
         c.arg(url);
@@ -1094,7 +1186,7 @@ fn with_context(message: &str, flow: Option<&FlowRef>) -> String {
                 .unwrap_or_default();
             let empty = if s.empty { ", no steps yet" } else { "" };
             format!(
-                "(Open in Studio: flow \"{}\" id={}{empty}{step})\n\n{message}",
+                "(Open in Writer: flow \"{}\" id={}{empty}{step})\n\n{message}",
                 s.name, s.id
             )
         }
@@ -1171,10 +1263,7 @@ impl ClaudeStream {
                         if let Some(id) = str_of(b, "id") {
                             self.tools.insert(id, name.clone());
                         }
-                        Some(AgentEvent::Tool {
-                            name,
-                            detail: b.get("input").and_then(|i| str_of(i, "summary")),
-                        })
+                        Some(AgentEvent::tool(name, b.get("input")))
                     }
                     _ => None,
                 })
@@ -1484,6 +1573,68 @@ mod tests {
     }
 
     #[test]
+    fn shows_a_choice_as_a_card() {
+        let events = parse_claude_line(
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__shikigami__ask_user_to_choose","input":{"question":" 在庫切れの注文はどうしますか？ ","options":[{"label":"飛ばす","description":"出荷できた分だけ進めます。"},{"label":"止める","description":""}],"recommended":0,"reason":"止まらないので"}}]}}"#,
+        );
+        assert_eq!(
+            events,
+            vec![AgentEvent::Choice {
+                question: "在庫切れの注文はどうしますか？".into(),
+                options: vec![
+                    ChoiceOption {
+                        label: "飛ばす".into(),
+                        description: Some("出荷できた分だけ進めます。".into())
+                    },
+                    ChoiceOption {
+                        label: "止める".into(),
+                        description: None
+                    },
+                ],
+                recommended: Some(0),
+                reason: Some("止まらないので".into()),
+            }]
+        );
+        let e = Envelope {
+            turn_id: "t".into(),
+            event: events[0].clone(),
+        };
+        let v = serde_json::to_value(e).unwrap();
+        assert_eq!(v["kind"], "choice");
+        assert_eq!(v["options"][0]["label"], "飛ばす");
+    }
+
+    #[test]
+    fn reads_choice_arguments_given_as_text() {
+        let args = json!(
+            r#"{"question":"どちら？","options":[{"label":"A"},{"label":"B"}],"recommended":1}"#
+        );
+        assert!(matches!(
+            AgentEvent::tool("ask_user_to_choose".into(), Some(&args)),
+            AgentEvent::Choice { recommended: Some(1), ref options, .. } if options.len() == 2
+        ));
+    }
+
+    #[test]
+    fn a_choice_the_server_refuses_is_no_card() {
+        for args in [
+            json!({ "question": "どちら？", "options": [{ "label": "A" }] }),
+            json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "A" }] }),
+            json!({ "question": " ", "options": [{ "label": "A" }, { "label": "B" }] }),
+            json!({ "question": "どちら？", "options": [{ "label": "1" }, { "label": "2" }, { "label": "3" }, { "label": "4" }, { "label": "5" }] }),
+            json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "B" }], "recommended": 2 }),
+        ] {
+            assert_eq!(
+                AgentEvent::tool("ask_user_to_choose".into(), Some(&args)),
+                AgentEvent::Tool {
+                    name: "ask_user_to_choose".into(),
+                    detail: None
+                }
+            );
+        }
+    }
+
+    #[test]
     fn events_serialize_camel_cased() {
         let e = Envelope {
             turn_id: "t".into(),
@@ -1596,7 +1747,7 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s))
-                .starts_with("(Open in Studio: flow \"受注\" id=scn_1)")
+                .starts_with("(Open in Writer: flow \"受注\" id=scn_1)")
         );
         let s = FlowRef {
             step_id: Some("stp_9".into()),
@@ -1604,7 +1755,7 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s)).starts_with(
-                "(Open in Studio: flow \"受注\" id=scn_1, selected step stepId=stp_9)"
+                "(Open in Writer: flow \"受注\" id=scn_1, selected step stepId=stp_9)"
             )
         );
         let s = FlowRef {
@@ -1614,7 +1765,7 @@ mod tests {
         };
         assert!(
             with_context("作って", Some(&s))
-                .starts_with("(Open in Studio: flow \"受注\" id=scn_1, no steps yet)")
+                .starts_with("(Open in Writer: flow \"受注\" id=scn_1, no steps yet)")
         );
         assert_eq!(with_context("直して", None), "直して");
     }

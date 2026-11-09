@@ -35,12 +35,26 @@ pub struct Sample {
     pub truth: Vec<Truth>,
 }
 
-fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ocr-bench")
+fn fixtures(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
 }
 
+/// The screens of the benchmark.
 pub fn samples() -> Vec<Sample> {
-    let dir = fixtures();
+    samples_in("ocr-bench")
+}
+
+/// The handwriting of the benchmark (`tests/fixtures/ocr-hand`): a slip and
+/// a memo written in handwriting-style fonts (`tests/ocr-bench/make-hand.mjs`),
+/// scanned and photographed, and real handwriting (`daiki-styles`).
+pub fn hand_samples() -> Vec<Sample> {
+    samples_in("ocr-hand")
+}
+
+fn samples_in(name: &str) -> Vec<Sample> {
+    let dir = fixtures(name);
     let truth: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("truth.json")).unwrap()).unwrap();
     let mut out = Vec::new();
@@ -220,10 +234,18 @@ impl Report {
             ("ダーク", has("-dark")),
             (
                 "そのまま",
-                Box::new(|n: &str| !n.contains("-cleartype") && !n.contains("-remote")),
+                Box::new(|n: &str| {
+                    !n.contains("-cleartype")
+                        && !n.contains("-remote")
+                        && !n.starts_with("hand-")
+                        && !n.starts_with("daiki-")
+                }),
             ),
             ("ClearType", has("-cleartype")),
             ("リモート画面", has("-remote")),
+            ("手書き風（スキャン）", has("-scan")),
+            ("手書き風（写真）", has("-photo")),
+            ("本物の手書き", has("daiki-")),
         ]
     }
 
@@ -403,6 +425,98 @@ mod tests {
         report.annotate("PaddleOCR small");
     }
 
+    /// Handwriting with PaddleOCR, small (the default) and medium
+    /// ("高精度", where its models are installed).
+    #[test]
+    #[ignore = "minutes in a debug build; run with --ignored"]
+    fn ocr_bench_handwriting_paddle() {
+        let samples = hand_samples();
+        for (accurate, title) in [
+            (false, "手書き PaddleOCR small"),
+            (true, "手書き PaddleOCR medium（高精度）"),
+        ] {
+            let engine = match crate::paddle::engine_for(accurate) {
+                Ok(engine) => engine,
+                Err(reason) => {
+                    eprintln!("skipped {title}: {reason}");
+                    continue;
+                }
+            };
+            let report = run(&samples, |image| engine.recognize(image).unwrap());
+            report.print(title);
+            report.annotate(title);
+        }
+    }
+
+    /// The handwritten slip's fields read one by one, as a flow reads a
+    /// form: as they are, then with the field's kind of text (date, phone
+    /// number, amount) and, for the name, the staff list as candidates.
+    #[test]
+    #[ignore = "minutes in a debug build; run with --ignored"]
+    fn ocr_bench_handwriting_fields() {
+        use crate::ocr_fit::{TextKind, fit_output};
+        let staff: Vec<String> = ["山田 太郎", "山本 花子", "佐藤 一郎", "田中 次郎"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        let field = |text: &str| -> (Option<TextKind>, bool) {
+            match text {
+                "2026年11月8日" => (Some(TextKind::Date), false),
+                "03-1234-5678" => (Some(TextKind::Phone), false),
+                "12,800円" => (Some(TextKind::Amount), false),
+                "山田 太郎" => (None, true),
+                _ => (None, false),
+            }
+        };
+        for accurate in [false, true] {
+            let Ok(engine) = crate::paddle::engine_for(accurate) else {
+                continue;
+            };
+            let (mut fields, mut plain_ok, mut fitted_ok) = (0, 0, 0);
+            for sample in hand_samples()
+                .iter()
+                .filter(|s| s.name.starts_with("hand-"))
+            {
+                for truth in &sample.truth {
+                    let (kind, by_name) = field(&truth.text);
+                    if kind.is_none() && !by_name {
+                        continue;
+                    }
+                    let r = truth.rect;
+                    let pad = 6;
+                    let Some(crop) = sample.image.crop(crate::bitmap::Rect {
+                        x: (r.x - pad).max(0),
+                        y: (r.y - pad).max(0),
+                        width: r.width + 2 * pad as u32,
+                        height: r.height + 2 * pad as u32,
+                    }) else {
+                        continue;
+                    };
+                    let want = chars(&truth.text, true);
+                    let plain = crate::vision::ocr_text(&engine.recognize(&crop).unwrap());
+                    let mut output =
+                        crate::visual::read_output(&engine.recognize_kind(&crop, kind).unwrap());
+                    fit_output(&mut output, kind, by_name.then_some(staff.as_slice()));
+                    let fitted = output["text"].as_str().unwrap_or_default().to_owned();
+                    fields += 1;
+                    plain_ok += usize::from(chars(&plain, true) == want);
+                    fitted_ok += usize::from(chars(&fitted, true) == want);
+                    if chars(&fitted, true) != want {
+                        eprintln!("  {:?} → {plain:?} → {fitted:?}", truth.text);
+                    }
+                }
+            }
+            let title = if accurate { "medium" } else { "small" };
+            let line = format!(
+                "手書きの欄（日付・電話・金額・名前） {title}: そのまま {plain_ok}/{fields}、種類と候補で {fitted_ok}/{fields}"
+            );
+            eprintln!("{line}");
+            if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                println!("::notice title=OCR benchmark: 手書きの欄 {title}::{line}");
+            }
+        }
+    }
+
     /// The same benchmark with Windows OCR, where its Japanese pack is
     /// installed (Add-WindowsCapability -Online -Name
     /// "Language.OCR~~~ja-JP~0.0.1.0").
@@ -420,5 +534,11 @@ mod tests {
         });
         report.print("Windows OCR");
         report.annotate("Windows OCR");
+        let hand = hand_samples();
+        let report = run(&hand, |image| {
+            crate::capture::recognize(image, Some("ja")).unwrap()
+        });
+        report.print("手書き Windows OCR");
+        report.annotate("手書き Windows OCR");
     }
 }

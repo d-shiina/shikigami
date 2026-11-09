@@ -50,6 +50,10 @@ enum Command {
     /// Workspace location and sharing.
     #[command(subcommand)]
     Workspace(WorkspaceCmd),
+    /// 配布フォルダー: shared folders where people put published versions
+    /// (`.spx`) for each other. The list of folders is this PC's own.
+    #[command(subcommand)]
+    Distribution(DistributionCmd),
     /// Run a flow (by ID or JSON file) without GUI or AI. A flow in
     /// the workspace runs its published version (see `version publish`).
     Run {
@@ -120,11 +124,12 @@ enum Command {
     /// Requests from AI clients waiting for a person's approval.
     #[command(subcommand)]
     Approval(ApprovalCmd),
-    /// The agent: runs flows unattended on this PC (schedules, file
-    /// triggers) so Task Scheduler is not needed.
-    #[command(subcommand)]
-    Agent(agent_cmd::AgentCmd),
-    /// When the agent starts flows by itself: daily, monthly, every few
+    /// The worker: runs flows unattended on this PC (schedules, file
+    /// triggers, jobs from a management server) so Task Scheduler is not
+    /// needed. `agent` (its name before) works too.
+    #[command(subcommand, alias = "agent")]
+    Worker(agent_cmd::AgentCmd),
+    /// When the worker starts flows by itself: daily, monthly, every few
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
@@ -133,7 +138,7 @@ enum Command {
     /// locking it.
     #[command(subcommand)]
     Session(SessionCmd),
-    /// A small reference management server for agents (protocol v1).
+    /// A small reference management server for workers (protocol v1).
     #[command(subcommand)]
     Manager(agent_cmd::ManagerCmd),
     /// This PC's audit trail: who changed, published and ran which flow,
@@ -157,6 +162,9 @@ enum Command {
         /// Tool classes to expose, comma separated: read, write, run.
         #[arg(long, value_delimiter = ',', default_value = "read,write,run")]
         allow: Vec<String>,
+        /// The client is the AI chat in SpellSheet Writer (it shows ask_user_to_choose as a card).
+        #[arg(long, hide = true)]
+        writer_chat: bool,
     },
 }
 
@@ -184,23 +192,41 @@ enum FlowCmd {
     Create {
         name: String,
     },
-    /// Import a bundle (`*.shikigami.json`) or a flow JSON file.
+    /// Import a flow file someone handed over (`*.spx`), an older bundle
+    /// (`*.shikigami.json`) or a flow JSON file.
     Import {
         file: PathBuf,
         /// When the flow ID already exists: `update` it (undoable) or
         /// import a `copy` under a new ID.
         #[arg(long, value_enum)]
         on_conflict: Option<OnConflict>,
+        /// Only show what the file holds and what this PC still needs
+        /// (extensions, logins, allowed sites); import nothing.
+        #[arg(long)]
+        check: bool,
     },
-    /// Write a bundle (flow + versions) for another workspace or person.
+    /// Write the flow as one file to hand to another person or PC (`.spx`):
+    /// the published version by default, with the flows it calls and its
+    /// folder's files (not `input/` unless asked). Logins go by name only.
     Export {
         id: String,
-        /// Output file (default: stdout).
+        /// Output file or folder (default: `<name> v<n>.spx` here). A name
+        /// ending in `.json` writes the older JSON bundle; `-` writes that
+        /// bundle to stdout.
         #[arg(long, short = 'o')]
         output: Option<PathBuf>,
-        /// Leave the named versions out.
+        /// Export the current content instead of the published version.
+        #[arg(long)]
+        current: bool,
+        /// Include every version, not only the exported one.
+        #[arg(long, conflicts_with = "no_versions")]
+        all_versions: bool,
+        /// Leave versions out.
         #[arg(long)]
         no_versions: bool,
+        /// Include the files under `input/` (usually real business data).
+        #[arg(long)]
+        with_input: bool,
     },
     Delete {
         id: String,
@@ -319,6 +345,26 @@ enum ApprovalCmd {
     Approve { id: String },
     /// Refuse one request.
     Deny { id: String },
+}
+
+#[derive(Subcommand)]
+enum DistributionCmd {
+    /// The folders this PC looks at.
+    List,
+    /// Look at a folder too, e.g. `add 経理課 \\fs01\経理\SpellSheet`.
+    Add { name: String, path: String },
+    /// Stop looking at a folder (its files stay).
+    Remove { name: String },
+    /// What each folder holds against this workspace (new, update, latest, older), as JSON.
+    Check,
+    /// Put the published version of a flow in a folder as `<name> v<n>.spx`.
+    Put {
+        /// Flow ID.
+        id: String,
+        /// Folder name (as added); may be left out when there is only one.
+        #[arg(long)]
+        folder: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -476,7 +522,7 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
         }
         let dir = install::commit(&root, staged)?;
         eprintln!(
-            "installed into {} (restart Studio and AI clients to use it)",
+            "installed into {} (restart Writer and AI clients to use it)",
             dir.display()
         );
         Ok(ExitCode::SUCCESS)
@@ -568,7 +614,7 @@ fn real_main() -> Result<ExitCode> {
 
     match &cli.command {
         Command::Session(cmd) => return session_cmd(cmd),
-        Command::Agent(cmd) => {
+        Command::Worker(cmd) => {
             return agent_cmd::agent_cmd(open_service()?, &runtime, &workspace(), cmd);
         }
         Command::Schedule(cmd) => {
@@ -625,6 +671,10 @@ fn real_main() -> Result<ExitCode> {
         Command::Approval(cmd) => {
             let svc = open_service()?;
             approval_cmd(&ApprovalStore::new(svc.store().local_root()), cmd).map_err(core_err)?;
+        }
+        Command::Distribution(cmd) => {
+            let svc = open_service()?;
+            distribution_cmd(&svc, cmd)?;
         }
         Command::Workspace(WorkspaceCmd::Info) => {
             let svc = open_service()?;
@@ -735,10 +785,11 @@ fn real_main() -> Result<ExitCode> {
                 println!("wrote {}", path.display());
             }
         }
-        Command::Mcp { allow } => {
+        Command::Mcp { allow, writer_chat } => {
             let mut options = shikigami_mcp::ServerOptions {
                 allow: Vec::new(),
                 adapters: adapters.clone(),
+                writer_chat: *writer_chat,
             };
             for name in allow {
                 let Some(class) = shikigami_mcp::ToolClass::parse(name) else {
@@ -1034,10 +1085,23 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
             )?;
             println!("{}", out.flow.id);
         }
-        FlowCmd::Import { file, on_conflict } => {
-            let text = std::fs::read_to_string(file)
-                .with_context(|| format!("reading {}", file.display()))?;
-            let value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+        FlowCmd::Import {
+            file,
+            on_conflict,
+            check,
+        } => {
+            let bytes =
+                std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+            if *check {
+                let secrets: Vec<String> = Vault::open(svc.store().root())
+                    .list()
+                    .map(|list| list.into_iter().map(|s| s.name).collect())
+                    .unwrap_or_default();
+                let preview = svc.preview_file(&bytes, &secrets)?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+                return Ok(());
+            }
+            let value = shikigami_core::service::file_to_bundle_value(&bytes)?;
             let on_conflict = on_conflict.map(|c| match c {
                 OnConflict::Update => ImportConflict::Update,
                 OnConflict::Copy => ImportConflict::Copy,
@@ -1055,21 +1119,79 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
         FlowCmd::Export {
             id,
             output,
+            current,
+            all_versions,
             no_versions,
+            with_input,
         } => {
-            let bundle = svc.export(&FlowId::new(id.as_str()), !no_versions)?;
-            let json = serde_json::to_string_pretty(&bundle)? + "\n";
-            match output {
-                Some(path) => {
-                    std::fs::write(path, json)
-                        .with_context(|| format!("writing {}", path.display()))?;
-                    eprintln!(
-                        "wrote {} ({} version(s))",
-                        path.display(),
-                        bundle.versions.len()
-                    );
+            let id = FlowId::new(id.as_str());
+            let legacy = output
+                .as_deref()
+                .is_some_and(|p| p == Path::new("-") || p.extension().is_some_and(|e| e == "json"));
+            if legacy {
+                let bundle = svc.export(&id, !no_versions)?;
+                let json = serde_json::to_string_pretty(&bundle)? + "\n";
+                match output.as_deref() {
+                    Some(path) if path != Path::new("-") => {
+                        std::fs::write(path, json)
+                            .with_context(|| format!("writing {}", path.display()))?;
+                    }
+                    _ => print!("{json}"),
                 }
-                None => print!("{json}"),
+                return Ok(());
+            }
+            use shikigami_core::package::{PackageContent, PackageOptions, PackageVersions};
+            let options = PackageOptions {
+                content: if *current {
+                    PackageContent::Current
+                } else {
+                    PackageContent::Auto
+                },
+                versions: if *no_versions {
+                    PackageVersions::None
+                } else if *all_versions {
+                    PackageVersions::All
+                } else {
+                    PackageVersions::Content
+                },
+                include_input: *with_input,
+                exclude: Vec::new(),
+                only: None,
+                exported_by: std::env::var("USERNAME")
+                    .or_else(|_| std::env::var("USER"))
+                    .ok(),
+            };
+            let (manifest, bytes) = svc.export_package(&id, &options)?;
+            let name = shikigami_core::package::file_name(
+                &manifest.flow.name,
+                manifest.flow.version.as_ref().map(|v| v.number),
+            );
+            let path = match output {
+                Some(p) if p.is_dir() => p.join(&name),
+                Some(p) => p.clone(),
+                None => PathBuf::from(&name),
+            };
+            std::fs::write(&path, &bytes).with_context(|| format!("writing {}", path.display()))?;
+            let what = match (&manifest.flow.version, manifest.flow.published) {
+                (Some(v), true) => format!("published version v{}", v.number),
+                (Some(v), false) => format!("version v{}", v.number),
+                (None, _) => "current content (not saved as a version)".to_owned(),
+            };
+            eprintln!("wrote {} ({what})", path.display());
+            let r = &manifest.requires;
+            for (label, items) in [
+                ("logins", &r.secrets),
+                ("sites", &r.sites),
+                ("apps", &r.apps),
+            ] {
+                if !items.is_empty() {
+                    eprintln!("  needs {label}: {}", items.join(", "));
+                }
+            }
+            if !r.plugins.is_empty() {
+                let plugins: Vec<String> =
+                    r.plugins.iter().map(|(k, v)| format!("{k} {v}")).collect();
+                eprintln!("  needs extensions: {}", plugins.join(", "));
             }
         }
         FlowCmd::Files { id } => {
@@ -1302,7 +1424,7 @@ fn runnable(
             code: "UNATTENDED_NOT_ALLOWED",
             message: format!("the workspace policy keeps {id} from running unattended"),
             hint: Some(
-                "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+                "Run it from Writer, or change \"unattended\" for it in policy.json.".into(),
             ),
         }))
     };
@@ -1378,9 +1500,8 @@ fn print_outcome(out: &shikigami_core::EditOutcome) {
 /// Reads a flow JSON file or the flow inside a bundle.
 /// A flow file or bundle, with the sub-flows a bundle carries.
 fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut value = shikigami_core::service::file_to_bundle_value(&bytes)?;
     let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
         // `scenario` / `subscenarios`: bundles from before flows were
@@ -1399,7 +1520,7 @@ fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
 
 /// A target is a file path when it ends with `.json` or exists on disk.
 fn is_file(target: &str) -> bool {
-    target.ends_with(".json") || Path::new(target).is_file()
+    target.ends_with(".json") || target.ends_with(".spx") || Path::new(target).is_file()
 }
 
 fn resolve(svc: &FlowService, target: &str) -> Result<(Flow, Vec<Flow>)> {
@@ -1425,7 +1546,7 @@ fn project_dirs(
     if !(target.ends_with(".json") || path.is_file()) {
         return Ok(Some(svc.project_dir(&flow.id)?));
     }
-    let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let value = shikigami_core::service::file_to_bundle_value(&std::fs::read(path)?)?;
     let file = std::path::absolute(path)?;
     if !shikigami_core::version::is_bundle(&value) {
         return Ok(file.parent().map(Path::to_path_buf));
@@ -1437,6 +1558,7 @@ fn project_dirs(
         .unwrap_or_default();
     let base = name
         .strip_suffix(".shikigami.json")
+        .or_else(|| name.strip_suffix(".spx"))
         .or_else(|| name.strip_suffix(".json"))
         .unwrap_or(&name)
         .to_owned();
@@ -1451,7 +1573,7 @@ fn project_dirs(
         }
         let dir = root.join(id.as_str());
         std::fs::create_dir_all(&dir)?;
-        shikigami_core::project::unpack(&bundle.files, id, &dir)?;
+        shikigami_core::project::unpack(&bundle.files, id, &dir, false)?;
         Ok(dir)
     };
     let main = unpack(&flow.id)?;
@@ -1874,4 +1996,63 @@ fn session_cmd(cmd: &SessionCmd) -> Result<ExitCode> {
             }
         }
     }
+}
+
+fn distribution_cmd(svc: &FlowService, cmd: &DistributionCmd) -> anyhow::Result<()> {
+    use shikigami_core::distribution::DistributionFolder;
+    match cmd {
+        DistributionCmd::List => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.distribution_folders()?)?
+            );
+        }
+        DistributionCmd::Add { name, path } => {
+            let mut folders = svc.distribution_folders()?;
+            folders.push(DistributionFolder {
+                name: name.clone(),
+                path: path.clone(),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.set_distribution_folders(folders)?)?
+            );
+        }
+        DistributionCmd::Remove { name } => {
+            let folders = svc.distribution_folders()?;
+            if !folders.iter().any(|f| &f.name == name) {
+                anyhow::bail!("no distribution folder named {name}");
+            }
+            let left = folders.into_iter().filter(|f| &f.name != name).collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.set_distribution_folders(left)?)?
+            );
+        }
+        DistributionCmd::Check => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&svc.scan_distribution()?)?
+            );
+        }
+        DistributionCmd::Put { id, folder } => {
+            let folders = svc.distribution_folders()?;
+            let name = match (folder, folders.as_slice()) {
+                (Some(name), _) => name.clone(),
+                (None, [only]) => only.name.clone(),
+                (None, []) => {
+                    anyhow::bail!("no distribution folder yet; add one with `distribution add`")
+                }
+                (None, _) => {
+                    anyhow::bail!("several distribution folders; choose one with --folder")
+                }
+            };
+            let by = std::env::var("USERNAME")
+                .or_else(|_| std::env::var("USER"))
+                .ok();
+            let path = svc.place_in_distribution(&FlowId::new(id.as_str()), &name, None, by)?;
+            println!("{}", path.display());
+        }
+    }
+    Ok(())
 }

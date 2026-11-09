@@ -1,18 +1,14 @@
-// The bar along the bottom holds what belongs to the window, not to what is
-// open: this PC's preferences (language, theme) and the version. What the
-// open flow's run is doing and where the selection is sit with the flow (the
-// title bar, the inspector); what the AI is doing sits by the AI's button.
-// What waits on the person has its badge on the control that answers it
-// (確認待ち, シークレット), not here.
-import type { HistoryEntry, Step } from "@shikigami/schema";
+// Pieces once held by the bar along the bottom, now shown where they belong:
+// the workspace and the language and theme switches (Settings), the open
+// flow's run (its title bar) and the selected node's place (the inspector).
+// The window has no status bar: the app's menu at its top left holds the
+// theme, language and version (ShellBar).
+import type { Step } from "@shikigami/schema";
 import { type ReactNode, useMemo, useState } from "react";
-import { activity, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
-import { actorLabel, relativeTime } from "../lib/changes";
 import { outline } from "../lib/outline";
 import { type Locale, setLocale, stepLabel, t, useLocale } from "../lib/i18n";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
-import { useAppVersion, useUpdate } from "./AppMenu";
 import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
 
 const ITEM = "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap";
@@ -60,45 +56,6 @@ export function WorkspaceSection() {
         </SettingsRow>
       </SettingsGroup>
     </form>
-  );
-}
-
-/**
- * While the AI asked in the AI pane works: what it is doing now, so it shows
- * from every place, not only in the pane. Otherwise the latest edit an AI
- * made through MCP, in any flow loaded so far.
- */
-export function AiActivity() {
-  const working = useAgentMaybe((s) => activity(s) !== null, false);
-  const tool = useAgentMaybe((s) => activity(s)?.tool ?? null, null);
-  const name = useAgentMaybe((s) => s.info?.name ?? "AI", "AI");
-  if (working) {
-    const what = tool ? ((t.agent.tools as Record<string, string>)[tool] ?? tool) : null;
-    return (
-      <span className={ITEM} title={t.bar.aiWorkingTitle}>
-        <span className="bg-brand-500 h-2 w-2 animate-pulse rounded-full" />
-        {t.bar.aiWorking(name, what)}
-      </span>
-    );
-  }
-  return <LastAiEdit />;
-}
-
-function LastAiEdit() {
-  const histories = useStudio((s) => s.histories);
-  const latest = useMemo(() => {
-    let found: HistoryEntry | null = null;
-    for (const entries of Object.values(histories)) {
-      for (const e of entries) if (e.actor.kind === "mcp" && (!found || e.at > found.at)) found = e;
-    }
-    return found;
-  }, [histories]);
-  if (!latest) return null;
-  return (
-    <span className={ITEM} title={t.bar.aiEditedTitle}>
-      <span className="bg-brand-500 h-2 w-2 rounded-full" />
-      {t.bar.aiEdited(actorLabel(latest), relativeTime(latest.at))}
-    </span>
   );
 }
 
@@ -234,29 +191,5 @@ export function LanguageSwitch({ labeled = false }: { labeled?: boolean }) {
         </button>
       ))}
     </div>
-  );
-}
-
-/** The version; brand blue while an update waits. Opens Settings. */
-function Version() {
-  const version = useAppVersion();
-  const update = useUpdate();
-  const setPlace = useStudio((s) => s.setPlace);
-  if (!version) return null;
-  return (
-    <button type="button" className={`${BUTTON} ${update ? "font-semibold text-brand-600" : ""}`} onClick={() => setPlace("settings")} title={t.shell.openSettings}>
-      {update ? `${t.updateAvailable} v${update}` : `v${version}`}
-    </button>
-  );
-}
-
-export function StatusBar() {
-  return (
-    <footer className="col-span-full flex h-7 min-w-0 items-center bg-frame px-2 text-[11px] text-slate-500">
-      <span className="flex-1" />
-      <LanguageSwitch />
-      <ThemeSwitch />
-      <Version />
-    </footer>
   );
 }

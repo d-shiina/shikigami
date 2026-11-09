@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use shikigami_core::distribution::{DistributionFolder, DistributionView};
+use shikigami_core::package::{PackageManifest, PackageOptions, PackagePlan, PackagePreview};
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
     Evidence, ExtractOutcome, FileStore, Flow, FlowDiff, FlowId, FlowSummary, HistoryEntry,
@@ -196,40 +198,197 @@ pub fn restore_version(
         .restore_version(&id, number, expected_revision, studio())?)
 }
 
-/// Writes a bundle into the Downloads folder and returns its path.
-#[tauri::command]
-pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> {
-    let bundle = state.service.export(&id, true)?;
+/// A free path for `name` in the Downloads folder (`name (2).spx`, …).
+fn download_path(name: &str) -> CmdResult<std::path::PathBuf> {
     let dir = dirs::download_dir()
         .or_else(dirs::home_dir)
-        .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?;
-    let stem: String = bundle
-        .flow
-        .name
-        .chars()
-        .map(|c| {
-            if r#"\/:*?"<>|"#.contains(c) || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect();
-    let stem = if stem.trim().is_empty() {
-        "flow".to_owned()
-    } else {
-        stem
-    };
-    let mut path = dir.join(format!("{stem}.shikigami.json"));
+        .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダーが見つかりません"))?;
+    let path = dir.join(name);
+    if !path.exists() {
+        return Ok(path);
+    }
+    let (stem, ext) = name.rsplit_once('.').unwrap_or((name, ""));
     let mut n = 2;
-    while path.exists() {
-        path = dir.join(format!("{stem} ({n}).shikigami.json"));
+    loop {
+        let path = dir.join(format!("{stem} ({n}).{ext}"));
+        if !path.exists() {
+            return Ok(path);
+        }
         n += 1;
     }
-    let json =
-        serde_json::to_vec_pretty(&bundle).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
-    std::fs::write(&path, json).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
-    Ok(path.display().to_string())
+}
+
+fn windows_user() -> Option<String> {
+    std::env::var("USERNAME").ok().filter(|s| !s.is_empty())
+}
+
+/// Writes the flow as a `.spx` file (default choices) into the Downloads
+/// folder and returns its path. Several flows at once use this.
+#[tauri::command]
+pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> {
+    let options = PackageOptions {
+        exported_by: windows_user(),
+        ..PackageOptions::default()
+    };
+    Ok(write_package_file(&state, &id, options)?.path)
+}
+
+/// What handing over a flow would put in the file, for the 「渡す」 dialog.
+#[tauri::command]
+pub fn package_plan(
+    state: State<'_, AppState>,
+    id: FlowId,
+    content: Option<shikigami_core::package::PackageContent>,
+) -> CmdResult<PackagePlan> {
+    Ok(state
+        .service
+        .package_plan(&id, content.unwrap_or_default())?)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedPackage {
+    pub path: String,
+    pub manifest: PackageManifest,
+}
+
+/// Writes the flow as a `.spx` file into the Downloads folder.
+#[tauri::command]
+pub fn export_package(
+    state: State<'_, AppState>,
+    id: FlowId,
+    options: PackageOptions,
+) -> CmdResult<ExportedPackage> {
+    write_package_file(&state, &id, options)
+}
+
+fn write_package_file(
+    state: &AppState,
+    id: &FlowId,
+    mut options: PackageOptions,
+) -> CmdResult<ExportedPackage> {
+    if options.exported_by.is_none() {
+        options.exported_by = windows_user();
+    }
+    let (manifest, bytes) = state.service.export_package(id, &options)?;
+    let path = download_path(&shikigami_core::package::file_name(
+        &manifest.flow.name,
+        manifest.flow.version.as_ref().map(|v| v.number),
+    ))?;
+    std::fs::write(&path, bytes).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    Ok(ExportedPackage {
+        path: path.display().to_string(),
+        manifest,
+    })
+}
+
+/// Shows a file selected in Explorer.
+/// The 配布フォルダー this PC looks at.
+#[tauri::command]
+pub fn distribution_folders(state: State<'_, AppState>) -> CmdResult<Vec<DistributionFolder>> {
+    Ok(state.service.distribution_folders()?)
+}
+
+#[tauri::command]
+pub fn set_distribution_folders(
+    state: State<'_, AppState>,
+    folders: Vec<DistributionFolder>,
+) -> CmdResult<Vec<DistributionFolder>> {
+    Ok(state.service.set_distribution_folders(folders)?)
+}
+
+/// What each 配布フォルダー holds now. Reading a file server can be slow,
+/// so it runs off the main thread.
+#[tauri::command]
+pub async fn scan_distribution(state: State<'_, AppState>) -> CmdResult<Vec<DistributionView>> {
+    let service = state.service.clone();
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || service.scan_distribution())
+            .await
+            .map_err(|e| err("INTERNAL", e.to_string()))??,
+    )
+}
+
+/// Puts the published version of a flow into a 配布フォルダー.
+#[tauri::command]
+pub async fn place_in_distribution(
+    state: State<'_, AppState>,
+    id: FlowId,
+    folder: String,
+    only: Option<Vec<shikigami_core::package::FileRef>>,
+) -> CmdResult<String> {
+    let service = state.service.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        service.place_in_distribution(&id, &folder, only, windows_user())
+    })
+    .await
+    .map_err(|e| err("INTERNAL", e.to_string()))??;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn reveal_file(path: String) -> CmdResult<()> {
+    let result = if cfg!(windows) {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{path}"))
+            .spawn()
+    } else {
+        let dir = std::path::Path::new(&path)
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_default();
+        std::process::Command::new("xdg-open").arg(dir).spawn()
+    };
+    result
+        .map(|_| ())
+        .map_err(|e| err("OPEN_FAILED", e.to_string()))
+}
+
+/// A flow file to look at or import: a path on disk (opened from Explorer,
+/// dropped on the window) or the contents of a file chosen in the page
+/// (base64).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowFile {
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub data: Option<String>,
+}
+
+fn file_bytes(file: &FlowFile) -> CmdResult<Vec<u8>> {
+    use base64::Engine as _;
+    match (&file.path, &file.data) {
+        (Some(path), _) => std::fs::read(path)
+            .map_err(|e| err("FILE_NOT_FOUND", format!("{path} を読めません: {e}"))),
+        (None, Some(data)) => base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| err("PARSE_ERROR", e.to_string())),
+        (None, None) => Err(err("PARSE_ERROR", "ファイルがありません")),
+    }
+}
+
+/// What a flow file holds and what this PC still needs, before importing.
+#[tauri::command]
+pub fn preview_package(state: State<'_, AppState>, file: FlowFile) -> CmdResult<PackagePreview> {
+    let secrets: Vec<String> = state
+        .vault
+        .summaries()
+        .map(|list| list.into_iter().map(|s| s.name).collect())
+        .unwrap_or_default();
+    Ok(state.service.preview_file(&file_bytes(&file)?, &secrets)?)
+}
+
+/// Imports a flow file (`.spx`, an older bundle, or a flow JSON file).
+#[tauri::command]
+pub fn import_package(
+    state: State<'_, AppState>,
+    file: FlowFile,
+    on_conflict: Option<ImportConflict>,
+) -> CmdResult<ImportOutcome> {
+    Ok(state
+        .service
+        .import_file(&file_bytes(&file)?, on_conflict, studio())?)
 }
 
 // -- an AI without MCP (Copilot, a chat window) --------------------------
@@ -328,7 +487,7 @@ pub fn read_project_text(
     if bytes.len() as u64 > shikigami_core::project::MAX_TEXT_READ {
         return Err(err(
             "PROJECT_FILE_TOO_LARGE",
-            "大きすぎるため Studio では開けません",
+            "大きすぎるため Writer では開けません",
         ));
     }
     let text = String::from_utf8(bytes)
@@ -356,7 +515,7 @@ pub fn read_project_image(
     if bytes.len() > 16 * 1024 * 1024 {
         return Err(err(
             "PROJECT_FILE_TOO_LARGE",
-            "大きすぎるため Studio では表示できません",
+            "大きすぎるため Writer では表示できません",
         ));
     }
     let kind = if bytes.starts_with(b"\x89PNG") {
@@ -725,6 +884,24 @@ pub fn get_observation(
     Ok(state.service.get_observation(&id)?)
 }
 
+/// How many of a flow's latest runs `step_times` learns from.
+const STEP_TIMES_RUNS: usize = 5;
+
+/// How long each step of a flow usually takes (ms, by step id), from its
+/// latest finished runs: the chart shows a running step's progress against it.
+#[tauri::command]
+pub async fn step_times(
+    state: State<'_, AppState>,
+    id: FlowId,
+) -> CmdResult<std::collections::HashMap<StepId, u64>> {
+    let root = state.service.store().local_root().to_path_buf();
+    Ok(tokio::task::spawn_blocking(move || {
+        shikigami_runtime::record::step_times(&root, &id, STEP_TIMES_RUNS)
+    })
+    .await
+    .unwrap_or_default())
+}
+
 /// Most events `run_record` returns; a long loop's tail is dropped.
 const MAX_RECORD_EVENTS: usize = 20_000;
 
@@ -772,6 +949,9 @@ pub struct DebugSettings {
     /// The variables' values there, from the last run.
     #[serde(default)]
     start_values: Map<String, Value>,
+    /// Whether Writer steps aside for the run (`run_band`).
+    #[serde(default)]
+    band: crate::run_band::BandSettings,
 }
 
 /// Starts a run of the stored flow. Events are emitted as `run-event`
@@ -790,6 +970,10 @@ pub async fn run_flow(
     let flow = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&flow).ok().flatten();
     let subflows = state.service.subflows(&flow)?;
+    // Writer steps aside for a run that works on the screen, unless it
+    // pauses before its first node anyway.
+    let band =
+        debug.band.shrink && !debug.step && crate::run_band::works_on_screen(&flow, &subflows);
     let project_dir = Some(state.service.project_dir(&id)?);
     // A run of the whole flow keeps the pictures for its 手順書.
     let run_id = RunId::generate();
@@ -799,7 +983,11 @@ pub async fn run_flow(
         .then(|| crate::manual::screens_dir(state.service.store().local_root(), &id, &run_id))
         .flatten();
     let manual = screens_dir.clone().map(crate::manual::Collector::new);
-    let handle = state
+    // Known to the band before the run's first event.
+    if band {
+        crate::run_band::prepare(run_id.clone(), id.clone(), debug.band);
+    }
+    let started = state
         .runtime
         .start(
             flow,
@@ -807,7 +995,7 @@ pub async fn run_flow(
                 project_dir,
                 full_run: true,
                 inputs: inputs.unwrap_or_default(),
-                run_id: Some(run_id),
+                run_id: Some(run_id.clone()),
                 screens_dir,
                 version,
                 debug: Some(DebugOptions {
@@ -826,8 +1014,20 @@ pub async fn run_flow(
             code: e.code,
             message: e.message,
             details: e.details,
-        })?;
-    track_run(app, &state, id, handle, RUN_EVENT, manual)
+        })
+        .and_then(|handle| track_run(app.clone(), &state, id, handle, RUN_EVENT, manual));
+    match started {
+        Ok(run_id) => {
+            if band {
+                crate::run_band::begin(&app, &run_id);
+            }
+            Ok(run_id)
+        }
+        Err(e) => {
+            crate::run_band::forget(&run_id);
+            Err(e)
+        }
+    }
 }
 
 /// A test case with its name (`tests/<name>.json`).
@@ -1164,6 +1364,7 @@ pub(crate) fn track_run(
                 if let Err(e) = emit_app.emit(event_name, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
                 }
+                crate::run_band::on_event(&emit_app, event);
                 if let RunEvent::Paused {
                     reason: shikigami_runtime::PauseReason::Error,
                     step_id,

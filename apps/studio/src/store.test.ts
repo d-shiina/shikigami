@@ -1,3 +1,4 @@
+import { BAND_DEFAULTS } from "./lib/bandSettings";
 import type {
   ApprovalRequest,
   EditOp,
@@ -193,6 +194,23 @@ describe("studio store", () => {
     expect(store.getState().human).toBeNull();
   });
 
+  it("keeps how far each loop got, in the open flow and in a called one", () => {
+    const store = createStudioStore(fakeApi({}));
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 1, type: "loopRound", stepId: "each", round: 3, total: 12 });
+    expect(store.getState().run?.loops["|each"]).toEqual({ round: 3, total: 12, ended: false, leftEarly: false });
+    store.getState().onRunEvent({ ...base, seq: 2, type: "loopEnded", stepId: "each", rounds: 7, total: 12, leftEarly: true });
+    store.getState().onRunEvent({ ...base, seq: 3, callPath: ["call"], type: "loopRound", stepId: "w", round: 2 });
+    expect(store.getState().run?.loops).toEqual({
+      "|each": { round: 7, total: 12, ended: true, leftEarly: true },
+      "call|w": { round: 2, total: null, ended: false, leftEarly: false },
+    });
+    // Started again (the next pass of a loop around it): the last pass's count does not carry over.
+    store.getState().onRunEvent({ ...base, seq: 4, type: "stepStarted", stepId: "each", stepType: "control.forEach", attempt: 1 });
+    expect(store.getState().run?.loops["|each"]).toBeUndefined();
+  });
+
   it("shows a stop in progress and ends a run whose last event never came", async () => {
     const stopRun = vi.fn(async () => {});
     const store = createStudioStore(fakeApi({ stopRun }));
@@ -373,6 +391,19 @@ describe("studio store", () => {
     expect(trailOf(store.getState())?.runId).toBe("run_2");
   });
 
+  it("keeps a running step's clock still while the run is paused, as its timeout is", () => {
+    const store = createStudioStore(fakeApi({}));
+    const ev = (seq: number, at: string, rest: Record<string, unknown>) =>
+      store.getState().onRunEvent({ runId: "run_1", seq, at, ...rest } as Parameters<ReturnType<typeof store.getState>["onRunEvent"]>[0]);
+    ev(0, "2026-10-28T00:00:00Z", { type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    ev(1, "2026-10-28T00:00:01Z", { type: "stepStarted", stepId: "w", stepType: "wait.until", attempt: 1, limitMs: 30000 });
+    expect(store.getState().run!.clocks["|w"]).toEqual({ since: Date.parse("2026-10-28T00:00:01Z"), waitMs: null, limitMs: 30000 });
+    ev(2, "2026-10-28T00:00:05Z", { type: "paused", stepId: "c", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1 });
+    ev(3, "2026-10-28T00:01:05Z", { type: "resumed", action: "continue" });
+    // A minute paused: the wait still has 4 seconds behind it, not 64.
+    expect(store.getState().run!.clocks["|w"]!.since).toBe(Date.parse("2026-10-28T00:01:01Z"));
+  });
+
   it("pauses on an error, keeps the evidence and resumes", async () => {
     const debugRun = vi.fn(async () => ({ revision: 2, updated: true }));
     const store = createStudioStore(fakeApi({ debugRun }));
@@ -424,7 +455,7 @@ describe("studio store", () => {
     await store.getState().runTo("s2");
     expect(store.getState().trying).toBe("s2");
     // The node itself is a breakpoint, on top of the ones the person set.
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: false, band: BAND_DEFAULTS });
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s2", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1 });
@@ -504,7 +535,7 @@ describe("studio store", () => {
     store.getState().toggleBreakpoint("s1");
     expect(store.getState().breakpoints).toEqual({ scn_a: ["s2"] });
     await store.getState().startRun({ step: true });
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true, band: BAND_DEFAULTS });
     // A running run of this flow picks up changes at once.
     store.getState().toggleBreakpoint("s3");
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
@@ -526,7 +557,7 @@ describe("studio store", () => {
     expect(store.getState().askInputs).toEqual({ flowId: "scn_a", options: { stopAt: "s1" } });
     expect(store.getState().trying).toBe("s1");
     await store.getState().answerInputs({ company: "株式会社まるちゃ" });
-    expect(run).toHaveBeenCalledWith("scn_a", { company: "株式会社まるちゃ" }, { breakpoints: ["s1"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", { company: "株式会社まるちゃ" }, { breakpoints: ["s1"], step: false, band: BAND_DEFAULTS });
     expect(store.getState().askInputs).toBeNull();
     // 「ここから実行」 starts with the earlier run's values: nothing to ask.
     run.mockClear();
@@ -600,7 +631,7 @@ describe("studio store", () => {
     await store.getState().open("scn_a");
     store.getState().toggleBreakpoint("x", "scn_b");
     await store.getState().startRun();
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false, band: BAND_DEFAULTS });
     store.getState().setFollowRun(false);
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "x", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1, callPath: ["c1"] } as unknown as RunEventEnvelope);
@@ -755,7 +786,7 @@ describe("studio store", () => {
     };
     const ownEdit: HistoryEntry = { ...aiEdit, revision: 3, actor: { kind: "studio" } };
 
-    it("lists only unreviewed non-Studio edits", async () => {
+    it("lists only unreviewed non-Writer edits", async () => {
       const store = createStudioStore(fakeApi({ history: vi.fn(async () => [aiEdit, ownEdit]) }));
       await store.getState().open("scn_a");
       expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);

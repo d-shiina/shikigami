@@ -17,6 +17,7 @@ const NAMES: Record<string, string> = {
   "browser.getText": "text",
   "browser.getTable": "table",
   "browser.getAttribute": "attribute",
+  "browser.runScript": "result",
   "browser.isVisible": "visible",
   "desktop.getTable": "table",
   "desktop.getValue": "value",

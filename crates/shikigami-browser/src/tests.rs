@@ -121,6 +121,21 @@ fn every_example_is_a_valid_step() {
     assert!(!validator.validate(&s).valid);
 }
 
+/// A script can do anything the page can, so it asks like a download does.
+#[test]
+fn running_a_script_is_dangerous_and_returns_a_value() {
+    let defs = step_defs();
+    let (def, method) = defs
+        .iter()
+        .find(|(d, _)| d.step_type == types::RUN_SCRIPT)
+        .expect("browser.runScript is registered");
+    assert_eq!(*method, "runScript");
+    assert_eq!(def.risk, RiskLevel::Dangerous);
+    assert!(def.has_output);
+    assert!(def.secret_params.is_empty());
+    assert_eq!(def.params_schema["required"], json!(["script"]));
+}
+
 #[test]
 fn targets_reach_frames_four_deep() {
     let runtime = Runtime::builder()
@@ -265,7 +280,7 @@ async fn secrets_go_to_the_adapter_with_their_sites_only() {
         error.details.unwrap()["hint"]
             .as_str()
             .unwrap()
-            .contains("Studio")
+            .contains("Writer")
     );
 }
 

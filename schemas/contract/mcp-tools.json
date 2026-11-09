@@ -202,6 +202,66 @@
       "class": "write"
     },
     {
+      "name": "ask_user_to_choose",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "ChoiceOption": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "label"
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ChoiceOption"
+            }
+          },
+          "recommended": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "question",
+          "options"
+        ]
+      },
+      "class": "read"
+    },
+    {
       "name": "ask_user_to_pick",
       "annotations": {
         "readOnlyHint": true,
@@ -268,6 +328,9 @@
                 "type": "string"
               },
               "secret": {
+                "type": "boolean"
+              },
+              "personal": {
                 "type": "boolean"
               },
               "format": {
@@ -680,6 +743,24 @@
               "boolean",
               "null"
             ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "includeInput": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         }
       },
@@ -959,6 +1040,18 @@
         "type": "object",
         "properties": {
           "bundle": {},
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "check": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "onConflict": {
             "anyOf": [
               {
@@ -969,10 +1062,7 @@
               }
             ]
           }
-        },
-        "required": [
-          "bundle"
-        ]
+        }
       },
       "class": "write"
     },
@@ -2441,6 +2531,9 @@
               "secret": {
                 "type": "boolean"
               },
+              "personal": {
+                "type": "boolean"
+              },
               "format": {
                 "anyOf": [
                   {
@@ -2856,6 +2949,9 @@
                 "type": "string"
               },
               "secret": {
+                "type": "boolean"
+              },
+              "personal": {
                 "type": "boolean"
               },
               "format": {

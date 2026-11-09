@@ -315,7 +315,8 @@ export function FileSheet() {
   const Icon = sheet.config ? FileCog : isLog ? ScrollText : FileText;
   const close = () => {
     if (asForm && dirty) void p.saveSheet();
-    if (asForm || !dirty || window.confirm(t.project.sheet.discard)) p.closeSheet();
+    if (asForm || !dirty) return p.closeSheet();
+    void p.leaveSheet();
   };
   return (
     <aside

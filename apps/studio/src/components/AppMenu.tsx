@@ -1,4 +1,5 @@
-// Studio's version, online updates and the MCP setup command: a section of
+// Studio's version and online updates (and the MCP setup row shown in the AI
+// section): a section of
 // the settings place. Like VS Code: the check runs once per launch (or from
 // "check again"), a new version downloads in the background, and it is
 // installed silently on "restart to update" or when Studio is closed. The
@@ -25,8 +26,18 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** MCP registration for the AI in use, pointing at the CLI installed with Studio. */
-export function mcpCommand(kind: AgentKind, cliPath: string): string {
+/** The AI clients the MCP registration can be shown for. */
+export type McpClient = Exclude<AgentKind, "command"> | "cursor";
+export const MCP_CLIENTS: { kind: McpClient; name: string }[] = [
+  { kind: "claudeCode", name: "Claude Code" },
+  { kind: "codex", name: "Codex" },
+  { kind: "cursor", name: "Cursor" },
+  { kind: "gemini", name: "Gemini CLI" },
+  { kind: "copilot", name: "GitHub Copilot" },
+];
+
+/** MCP registration for an AI client, pointing at the CLI installed with Studio. */
+export function mcpCommand(kind: McpClient, cliPath: string): string {
   switch (kind) {
     case "codex":
       return `codex mcp add shikigami -- "${cliPath}" mcp`;
@@ -34,9 +45,87 @@ export function mcpCommand(kind: AgentKind, cliPath: string): string {
       return `gemini mcp add --scope user shikigami "${cliPath}" mcp`;
     case "copilot":
       return `copilot mcp add shikigami -- "${cliPath}" mcp`;
+    case "cursor":
+      // What goes in ~/.cursor/mcp.json when the "add" link cannot be used.
+      return JSON.stringify({ mcpServers: { shikigami: { command: cliPath, args: ["mcp"] } } }, null, 2);
     default:
       return `claude mcp add --scope user shikigami -- "${cliPath}" mcp`;
   }
+}
+
+/**
+ * The settings row for registering the MCP server with an AI client, in the
+ * AI section: the CLI's place comes from the installed Studio.
+ */
+export function McpSetupRow() {
+  useEffect(start, []);
+  const info = useApp((s) => s.info);
+  const agentInfo = useAgent((s) => s.info);
+  // A `command` agent registers Shikigami its own way; start on Claude Code's.
+  const agentKind = agentInfo && agentInfo.kind !== "command" ? agentInfo.kind : "claudeCode";
+  return (
+    <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint} align="start">
+      {info?.cliPath ? (
+        <McpSetup cliPath={info.cliPath} initial={agentKind} />
+      ) : (
+        <p className="text-[12px] text-slate-500">{info ? t.mcpNoCli : t.loading}</p>
+      )}
+    </SettingsRow>
+  );
+}
+
+/** The registration for one AI client: pick it, then a button (Cursor) or a command to copy. */
+function McpSetup({ cliPath, initial }: { cliPath: string; initial: McpClient }) {
+  const [kind, setKind] = useState<McpClient>(initial);
+  const [copied, setCopied] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const text = mcpCommand(kind, cliPath);
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div>
+      <div role="radiogroup" aria-label={t.mcpClient} className="mb-2 flex flex-wrap gap-1">
+        {MCP_CLIENTS.map((c) => (
+          <button
+            key={c.kind}
+            type="button"
+            role="radio"
+            aria-checked={kind === c.kind}
+            onClick={() => {
+              setKind(c.kind);
+              setProblem(null);
+            }}
+            className={`rounded-md border px-2 py-0.5 text-xs ${kind === c.kind ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+          >
+            {c.name}
+          </button>
+        ))}
+      </div>
+      {kind === "cursor" && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void updates.addToCursor().catch((e: unknown) => setProblem(message(e)))}
+            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100"
+          >
+            {t.mcpAddToCursor}
+          </button>
+          <span className="text-[11.5px] text-slate-500">{t.mcpCursorHint}</span>
+        </div>
+      )}
+      {problem && <p className="mb-2 text-xs text-shu-600">{problem}</p>}
+      <p className="mb-1 text-[11.5px] text-slate-500">{kind === "cursor" ? t.mcpCursorFile : t.mcpRunOnce}</p>
+      <div className="flex items-start gap-2">
+        <code className="block min-w-0 flex-1 rounded-md bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all whitespace-pre-wrap">{text}</code>
+        <button type="button" onClick={() => void copy()} className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
+          {copied ? t.copied : t.copy}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 const useApp = create<{ info: AppInfo | null; state: UpdateState; started: boolean }>(() => ({
@@ -105,16 +194,6 @@ export function AboutSection() {
   useEffect(start, []);
   const info = useApp((s) => s.info);
   const state = useApp((s) => s.state);
-  const agentInfo = useAgent((s) => s.info);
-  // A `command` agent registers Shikigami its own way; show Claude Code's.
-  const agentKind = agentInfo && agentInfo.kind !== "command" ? agentInfo.kind : "claudeCode";
-  const agentName = agentKind === "claudeCode" ? "Claude Code" : (agentInfo?.name ?? "AI");
-  const [copied, setCopied] = useState(false);
-  const copy = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
   if (!info) return null;
   return (
     <SettingsGroup>
@@ -150,22 +229,6 @@ export function AboutSection() {
           <button type="button" onClick={() => void install(state.info)} className={settingsPrimary}>
             {t.updateInstall}
           </button>
-        </SettingsRow>
-      )}
-      {info.cliPath && (
-        <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint(agentName)} align="start">
-          <div className="flex items-start gap-2">
-            <code className="block min-w-0 flex-1 rounded-md bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all">
-              {mcpCommand(agentKind, info.cliPath)}
-            </code>
-            <button
-              type="button"
-              onClick={() => void copy(mcpCommand(agentKind, info.cliPath ?? ""))}
-              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
-            >
-              {copied ? t.copied : t.copy}
-            </button>
-          </div>
         </SettingsRow>
       )}
     </SettingsGroup>

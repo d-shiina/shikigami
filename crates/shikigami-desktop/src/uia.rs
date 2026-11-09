@@ -188,7 +188,7 @@ impl Backend for UiaBackend {
             },
         };
         if !windows {
-            return crate::backend::paddle_recognize(image, options.accurate);
+            return crate::backend::paddle_recognize(image, options.accurate, options.kind);
         }
         // Windows OCR needs only the thread's apartment, not UI Automation.
         self.on_thread(move |_| capture::recognize(&image, options.language.as_deref()))
@@ -2227,6 +2227,7 @@ impl Uia {
         let found = self.resolve_enabled(target)?;
         self.bring_to_front(&found, false)?;
         let at = self.mouse_point(&found, target)?;
+        crate::keep_out::clear(at.x, at.y);
         // SAFETY: Win32 calls on the UIA thread.
         unsafe {
             SetCursorPos(at.x, at.y).or_fail()?;
@@ -2492,6 +2493,7 @@ fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) ->
 
 /// Moves the cursor and tells the app under it that the mouse moved.
 fn move_to(at: POINT) -> Result<(), StepError> {
+    crate::keep_out::clear(at.x, at.y);
     // SAFETY: plain Win32 calls.
     unsafe { SetCursorPos(at.x, at.y) }.or_fail()?;
     send(&[mouse(MOUSEEVENTF_MOVE)])
@@ -2583,7 +2585,7 @@ fn check_app(text: &Text, window: &WindowInfo) -> Result<(), StepError> {
             ),
         )
         .with_details(json!({
-            "hint": format!("If this app is right, ask the user to add app:{} to the secret's sites in Studio.", window.process)
+            "hint": format!("If this app is right, ask the user to add app:{} to the secret's sites in Writer.", window.process)
         }))),
         _ => Ok(()),
     }

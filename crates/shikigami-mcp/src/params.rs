@@ -469,6 +469,32 @@ pub struct AskUserToPickParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AskUserToChooseParams {
+    /// The question, in one short sentence in the person's language, e.g.
+    /// 「在庫切れの注文はどうしますか？」.
+    pub question: String,
+    /// 2 to 4 answers to pick from, each different in what happens.
+    pub options: Vec<ChoiceOption>,
+    /// Index (from 0) of the option you recommend, if one is better.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended: Option<usize>,
+    /// Why you recommend it, in one sentence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChoiceOption {
+    /// A short name for the answer (a few words), e.g. 「飛ばして一覧に残す」.
+    pub label: String,
+    /// One sentence on what happens if the person picks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct InspectUiParams {
     /// The window to look into, e.g. { "process": "notepad.exe" } or { "title": "請求" }
     /// (title matches partially). Omit to list the open windows.
@@ -602,13 +628,37 @@ pub struct ExportFlowParams {
     /// Include named versions (default true).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_versions: Option<bool>,
+    /// Write a `.spx` file (the one the user hands to another person or PC)
+    /// instead of returning the bundle: a folder (the file is named after
+    /// the flow and version) or a path ending in `.spx`. Existing files are
+    /// not overwritten. Holds the published version unless `current`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// With `path`: the current content instead of the published version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<bool>,
+    /// With `path`: include files under input/ (usually real business data;
+    /// only when the user asks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_input: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportFlowParams {
     /// The `bundle` returned by export_flow, or a bare flow document.
-    pub bundle: Value,
+    /// Give this or `path`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle: Option<Value>,
+    /// A file the user was handed: `.spx`, an older `.shikigami.json`
+    /// bundle, or a flow JSON file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// With `path`: import nothing; return what the file holds, how it
+    /// differs from the flow here, and what this PC still needs
+    /// (extensions, logins, allowed sites).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<bool>,
     /// Only needed when the flow ID already exists (IMPORT_CONFLICT):
     /// "update" applies the content to the existing flow as one undoable
     /// edit and adds missing versions; "copy" imports it under a new ID.

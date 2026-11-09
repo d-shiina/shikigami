@@ -169,9 +169,10 @@ export function unsetIssues(validation: ValidationReport | null | undefined): Va
 export function flowForChat(flow: Flow): string {
   const content: Record<string, unknown> = { name: flow.name };
   if (flow.description) content.description = flow.description;
-  // A secret's value never leaves Studio, even one wrongly saved as a default
-  // (the bundle export drops it the same way).
-  if (flow.variables?.length) content.variables = flow.variables.map((v) => (v.secret ? withoutDefault(v) : v));
+  // A secret's value never leaves Studio, even one wrongly saved as a default,
+  // and neither does the default of personal data (the bundle export drops
+  // them the same way).
+  if (flow.variables?.length) content.variables = flow.variables.map((v) => (v.secret || v.personal ? withoutDefault(v) : v));
   if (flow.parts && Object.keys(flow.parts).length) content.parts = flow.parts;
   content.steps = flow.steps ?? [];
   if (flow.settings && Object.keys(flow.settings).length) content.settings = flow.settings;

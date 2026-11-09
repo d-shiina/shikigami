@@ -237,10 +237,16 @@ impl NotifyRule {
 
 /// How long run records are kept. Each PC applies it to its own records;
 /// without a limit they are kept until deleted by hand.
+/// Days run records, run logs and MCP calls are kept when `keepDays` is
+/// left out: what a run leaves behind (values, screens) does not stay for
+/// good unless someone asks for it.
+pub const DEFAULT_KEEP_DAYS: u32 = 90;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecordsPolicy {
-    /// Delete run records older than this many days.
+    /// Delete run records older than this many days ([`DEFAULT_KEEP_DAYS`]
+    /// when left out, `0` keeps them for good).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_days: Option<u32>,
     /// Keep at most this many run records (the newest).
@@ -260,6 +266,16 @@ pub struct RecordsPolicy {
 impl RecordsPolicy {
     pub fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// How many days run records and run logs are kept; `None` keeps them
+    /// for good (`keepDays: 0`).
+    pub fn days_kept(&self) -> Option<u32> {
+        match self.keep_days {
+            None => Some(DEFAULT_KEEP_DAYS),
+            Some(0) => None,
+            Some(days) => Some(days),
+        }
     }
 }
 
@@ -436,8 +452,12 @@ impl Policy {
                 out.push("apps: empty entry".into());
             }
         }
-        if self.records.keep_days == Some(0) || self.records.keep_runs == Some(0) {
-            out.push("records: 0 would delete every run record; leave it out to keep them".into());
+        // keepDays 0 keeps records for good; keepRuns 0 would delete them all.
+        if self.records.keep_runs == Some(0) {
+            out.push(
+                "records.keepRuns: 0 would delete every run record; leave it out to keep them"
+                    .into(),
+            );
         }
         for (i, rule) in self.notify.iter().enumerate() {
             if !rule.webhook.starts_with("https://") && !is_local_http(&rule.webhook) {
@@ -546,7 +566,7 @@ impl Policy {
             details: serde_json::json!({
                 "site": shown,
                 "allowed": self.sites,
-                "hint": "A person adds the site to \"sites\" in policy.json (Studio: 許可と承認). Do not work around it with another step.",
+                "hint": "A person adds the site to \"sites\" in policy.json (Writer: 許可と承認). Do not work around it with another step.",
             }),
         })
     }
@@ -568,7 +588,7 @@ impl Policy {
             details: serde_json::json!({
                 "app": program.trim(),
                 "allowed": self.apps,
-                "hint": "A person adds the program to \"apps\" in policy.json (Studio: 許可と承認).",
+                "hint": "A person adds the program to \"apps\" in policy.json (Writer: 許可と承認).",
             }),
         })
     }
@@ -610,6 +630,14 @@ fn origin(url: &str) -> Option<(String, String, Option<String>)> {
         return None;
     }
     Some((scheme, host, port))
+}
+
+/// `https://host[:port]` of an http(s) URL, as the allow-list compares it.
+pub fn site_origin(url: &str) -> Option<String> {
+    origin(url).map(|(scheme, host, port)| match port {
+        Some(port) => format!("{scheme}://{host}:{port}"),
+        None => format!("{scheme}://{host}"),
+    })
 }
 
 /// One `sites` entry: `https://example.com`, `https://*.example.com`,

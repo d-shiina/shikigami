@@ -2,23 +2,23 @@
 
 [English](../release.md) | 日本語
 
-インストール版の Studio は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Studio が開き直す）か、Studio を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
+インストール版の Writer は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Writer が開き直す）か、Writer を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
 - 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
-- 改ざん防止：インストーラーは専用の署名鍵で署名し、Studio はリリース時に埋め込んだ公開鍵で検証してから入れ替える
+- 改ざん防止：インストーラーは専用の署名鍵で署名し、Writer はリリース時に埋め込んだ公開鍵で検証してから入れ替える
 - インストーラー：NSIS（ユーザー単位、管理者権限不要）
 - 開発版（`pnpm studio:dev`）は確認しない
 
 ## CLI（MCP サーバー）も一緒に更新される
 
-リリース版のインストーラーには `shikigami.exe`（CLI・MCP サーバー）が Studio と同じフォルダーに入ります。Claude Code にはこの `shikigami.exe` を登録しておけば、Studio を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Studio 右下のバージョン表示を開くとコピーできます。
+リリース版のインストーラーには `shikigami.exe`（CLI・MCP サーバー）が Writer と同じフォルダーに入ります。Claude Code にはこの `shikigami.exe` を登録しておけば、Writer を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Writer 右下のバージョン表示を開くとコピーできます。
 
 ```powershell
 claude mcp add --scope user shikigami -- "<インストール先>\shikigami.exe" mcp
 ```
 
-Claude Code が MCP サーバーを動かしている最中でも更新できます。Windows は実行中の exe を上書きできませんが名前の変更はできるので、Studio はインストーラーを起動する直前に `shikigami.exe` を `shikigami-<旧バージョン>.exe.old` に移します（同梱の `node\node.exe` も同じく `node-<旧バージョン>.exe.old` へ）。動いているサーバーは古いファイルのまま動き続け、次に起動したときから新しい版になります（Claude Code では `/mcp` から再接続）。残った `.old` は次回の Studio 起動時に消します。インストールが取り消された場合は元に戻します。
+Claude Code が MCP サーバーを動かしている最中でも更新できます。Windows は実行中の exe を上書きできませんが名前の変更はできるので、Writer はインストーラーを起動する直前に `shikigami.exe` を `shikigami-<旧バージョン>.exe.old` に移します（同梱の `node\node.exe` も同じく `node-<旧バージョン>.exe.old` へ）。動いているサーバーは古いファイルのまま動き続け、次に起動したときから新しい版になります（Claude Code では `/mcp` から再接続）。残った `.old` は次回の Writer 起動時に消します。インストールが取り消された場合は元に戻します。
 
 リポジトリから開発していて `target\debug\shikigami.exe` を登録している場合は、これまでどおり `cargo build -p shikigami-cli` で更新されます。
 
@@ -37,12 +37,12 @@ pnpm release:setup
 
 GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` がなければ、値をクリップボードに入れて登録ページを開くので、貼り付けて保存するだけです（2 回）。
 
-**秘密鍵をなくすと、インストール済みの Studio に更新を届けられなくなります。** `shikigami.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
+**秘密鍵をなくすと、インストール済みの Writer に更新を届けられなくなります。** `shikigami.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
 
 ## リリースの手順
 
 1. [CHANGELOG.md](../../CHANGELOG.md) の「未リリース」を版番号と日付の見出しにする（破壊的変更・非推奨は [compatibility.md](compatibility.md) §9）
-1. ルートの `Cargo.toml` の `[workspace.package]` の `version` を上げる（Studio・CLI・MCP サーバーはこの 1 か所でバージョンが決まります）。`cargo check` で `Cargo.lock` も更新してコミット
+1. ルートの `Cargo.toml` の `[workspace.package]` の `version` を上げる（Writer・CLI・MCP サーバーはこの 1 か所でバージョンが決まります）。`cargo check` で `Cargo.lock` も更新してコミット
 2. 同じバージョンのタグを push する
 
    ```sh
@@ -53,12 +53,12 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
    ターミナルを使わずに出すなら、GitHub の **Actions → Release → Run workflow**（ブランチは `main`）を押します。今の `main` に `Cargo.toml` のバージョンのタグを付けて公開します。そのタグがすでに別のコミットにあれば止まります
 3. `Release` ワークフロー（`.github/workflows/release.yml`）が Windows でビルドし、Release を公開します。タグと `Cargo.toml` のバージョンが違うとき、署名鍵が登録されていないとき（上の「最初の準備」）は止まります
    - リリースノートは `CHANGELOG.md` のうち、見出しにそのバージョンがある節（例：`## [0.2.0] - 2026-11-06`）です。なければ `CHANGELOG.md` へのリンクになります
-   - ハイフン付きのバージョン（`0.2.0-beta.1`）はプレリリースになり、インストール済みの Studio は更新しません
+   - ハイフン付きのバージョン（`0.2.0-beta.1`）はプレリリースになり、インストール済みの Writer は更新しません
    - インストーラーは実行結果のページにも `installers-<バージョン>` として 14 日間残ります
 
 リリースのビルドを変える Pull Request（ワークフロー・`apps/studio/scripts/`・Tauri の設定）では、同じビルドを試しに走らせます。何も公開せず、インストーラーを実行結果のページに残すので、タグを付ける前に手で入れて確かめられます。署名鍵がなければ使い捨ての鍵で署名します。
 
-公開した時点で、インストール済みの Studio は次の起動時に更新を見つけます。
+公開した時点で、インストール済みの Writer は次の起動時に更新を見つけます。
 
 ## 手元でリリース版を作る
 
@@ -73,7 +73,7 @@ pnpm studio:release
 
 ## Node.js とブラウザアダプターの同梱
 
-ブラウザ操作と Node のプラグインが、Node.js を入れていない PC（入れられない会社の PC を含む）でも動くよう、インストーラーには次のものが Studio と同じフォルダーに入ります。
+ブラウザ操作と Node のプラグインが、Node.js を入れていない PC（入れられない会社の PC を含む）でも動くよう、インストーラーには次のものが Writer と同じフォルダーに入ります。
 
 | フォルダー | 中身 |
 |---|---|
@@ -88,5 +88,5 @@ pnpm studio:release
 
 ## 注意
 
-- インストーラーはコード署名（Authenticode）をしていないため、初回インストール時に SmartScreen の警告が出ます。更新は Studio 内で行うので警告は出ません
+- インストーラーはコード署名（Authenticode）をしていないため、初回インストール時に SmartScreen の警告が出ます。更新は Writer 内で行うので警告は出ません
 - 最初の 1 回（更新機能の入った版）は Releases からインストーラーを手で入れてください

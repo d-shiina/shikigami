@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph local[The user's PC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
-    STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
+    STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
     subgraph libs[Shared libraries (Rust)]
@@ -59,8 +59,8 @@ flowchart LR
 | `shikigami-studio` | The user | GUI. Embeds Core/Runtime as libraries |
 | `spellsheet mcp` | The AI client (stdio child process) | Provides the MCP tools. Runs on its own, without a GUI. A subcommand of the CLI executable (so there is one thing to distribute) |
 | `shikigami` (CLI) | The user / a scheduler | Headless runs and management |
-| `spellsheet agent` | Windows sign-in (one per PC, user and workspace) | Runs schedules and jobs from the management server one at a time ([remote.md](remote.md), [schedules.md](schedules.md)) |
-| `spellsheet manager` | An administrator (a server) | The management server: hands queued jobs to free agents, over signed HTTP ([remote.md](remote.md)) |
+| `spellsheet worker` | Windows sign-in (one per PC, user and workspace) | Runs schedules and jobs from the management server one at a time ([remote.md](remote.md), [schedules.md](schedules.md)) |
+| `spellsheet manager` | An administrator (a server) | The management server: hands queued jobs to free workers, over signed HTTP ([remote.md](remote.md)) |
 | `browser-adapter` (Node) | The Runtime | Playwright operations. Started only when needed |
 
 Studio and the MCP server are **separate processes sharing the same workspace**. They stay in sync with §7's "optimistic concurrency with the files as the source of truth, plus change notifications".
@@ -101,8 +101,8 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP server (rmcp, started with `spellsheet mcp`)
 │  ├─ shikigami-adapters/ every built-in adapter plus installed plugins, in one list (all Runtimes are built from it)
 │  ├─ shikigami-secrets/  the workspace vault (encrypted file, key in Windows Credential Manager)
-│  ├─ shikigami-agent/    `spellsheet agent`: the one process per PC that runs schedules and remote jobs
-│  ├─ shikigami-manager/  `spellsheet manager`: the management server agents take jobs from
+│  ├─ shikigami-agent/    `spellsheet worker`: the one process per PC that runs schedules and remote jobs
+│  ├─ shikigami-manager/  `spellsheet manager`: the management server workers take jobs from
 │  ├─ shikigami-browser/  browser.* (client of the Node sidecar)
 │  ├─ shikigami-desktop/  desktop.* (UI Automation)
 │  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly; macros through COM)
@@ -418,7 +418,7 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 |---|---|---|
 | Arbitrary code execution | Flows have no general script execution. The expression language allows only side-effect-free functions (`len`, `contains`…). Nesting depth limits prevent DoS too | **P1 done** |
 | Path traversal | Flow/run IDs accept only `[A-Za-z0-9_-]{1,128}`, checked before use as file names | **P1 done** |
-| Secrets in logs | Values of `secret` variables and secrets are masked as `***` in logs, errors, events and output records. Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
+| Secrets in logs | Values of `secret` and `personal` variables and secrets are masked as `***` in logs, errors, events and output records ([secrets.md](secrets.md#personal-data)). Run records and logs are kept 90 days by default (`records.keepDays`). Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
 | Irreversible mistakes | Deleting a flow moves it to the trash. Every change is journaled and can be undone | **P1 done** |
 | Studio permissions | Tauri capabilities are `core:default` only. No file or shell plugins. CSP set | **P1 done** |
 | MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |

@@ -74,7 +74,7 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
   browser: [
     ["open", ["browser.open", "browser.attach", "browser.navigate", "browser.switchTab", "browser.closeTab", "browser.close"]],
     ["operate", ["browser.click", "browser.fill", "browser.select", "browser.check", "browser.press", "browser.hover", "browser.scroll", "browser.upload", "browser.download"]],
-    ["read", ["browser.getText", "browser.getTable", "browser.getAttribute", "browser.isVisible", "browser.screenshot"]],
+    ["read", ["browser.getText", "browser.getTable", "browser.getAttribute", "browser.isVisible", "browser.screenshot", "browser.runScript"]],
     ["wait", ["browser.waitFor", "browser.waitForHuman"]],
   ],
   excel: [

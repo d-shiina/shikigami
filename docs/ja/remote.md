@@ -2,14 +2,14 @@
 
 [English](../remote.md) | 日本語
 
-管理サーバーは、たくさんの PC のエージェントに仕事（ジョブ）を渡します。「このフローを、空いている PC で動かして」と頼み、結果を見られます。PC からは**外向き**（HTTPS）にしかつながず、PC にポートを開けないので、プロキシやファイアウォールの内側でも動きます。設計メモは [design/remote-runs.md](../design/remote-runs.md)。
+管理サーバーは、たくさんの PC の Worker に仕事（ジョブ）を渡します。「このフローを、空いている PC で動かして」と頼み、結果を見られます。PC からは**外向き**（HTTPS）にしかつながず、PC にポートを開けないので、プロキシやファイアウォールの内側でも動きます。設計メモは [design/remote-runs.md](../design/remote-runs.md)。
 
 SpellSheet には下のプロトコルを話す小さな**参考実装のサーバー**（`spellsheet manager serve`）が付いています。状態は JSON ファイル 1 つで、管理用の API はありますが画面はありません。試す・テストする・社内 LAN の小さなチームで使うためのものです。本格的な管理ツールも同じプロトコルの上に作れます。
 
 ## しくみ
 
 1. サーバーで**一度だけ使える登録コード**を作る。
-2. PC で `spellsheet agent enroll <サーバーの URL> <コード>`。エージェントが自分で Ed25519 の鍵の組を作り、公開鍵だけを送ります。秘密鍵は Windows の資格情報マネージャーに置きます。以後の要求はすべて署名つきです。
+2. PC で `spellsheet worker enroll <サーバーの URL> <コード>`。Worker が自分で Ed25519 の鍵の組を作り、公開鍵だけを送ります。秘密鍵は Windows の資格情報マネージャーに置きます。以後の要求はすべて署名つきです。
 3. ワークスペースの `policy.json` で、サーバーに許すことを PC 側が決めます。
 
    ```json
@@ -20,16 +20,16 @@ SpellSheet には下のプロトコルを話す小さな**参考実装のサー�
    }
    ```
 
-4. エージェント（`spellsheet agent install`、または Studio の「自動実行」の「エージェントを開始」）は、**何も実行していないときだけ**サーバーに仕事を取りに行きます。そのとき `remote.flows` で許していて、この PC で公開版があるフローを伝え、サーバーは合うジョブがあれば渡します。
+4. Worker（`spellsheet worker install`、または Writer の「自動実行」の「自動実行を開始」）は、**何も実行していないときだけ**サーバーに仕事を取りに行きます。そのとき `remote.flows` で許していて、この PC で公開版があるフローを伝え、サーバーは合うジョブがあれば渡します。
 5. ジョブはほかの無人実行と同じく動きます。**公開版**を、`policy.json` のサイト・アプリ・`unattended` の決まりのもとで、この PC の金庫の秘密を使って。記録の `origin` は `trigger: "remote"`、`requestedBy`（サーバーで頼んだ人）、`jobId`。イベントは 2 秒ごと、レポートは最後にサーバーへ送ります。サーバーに届かないあいだも実行は最後まで続き、つながったら送ります。
 6. サーバーで取り消したジョブは、PC の次の連絡で取り消します（`finally` は動きます）。
 
 最後に決めるのは PC です。サーバーが何を頼んでも、`policy.json` で許していないフロー（`REMOTE_NOT_ALLOWED`）、公開していないもの（`NOT_PUBLISHED`）、ジョブが指定した版と違う公開版（`VERSION_MISMATCH`）は動かさず、**断った**ことをサーバーに返します。秘密は PC から出ません。ジョブが運ぶのは入力の値で、パスワードではありません。
 
 ```powershell
-spellsheet agent enroll https://manager.example.co.jp 3f9a1c0d2b7e4a55
-spellsheet agent status        # サーバー・ワーカー ID・問題があればその内容
-spellsheet agent unenroll
+spellsheet worker enroll https://manager.example.co.jp 3f9a1c0d2b7e4a55
+spellsheet worker status        # サーバー・ワーカー ID・問題があればその内容
+spellsheet worker unenroll
 ```
 
 ## 参考実装のサーバー
@@ -38,7 +38,7 @@ spellsheet agent unenroll
 spellsheet manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
 ```
 
-`--data` に `state.json`（ワーカー・ジョブ・ログ）と、最初の起動で作る `admin-token` を置きます。待ち受けは HTTP なので、その PC の外から使うときは HTTPS のリバースプロキシを前に置いてください（エージェントは `localhost` 以外の `http://` を断ります）。
+`--data` に `state.json`（ワーカー・ジョブ・ログ）と、最初の起動で作る `admin-token` を置きます。待ち受けは HTTP なので、その PC の外から使うときは HTTPS のリバースプロキシを前に置いてください（Worker は `localhost` 以外の `http://` を断ります）。
 
 管理用 API（`Authorization: Bearer <admin-token>`）：
 

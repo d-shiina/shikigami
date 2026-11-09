@@ -664,6 +664,47 @@ async fn added_ocr_engines_read_and_say_how_sure_they_are() {
     assert!(line.get("confidence").is_none() && line.get("unsure").is_none());
 }
 
+/// textKind keeps what a field can hold, and candidates snap a read to
+/// the nearest listed text; what was read stays beside it.
+#[tokio::test]
+async fn read_text_fits_reads_to_the_kind_and_candidates() {
+    let screen = Arc::new(ocr_screen());
+    let report = run_on(
+        screen.clone(),
+        vec![saving(step(
+            types::READ_TEXT,
+            json!({ "target": { "window": { "title": "Citrix" } }, "textKind": "number" }),
+        ))],
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let read = report.outputs["out"]["lines"][0]["read"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let text = report.outputs["out"]["text"].as_str().unwrap().to_owned();
+    assert!(
+        text.chars()
+            .all(|c| c.is_ascii_digit() || ",.-+".contains(c)),
+        "{text}"
+    );
+    assert_ne!(read, text);
+
+    let report = run_on(
+        screen.clone(),
+        vec![saving(step(
+            types::READ_TEXT,
+            json!({ "target": { "window": { "title": "Citrix" } }, "candidates": [read.clone(), "まったく別の文字"] }),
+        ))],
+    )
+    .await;
+    // The line that is a candidate is marked so; the other lines are kept.
+    assert_eq!(report.outputs["out"]["lines"][0]["text"], json!(read));
+    assert_eq!(report.outputs["out"]["lines"][0]["candidate"], json!(true));
+    let wrong = crate::visual::ocr_options(&json!({ "textKind": "color" }));
+    assert_eq!(wrong.unwrap_err().code, "INVALID_PARAMS");
+}
+
 /// `table: true` splits a ruled table into rows named by its header.
 #[tokio::test]
 async fn read_text_reads_a_table_by_its_ruled_lines() {

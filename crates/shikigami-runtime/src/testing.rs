@@ -180,7 +180,7 @@ pub fn case_from_run(
         if !def.direction.is_input() || inputs.contains_key(variable) {
             continue;
         }
-        if def.secret || *truncated {
+        if def.masked() || *truncated {
             left_out.push(variable.clone());
             continue;
         }
@@ -188,7 +188,7 @@ pub fn case_from_run(
     }
     let mut outputs = Map::new();
     for (name, value) in &report.outputs {
-        let secret = flow.variables.iter().any(|v| &v.name == name && v.secret);
+        let secret = flow.variables.iter().any(|v| &v.name == name && v.masked());
         if secret {
             left_out.push(name.clone());
         } else {

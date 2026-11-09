@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, type Scene } from "./manual";
+import { buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
 const contract = JSON.parse(readFileSync(new URL("../../../../schemas/contract/step-types.json", import.meta.url), "utf8")) as {
@@ -128,6 +128,23 @@ describe("the 手順書 of a flow", () => {
     // Hidden by the person: left out too.
     const hidden = buildManual(flow, defs, null, new Map(), { [pass]: { hidden: true, boxes: [], width: 0, height: 0 } }, drafts);
     expect(hidden.drafts).toBe(0);
+  });
+
+  it("lays the manual out as sheets: a cover, then one screen per page", () => {
+    const moved: ManualManifest = { ...manifest, shots: manifest.shots.map((s, i) => ({ ...s, view: `v${i}` })) };
+    const pages = pagesOf(buildManual(flow, defs, moved));
+    expect(pages[0]?.kind).toBe("cover");
+    expect(pages.map((p) => p.number)).toEqual(pages.map((_, i) => i + 1));
+    const body = pages.flatMap((p) => (p.kind === "body" ? [p] : []));
+    // Each chapter starts on its own sheet, and no sheet holds two pictures.
+    expect(body.filter((p) => p.first).map((p) => p.chapter.number)).toEqual([1, 2, 3, 4, 5]);
+    for (const p of body) expect(p.blocks.filter((b) => b.kind === "item" && b.item.kind === "scene" && b.item.shot).length).toBeLessThanOrEqual(1);
+    // The second login screen goes on the next sheet, under the branch it belongs to.
+    const second = body.find((p) => p.shot?.file === "003.jpg");
+    expect(second?.first).toBe(false);
+    expect(second?.blocks[0]).toMatchObject({ kind: "label", continued: true, item: { kind: "branch" } });
+    // Words only: one run of pages per chapter.
+    expect(pagesOf(buildManual(flow, defs, moved), false).length).toBe(1 + doc.chapters.length);
   });
 
   it("leaves out screens the person hid", () => {
