@@ -262,27 +262,58 @@ export type InstalledExtension = ExtensionSummary & {
   problems: string[];
 };
 
-export type ExtensionSource = { kind: "file"; path: string } | { kind: "url"; url: string } | { kind: "github"; repo: string };
+export type ExtensionSource =
+  | { kind: "file"; path: string }
+  | { kind: "url"; url: string; sha256?: string }
+  | { kind: "github"; repo: string }
+  | { kind: "registry"; name: string; registry?: string };
 
 /** A downloaded and checked extension, before it is installed. */
-export type ExtensionPreview = ExtensionSummary & { id: string; source: ExtensionSource; installedVersion: string | null };
+export type ExtensionPreview = ExtensionSummary & {
+  id: string;
+  source: ExtensionSource;
+  installedVersion: string | null;
+  /** The SHA-256 the download matched (a registry pins it). */
+  sha256?: string | null;
+  /** From the official registry (only for a registry source). */
+  official?: boolean;
+};
 
-export type ExtensionList = { root: string; installed: InstalledExtension[]; registry: string | null; restartNeeded: boolean };
+export type ExtensionList = { root: string; installed: InstalledExtension[]; registries: string[]; officialRegistry: string; restartNeeded: boolean };
 
 /** One extension a registry index offers. */
-export type RegistryEntry = { name: string; label: string; description?: string; version?: string; publisher?: string; homepage?: string; source: string };
+export type RegistryEntry = {
+  name: string;
+  label: string;
+  description?: string;
+  version?: string;
+  publisher?: string;
+  homepage?: string;
+  source?: string;
+  url?: string;
+  sha256?: string;
+  /** Why it was taken off the list: not installed or updated any more. */
+  withdrawn?: string;
+  /** The index it came from. */
+  registry: string;
+  official: boolean;
+};
+
+/** What the registries offer, and the ones that could not be read. */
+export type RegistryOffer = { extensions: RegistryEntry[]; withdrawn: RegistryEntry[]; failed: { registry: string; code: string; message: string; problems: string[] }[] };
 
 export const extensionsApi = {
   list: () => call<ExtensionList>("list_extensions"),
   /** Downloads and checks; installs nothing. */
   stage: (source: string) => call<ExtensionPreview>("stage_extension", { source }),
+  stageFromRegistry: (name: string, registry: string) => call<ExtensionPreview>("stage_extension_from_registry", { name, registry }),
   stageUpdate: (name: string) => call<ExtensionPreview>("stage_extension_update", { name }),
   install: (id: string) => call<void>("install_extension", { id }),
   discard: (id: string) => call<void>("discard_extension", { id }),
   setEnabled: (name: string, enabled: boolean) => call<void>("set_extension_enabled", { name, enabled }),
   uninstall: (name: string) => call<void>("uninstall_extension", { name }),
-  setRegistry: (url: string) => call<void>("set_extension_registry", { url }),
-  registry: () => call<RegistryEntry[]>("fetch_extension_registry"),
+  setRegistries: (urls: string[]) => call<void>("set_extension_registries", { urls }),
+  registry: () => call<RegistryOffer>("fetch_extension_registry"),
   restart: () => call<void>("restart_for_extensions"),
   /** A zip file picked in the file dialog, or null. */
   pickZip: () => call<string | null>("runner_pick", { kind: "file", start: null }),

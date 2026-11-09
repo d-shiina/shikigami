@@ -441,8 +441,9 @@ enum PluginCmd {
     /// Check the plugin in DIR (manifest, schemas, examples) without
     /// installing it.
     Check { dir: PathBuf },
-    /// Install an extension from a zip file or folder, an https zip URL or
-    /// a GitHub repository (its latest release). Without --yes, only shows
+    /// Install an extension by its name in the registries (the version and
+    /// zip they pin), or from a zip file or folder, an https zip URL or a
+    /// GitHub repository (its latest release). Without --yes, only shows
     /// what it is: its nodes, what they send outside and the program it
     /// starts.
     Install {
@@ -463,11 +464,15 @@ enum PluginCmd {
     Enable { name: String },
     /// Turn an installed extension off (kept, but its nodes are not loaded).
     Disable { name: String },
-    /// Show or set (`--set URL`, empty to clear) the registry index URL,
-    /// and list the extensions it offers.
+    /// List the registries (the official one first by default) and the
+    /// extensions they offer. `--set URL…` replaces the list (in order;
+    /// earlier ones win a name), `--set` alone empties it, `--reset` goes
+    /// back to the official one.
     Registry {
+        #[arg(long, num_args = 0.., value_name = "URL", conflicts_with = "reset")]
+        set: Option<Vec<String>>,
         #[arg(long)]
-        set: Option<String>,
+        reset: bool,
     },
 }
 
@@ -552,22 +557,33 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
             eprintln!("{name} is {}", if on { "on" } else { "off" });
             Ok(ExitCode::SUCCESS)
         }
-        PluginCmd::Registry { set } => {
-            if let Some(url) = set {
-                install::set_registry_url(url).map_err(|e| anyhow::anyhow!(e))?;
+        PluginCmd::Registry { set, reset } => {
+            if *reset {
+                install::set_registry_urls(&[install::OFFICIAL_REGISTRY.to_owned()])
+                    .map_err(|e| anyhow::anyhow!(e))?;
+            } else if let Some(urls) = set {
+                install::set_registry_urls(urls).map_err(|e| anyhow::anyhow!(e))?;
             }
-            let Some(url) = install::registry_url() else {
+            let urls = install::registry_urls();
+            if urls.is_empty() {
                 eprintln!(
-                    "no registry is set (spellsheet plugin registry --set https://…/index.json)"
+                    "no registry is set (spellsheet plugin registry --reset, or --set https://…/index.json)"
                 );
                 return Ok(ExitCode::SUCCESS);
-            };
-            let list = rt.block_on(install::fetch_registry(&url))?;
+            }
+            let offered = rt.block_on(install::fetch_registries(&urls));
+            for f in &offered.failed {
+                eprintln!("cannot read {}: {}", f.registry, f.message);
+                for p in &f.problems {
+                    eprintln!("  {p}");
+                }
+            }
             println!(
                 "{}",
-                serde_json::to_string_pretty(
-                    &serde_json::json!({ "registry": url, "extensions": list })
-                )?
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "registries": urls,
+                    "extensions": offered.extensions,
+                }))?
             );
             Ok(ExitCode::SUCCESS)
         }

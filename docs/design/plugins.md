@@ -155,7 +155,7 @@ hello/
 2 の導入と一覧、4 の Studio の画面は [extensions.md](../ja/extensions.md) で対応済み。
 
 1. 足りないプラグインを Studio の画面で案内する（記録と検証のヒントは `requires` で対応済み）
-2. `spellsheet plugin install <zip / Git URL>` と一覧（カタログ）
+2. ~~`spellsheet plugin install <zip / Git URL>` と一覧（カタログ）~~ 対応済み。サードパーティの置き場所は公式の一覧リポジトリ spellsheet/plugins（作者は自分のリポジトリでリリースし、一覧に 1 行の PR）、各行は版と zip の SHA-256 で固定（2026-11-09 決定、[extensions.md](../ja/extensions.md)）
 3. 署名・発行元の確認、`dangerous` なプラグインを初回に人が許可する仕組み
 4. Studio でのプラグイン一覧画面
 5. 各言語向けの小さな SDK（Node.js / Python / .NET）
