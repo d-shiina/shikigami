@@ -609,6 +609,12 @@ export function App() {
     // While the AI asked in the pane works, Studio follows it: a flow it
     // has just made opens, and the chart pans to the nodes it adds. Only
     // changes from outside count, so the person's own edits never move the view.
+    // Text typed by hand into a project file and not saved yet: opening another flow (or none)
+    // would drop it, so the AI's new flow does not take the screen over it.
+    const handEdited = () => {
+      const sheet = projectStore.getState().sheet;
+      return !!sheet && sheet.text !== sheet.saved && (!sheet.config || sheet.raw);
+    };
     const followChange = async (id: string) => {
       const before = store.getState();
       const known = before.summaries.some((s) => s.id === id);
@@ -620,7 +626,7 @@ export function App() {
       // The pane and the status bar already say the AI is at work; a notice per edit is noise.
       if (now.notice === t.externalChange) store.setState({ notice: null });
       let opened = false;
-      if (shouldFollow(id, known, working, now)) {
+      if (shouldFollow(id, known, working, now) && !handEdited()) {
         await now.open(id);
         opened = store.getState().flow?.id === id;
         const name = store.getState().flow?.name;
@@ -649,7 +655,7 @@ export function App() {
       const s = store.getState();
       const asked = askedForFlow(prev.chats, a.chats);
       if (asked) {
-        if (mayDraft(s.place, isActive(s.run))) s.showDrafting(asked);
+        if (mayDraft(s.place, isActive(s.run) || handEdited())) s.showDrafting(asked);
         return;
       }
       const drafting = s.drafting;

@@ -66,10 +66,11 @@ export function askedForFlow(before: Chat[], after: Chat[]): Drafting | null {
 /**
  * Whether the screen may give way to a new flow being made: the library or
  * the editor (as for following, elsewhere the person is doing something
- * else), and not while a run of the open flow is under way.
+ * else), and not while the open flow holds the person: a run of it under
+ * way, or a project file edited by hand and not saved.
  */
-export function mayDraft(place: Place, running: boolean): boolean {
-  return (place === "library" || place === "flows") && !running;
+export function mayDraft(place: Place, held: boolean): boolean {
+  return (place === "library" || place === "flows") && !held;
 }
 
 /**
