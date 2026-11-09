@@ -714,6 +714,24 @@ pub(crate) fn init_variables(
                         format!("input '{}' must be of type {:?}", var.name, var.var_type),
                     ));
                 }
+                // An input with choices takes only those (one of them may
+                // name the secret a step logs in with).
+                if !var.choices.is_empty()
+                    && !var
+                        .choices
+                        .iter()
+                        .any(|c| shikigami_core::expr::loose_eq(c, value))
+                {
+                    return Err(RunError {
+                        details: Some(
+                            serde_json::json!({ "input": var.name, "choices": var.choices }),
+                        ),
+                        ..RunError::new(
+                            "INVALID_INPUT",
+                            format!("input '{}' must be one of its choices", var.name),
+                        )
+                    });
+                }
                 value.clone()
             }
             _ => match &var.default {

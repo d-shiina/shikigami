@@ -50,7 +50,7 @@ export function readable(expr: string): string {
 
 function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: locale === "ja" ? "（未設定）" : "(not set)" };
-  if (secretName(value)) return { code: `🔑 ${secretName(value)}` };
+  if (secretName(value)) return { code: `🔑 ${readable(secretName(value)!.replace(/^\s*\{\{\s*|\s*\}\}\s*$/g, ""))}` };
   return { code: typeof value === "string" ? readable(value) : JSON.stringify(value) };
 }
 

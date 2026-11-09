@@ -19,6 +19,7 @@ import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useI
 import { listToText, textToList } from "../../lib/listText";
 import { pageAbove } from "../../lib/loopScope";
 import { credentialFor } from "../../lib/extensions";
+import { accountInputs, accountLabel, nameVariable, pickEachRun, sameSite } from "../../lib/secretAccounts";
 import { fieldLabel as secretFieldLabel } from "../../lib/secretKinds";
 import { FOR_EACH } from "../../lib/stepTypes";
 import { type PickedWindow, pickedWindow } from "../../lib/windowFinder";
@@ -65,7 +66,22 @@ function TextOrSecretField({
     credential && def?.plugin
       ? openSecretForm({ name: credential.label, sites: [`plugin:${def.plugin.name}`], fields: ["password"], kind: credential.kind })
       : openSecrets(true);
+  const flow = useStudio((s) => s.flow);
+  const applyOps = useStudio((s) => s.applyOps);
   const ref = isSecretRef(value) ? value : null;
+  // Several accounts of one site: the input the account is picked with each run, or the others it could be.
+  const fromInput = ref ? nameVariable(ref.secret) : null;
+  const inputs = flow ? accountInputs(flow) : [];
+  const picked = fromInput ? inputs.find((v) => v.name === fromInput) : undefined;
+  const others = ref && !fromInput && !credential ? sameSite(allSecrets, ref.secret) : [];
+  const pickEach = () => {
+    if (!flow || !ref) return;
+    const own = allSecrets.find((s) => s.name === ref.secret);
+    const site = own?.sites.find((x) => others.some((o) => o.sites.includes(x))) ?? "";
+    const host = site.replace(/^[a-z]+:\/\//, "");
+    const { ops } = pickEachRun(flow, ref.secret, others.map((o) => o.name), t.props.accountDescription(host), t.props.accountBase);
+    void applyOps(ops);
+  };
   const [mode, setMode] = useState<"text" | "secret">(ref ? "secret" : "text");
   useEffect(() => setMode(ref ? "secret" : "text"), [ref]);
   // The param's schema lists the fields it takes (http.request auth also takes the OAuth access token).
@@ -104,10 +120,20 @@ function TextOrSecretField({
             <option value="">{t.secretChoose}</option>
             {secrets.map((s) => (
               <option key={s.name} value={s.name}>
-                {s.name}
+                {accountLabel(s)}
               </option>
             ))}
-            {ref && !secrets.some((s) => s.name === ref.secret) && <option value={ref.secret}>{t.props.unregistered(ref.secret)}</option>}
+            {ref && !fromInput && !secrets.some((s) => s.name === ref.secret) && <option value={ref.secret}>{t.props.unregistered(ref.secret)}</option>}
+            {!credential && (inputs.length > 0 || fromInput) && (
+              <optgroup label={t.props.accountInputs}>
+                {inputs.map((v) => (
+                  <option key={v.name} value={`{{ ${v.name} }}`}>
+                    {t.props.accountInput(v.name)}
+                  </option>
+                ))}
+                {fromInput && !picked && <option value={ref!.secret}>{t.props.unregistered(fromInput)}</option>}
+              </optgroup>
+            )}
           </select>
           <select
             className={`${inputClass} w-36`}
@@ -130,6 +156,17 @@ function TextOrSecretField({
             ＋{t.secretRegister}
           </button>
         </div>
+      )}
+      {mode === "secret" && picked && (
+        <span className="block text-[11px] text-slate-500">{t.props.pickedEachRun(picked.name, (picked.choices ?? []).map(String).join("・"))}</span>
+      )}
+      {mode === "secret" && others.length > 0 && (
+        <span className="block text-[11px] text-slate-500">
+          {t.props.sameSiteAccounts(others.length)}
+          <button type="button" title={t.props.pickEachRunTitle} className="ml-1 text-brand-600 hover:underline" onClick={pickEach}>
+            {t.props.pickEachRun}
+          </button>
+        </span>
       )}
       {credential && <span className="block text-[11px] text-slate-500">{t.extensions.secretHint(credential.label, t.secretKinds[credential.kind])}</span>}
     </div>

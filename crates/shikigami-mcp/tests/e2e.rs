@@ -534,6 +534,24 @@ async fn secrets_are_named_but_never_revealed() {
     );
     let text = listed.to_string();
     assert!(!text.contains("hunter2") && !text.contains("tanaka"));
+    assert!(listed.get("sameSite").is_none());
+
+    // A second account of the same site: the AI is told not to pick one.
+    shikigami_secrets::Vault::open(&h.root)
+        .set(shikigami_secrets::SecretInput {
+            name: "受注システム（申請）".into(),
+            username: Some("suzuki".into()),
+            password: Some("hunter3".into()),
+            sites: Some(vec!["https://orders.example.com".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+    let listed = h.ok("list_secrets", json!({})).await;
+    assert_eq!(
+        listed["sameSite"],
+        json!([{ "site": "https://orders.example.com", "secrets": ["受注システム", "受注システム（申請）"] }])
+    );
+    assert!(listed["sameSiteHint"].as_str().unwrap().contains("choices"));
 
     // Secrets may only be typed into input fields, never logged.
     let (is_error, result) = h

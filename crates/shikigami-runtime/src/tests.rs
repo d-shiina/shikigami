@@ -1343,6 +1343,31 @@ async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
 }
 
 #[tokio::test]
+async fn the_account_is_picked_when_the_run_starts() {
+    let runtime = typing_runtime().with_secrets(Arc::new(MemorySecrets));
+    let mut s = flow(vec![
+        Step::new("test.type").with_param(
+            "value",
+            json!({ "secret": "{{ account }}", "field": "username" }),
+        ),
+        Step::new("test.type").with_param(
+            "value",
+            json!({ "secret": "{{ account }}", "field": "password" }),
+        ),
+    ]);
+    let mut account = var("account", VarType::String, VarDirection::Input, None);
+    account.choices = vec![json!("受注"), json!("申請")];
+    s.variables.push(account);
+    let (report, events) = run(&runtime, s.clone(), json!({ "account": "受注" })).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(logs(&events), ["typed tanaka", "typed ***"]);
+    assert_eq!(report.secrets_used, ["受注"]);
+    // Only the listed accounts are taken.
+    let (report, _) = run(&runtime, s, json!({ "account": "他の人" })).await;
+    assert_eq!(report.error.map(|e| e.code), Some("INVALID_INPUT".into()));
+}
+
+#[tokio::test]
 async fn large_values_are_recorded_as_a_preview() {
     let s = flow(vec![
         Step::new("variable.set")
