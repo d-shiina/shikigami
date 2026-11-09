@@ -28,6 +28,7 @@ pub mod schema;
 pub mod secret;
 pub mod service;
 pub mod store;
+pub mod suggest;
 pub mod testcase;
 pub mod validate;
 pub mod version;

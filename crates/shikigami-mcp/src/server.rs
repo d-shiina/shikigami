@@ -188,6 +188,7 @@ const INSTRUCTIONS: &str = "\
 SpellSheet is a desktop RPA tool. You edit the same flows a human edits in \
 SpellSheet Writer, and flows run later without you.\n\
 - Call list_step_types / get_step_schema before writing steps; params are validated against the schema.\n\
+- Use only step type names that list_step_types returns; never guess one from what you want to do (there is no control.pause or control.confirm). Common needs: wait for an element browser.waitFor / desktop.waitFor; wait until a condition holds wait.until; wait a fixed time flow.delay; ask the person to confirm dialog.message with buttons \"yesNo\" (its output is the button pressed); ask for values dialog.input / dialog.form; let the person log in or approve MFA in the browser browser.waitForHuman. An UNKNOWN_STEP_TYPE error lists the likely types in details.suggestions.\n\
 - Prefer small edits (add_step, update_step) or one update_flow with several ops; each call is one undo step for the human.\n\
 - The human may be watching the flow chart in Writer while you work. Build a new flow so they see it grow: create_flow with its name and variables (or, when the human opened an empty one for you, build in that), then add the steps in flow order a few at a time (update_flow with a handful of addStep ops per call), not all in one call.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the flow: re-read it and redo your change, never overwrite blindly.\n\
@@ -525,12 +526,9 @@ impl ShikigamiMcp {
     ) -> Result<(Gate<'static>, Vec<shikigami_core::Subflow>), ErrorPayload> {
         // A typo is an error to fix, not an action to approve.
         if self.inner.runtime.registry().get(&step.step_type).is_none() {
-            return Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!(
-                    "unknown step type '{}' (see list_step_types)",
-                    step.step_type
-                ),
+            return Err(unknown_step_type(
+                self.inner.runtime.registry(),
+                &step.step_type,
             ));
         }
         let mut wrapper = shikigami_core::Flow::new("test_step");
@@ -585,6 +583,23 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
         code: code.to_owned(),
         message: message.into(),
         details: None,
+    }
+}
+
+/// UNKNOWN_STEP_TYPE with the types the name most likely meant, so an AI
+/// client fixes a guessed name (`control.confirm`) in one step.
+fn unknown_step_type(registry: &shikigami_core::StepRegistry, name: &str) -> ErrorPayload {
+    let suggestions: Vec<&str> = shikigami_core::suggest::suggest_step_types(registry, name)
+        .into_iter()
+        .map(|d| d.step_type.as_str())
+        .collect();
+    ErrorPayload {
+        code: "UNKNOWN_STEP_TYPE".to_owned(),
+        message: format!("unknown step type: {name}"),
+        details: Some(json!({
+            "hint": shikigami_core::suggest::unknown_step_type_hint(registry, name),
+            "suggestions": suggestions,
+        })),
     }
 }
 
@@ -759,10 +774,7 @@ impl ShikigamiMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let outcome = match self.svc().registry().get(&p.step_type) {
             Some(def) => Ok(to_value(def)),
-            None => Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!("unknown step type: {}", p.step_type),
-            )),
+            None => Err(unknown_step_type(self.svc().registry(), &p.step_type)),
         };
         self.finish("get_step_schema", &peer, None, outcome)
     }
@@ -2160,12 +2172,9 @@ impl ShikigamiMcp {
             .map(|id| self.svc().project_dir(&FlowId::new(id)))
             .transpose()?;
         if self.inner.runtime.registry().get(&step.step_type).is_none() {
-            return Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!(
-                    "unknown step type '{}' (see list_step_types)",
-                    step.step_type
-                ),
+            return Err(unknown_step_type(
+                self.inner.runtime.registry(),
+                &step.step_type,
             ));
         }
         // The AI names no result variable: it gets the result as `output`.

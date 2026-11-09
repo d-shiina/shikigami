@@ -28,6 +28,7 @@
 2. 離れたノード同士を名前で参照しない（background/await のようなハンドルは作らない。「先に始めて後で待つ」は `control.parallel` のブランチとブロック末尾の合流で書く）。
 3. 排他・ロックは Runtime が params から推論する。AI に宣言させない。
 4. 検証エラーには直し方（`hint`）を付け、`get_step_schema` はコピーできる記述例（`examples`）を返す。
+   ノードの種類を推測で書いたとき（`control.pause`、`control.confirm`、`browser.waitForElement` など）は、別名として受け付けず（原則 1）、`UNKNOWN_STEP_TYPE` の `details.suggestions` と `hint` に目的の合う本物の種類（`flow.delay`、`dialog.message`、`browser.waitFor` など）を出す。MCP の説明にも「待つ・人に確認する」といった目的別の対応を最初から書いておく。
 5. 結果がタイミングで変わる書き方は、実行時ではなく検証時にエラーにする。
 
 ## A. `control.forEach` の並列化
