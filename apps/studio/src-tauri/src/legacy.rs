@@ -162,18 +162,18 @@ fn plugin_setups(root: &Path) -> Vec<PathBuf> {
 /// Rewrites each file that mentions the old server or command. False when
 /// one could not be read or written (the old command is then kept).
 fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
-    // A setup with both names keeps the old server as it is; its tool
-    // permissions (`mcp__<old>__…`) then stay with it.
+    // Tool permissions (`mcp__<old>__…`) are Claude Code's. When one of its
+    // setups has both names, the old server keeps its name, and its
+    // permissions stay with it.
     let old = legacy_name();
-    let old_kept = files.iter().any(|file| {
-        std::fs::read_to_string(file).is_ok_and(|text| {
-            if file.extension().is_some_and(|e| e == "toml") {
-                toml_has_both(&text, &old)
-            } else {
+    let old_kept = files
+        .iter()
+        .filter(|file| is_claude_setup(file))
+        .any(|file| {
+            std::fs::read_to_string(file).is_ok_and(|text| {
                 serde_json::from_str::<Value>(&text).is_ok_and(|v| json_has_both(&v, &old))
-            }
-        })
-    });
+            })
+        });
     let mut all = true;
     for file in files {
         let Ok(text) = std::fs::read_to_string(file) else {
@@ -237,15 +237,11 @@ fn json_has_both(value: &Value, old: &str) -> bool {
     }
 }
 
-fn toml_has_both(text: &str, old: &str) -> bool {
-    let has = |name: &str| {
-        text.lines().any(|l| {
-            toml_table(l).is_some_and(|(path, _)| {
-                path.len() >= 2 && path[0] == "mcp_servers" && path[1] == name
-            })
-        })
-    };
-    has(old) && has(NAME)
+/// Where Claude Code registers MCP servers: `~/.claude.json` (also its
+/// projects) and the `.mcp.json` of projects and plugins.
+fn is_claude_setup(file: &Path) -> bool {
+    file.file_name()
+        .is_some_and(|n| n == ".claude.json" || n == ".mcp.json")
 }
 
 fn migrate_value(value: &mut Value, old: &str, permissions: bool) -> bool {
@@ -266,7 +262,10 @@ fn migrate_value(value: &mut Value, old: &str, permissions: bool) -> bool {
         Value::Array(items) => items.iter_mut().fold(false, |changed, item| {
             migrate_value(item, old, permissions) | changed
         }),
-        Value::String(text) if permissions => match text.strip_prefix(&format!("mcp__{old}")) {
+        Value::String(text) if permissions => match text
+            .strip_prefix(&format!("mcp__{old}"))
+            .filter(|rest| rest.is_empty() || rest.starts_with("__"))
+        {
             Some(rest) => {
                 *text = format!("mcp__{NAME}{rest}");
                 true
@@ -541,7 +540,7 @@ mod tests {
     fn permissions_stay_with_an_old_server_that_keeps_its_name() {
         let dir = tempfile::tempdir().unwrap();
         let old = old();
-        let servers = dir.path().join("claude.json");
+        let servers = dir.path().join(".claude.json");
         let settings = dir.path().join("settings.json");
         std::fs::write(
             &servers,
@@ -562,6 +561,48 @@ mod tests {
         let out: Value =
             serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
         assert_eq!(out["permissions"]["allow"][0], rule.as_str());
+    }
+
+    #[test]
+    fn only_the_whole_server_name_moves_in_permissions() {
+        let old = old();
+        let text = json!({ "permissions": { "deny": [
+            format!("mcp__{old}"),
+            format!("mcp__{old}__run_flow"),
+            format!("mcp__{old}-other__run_flow"),
+        ] } })
+        .to_string();
+        let out: Value = serde_json::from_str(&migrate_json(&text, true).unwrap()).unwrap();
+        assert_eq!(
+            out["permissions"]["deny"],
+            json!([
+                "mcp__spellsheet",
+                "mcp__spellsheet__run_flow",
+                format!("mcp__{old}-other__run_flow")
+            ])
+        );
+    }
+
+    #[test]
+    fn both_names_in_another_client_do_not_stop_claude_permissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = old();
+        let codex = dir.path().join("config.toml");
+        std::fs::write(
+            &codex,
+            format!("[mcp_servers.spellsheet]\ncommand = \"spellsheet\"\n\n[mcp_servers.{old}]\ncommand = \"{old}\"\n"),
+        )
+        .unwrap();
+        let settings = dir.path().join("settings.json");
+        std::fs::write(
+            &settings,
+            json!({ "permissions": { "allow": [format!("mcp__{old}__get_flow")] } }).to_string(),
+        )
+        .unwrap();
+        assert!(migrate_mcp_setups(&[codex, settings.clone()]));
+        let out: Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(out["permissions"]["allow"][0], "mcp__spellsheet__get_flow");
     }
 
     #[test]
