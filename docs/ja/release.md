@@ -60,6 +60,10 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
 
 公開した時点で、インストール済みの Writer は次の起動時に更新を見つけます。
 
+## 製品サイト（GitHub Pages）
+
+`site/` が製品紹介ページとダウンロードページです（日本語、ビルド不要のふつうの HTML）。`.github/workflows/pages.yml` が、main の `site/` が変わったときと、Release の実行が終わるたびに公開し直します。そのとき `site/release.json` に最新のインストーラーを書くので、ダウンロードボタンはその `SpellSheet.Writer_<版>_x64-setup.exe` を直接指します。ページは GitHub の API でも最新版を確かめ、どちらも取れないときはリリースのページへつなぎます。リポジトリはページのアドレスから読むので、名前を変えても直す所はありません。最初に 1 回だけ、Settings → Pages → Source を「GitHub Actions」にします。
+
 ## 手元でリリース版を作る
 
 ```powershell

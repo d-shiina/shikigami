@@ -1,0 +1,58 @@
+name: Pages
+
+# The product site (site/) on GitHub Pages: the introduction and the
+# download page. It is published again after each release so release.json
+# names the newest installer; the page also checks the GitHub API itself.
+#
+# Once per repository: Settings → Pages → Build and deployment → Source:
+# "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write release.json (the latest installer)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > latest.json 2>/dev/null; then
+            jq '{tag: .tag_name, published: .published_at,
+                 asset: ([.assets[] | select(.name | test("_x64-setup\\.exe$"))
+                          | {name, size, url: .browser_download_url, digest}] | first)}' \
+              latest.json > site/release.json
+          else
+            echo '{}' > site/release.json
+          fi
+          cat site/release.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

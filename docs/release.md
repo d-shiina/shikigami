@@ -60,6 +60,10 @@ A pull request that changes the release build (the workflow, `apps/studio/script
 
 Once published, installed copies of Writer find the update the next time they start.
 
+## Product site (GitHub Pages)
+
+`site/` is the product page and the download page (Japanese, plain HTML with no build step). `.github/workflows/pages.yml` publishes it when `site/` changes on main and again after each Release run, writing `site/release.json` with the newest installer so the download button points at that `SpellSheet.Writer_<version>_x64-setup.exe`. The page also asks the GitHub API for the latest release and falls back to the release page, and it reads the repository from its own address, so a rename needs no change. One-time setup: Settings → Pages → Source: "GitHub Actions".
+
 ## Building a release locally
 
 ```powershell
