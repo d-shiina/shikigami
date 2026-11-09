@@ -1025,9 +1025,9 @@ export const ja = {
     where: "ファイルの設定欄か、フロー図の上で離してください",
   },
   places: {
-    neededTitle: (n: number) => (n === 1 ? "読むファイルがまだありません" : `読むファイルが ${n} つまだありません`),
+    neededTitle: (n: number) => (n === 1 ? "入力ファイルがまだありません" : `入力ファイルが ${n} つまだありません`),
     neededBody: "どこから読むかを選んでください。",
-    neededShort: (n: number) => `ファイルが ${n} つ足りません`,
+    neededShort: (n: number) => `入力ファイルが ${n} つ足りません`,
     readBy: (names: string) => `${names} で使用`,
     put: "フォルダーに置く",
     putTitle: (path: string) => `ファイルを選んで ${path} としてコピーします`,

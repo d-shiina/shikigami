@@ -1025,9 +1025,9 @@ export const en: Dict = {
     where: "Drop it on a file setting or on the chart",
   },
   places: {
-    neededTitle: (n: number) => (n === 1 ? "A file it reads is not here yet" : `${n} files it reads are not here yet`),
+    neededTitle: (n: number) => (n === 1 ? "An input file is not here yet" : `${n} input files are not here yet`),
     neededBody: "Choose where to read it from.",
-    neededShort: (n: number) => `${n} missing`,
+    neededShort: (n: number) => (n === 1 ? "1 input file missing" : `${n} input files missing`),
     readBy: (names: string) => `Used by ${names}`,
     put: "Put it in the folder",
     putTitle: (path: string) => `Pick a file and copy it as ${path}`,
