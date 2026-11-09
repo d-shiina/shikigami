@@ -47,16 +47,20 @@ fn a_new_version_in_the_folder_shows_up_as_an_update() {
         .unwrap()
         .flow;
     // Only a published version goes to the folder.
-    assert!(a.place_in_distribution(&flow.id, "経理課", None).is_err());
+    assert!(
+        a.place_in_distribution(&flow.id, "経理課", None, None)
+            .is_err()
+    );
     a.publish(&flow.id, PublishInput::default(), person())
         .unwrap();
     let first = a
-        .place_in_distribution(&flow.id, "経理課", Some("椎名".into()))
+        .place_in_distribution(&flow.id, "経理課", None, Some("椎名".into()))
         .unwrap();
     assert!(first.ends_with("請求書の集計 v1.spx"));
     // Putting the same version again writes nothing new.
     assert_eq!(
-        a.place_in_distribution(&flow.id, "経理課", None).unwrap(),
+        a.place_in_distribution(&flow.id, "経理課", None, None)
+            .unwrap(),
         first
     );
     assert_eq!(std::fs::read_dir(shared.path()).unwrap().count(), 1);
@@ -87,7 +91,8 @@ fn a_new_version_in_the_folder_shows_up_as_an_update() {
     .unwrap();
     a.publish(&flow.id, PublishInput::default(), person())
         .unwrap();
-    a.place_in_distribution(&flow.id, "経理課", None).unwrap();
+    a.place_in_distribution(&flow.id, "経理課", None, None)
+        .unwrap();
     let seen = b.scan_distribution().unwrap();
     assert_eq!(seen[0].flows.len(), 1);
     let item = &seen[0].flows[0];
@@ -114,4 +119,42 @@ fn a_folder_that_cannot_be_reached_says_so() {
     let seen = svc.scan_distribution().unwrap();
     assert!(seen[0].error.is_some());
     assert!(seen[0].flows.is_empty());
+}
+
+#[test]
+fn placing_puts_only_the_files_chosen() {
+    let shared = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    svc.set_distribution_folders(folder(shared.path())).unwrap();
+    let flow = svc
+        .create(
+            NewFlow {
+                name: "勤怠の締め".into(),
+                steps: vec![Step::new("log.message").with_param("message", "1")],
+                ..Default::default()
+            },
+            person(),
+        )
+        .unwrap()
+        .flow;
+    svc.write_project_file(&flow.id, "templates/ひな形.xlsx", b"t", false)
+        .unwrap();
+    svc.write_project_file(&flow.id, "config/設定.json", b"{}", false)
+        .unwrap();
+    svc.publish(&flow.id, PublishInput::default(), person())
+        .unwrap();
+    let only = vec![shikigami_core::package::FileRef {
+        flow_id: flow.id.clone(),
+        path: "config/設定.json".into(),
+    }];
+    let path = svc
+        .place_in_distribution(&flow.id, "経理課", Some(only), None)
+        .unwrap();
+    let manifest = shikigami_core::package::read_manifest(&std::fs::read(path).unwrap()).unwrap();
+    let paths: Vec<_> = manifest.contents.iter().map(|e| e.path.as_str()).collect();
+    assert!(paths.iter().any(|p| p.ends_with("config/設定.json")));
+    assert!(!paths.iter().any(|p| p.contains("templates/")));
+    // No temporary file is left beside it.
+    assert_eq!(std::fs::read_dir(shared.path()).unwrap().count(), 1);
 }

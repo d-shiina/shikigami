@@ -1851,11 +1851,13 @@ impl FlowService {
     /// Puts the published version of `id` into the 配布フォルダー `folder`
     /// as `<name> v<n>.spx`, returning the file. Only a published version
     /// goes there. When the folder already has that very version, nothing
-    /// is written.
+    /// is written. `only` is the files chosen in 渡す (as in
+    /// [`package::PackageOptions::only`]); without it, the default choice.
     pub fn place_in_distribution(
         &self,
         id: &FlowId,
         folder: &str,
+        only: Option<Vec<package::FileRef>>,
         exported_by: Option<String>,
     ) -> CoreResult<std::path::PathBuf> {
         let target = self
@@ -1871,6 +1873,7 @@ impl FlowService {
             id,
             &package::PackageOptions {
                 content: package::PackageContent::Published,
+                only,
                 exported_by,
                 ..package::PackageOptions::default()
             },
@@ -1892,14 +1895,27 @@ impl FlowService {
             &manifest.flow.name,
             manifest.flow.version.as_ref().map(|v| v.number),
         ));
+        // Written beside it under a temporary name, then given its name only
+        // if that is still free: a cut connection leaves no half file under
+        // the real name, and two people putting at once cannot overwrite.
+        let exists = || CoreError::Rejected {
+            code: "FILE_EXISTS",
+            message: format!("{} already exists and holds something else", path.display()),
+            hint: Some("Rename or remove that file in the folder first.".into()),
+        };
         if path.exists() {
-            return Err(CoreError::Rejected {
-                code: "FILE_EXISTS",
-                message: format!("{} already exists and holds something else", path.display()),
-                hint: Some("Rename or remove that file in the folder first.".into()),
-            });
+            return Err(exists());
         }
-        std::fs::write(&path, &bytes)?;
+        let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+        std::io::Write::write_all(&mut tmp, &bytes)?;
+        tmp.as_file().sync_all()?;
+        tmp.persist_noclobber(&path).map_err(|e| {
+            if e.error.kind() == std::io::ErrorKind::AlreadyExists {
+                exists()
+            } else {
+                CoreError::Io(e.error)
+            }
+        })?;
         Ok(path)
     }
 

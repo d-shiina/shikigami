@@ -593,7 +593,7 @@ export type StudioState = {
   openDistribution(): void;
   closeDistribution(): void;
   /** Puts the published version of a flow into a 配布フォルダー. True once it is there. */
-  placeInDistribution(id: string, folder: string): Promise<boolean>;
+  placeInDistribution(id: string, folder: string, only?: { flowId: string; path: string }[]): Promise<boolean>;
   /** Writes the flow as a `.spx` file; the path, or null when it failed (said in `error`). */
   exportPackage(id: string, options: PackageOptions): Promise<ExportedPackage | null>;
   /** Shows what a flow file holds and what this PC needs, before importing it. */
@@ -2403,9 +2403,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set((s) => ({ distribution: { ...s.distribution, open: false } }));
       },
 
-      async placeInDistribution(id, folder) {
+      async placeInDistribution(id, folder, only) {
         try {
-          await api.placeInDistribution(id, folder);
+          await api.placeInDistribution(id, folder, only);
           set({ handOff: null, notice: t.distribution.placed(folder), error: null });
           void get().checkDistribution();
           return true;
