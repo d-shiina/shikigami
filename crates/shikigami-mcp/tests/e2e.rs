@@ -1258,6 +1258,13 @@ async fn only_the_writer_chat_gets_ask_user_to_choose() {
         )
         .await;
     assert_eq!(shown["status"], "shown");
+    // The card is in Writer's AI chat: the hint names that place, so the AI
+    // does not send the person to look for it in a web browser.
+    let hint = shown["hint"].as_str().unwrap();
+    assert!(
+        hint.contains("AI チャット") && hint.contains("not a web browser"),
+        "{hint}"
+    );
 
     for args in [
         json!({ "question": "どちら？", "options": [{ "label": "A" }] }),
