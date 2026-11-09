@@ -279,15 +279,16 @@ textarea,
  */
 .flow-frame.flow-frame-running,
 .flow-edge-running-around {
-  border-color: color-mix(in srgb, var(--color-accent-500) 45%, var(--color-slate-300)) !important;
+  border-color: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-slate-300)) !important;
 }
-/* Its head and foot are its top and bottom edges: in the frame's colour. */
+/*
+ * Its head and foot are its top and bottom edges: in the frame's colour.
+ * Even the innermost frame keeps a softer orange than the node at work and
+ * the progress bars, so the bar along its foot reads apart from the edge.
+ */
+.flow-frame.flow-frame-running-here,
 .flow-edge-running-here {
-  border-color: var(--color-accent-500) !important;
-}
-.flow-frame.flow-frame-running-here {
-  border-color: var(--color-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-500) 65%, var(--color-slate-300)) !important;
 }
 /* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
 .react-flow__edgelabel-renderer {
