@@ -11,7 +11,7 @@ use spellsheet_core::registry::{
     StepTypeDef,
 };
 use spellsheet_core::resource::{DESKTOP_INPUT, ResourceDef};
-use spellsheet_core::secret::text_or_secret_schema;
+use spellsheet_core::secret::{text_or_secret_schema, token_or_secret_schema};
 use spellsheet_core::{Flow, Step, Validator};
 
 /// File name of the manifest inside a plugin folder.
@@ -471,7 +471,17 @@ impl Manifest {
                         .get("description")
                         .and_then(Value::as_str)
                         .unwrap_or("text, or a registered secret { \"secret\": \"<name>\", \"field\": \"password\" }");
-                    let mut schema = text_or_secret_schema(description);
+                    // A setting that takes an OAuth secret also takes its
+                    // access token (`field: "accessToken"`, refreshed by the host).
+                    let oauth = self
+                        .credentials
+                        .iter()
+                        .any(|c| c.kind == "oauth" && c.params.contains(key));
+                    let mut schema = if oauth {
+                        token_or_secret_schema(description)
+                    } else {
+                        text_or_secret_schema(description)
+                    };
                     // Studio names the field by its title, as for other params.
                     if let (Some(title), Some(map)) =
                         (property.get("title"), schema.as_object_mut())

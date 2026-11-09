@@ -657,6 +657,68 @@ pub fn copy_into_project(
     Ok(added)
 }
 
+/// Copies one file from anywhere on the PC into the flow's folder under
+/// the name a node already reads (`input/受注.xlsx`), whatever it was
+/// called where it was.
+#[tauri::command]
+pub fn copy_into_project_as(
+    state: State<'_, AppState>,
+    id: FlowId,
+    from: String,
+    path: String,
+    overwrite: bool,
+) -> CmdResult<ProjectFile> {
+    Ok(state
+        .service
+        .copy_into_project(&id, std::path::Path::new(&from), &path, overwrite)?)
+}
+
+/// The folders on this PC that a cloud storage app keeps in sync (Box
+/// Drive, OneDrive), and the user's profile folder, for "read it from Box
+/// or OneDrive".
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncFolders {
+    pub profile: Option<String>,
+    pub folders: Vec<SyncFolder>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncFolder {
+    pub name: String,
+    pub path: String,
+}
+
+#[tauri::command]
+pub fn sync_folders() -> SyncFolders {
+    let profile = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
+    let mut folders: Vec<SyncFolder> = Vec::new();
+    let mut add = |name: String, path: std::path::PathBuf| {
+        let path = path.to_string_lossy().into_owned();
+        if std::path::Path::new(&path).is_dir()
+            && !folders.iter().any(|f| f.path.eq_ignore_ascii_case(&path))
+        {
+            folders.push(SyncFolder { name, path });
+        }
+    };
+    if let Some(home) = &profile {
+        add("Box".into(), std::path::Path::new(home).join("Box"));
+    }
+    // OneDrive sets these for the personal and the work account.
+    for var in ["OneDriveCommercial", "OneDrive", "OneDriveConsumer"] {
+        if let Ok(path) = std::env::var(var) {
+            let path = std::path::PathBuf::from(path);
+            let name = path
+                .file_name()
+                .map_or_else(|| "OneDrive".into(), |n| n.to_string_lossy().into_owned());
+            add(name, path);
+        }
+    }
+    SyncFolders { profile, folders }
+}
+
 #[tauri::command]
 pub fn create_project_folder(
     state: State<'_, AppState>,

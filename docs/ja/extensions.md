@@ -106,6 +106,7 @@ API キーなどは Writer の「シークレット」に登録し、ノード�
 - カスタム ノードが受け取れるのは `secretParams` に挙げた設定だけです。
 - シークレットの「使ってよい先」に `plugin:<名前>`（例 `plugin:azureocr`）を登録したものだけが、そのカスタム ノードに渡ります。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED` で止まります。
 - マニフェストの `credentials` に種類（`login` / `apiKey` / `oauth`）を書くと、Writer はその種類のシークレットを選択肢に出し、新規登録の画面もその種類で開きます。
+- 種類 `oauth` の設定には、`oauth.signIn` で取ったアクセストークン（`{ "secret": "Box", "field": "accessToken" }`）を渡せます。SpellSheet が期限の 2 分前から取り直してから渡すので、拡張機能はリフレッシュを気にしなくてよく、クライアント シークレットもリフレッシュ トークンも受け取りません。シークレットの使ってよい先に `plugin:<名前>` が要るのは同じです。
 
 ## 作る
 
@@ -125,6 +126,7 @@ azureocr/
 | 見本 | 内容 |
 |---|---|
 | [examples/plugins/azure-ocr](../../examples/plugins/azure-ocr) | クラウド型 AI-OCR（Azure AI Document Intelligence）。外部送信・API キー・ファイルの設定・設定欄の名前の付け方の例 |
+| [examples/plugins/box](../../examples/plugins/box) | Box のフォルダーの一覧・ダウンロード・アップロード。OAuth のアクセストークンを受け取る例 |
 | [examples/plugins/hello](../../examples/plugins/hello) | 最小の例。ファイルの排他（`resources`） |
 
 ### マニフェスト

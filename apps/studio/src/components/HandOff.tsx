@@ -7,7 +7,7 @@
 // shows a sheet of paper with what it holds and what this PC still lacks,
 // each with the button that adds it, before anything is imported.
 import type { CheckKind, DiffKind, PackageFileChoice, PackageRequires1, RequirementCheck } from "@spellsheet/schema";
-import { AppWindow, Check, CircleAlert, FileText, Globe, KeyRound, Puzzle, TextCursorInput, Workflow } from "lucide-react";
+import { AppWindow, Check, CircleAlert, FileText, FolderOpen, Globe, KeyRound, Puzzle, TextCursorInput, Workflow } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { api, events } from "../lib/api";
@@ -19,7 +19,7 @@ const quiet = `${base} text-slate-600 hover:bg-slate-100`;
 const secondary = `${base} border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-sheet`;
 const small = "h-7 shrink-0 rounded-md border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-primary";
 
-const ICON = { plugin: Puzzle, secret: KeyRound, site: Globe, app: AppWindow } satisfies Record<CheckKind, unknown>;
+const ICON = { plugin: Puzzle, secret: KeyRound, site: Globe, app: AppWindow, place: FolderOpen } satisfies Record<CheckKind, unknown>;
 
 function kb(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -97,6 +97,7 @@ function Needs({ requires }: { requires: PackageRequires1 }) {
     ...((requires.secrets ?? []).length ? [{ icon: KeyRound, text: h.secret((requires.secrets ?? []).map(t.quote).join("")) }] : []),
     ...(requires.sites ?? []).map((s) => ({ icon: Globe, text: h.site(s) })),
     ...(requires.apps ?? []).map((s) => ({ icon: AppWindow, text: h.app(s) })),
+    ...(requires.places ?? []).map((s) => ({ icon: FolderOpen, text: h.place(s) })),
     ...((requires.inputs ?? []).length ? [{ icon: TextCursorInput, text: h.input((requires.inputs ?? []).map((i) => t.quote(i.name)).join("")) }] : []),
   ];
   if (rows.length === 0) return <p className="text-xs text-slate-500">{h.needsNothing}</p>;
@@ -342,7 +343,7 @@ export function ReceiveSheet() {
   };
   const action = (c: RequirementCheck) => (c.kind === "secret" ? r.register : c.kind === "plugin" ? r.install : r.allow);
   const line = (c: RequirementCheck) =>
-    c.kind === "plugin" ? r.plugin(c.name, c.range ?? "") : c.kind === "secret" ? r.secret(c.name) : c.kind === "site" ? r.site(c.name) : r.appRun(c.name);
+    c.kind === "plugin" ? r.plugin(c.name, c.range ?? "") : c.kind === "secret" ? r.secret(c.name) : c.kind === "site" ? r.site(c.name) : c.kind === "place" ? r.place(c.name) : r.appRun(c.name);
   const changes = existing
     ? [
         ...existing.diff.flow.map((f) => ({ kind: "changed" as DiffKind, text: (t.versionField as Record<string, string>)[f.field] ?? f.field })),
@@ -430,13 +431,13 @@ export function ReceiveSheet() {
                     {line(c)}
                     {!ok && (
                       <span className="ml-2 text-xs text-slate-500">
-                        {c.kind === "plugin" && c.status === "missing" ? r.pluginMissing : c.installed ? `${r.status[c.status]}（${c.installed}）` : r.status[c.status]}
+                        {c.kind === "place" ? r.unreachable : c.kind === "plugin" && c.status === "missing" ? r.pluginMissing : c.installed ? `${r.status[c.status]}（${c.installed}）` : r.status[c.status]}
                       </span>
                     )}
                   </span>
                   {ok ? (
                     <span className="shrink-0 rounded bg-moegi-100 px-1.5 text-[11px] text-moegi-600">{c.kind === "secret" ? r.installed : r.status.ok}</span>
-                  ) : (
+                  ) : c.kind === "place" ? null : (
                     <button type="button" className={small} onClick={() => go(c)}>
                       {action(c)}
                     </button>

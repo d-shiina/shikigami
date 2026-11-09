@@ -10,6 +10,7 @@ import { isImagePath } from "../lib/preview";
 import type { ProjectFile, Flow, Step, StepTypeDef } from "@spellsheet/schema";
 import {
   Boxes,
+  CircleAlert,
   Copy,
   Eraser,
   ExternalLink,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { startFileDrag, useFileDrag } from "./FileDrag";
+import { NeededFiles, OutputPlaceMenu, useNeededFiles } from "./FilePlaces";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { baseNameRange, textAsk } from "../lib/ask";
@@ -109,6 +111,7 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
 
 function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: boolean }) {
   const newSettings = useProject((s) => s.newSettings);
+  const needed = useNeededFiles().length;
   const applyOps = useStudio((s) => s.applyOps);
   const hasReader = useStudio((s) => [...walkSteps(s.flow?.steps ?? [])].some((step) => step.type === "config.read"));
   // A settings file is only useful once a node reads it: the first one gets
@@ -128,11 +131,13 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
         <i className="inline-block h-2 w-2 rounded-sm" style={{ background: color }} />
         <b className="font-semibold text-slate-600">{t.project.shelves[role]}</b>
         <span className="ml-auto font-mono text-[10.5px]">{over ? t.project.dropHere(`${role}/`) : `${role}/`}</span>
+        {role === "output" && <OutputPlaceMenu />}
       </div>
       {files.map((f) => (
         <FileRow key={f.path} file={f} role={role} />
       ))}
-      {files.length === 0 &&
+      {role === "input" && <NeededFiles />}
+      {files.length === 0 && !(role === "input" && needed > 0) &&
         (role === "config" ? (
           <button
             type="button"
@@ -208,6 +213,7 @@ function readAll(list: FileList): Promise<{ name: string; data: string }[]> {
 export function ProjectButton() {
   const setOpen = useProject((s) => s.setPanelOpen);
   const count = useProject((s) => s.files?.files.filter((f) => roleOf(f.path) !== "logs" && roleOf(f.path) !== "work").length ?? 0);
+  const needed = useNeededFiles().length;
   return (
     <button
       type="button"
@@ -218,6 +224,12 @@ export function ProjectButton() {
       <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />
       {t.project.toggle}
       {count > 0 && <span className="text-slate-400">{count}</span>}
+      {needed > 0 && (
+        <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+          <CircleAlert size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.places.neededShort(needed)}
+        </span>
+      )}
     </button>
   );
 }

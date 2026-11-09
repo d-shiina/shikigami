@@ -4,7 +4,9 @@
 // people change values without touching JSON or the flow. Other text files
 // (CSV, notes, run logs) are plain text.
 import type { ConfigFile, ConfigItem, ConfigType, Flow, Step } from "@spellsheet/schema";
-import { Calendar, FileCog, FileText, Hash, List, type LucideIcon, Plus, ScrollText, ToggleLeft, Type, X } from "lucide-react";
+import { Calendar, FileCog, FileText, Folder, Hash, List, type LucideIcon, Plus, ScrollText, ToggleLeft, Type, X } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { portable } from "../lib/filePlaces";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -18,6 +20,7 @@ const TYPES: { type: ConfigType; icon: LucideIcon }[] = [
   { type: "boolean", icon: ToggleLeft },
   { type: "date", icon: Calendar },
   { type: "list", icon: List },
+  { type: "folder", icon: Folder },
 ];
 
 /** A value that fits the type, keeping what it can of the old one. */
@@ -73,6 +76,8 @@ function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: un
       return <input type="date" data-value className={field} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;
     case "list":
       return <ListInput values={Array.isArray(value) ? value.map(String) : []} onChange={onChange} />;
+    case "folder":
+      return <FolderInput value={typeof value === "string" ? value : ""} onChange={onChange} />;
     default:
       return (
         <input
@@ -84,6 +89,34 @@ function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: un
         />
       );
   }
+}
+
+/**
+ * A folder: typed, or picked in Explorer. A folder inside the user's own
+ * profile (a Box Drive or OneDrive folder) is kept as %USERPROFILE%\…, so
+ * the setting fits everyone who runs the flow.
+ */
+function FolderInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+  const browse = async () => {
+    const picked = await invoke<string | null>("runner_pick", { kind: "folder", start: value || null }).catch(() => null);
+    if (!picked) return;
+    const sync = await invoke<{ profile: string | null }>("sync_folders").catch(() => ({ profile: null }));
+    onChange(portable(picked, sync.profile));
+  };
+  return (
+    <div className="flex gap-1">
+      <input data-value className={field} placeholder="\\server\\share" value={value} onChange={(e) => onChange(e.target.value)} />
+      <button
+        type="button"
+        title={t.props.browseTitle}
+        aria-label={t.props.browseTitle}
+        onClick={() => void browse()}
+        className="h-8 shrink-0 rounded-lg border border-slate-200 px-2 text-[12px] text-slate-600 hover:bg-slate-50"
+      >
+        {t.props.browse}
+      </button>
+    </div>
+  );
 }
 
 function ListInput({ values, onChange }: { values: string[]; onChange: (value: unknown) => void }) {

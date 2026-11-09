@@ -226,6 +226,8 @@ pub fn run() {
             commands::write_project_text,
             commands::upload_project_file,
             commands::copy_into_project,
+            commands::copy_into_project_as,
+            commands::sync_folders,
             commands::create_project_folder,
             commands::rename_project_file,
             commands::delete_project_file,
