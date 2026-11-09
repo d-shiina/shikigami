@@ -1172,3 +1172,50 @@ async fn ai_writes_test_cases_and_runs_them() {
     assert!(is_error);
     assert_eq!(kept["code"], "TEST_CASE_EXISTS");
 }
+
+#[tokio::test]
+async fn only_the_writer_chat_gets_ask_user_to_choose() {
+    let outside = start(ServerOptions::default()).await;
+    let names: Vec<_> = outside
+        .client
+        .list_all_tools()
+        .await
+        .unwrap()
+        .iter()
+        .map(|t| t.name.to_string())
+        .collect();
+    assert!(!names.contains(&"ask_user_to_choose".to_owned()));
+    outside.client.cancel().await.unwrap();
+
+    let h = start(ServerOptions {
+        writer_chat: true,
+        ..ServerOptions::default()
+    })
+    .await;
+    let shown = h
+        .ok(
+            "ask_user_to_choose",
+            json!({
+                "question": "在庫切れの注文はどうしますか？",
+                "options": [
+                    { "label": "飛ばして一覧に残す", "description": "出荷できた分だけ進めます。" },
+                    { "label": "そこで止めて人に聞く" }
+                ],
+                "recommended": 0
+            }),
+        )
+        .await;
+    assert_eq!(shown["status"], "shown");
+
+    for args in [
+        json!({ "question": "どちら？", "options": [{ "label": "A" }] }),
+        json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "A" }] }),
+        json!({ "question": "", "options": [{ "label": "A" }, { "label": "B" }] }),
+        json!({ "question": "どちら？", "options": [{ "label": "A" }, { "label": "B" }], "recommended": 2 }),
+    ] {
+        let (is_error, value) = h.call("ask_user_to_choose", args).await;
+        assert!(is_error);
+        assert_eq!(value["code"], "INVALID_PARAMS");
+    }
+    h.client.cancel().await.unwrap();
+}

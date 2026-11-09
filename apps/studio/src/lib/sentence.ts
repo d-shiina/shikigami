@@ -344,6 +344,7 @@ const BUILDERS: Record<string, Builder> = {
     ),
   ],
   "browser.getAttribute": (p, s) => [w(`${targetText(p.target)}の `), code(p.name), w(" 属性を読む"), ...saveAs(s)],
+  "browser.runScript": (p, s) => [w(p.target ? `${targetText(p.target)}について JavaScript を動かす` : "ページで JavaScript を動かす"), ...saveAs(s)],
   "browser.switchTab": (p, s) => [
     w(typeof p.index === "number" ? `${p.index + 1}番目のタブに移る` : `「${String(p.title ?? p.url ?? "")}」のタブに移る`),
     ...saveAs(s),
@@ -420,6 +421,7 @@ const BUILDERS_EN: Record<string, Builder> = {
     ),
   ],
   "browser.getAttribute": (p, s) => [w("Read the "), code(p.name), w(` attribute of ${targetText(p.target)}`), ...saveAs(s)],
+  "browser.runScript": (p, s) => [w(p.target ? `Run JavaScript on ${targetText(p.target)}` : "Run JavaScript in the page"), ...saveAs(s)],
   "browser.switchTab": (p, s) => [
     w(typeof p.index === "number" ? `Move to tab #${p.index + 1}` : `Move to the "${String(p.title ?? p.url ?? "")}" tab`),
     ...saveAs(s),

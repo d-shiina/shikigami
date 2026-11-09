@@ -12,6 +12,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "browser.navigate": { summary: "前のページに戻る・次に進む・読み込み直す", words: "戻る 進む 再読み込み 更新 リロード バック" },
   "browser.hover": { summary: "部品にマウスを乗せる（乗せると開くメニューなど）", words: "ホバー マウスオーバー 乗せる メニュー ツールチップ マウスを乗せる" },
   "browser.scroll": { summary: "ページや一覧をスクロールする（下まで・部品が見えるまで）", words: "スクロール 下 上 続きを読み込む 無限" },
+  "browser.runScript": { summary: "ページの中で JavaScript を動かして結果を受け取る（ほかのノードで読めない値に）", words: "javascript js スクリプト 実行 evaluate コード ページ 関数 inject" },
   "browser.getAttribute": { summary: "部品の属性（リンク先の URL・画像のアドレスなど）を読む", words: "属性 href リンク先 URL src 取得 属性を取得" },
   "browser.switchTab": { summary: "別のタブ・ポップアップのウィンドウに移る", words: "タブ ウィンドウ ポップアップ 別窓 切替 新しいタブ タブを切り替える" },
   "browser.closeTab": { summary: "今のタブを閉じて、前のタブに戻る", words: "タブ ウィンドウ ポップアップ 閉じる 戻る タブを閉じる" },

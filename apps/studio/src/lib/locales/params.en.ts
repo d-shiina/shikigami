@@ -173,6 +173,7 @@ export const paramsEn = {
     "browser.fill": { value: "Text to enter" },
     "browser.select": { value: "Option" },
     "browser.getAttribute": { name: "Attribute" },
+    "browser.runScript": { script: "Script", args: "Values to pass", frame: "Frame" },
     "browser.attach": { title: "Tab title" },
     "browser.switchTab": { title: "Tab title" },
     "browser.scroll": { to: "Scroll to" },

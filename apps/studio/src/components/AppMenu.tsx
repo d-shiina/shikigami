@@ -63,10 +63,13 @@ export function McpSetupRow() {
   const agentInfo = useAgent((s) => s.info);
   // A `command` agent registers Shikigami its own way; start on Claude Code's.
   const agentKind = agentInfo && agentInfo.kind !== "command" ? agentInfo.kind : "claudeCode";
-  if (!info?.cliPath) return null;
   return (
     <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint} align="start">
-      <McpSetup cliPath={info.cliPath} initial={agentKind} />
+      {info?.cliPath ? (
+        <McpSetup cliPath={info.cliPath} initial={agentKind} />
+      ) : (
+        <p className="text-[12px] text-slate-500">{info ? t.mcpNoCli : t.loading}</p>
+      )}
     </SettingsRow>
   );
 }

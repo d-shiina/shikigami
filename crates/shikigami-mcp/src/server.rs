@@ -98,6 +98,7 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("stop_flow", ToolClass::Run),
     ("inspect_page", ToolClass::Run),
     ("ask_user_to_pick", ToolClass::Run),
+    ("ask_user_to_choose", ToolClass::Read),
     ("inspect_ui", ToolClass::Run),
     ("test_step", ToolClass::Run),
     ("run_tests", ToolClass::Run),
@@ -165,6 +166,9 @@ pub struct ServerOptions {
     /// The adapters the Runtime was built with; inspect_page and test_step
     /// reach the application through them.
     pub adapters: Vec<Arc<dyn Adapter>>,
+    /// The client is the AI chat inside SpellSheet Writer, which shows
+    /// ask_user_to_choose as a card. Other clients do not get that tool.
+    pub writer_chat: bool,
 }
 
 impl Default for ServerOptions {
@@ -172,6 +176,7 @@ impl Default for ServerOptions {
         Self {
             allow: vec![ToolClass::Read, ToolClass::Write, ToolClass::Run],
             adapters: Vec::new(),
+            writer_chat: false,
         }
     }
 }
@@ -252,6 +257,9 @@ impl ShikigamiMcp {
             if !options.allow.contains(class) {
                 tool_router.remove_route(name);
             }
+        }
+        if !options.writer_chat {
+            tool_router.remove_route("ask_user_to_choose");
         }
         let can_write = options.allow.contains(&ToolClass::Write);
         let audit = AuditLog::new(service.store().local_root());
@@ -1708,6 +1716,27 @@ impl ShikigamiMcp {
         Ok(result)
     }
 
+    /// Ask the person to choose between 2 to 4 answers when the work depends on a decision only
+    /// they can make (how to handle a case, which of several ways to build something). Writer
+    /// shows the question and the answers as a card in the AI chat; the person presses one or
+    /// writes their own answer. Use it instead of listing alternatives in your reply. This call
+    /// returns at once: end your turn after it without repeating the options. The answer comes
+    /// as the person's next message. One question per turn.
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
+    async fn ask_user_to_choose(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<AskUserToChooseParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let outcome = check_choices(&p).map(|()| {
+            json!({
+                "status": "shown",
+                "hint": "Writer shows this as a card. End your turn now, without repeating the question or the options; the person's answer comes as the next message.",
+            })
+        });
+        self.finish("ask_user_to_choose", &peer, None, outcome)
+    }
+
     /// Ask the user to point at an element on the open web page when you cannot tell which one a
     /// step should touch: several elements fit (two 「編集」 buttons, one per row), an icon has no
     /// name, or the words in inspect_page do not say which one the user means. Do not guess with
@@ -2729,6 +2758,48 @@ impl ShikigamiMcp {
 
 /// How long test_step shows a browser step's target before running it.
 const HIGHLIGHT_WAIT_MS: u64 = 700;
+/// Most answers ask_user_to_choose shows (more do not fit a card to read at a glance).
+const MAX_CHOICES: usize = 4;
+
+/// Whether ask_user_to_choose has a question and 2 to 4 distinct answers.
+fn check_choices(p: &AskUserToChooseParams) -> Result<(), ErrorPayload> {
+    if p.question.trim().is_empty() {
+        return Err(err(
+            "INVALID_PARAMS",
+            "question is required, e.g. 「在庫切れの注文はどうしますか？」",
+        ));
+    }
+    if !(2..=MAX_CHOICES).contains(&p.options.len()) {
+        return Err(err(
+            "INVALID_PARAMS",
+            format!(
+                "give 2 to {MAX_CHOICES} options (got {}); for one, just say what you will do",
+                p.options.len()
+            ),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for option in &p.options {
+        let label = option.label.trim();
+        if label.is_empty() {
+            return Err(err("INVALID_PARAMS", "every option needs a label"));
+        }
+        if !seen.insert(label) {
+            return Err(err(
+                "INVALID_PARAMS",
+                format!("two options have the same label: {label}"),
+            ));
+        }
+    }
+    if p.recommended.is_some_and(|i| i >= p.options.len()) {
+        return Err(err(
+            "INVALID_PARAMS",
+            "recommended is the index (from 0) of one of the options",
+        ));
+    }
+    Ok(())
+}
+
 /// How long ask_user_to_pick waits for a click by default.
 const DEFAULT_PICK_WAIT_MS: u64 = 120_000;
 /// How often ask_user_to_pick looks whether Studio cancelled the request.

@@ -47,6 +47,7 @@ pub mod types {
     pub const HOVER: &str = "browser.hover";
     pub const SCROLL: &str = "browser.scroll";
     pub const GET_ATTRIBUTE: &str = "browser.getAttribute";
+    pub const RUN_SCRIPT: &str = "browser.runScript";
     pub const SWITCH_TAB: &str = "browser.switchTab";
     pub const CLOSE_TAB: &str = "browser.closeTab";
     pub const DOWNLOAD: &str = "browser.download";
@@ -609,6 +610,32 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             ..Def::default()
         },
         Def {
+            step_type: RUN_SCRIPT,
+            method: "runScript",
+            label: "JavaScript の実行",
+            description: "Runs JavaScript in the current page and returns what it returns. `script` is the body of an async function: use `return` for the result and `await` freely. Inside it, `args` is the value of `args` (pass flow values here, e.g. { \"code\": \"{{ order.code }}\" }; never write {{ }} inside `script`, a value with a quote would break the code) and `element` is the element `target` points at (null without `target`). `frame` runs it inside that iframe when there is no `target` (with `target`, its own frame is used). Output: the return value (text, number, true/false, null, arrays and objects of them; elements and functions come back as null). Waits for a returned promise up to the step's timeoutMs, then fails with SCRIPT_TIMEOUT; an exception or a syntax error fails with SCRIPT_ERROR and its message. Use it only when no other browser.* step can do the job (a value kept in the page's JavaScript, a hidden state, a calculation on many elements): reading text, attributes and tables, clicking and typing have their own steps, which read better and survive page changes. It runs only inside the page, never on the PC; registered secrets cannot be passed in, and secret values typed on the page are returned as ***.",
+            params: json!({
+                "script": { "type": "string", "minLength": 1, "description": "実行する JavaScript（async 関数の中身。結果は return で返す。args・element が使える）" },
+                "args": { "description": "スクリプトに渡す値（args として使える）。フローの値はここに {{ }} で入れる" },
+                "target": target,
+                "frame": frame_schema(FRAME_DEPTH - 1)
+            }),
+            required: &["script"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": RUN_SCRIPT, "name": "画面の受注件数を読む", "params": { "script": "return window.app.orders.length;" }, "saveAs": "orderCount" }),
+                json!({ "type": RUN_SCRIPT, "name": "選んだ行の受注番号を集める", "params": {
+                    "script": "return [...element.querySelectorAll('tr.selected')].map(tr => tr.dataset.code);",
+                    "target": { "role": "table", "name": "受注" }
+                }, "saveAs": "codes" }),
+                json!({ "type": RUN_SCRIPT, "name": "検索 API を呼ぶ", "params": {
+                    "script": "const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();",
+                    "args": { "code": "{{ order.code }}" }
+                }, "saveAs": "detail" }),
+            ],
+            ..Def::default()
+        },
+        Def {
             step_type: SWITCH_TAB,
             method: "switchTab",
             label: "タブ切り替え",
@@ -875,7 +902,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 binds_variables: vec![],
                 // Downloads write files; uploads send them out.
                 // Attaching reaches the person's own logins.
-                risk: if oauth || [DOWNLOAD, UPLOAD, ATTACH].contains(&d.step_type) {
+                // A script can do anything the page can (send, delete).
+                risk: if oauth || [DOWNLOAD, UPLOAD, ATTACH, RUN_SCRIPT].contains(&d.step_type) {
                     RiskLevel::Dangerous
                 } else {
                     RiskLevel::Interactive

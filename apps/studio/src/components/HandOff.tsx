@@ -355,6 +355,8 @@ export function ReceiveSheet() {
     await importReceived(existing ? mode : undefined);
     setBusy(false);
   };
+  const kept = (existing?.keptInputs ?? []).map((p) => p.replace(/^input\//i, ""));
+  const keptInputs = kept.length > 3 ? `${kept.slice(0, 3).join("・")} ${r.moreChanges(kept.length - 3)}` : kept.join("・");
   const publishedHere = existing?.publishedVersion != null ? `v${existing.publishedVersion}` : null;
   return (
     <Modal label={manifest.flow.name} onCancel={close} wide>
@@ -399,7 +401,9 @@ export function ReceiveSheet() {
               </ul>
             )}
             <div className="mt-2.5 space-y-1.5">
-              <Choice on={mode === "update"} onPick={() => setMode("update")} title={r.update} note={r.updateNote(publishedHere)} />
+              <Choice on={mode === "update"} onPick={() => setMode("update")} title={r.update} note={r.updateNote(publishedHere)}>
+                {keptInputs.length > 0 && <span className="mt-1 block text-xs text-slate-600">{r.keptInputs(keptInputs)}</span>}
+              </Choice>
               <Choice on={mode === "copy"} onPick={() => setMode("copy")} title={r.copy} note={r.copyNote(existing.name)} />
             </div>
           </section>

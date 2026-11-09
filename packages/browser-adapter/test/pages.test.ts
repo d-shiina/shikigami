@@ -40,6 +40,12 @@ const PAGES: Record<string, string> = {
     <label>コード <input id="code" onkeydown="document.getElementById('k').textContent = String(Number(document.getElementById('k').textContent) + 1)"></label>
     <p id="k">0</p>
     <a href="/detail">詳細へ</a>`,
+  "/script": `<title>台帳</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline'">
+    <script>window.app = { orders: [{ code: "A-1" }, { code: "B-2" }] }</script>
+    <table aria-label="受注"><tr data-code="A-1" class="selected"><td>A-1</td></tr><tr data-code="B-2"><td>B-2</td></tr></table>
+    <label>パスワード <input type="password" id="pw"></label>
+    <iframe name="side" srcdoc="<script>window.where = 'side'</script><p>横</p><label>暗証番号 <input type='password' id='pin'></label>"></iframe>`,
   "/inner": `<button onclick="this.textContent = '押しました'">奥のボタン</button>`,
 };
 
@@ -292,5 +298,62 @@ describe("clicks, checkboxes, typing and moving between pages", () => {
     await adapter.call("open", { ...tab, url: `${base}/clicks#more` });
     const result = (await adapter.call("navigate", { ...tab, action: "back" })) as { url: string };
     expect(result.url).toBe(`${base}/clicks`);
+  });
+});
+
+describe("JavaScript in the page", () => {
+  const tab = { runId: "run_script", context: "script" };
+  const runScript = (params: Record<string, unknown>) => adapter.call("runScript", { ...tab, ...params });
+
+  beforeAll(async () => {
+    await adapter.call("open", { ...tab, url: `${base}/script` });
+  });
+
+  it("returns what the script returns, with args, even where the page forbids eval", async () => {
+    expect(await runScript({ script: "return window.app.orders.map(o => o.code);" })).toEqual(["A-1", "B-2"]);
+    expect(await runScript({ script: "return args.a + args.b;", args: { a: 1, b: 2 } })).toBe(3);
+    expect(await runScript({ script: "await new Promise(r => setTimeout(r, 50)); return { title: document.title, ok: true };" })).toEqual({
+      title: "台帳",
+      ok: true,
+    });
+  });
+
+  it("passes the target as element", async () => {
+    const codes = await runScript({
+      script: "return [...element.querySelectorAll('tr.selected')].map(tr => tr.dataset.code);",
+      target: { role: "table", name: "受注" },
+    });
+    expect(codes).toEqual(["A-1"]);
+    expect(await runScript({ script: "return element;" })).toBeNull();
+  });
+
+  it("runs inside a frame", async () => {
+    expect(await runScript({ script: "return window.where ?? 'top';" })).toBe("top");
+    expect(await runScript({ script: "return window.where;", frame: { name: "side" } })).toBe("side");
+  });
+
+  it("turns what JSON cannot hold into plain values", async () => {
+    expect(await runScript({ script: "return document.body;" })).toBeNull();
+    expect(await runScript({ script: "return [undefined, () => 1, NaN, new Date(0), 2n];" })).toEqual([null, null, null, "1970-01-01T00:00:00.000Z", "2"]);
+    expect(await runScript({ script: "document.title = '更新';" })).toBeNull();
+  });
+
+  it("reports exceptions, syntax errors and scripts that never finish", async () => {
+    const thrown = await failure(runScript({ script: "throw new Error('在庫がありません');" }));
+    expect(thrown.code).toBe("SCRIPT_ERROR");
+    expect(thrown.message).toContain("在庫がありません");
+    expect((await failure(runScript({ script: "return (;" }))).code).toBe("SCRIPT_ERROR");
+    expect((await failure(runScript({ script: "await new Promise(() => {});", timeoutMs: 300 }))).code).toBe("SCRIPT_TIMEOUT");
+    expect((await failure(runScript({ script: "  " }))).code).toBe("INVALID_PARAMS");
+  });
+
+  it("never returns what is typed in a password field", async () => {
+    await adapter.call("fill", { ...tab, target: { label: "パスワード" }, value: "hunter2-secret" });
+    expect(await runScript({ script: "return { pw: document.getElementById('pw').value };" })).toEqual({ pw: "***" });
+    const thrown = await failure(runScript({ script: "throw new Error('pw=' + document.getElementById('pw').value);" }));
+    expect(thrown.message).toContain("pw=***");
+    expect(thrown.message).not.toContain("hunter2");
+    await adapter.call("fill", { ...tab, target: { label: "暗証番号", frame: { name: "side" } }, value: "9876-pin" });
+    expect(await runScript({ script: "return document.getElementById('pin').value;", frame: { name: "side" } })).toBe("***");
   });
 });

@@ -152,11 +152,14 @@ fn clean_downloads(dir: &Path, current_version: &str) {
     }
 }
 
-/// The CLI installed with Studio, which MCP clients run; none in development.
+/// The CLI that MCP clients run: the one installed with Studio, else the
+/// one the AI pane uses (next to Studio, as `target/debug` in development,
+/// or on PATH), so the settings always show how to register it.
 fn installed_cli() -> Option<String> {
     install_dir()
         .map(|dir| dir.join(CLI_EXE))
         .filter(|p| !cfg!(debug_assertions) && p.is_file())
+        .or_else(crate::agent::cli_path)
         .map(|p| p.display().to_string())
 }
 
@@ -180,12 +183,38 @@ fn cursor_install_url(cli: &str) -> String {
 #[tauri::command]
 pub fn open_cursor_mcp_install() -> CmdResult<()> {
     let Some(cli) = installed_cli() else {
+        return Err(err("NOT_FOUND", "SpellSheet のコマンドが見つかりません"));
+    };
+    // Without Cursor nothing handles cursor://, and Windows answers the link
+    // by opening Explorer instead; say so and leave the copy below to use.
+    if !cursor_link_handled() {
         return Err(err(
             "NOT_FOUND",
-            "インストールされた SpellSheet が見つかりません",
+            "この PC に Cursor が見つかりません。Cursor を入れてからもう一度押すか、下の内容を mcp.json に書いてください",
         ));
-    };
+    }
     crate::agent::open_external(&cursor_install_url(&cli))
+}
+
+/// Whether some program (Cursor) is registered for `cursor://` links:
+/// `HKEY_CLASSES_ROOT\cursor` with a "URL Protocol" value, per user or for
+/// the machine.
+#[cfg(windows)]
+fn cursor_link_handled() -> bool {
+    use std::os::windows::process::CommandExt as _;
+    std::process::Command::new("reg")
+        .args(["query", r"HKCR\cursor", "/v", "URL Protocol"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[cfg(not(windows))]
+fn cursor_link_handled() -> bool {
+    true
 }
 
 #[tauri::command]

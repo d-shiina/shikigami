@@ -350,6 +350,8 @@ export const api = {
   revealFile: (path: string) => call<void>("reveal_file", { path }),
   /** The `.spx` file opened from Explorer that is waiting to be shown, once. */
   takeOpenedFile: () => call<string | null>("take_opened_file"),
+  /** Writer's screen has drawn: shows the (hidden) window and closes the start-up screen (splash.rs). */
+  startupReady: () => call<void>("startup_ready"),
   /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
   saveAiGuide: () => call<string>("save_ai_guide"),
   /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
@@ -392,7 +394,14 @@ export const api = {
   run: (
     id: string,
     inputs?: Record<string, unknown>,
-    debug?: { breakpoints: string[]; step?: boolean; startAt?: string; startValues?: Record<string, unknown> },
+    debug?: {
+      breakpoints: string[];
+      step?: boolean;
+      startAt?: string;
+      startValues?: Record<string, unknown>;
+      /** Whether Writer steps aside for a run that works on the screen (src-tauri/src/run_band.rs). */
+      band?: { shrink: boolean; restoreAtEnd: boolean };
+    },
   ) =>
     call<string>("run_flow", { id, inputs, debug }),
   /** Step commands for a paused run; resuming swaps in the stored revision first (e.g. the AI's fix). */
@@ -493,6 +502,8 @@ export type AgentEvent = { turnId: string } & (
   | { kind: "preparing"; name: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
+  /** The agent asks the person to choose (ask_user_to_choose); the answer is the next message. */
+  | { kind: "choice"; question: string; options: ChoiceOption[]; recommended: number | null; reason: string | null }
   | { kind: "created"; flowId: string; name: string }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
@@ -525,6 +536,9 @@ export const agent = {
   onInstall: (handler: (e: InstallEvent) => void): Promise<UnlistenFn> =>
     listen<InstallEvent>("agent-install", (e) => handler(e.payload)),
 };
+
+/** One answer on a card the AI asks the person to choose from. */
+export type ChoiceOption = { label: string; description: string | null };
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
 /** Which AI to set up; the installer is chosen by this. */

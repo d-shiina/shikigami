@@ -52,6 +52,32 @@ describe("agent store", () => {
     expect(now(store.getState())).toMatchObject({ sessionId: "codex-1", agent: "codex" });
   });
 
+  it("shows the AI's choices as a card and the next message answers it", async () => {
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${(api.send as ReturnType<typeof vi.fn>).mock.calls.length}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("在庫切れの扱いを足して", { id: "scn_a", name: "A" });
+    store.getState().onEvent({
+      turnId: "turn_1",
+      kind: "choice",
+      question: "在庫切れの注文はどうしますか？",
+      options: [
+        { label: "飛ばして一覧に残す", description: "出荷できた分だけ進めます。" },
+        { label: "そこで止めて人に聞く", description: null },
+      ],
+      recommended: 0,
+      reason: null,
+    });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    expect(now(store.getState()).items[1]).toMatchObject({ parts: [{ kind: "choice", recommended: 0, answer: null }] });
+
+    await store.getState().send("飛ばして一覧に残す", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith(expect.objectContaining({ message: "飛ばして一覧に残す" }));
+    const items = now(store.getState()).items;
+    expect(items[1]).toMatchObject({ parts: [{ kind: "choice", answer: "飛ばして一覧に残す" }] });
+    expect(items[2]).toMatchObject({ role: "person", text: "飛ばして一覧に残す", answers: true });
+  });
+
   it("keeps a conversation with the AI that ran it when the AI is switched mid-turn", async () => {
     const api = fakeAgent();
     const store = createAgentStore(api);

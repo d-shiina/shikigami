@@ -1584,6 +1584,11 @@ export interface ExistingFlow {
    */
   hasPackageVersion: boolean;
   diff: FlowDiff1;
+  /**
+   * The package's files under `input/` that an update leaves out,
+   * because this PC already has a file of that name there.
+   */
+  keptInputs?: string[];
 }
 /**
  * Differences from `from` to `to`.

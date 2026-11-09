@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ImageViewerHost } from "./components/ImageViewer";
+import { RunBand } from "./runband/RunBand";
 import { Runner } from "./runner/Runner";
 // Bundled so Japanese never falls back to Chinese glyph shapes, offline too.
 import "@fontsource-variable/inter/index.css";
@@ -20,12 +21,13 @@ if ("__TAURI_INTERNALS__" in globalThis) {
   onLocaleChange(trayLabels);
 }
 
+const view = new URLSearchParams(location.search).get("view");
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      {/* The run window (src-tauri/src/runner.rs) is the same app on another page. */}
-      {new URLSearchParams(location.search).get("view") === "runner" ? <Runner /> : <App />}
+      {/* The run window (src-tauri/src/runner.rs) and the run band (run_band.rs) are the same app on other pages. */}
+      {view === "runner" ? <Runner /> : view === "band" ? <RunBand /> : <App />}
       <ImageViewerHost />
     </StrictMode>,
   );

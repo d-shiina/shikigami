@@ -241,20 +241,6 @@ textarea,
   background-color: var(--color-desk);
 }
 
-/* The flow chart's desk: the manual's grey, so the sheet the flow is written on reads as paper. */
-.flow-desk {
-  --xy-background-color: var(--manual-desk);
-  background-color: var(--manual-desk);
-}
-/* The sheet itself (FlowCanvas FlowSheet): the manual page's white and shadow, under the frames (-1) and lines. */
-.flow-sheet {
-  z-index: -10;
-  background-color: var(--color-sheet);
-  box-shadow:
-    0 1px 2px rgb(20 30 50 / 0.08),
-    0 8px 24px rgb(20 30 50 / 0.08);
-}
-
 /*
  * The frame of a loop (if, try, …) around its blocks; the step's own node is
  * its head, over the top edge. A loop's frame is tinted with the control

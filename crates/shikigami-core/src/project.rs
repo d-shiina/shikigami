@@ -421,9 +421,16 @@ pub fn clear_work(project_dir: &Path) -> Vec<String> {
 
 /// Writes the bundle's files of flow `id` into `dir` (a project folder),
 /// replacing files of the same name.
-pub fn unpack(files: &[BundledFile], id: &FlowId, dir: &Path) -> CoreResult<()> {
+///
+/// With `keep_input` (an update of a flow already here), a file under
+/// `input/` that is already in `dir` is left as it is: it is this PC's
+/// data, not part of how the flow works.
+pub fn unpack(files: &[BundledFile], id: &FlowId, dir: &Path, keep_input: bool) -> CoreResult<()> {
     use base64::Engine as _;
     for file in files.iter().filter(|f| &f.flow_id == id) {
+        if keep_input && is_input(&file.path) && dir.join(relative_path(&file.path)?).exists() {
+            continue;
+        }
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(file.data.as_bytes())
             .map_err(|e| {
@@ -436,6 +443,24 @@ pub fn unpack(files: &[BundledFile], id: &FlowId, dir: &Path) -> CoreResult<()> 
         crate::store::write_atomic(&target, &bytes)?;
     }
     Ok(())
+}
+
+/// Whether a bundled file is under `input/`.
+pub fn is_input(path: &str) -> bool {
+    path.split('/')
+        .next()
+        .is_some_and(|top| top.eq_ignore_ascii_case(FOLDERS[0].name))
+}
+
+/// The files of flow `id` in a bundle that an update would leave as they
+/// are, because a file of that name is already under `input/` in `dir`.
+pub fn kept_inputs(files: &[BundledFile], id: &FlowId, dir: &Path) -> Vec<String> {
+    files
+        .iter()
+        .filter(|f| &f.flow_id == id && is_input(&f.path))
+        .filter(|f| relative_path(&f.path).is_ok_and(|p| dir.join(p).exists()))
+        .map(|f| f.path.clone())
+        .collect()
 }
 
 /// Whether a file belongs in a bundle: not under `output/`, `work/` or

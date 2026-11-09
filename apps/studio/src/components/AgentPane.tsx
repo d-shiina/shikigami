@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { Check, ChevronDown, ClipboardPaste, Download, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardPaste, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, agent } from "../lib/api";
@@ -46,15 +46,22 @@ export function AgentPane({ width }: { width: number }) {
   // The conversation may be about another flow than the one in the editor.
   const here = flow !== null && chat.flowId === flow.id;
   const stepId = here && selection?.kind === "step" ? selection.stepId : null;
-  const submit = async () => {
+  const submit = async (answer?: string) => {
     const ref = chat.flowId ? { id: chat.flowId, name: here ? flow.name : chat.title, stepId, empty: here && (flow.steps ?? []).length === 0 } : null;
     const context = chat.flowId ? `${ref!.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
+    const id = chat.id;
+    // A pressed answer leaves what the person was writing alone.
+    if (answer !== undefined) {
+      await sendIn(id, answer, ref, context);
+      return;
+    }
     // Cleared as it is sent, like any chat; back again if it was not taken.
     const text = draft;
-    const id = chat.id;
     setDraftOf(id, () => "");
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
   };
+  // Only the last reply's card can still be answered, and not while the AI works.
+  const canChoose = !busy && !blockedElsewhere && !chat.interrupting && !!info?.available;
   return (
     <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col bg-sheet">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-3 pl-2">
@@ -116,8 +123,8 @@ export function AgentPane({ width }: { width: number }) {
             </div>
           </div>
         )}
-        {items.map((item) => (
-          <Item key={item.id} item={item} />
+        {items.map((item, i) => (
+          <Item key={item.id} item={item} onChoose={canChoose && i === items.length - 1 ? (answer) => void submit(answer) : null} />
         ))}
         {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
         <LoginBox name={info?.name ?? "AI"} />
@@ -351,8 +358,9 @@ function lastWords(c: Chat): string {
   return c.sessionId ? t.agent.earlier : "";
 }
 
-function Item({ item }: { item: ChatItem }) {
+function Item({ item, onChoose }: { item: ChatItem; onChoose: ((answer: string) => void) | null }) {
   if (item.role === "person") {
+    if (item.answers) return null;
     return (
       <div className="ml-8">
         {item.context && <div className="mb-0.5 truncate text-right text-[10px] text-slate-400">{item.context}</div>}
@@ -363,7 +371,7 @@ function Item({ item }: { item: ChatItem }) {
   return (
     <div className="mr-4 space-y-1.5">
       {item.parts.map((part, i) => (
-        <Part key={i} part={part} />
+        <Part key={i} part={part} onChoose={onChoose} />
       ))}
       {item.status === "running" && <Progress starting={item.turnId === ""} quiet={item.parts.length === 0} preparing={item.preparing} />}
       {item.status === "done" && item.message && <div className="text-[11px] text-slate-500">{item.message}</div>}
@@ -406,8 +414,10 @@ function Progress({ starting, quiet, preparing }: { starting: boolean; quiet: bo
   );
 }
 
-function Part({ part }: { part: AgentPart }) {
+function Part({ part, onChoose }: { part: AgentPart; onChoose: ((answer: string) => void) | null }) {
   switch (part.kind) {
+    case "choice":
+      return <ChoiceCard part={part} onChoose={onChoose} />;
     case "text":
       return <Markdown text={part.text.trim()} />;
     case "tool":
@@ -423,6 +433,60 @@ function Part({ part }: { part: AgentPart }) {
     case "toolFailed":
       return <div className="pl-3 text-[11px] text-shu-600">{t.agent.toolFailed}{part.message}</div>;
   }
+}
+
+/**
+ * The AI asks the person to choose (ask_user_to_choose). Pressing an answer
+ * sends it as the next message; writing something else in the box answers
+ * too. Once answered, only the question and the answer stay, in one line.
+ */
+function ChoiceCard({ part, onChoose }: { part: Extract<AgentPart, { kind: "choice" }>; onChoose: ((answer: string) => void) | null }) {
+  if (part.answer !== null) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-[12px] text-slate-500">
+        <Check size={14} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
+        <span className="min-w-0 whitespace-pre-wrap">
+          {t.agent.choice.answered(part.question)}
+          {/* A pressed answer is one of the options; a written one is the person's own words. */}
+          <span className={part.options.some((o) => o.label === part.answer) ? "font-semibold text-ink" : "text-ink"}>{part.answer}</span>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div role="group" aria-label={part.question} className="rounded-lg border border-slate-200 bg-sheet p-3 shadow-raised">
+      <div className="mb-2.5 flex items-start gap-2 text-[13px] leading-snug font-bold text-ink">
+        <ListChecks size={16} className="mt-0.5 shrink-0 text-brand-500" aria-hidden="true" />
+        <span>{part.question}</span>
+      </div>
+      <div className="space-y-1.5">
+        {part.options.map((option, i) => (
+          <button
+            key={option.label}
+            type="button"
+            disabled={!onChoose}
+            onClick={() => onChoose?.(option.label)}
+            className="block w-full rounded-md border border-slate-200 px-2.5 py-2 text-left enabled:hover:border-brand-500 enabled:hover:bg-brand-50 focus-visible:border-brand-500 focus-visible:outline-none disabled:opacity-60"
+          >
+            <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+              <span className="w-3 shrink-0 text-[11px] font-normal text-slate-400 tabular-nums">{i + 1}</span>
+              <span className="min-w-0">{option.label}</span>
+              {part.recommended === i && (
+                <span className="ml-auto shrink-0 rounded border border-brand-100 px-1.5 text-[11px] font-medium text-brand-600">
+                  {t.agent.choice.recommended}
+                </span>
+              )}
+            </span>
+            {option.description && <span className="mt-0.5 block pl-5 text-[12px] leading-relaxed text-slate-500">{option.description}</span>}
+          </button>
+        ))}
+      </div>
+      {part.reason && part.recommended !== null && (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">{t.agent.choice.reason(part.reason)}</p>
+      )}
+      <p className="mt-1 text-[11.5px] text-slate-500">{t.agent.choice.other}</p>
+    </div>
+  );
 }
 
 /** The agents Studio can run, before the list from this PC arrives. */

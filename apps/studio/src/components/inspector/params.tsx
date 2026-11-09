@@ -263,6 +263,9 @@ function ParamField({
     );
   } else if (schema.type === "string" && isPath) {
     editor = <PathField value={String(value ?? "")} folder={name === "folder"} onChange={onChange} />;
+  } else if (schema.type === "string" && CODE_PARAMS.has(`${stepType}.${name}`)) {
+    // Code: several lines in a fixed-width font, no variables inserted (values go in through `args`).
+    editor = <CommitInput multiline mono value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "string" && binds) {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "string") {
@@ -329,6 +332,9 @@ function ParamField({
     </Row>
   );
 }
+
+/** Params that hold code, edited as several lines of plain text. */
+const CODE_PARAMS = new Set(["browser.runScript.script"]);
 
 /** Items set rarely: shown under "詳しく指定" unless they hold a value. */
 const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder", "frame", "within", "after"]);

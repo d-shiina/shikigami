@@ -1,20 +1,20 @@
-# Extensions
+# Custom nodes
 
 English | [日本語](ja/extensions.md)
 
-Extensions add nodes to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
+Custom nodes are nodes added to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
 
 - An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Writer and runs keep going; only its node fails.
 - Its nodes work like built-in ones: they are listed in the palette, their settings form is built from what the extension declares, and validation, retries, timeouts and secret masking apply as usual.
 - AI clients get them too: MCP `list_step_types` / `get_step_schema` and Writer's "save the spec" include extension nodes.
 
-The design is in [design/plugins.md](design/plugins.md) (Japanese; the code calls extensions "plugins").
+Each installable package of custom nodes is called an *extension* on this page; Writer shows them as **Custom nodes**, and the code and the CLI call them plugins. The design is in [design/plugins.md](design/plugins.md) (Japanese).
 
 ## Using extensions
 
-### Writer's Extensions place
+### Writer's Custom nodes page
 
-The sidebar's Extensions place lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the place offers a Restart button).
+Open it from Settings (Custom nodes → Manage) or from the node palette (Add custom nodes, bottom left). It lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the page offers a Restart button).
 
 An extension's nodes are listed in the palette under the extension's name, with its tag (e.g. "AI-OCR") before node names; their settings form is built from the manifest's JSON Schema.
 
