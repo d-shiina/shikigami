@@ -63,7 +63,7 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
 
 ## 製品サイト（GitHub Pages）
 
-`site/` が製品紹介ページとダウンロードページです（日本語、ビルド不要のふつうの HTML）。`.github/workflows/pages.yml` が、main の `site/` が変わったときと、Release の実行が終わるたびに公開し直します。そのとき `site/release.json` に最新のインストーラーを書くので、ダウンロードボタンはその `SpellSheet.Writer_<版>_x64-setup.exe` を直接指します。ページは GitHub の API でも最新版を確かめ、どちらも取れないときはリリースのページへつなぎます。リポジトリはページのアドレスから読むので、名前を変えても直す所はありません。最初に 1 回だけ、Settings → Pages → Source を「GitHub Actions」にします。
+`site/` が製品紹介ページとダウンロードページです（日本語、ビルド不要のふつうの HTML）。https://spellsheet.github.io/ で、[spellsheet/spellsheet.github.io](https://github.com/spellsheet/spellsheet.github.io) リポジトリが配信します。そちらのワークフローが 15 分ごとにこのリポジトリを見て、`site/`・マニュアル・最新のリリースのどれかが変わっていれば配信し直します（すぐ出したいときはその Deploy を手で走らせます）。そのとき `release.json` に最新のインストーラーを書くので、ダウンロードボタンはその `SpellSheet.Writer_<版>_x64-setup.exe` を直接指します。ページは GitHub の API でも最新版を確かめ、どちらも取れないときはリリースのページへつなぎます。このリポジトリ自身のページ（以前のアドレス https://spellsheet.github.io/spellsheet/）は、新しいアドレスへ飛ばすだけです（`.github/workflows/pages.yml`・`site-moved/`）。
 
 ## 手元でリリース版を作る
 

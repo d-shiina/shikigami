@@ -1,21 +1,18 @@
 name: Pages
 
-# The product site (site/) on GitHub Pages: the introduction and the
-# download page. It is published again after each release so release.json
-# names the newest installer; the page also checks the GitHub API itself.
-#
-# Once per repository: Settings → Pages → Build and deployment → Source:
-# "GitHub Actions".
+# The product site moved to https://spellsheet.github.io/, published by the
+# spellsheet/spellsheet.github.io repository from site/ (and the manual) in
+# this repository. This repository's own page, the old address
+# https://spellsheet.github.io/spellsheet/, only sends visitors there:
+# site-moved/index.html is published as every page (404.html too), keeping
+# the rest of the address.
 
 on:
   push:
     branches: [main]
     paths:
-      - "site/**"
+      - "site-moved/**"
       - ".github/workflows/pages.yml"
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -29,30 +26,21 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Write release.json (the latest installer)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Every page leads to the new address
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > latest.json 2>/dev/null; then
-            jq '{tag: .tag_name, published: .published_at,
-                 asset: ([.assets[] | select(.name | test("_x64-setup\\.exe$"))
-                          | {name, size, url: .browser_download_url, digest}] | first)}' \
-              latest.json > site/release.json
-          else
-            echo '{}' > site/release.json
-          fi
-          cat site/release.json
+          mkdir public
+          cp site-moved/index.html public/index.html
+          cp site-moved/index.html public/404.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: public
       - id: deployment
         uses: actions/deploy-pages@v4
