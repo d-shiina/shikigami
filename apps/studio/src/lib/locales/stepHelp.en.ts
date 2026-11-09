@@ -9,6 +9,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "browser.navigate": { summary: "Go back, go forward or reload the page", words: "back forward reload refresh" },
   "browser.hover": { summary: "Move the mouse over an element (menus that open on hover…)", words: "hover mouseover menu tooltip" },
   "browser.scroll": { summary: "Scroll the page or a list (to the end, or until an element shows)", words: "scroll down up load more infinite" },
+  "browser.runScript": { summary: "Run JavaScript in the page and get its result (for values no other node can read)", words: "javascript js script run evaluate code inject function" },
   "browser.getAttribute": { summary: "Read an attribute of an element (link address, image address…)", words: "attribute href link url src get" },
   "browser.switchTab": { summary: "Move to another tab or popup window", words: "tab window popup switch new tab" },
   "browser.closeTab": { summary: "Close the current tab and go back to the one before", words: "tab window popup close back" },

@@ -316,6 +316,21 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"browser.press","params":{"target":{"label":"検索"},"key":"Enter"}}`
 
+#### browser.runScript (JavaScript の実行)
+
+Runs JavaScript in the current page and returns what it returns. `script` is the body of an async function: use `return` for the result and `await` freely. Inside it, `args` is the value of `args` (pass flow values here, e.g. { "code": "{{ order.code }}" }; never write {{ }} inside `script`, a value with a quote would break the code) and `element` is the element `target` points at (null without `target`). `frame` runs it inside that iframe when there is no `target` (with `target`, its own frame is used). Output: the return value (text, number, true/false, null, arrays and objects of them; elements and functions come back as null). Waits for a returned promise up to the step's timeoutMs, then fails with SCRIPT_TIMEOUT; an exception or a syntax error fails with SCRIPT_ERROR and its message. Use it only when no other browser.* step can do the job (a value kept in the page's JavaScript, a hidden state, a calculation on many elements): reading text, attributes and tables, clicking and typing have their own steps, which read better and survive page changes. It runs only inside the page, never on the PC; registered secrets cannot be passed in, and secret values typed on the page are returned as ***.
+
+Params:
+- `script`*: text — 実行する JavaScript（async 関数の中身。結果は return で返す。args・element が使える）
+- `args`: any — スクリプトに渡す値（args として使える）。フローの値はここに {{ }} で入れる
+- `target`: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `frame`: { name: text, title: text, src: text, css: text, nth: whole number, frame: { name: text, title: text, src: text, css: text, nth: whole number, frame: object } } — 要素が入っている iframe（フレームセットのフレームも）。inspect_page の frames に出る name / title / src で指定する
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Output: yes (saveAs)
+Example: `{"type":"browser.runScript","name":"画面の受注件数を読む","params":{"script":"return window.app.orders.length;"},"saveAs":"orderCount"}`
+Example: `{"type":"browser.runScript","name":"選んだ行の受注番号を集める","params":{"script":"return [...element.querySelectorAll('tr.selected')].map(tr => tr.dataset.code);","target":{"role":"table","name":"受注"}},"saveAs":"codes"}`
+Example: `{"type":"browser.runScript","name":"検索 API を呼ぶ","params":{"script":"const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();","args":{"code":"{{ order.code }}"}},"saveAs":"detail"}`
+
 #### browser.screenshot (スクリーンショット)
 
 Saves a PNG of the page to `path` (absolute; `fullPage: true` for the whole page). Output: the path.
