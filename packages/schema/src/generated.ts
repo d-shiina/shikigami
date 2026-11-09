@@ -153,7 +153,7 @@ export type SubflowImport = "created" | "updated" | "kept";
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "CheckKind".
  */
-export type CheckKind = "plugin" | "secret" | "site" | "app";
+export type CheckKind = ("plugin" | "secret" | "site" | "app") | "place";
 /**
  * State of one requirement on this PC.
  *
@@ -344,7 +344,7 @@ export type NotifyFormat = "teams" | "slack" | "json";
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ConfigType".
  */
-export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
+export type ConfigType = ("text" | "number" | "boolean") | "date" | "list" | "folder";
 /**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExpectedStatus".
@@ -1409,6 +1409,13 @@ export interface PackageRequires {
    * Inputs asked for when the flow runs (no default value).
    */
   inputs?: PackageInput[];
+  /**
+   * Places outside the flow's folder it reads or writes, written out in
+   * full in its steps or as a folder in its settings files
+   * (`\\fs01\経理`, `%USERPROFILE%\Box\経理`): the PC that runs it
+   * has to reach them.
+   */
+  places?: string[];
 }
 /**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
@@ -1506,6 +1513,13 @@ export interface PackageRequires1 {
    * Inputs asked for when the flow runs (no default value).
    */
   inputs?: PackageInput[];
+  /**
+   * Places outside the flow's folder it reads or writes, written out in
+   * full in its steps or as a folder in its settings files
+   * (`\\fs01\経理`, `%USERPROFILE%\Box\経理`): the PC that runs it
+   * has to reach them.
+   */
+  places?: string[];
 }
 /**
  * Options of [`crate::FlowService::export_package`].
@@ -2197,6 +2211,13 @@ export interface ProjectFiles {
    * Every file except `flow.json`, sorted by path.
    */
   files: ProjectFile[];
+  /**
+   * Files the flow reads from `input/` that are not there yet: ask the
+   * person where they come from (put the file in `input/`, or read it
+   * from a file server or a folder synced with cloud storage set in
+   * `config/`).
+   */
+  needed?: NeededFile[];
 }
 /**
  * One file in a project folder.
@@ -2217,6 +2238,22 @@ export interface ProjectFile {
    * that writes it fails with `FILE_IN_USE`.
    */
   inUse?: boolean;
+}
+/**
+ * A file the flow reads from its `input/` folder that is not there yet.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "NeededFile".
+ */
+export interface NeededFile {
+  /**
+   * Relative to the flow's folder, `/`-separated (`input/受注.xlsx`).
+   */
+  path: string;
+  /**
+   * The steps that read it, in flow order.
+   */
+  stepIds: StepId[];
 }
 /**
  * A settings file (`config/*.json`) kept out of the flow: values a
@@ -2245,7 +2282,7 @@ export interface ConfigItem {
    * The key in the object `config.read` returns (`settings.締め日`).
    */
   name: string;
-  type?: ("text" | "number" | "boolean") | "date" | "list";
+  type?: ("text" | "number" | "boolean") | "date" | "list" | "folder";
   value?: {
     [k: string]: unknown;
   };

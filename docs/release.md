@@ -63,7 +63,7 @@ Once published, installed copies of Writer find the update the next time they st
 
 ## Product site (GitHub Pages)
 
-`site/` is the product page and the download page (Japanese, plain HTML with no build step). `.github/workflows/pages.yml` publishes it when `site/` changes on main and again after each Release run, writing `site/release.json` with the newest installer so the download button points at that `SpellSheet.Writer_<version>_x64-setup.exe`. The page also asks the GitHub API for the latest release and falls back to the release page, and it reads the repository from its own address, so a rename needs no change. One-time setup: Settings → Pages → Source: "GitHub Actions".
+`site/` is the product page and the download page (Japanese, plain HTML with no build step), published at https://spellsheet.github.io/ by the [spellsheet/spellsheet.github.io](https://github.com/spellsheet/spellsheet.github.io) repository. Its workflow checks this repository every 15 minutes and publishes again when `site/`, the manual or the latest release has changed (run its Deploy workflow by hand to publish at once). It writes `release.json` with the newest installer so the download button points at that `SpellSheet.Writer_<version>_x64-setup.exe`; the page also asks the GitHub API for the latest release and falls back to the release page. This repository's own page, the old address https://spellsheet.github.io/spellsheet/, only redirects there (`.github/workflows/pages.yml`, `site-moved/`).
 
 ## Building a release locally
 

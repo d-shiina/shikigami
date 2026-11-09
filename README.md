@@ -180,4 +180,4 @@ See [docs/mcp.md](docs/mcp.md) for Codex / Cursor settings and the tool list. AI
 
 ## License
 
-[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.
+[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [Code signing policy](CODE_SIGNING_POLICY.md) for how the installers are signed, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.

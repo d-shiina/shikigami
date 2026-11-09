@@ -18,6 +18,7 @@ pub mod ops;
 pub mod package;
 pub mod paths;
 pub mod pick;
+pub mod places;
 pub mod policy;
 pub mod project;
 pub mod registry;
