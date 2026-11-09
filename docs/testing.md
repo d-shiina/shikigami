@@ -91,4 +91,4 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # a flow file too
 - The exit code is 1 when any case differs, for batch files and CI
 - `--json` prints one JSON object (`passed`, `failed`, `cases[]`; each case has `passed`, `runId`, `status`, `error`, `mismatches[]`). A mismatch has `at` (e.g. `outputs.total`), `expected` and `actual`
 
-Example: `examples/tutorials/sales-csv/tests/`, from the [sales CSV tutorial](tutorials/sales-csv.md).
+Example: `examples/tutorials/sales-csv/tests/`, for the flow that combines branch sales CSVs into one workbook.

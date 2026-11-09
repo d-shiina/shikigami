@@ -91,4 +91,4 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # ファイルのフロ
 - 1 つでも違うと終了コードは 1 です。バッチや CI の判定にそのまま使えます
 - `--json` は結果を 1 つの JSON（`passed`・`failed`・`cases[]`、各ケースに `passed`・`runId`・`status`・`error`・`mismatches[]`）で出します。`mismatches[]` は `at`（`outputs.total` など）・`expected`・`actual` です
 
-見本：[売上 CSV のチュートリアル](tutorials/sales-csv.md) の `examples/tutorials/sales-csv/tests/`。
+見本：支店の売上 CSV を 1 つの Excel にまとめるフローの `examples/tutorials/sales-csv/tests/`。

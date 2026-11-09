@@ -27,11 +27,11 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 ## Getting started
 
 1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
-2. Start **SpellSheet Writer** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
+2. Start **SpellSheet Writer** from the Start menu.
 3. To have AI build flows, open "AI chat" at the top of Writer (Ctrl+J), pick the AI you use (Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot) and press its button, such as "Install Claude Code": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
 
-To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.
+The rest of this page is for developers.
 
 ## Status
 
@@ -41,7 +41,6 @@ Writer's UI is available in English and Japanese (the language menu under "Spell
 
 | Document | Contents |
 |---|---|
-| [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, flow format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/ai-chat.md](docs/ai-chat.md) | Building flows with an AI chat that has no MCP (Microsoft Copilot): the guide to give it, pasting its answer into Writer, what is left for a person |
@@ -93,7 +92,7 @@ packages/schema         TypeScript types generated from the Rust types
 packages/browser-adapter  Browser automation process (Playwright)
 plugins/spellsheet      Claude Code plugin (MCP settings + skill)
 schemas/                Generated JSON Schema (public contract)
-examples/               Sample flows, tutorials and example custom nodes
+examples/               Sample flows (CI runs them end to end) and example custom nodes
 ```
 
 `spellsheet-core` depends on no other crate in the workspace; every entry point (Writer, CLI, MCP server, Worker) edits flows through it. The crates that touch Windows APIs keep `unsafe` to the modules that call them; everywhere else it is forbidden by the workspace lints. See [docs/architecture.md](docs/architecture.md) for the full design.
