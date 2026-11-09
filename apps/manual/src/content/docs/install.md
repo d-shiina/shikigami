@@ -42,7 +42,6 @@ Get-FileHash "$env:USERPROFILE\Downloads\SpellSheet.Writer_…_x64-setup.exe"
 スタートメニューから「SpellSheet Writer」を開くと、「何を自動化しますか？」の画面が出ます。
 
 - **AI に依頼**：やりたいことを書いて送ると、AI がフローを組み始めます。初めてのときは、使う AI を選んで導入とサインインをします（[AI と MCP の登録](../ai-and-mcp/)）。
-- **見本を開く**：完成したフローを開いて、中身と動きを確かめられます。
 - **空のフローを作る**：自分でノードを並べて作ります。
 
 ## 更新
