@@ -698,7 +698,9 @@ async fn read_text_fits_reads_to_the_kind_and_candidates() {
         ))],
     )
     .await;
-    assert_eq!(report.outputs["out"]["text"], json!(read));
+    // The line that is a candidate is marked so; the other lines are kept.
+    assert_eq!(report.outputs["out"]["lines"][0]["text"], json!(read));
+    assert_eq!(report.outputs["out"]["lines"][0]["candidate"], json!(true));
     let wrong = crate::visual::ocr_options(&json!({ "textKind": "color" }));
     assert_eq!(wrong.unwrap_err().code, "INVALID_PARAMS");
 }

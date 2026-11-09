@@ -152,6 +152,11 @@ const MIN_SIMILARITY: f64 = 0.5;
 /// The choice `read` is nearest, when it is near enough and nearer than
 /// any other (a tie snaps to nothing: the read is left as it is).
 pub fn nearest<'a>(read: &str, choices: &'a [String]) -> Option<&'a str> {
+    scored(read, choices).map(|(_, c)| c)
+}
+
+/// [`nearest`], with how near it is (0–1).
+fn scored<'a>(read: &str, choices: &'a [String]) -> Option<(f64, &'a str)> {
     let read = key(read);
     if read.is_empty() {
         return None;
@@ -172,7 +177,7 @@ pub fn nearest<'a>(read: &str, choices: &'a [String]) -> Option<&'a str> {
         [(best, choice), rest @ ..]
             if *best >= MIN_SIMILARITY && rest.first().is_none_or(|(next, _)| next < best) =>
         {
-            Some(choice)
+            Some((*best, choice))
         }
         _ => None,
     }
@@ -219,7 +224,7 @@ pub fn fit_output(output: &mut Value, kind: Option<TextKind>, choices: Option<&[
                 .collect()
         })
         .unwrap_or_default();
-    if whole.len() > 1 && snap_whole(output, &whole.concat(), choices) {
+    if whole.len() > 1 && snap_whole(output, &whole, choices) {
         return;
     }
     let Some(lines) = output["lines"].as_array_mut() else {
@@ -250,11 +255,22 @@ pub fn fit_output(output: &mut Value, kind: Option<TextKind>, choices: Option<&[
 }
 
 /// Lines that as a whole are a candidate, made one line of it; false when
-/// they are not.
-fn snap_whole(output: &mut Value, whole: &str, choices: Option<&[String]>) -> bool {
-    let Some(choice) = choices.and_then(|c| nearest(whole, c)) else {
+/// they are not, or when a line alone is as near to a candidate (lines
+/// that are each a candidate of their own stay apart).
+fn snap_whole(output: &mut Value, fitted: &[String], choices: Option<&[String]>) -> bool {
+    let Some(choices) = choices else {
         return false;
     };
+    let Some((near, choice)) = scored(&fitted.concat(), choices) else {
+        return false;
+    };
+    if fitted
+        .iter()
+        .filter_map(|l| scored(l, choices))
+        .any(|(n, _)| n >= near)
+    {
+        return false;
+    }
     let Some(lines) = output["lines"].as_array() else {
         return false;
     };
@@ -286,6 +302,25 @@ fn snap_whole(output: &mut Value, whole: &str, choices: Option<&[String]>) -> bo
     output["lines"] = json!([line]);
     output["text"] = json!(choice);
     true
+}
+
+/// A table's cells below the header row fitted and snapped as lines are;
+/// the header's names are left as read.
+pub fn fit_cells(
+    cells: &mut [Vec<String>],
+    header: usize,
+    kind: Option<TextKind>,
+    choices: Option<&[String]>,
+) {
+    for row in cells.iter_mut().skip(header) {
+        for cell in row.iter_mut().filter(|c| !c.is_empty()) {
+            let mut text = kind.map_or_else(|| cell.clone(), |k| k.fit(cell));
+            if let Some(choice) = choices.and_then(|c| nearest(&text, c)) {
+                text = choice.to_owned();
+            }
+            *cell = text;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -351,9 +386,32 @@ mod tests {
         assert_eq!(output["lines"][0]["read"], "山田\n太郎");
         assert_eq!(output["lines"][0]["confidence"], 0.7);
 
+        // Lines that are each a candidate stay apart.
+        let two: Vec<String> = vec!["Alice".into(), "Bob".into()];
+        let mut output =
+            json!({ "text": "Alice\nBob", "lines": [{ "text": "Alice" }, { "text": "Bob" }] });
+        fit_output(&mut output, None, Some(&two));
+        assert_eq!(output["text"], "Alice\nBob");
+        assert_eq!(output["lines"].as_array().unwrap().len(), 2);
+
         let mut output = json!({ "text": "", "lines": [{ "text": "０９０ー1234" }] });
         fit_output(&mut output, Some(TextKind::Phone), None);
         assert_eq!(output["text"], "090-1234");
         assert_eq!(output["lines"][0]["read"], "０９０ー1234");
+    }
+
+    #[test]
+    fn table_cells_below_the_header_are_fitted() {
+        let mut cells = vec![
+            vec!["金額".to_owned(), "担当".to_owned()],
+            vec!["12.800円".to_owned(), "山田木".to_owned()],
+        ];
+        let staff: Vec<String> = vec!["山田 太郎".into(), "佐藤 一郎".into()];
+        let mut names = cells.clone();
+        fit_cells(&mut cells, 1, Some(TextKind::Amount), None);
+        assert_eq!(cells[0][0], "金額");
+        assert_eq!(cells[1][0], "12,800円");
+        fit_cells(&mut names, 1, None, Some(&staff));
+        assert_eq!(names[1][1], "山田 太郎");
     }
 }

@@ -970,7 +970,10 @@ impl DesktopStep {
                         .collect(),
                 })
                 .collect();
-            let table = ocr_table::read_table(&picture.image, &local);
+            let mut table = ocr_table::read_table(&picture.image, &local);
+            if let Some(t) = table.as_mut() {
+                ocr_fit::fit_cells(&mut t.cells, header, kind, choices.as_deref());
+            }
             let json = table.map_or_else(
                 || json!({ "cells": [], "rows": [] }),
                 |t| ocr_table::table_json(&t, header),
