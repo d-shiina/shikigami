@@ -157,6 +157,18 @@ test("downloads the files of a folder, saving Sheets as Excel", async () => {
   p.close();
 });
 
+test("refuses a file whose name would be saved outside the folder", async () => {
+  ITEMS.push({ id: "x104", name: "../escaped.txt", mimeType: "text/plain", size: "1", parent: "f11", body: "E" });
+  const p = plugin();
+  const to = join(work, "escape", "input");
+  const answer = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, overwrite: true });
+  ITEMS.pop();
+  p.close();
+  assert.equal(answer.error.data.code, "FILE_NAME_NOT_ALLOWED");
+  assert.throws(() => readFileSync(join(work, "escape", "escaped.txt")));
+  assert.throws(() => readFileSync(join(to, "受注.xlsx")));
+});
+
 test("refuses a folder where two files would be saved under one name", async () => {
   ITEMS.push({ id: "x103", name: "集計.XLSX", mimeType: "application/octet-stream", size: "1", parent: "f11", body: "B" });
   const p = plugin();

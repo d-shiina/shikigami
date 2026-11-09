@@ -15,7 +15,7 @@
 // SharePoint document library, which is how SharePoint is reached.
 
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
 // The API's address; a test points it at a stand-in on this PC.
@@ -161,6 +161,19 @@ async function writeWhole(path, bytes) {
 }
 
 
+/**
+ * The name a remote file is saved under in `to`, refused unless it is one plain file name: a name with
+ * \\ or / (Google Drive allows /), .., or : (a Windows stream) could write outside the folder.
+ */
+function placeIn(to, name) {
+  const bad = !name || name === "." || name === ".." || /[\\/:<>"|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name);
+  const path = resolve(to, name);
+  if (bad || dirname(path) !== resolve(to)) {
+    throw new StepError("FILE_NAME_NOT_ALLOWED", `'${name}' cannot be saved as a file on Windows`, { hint: "Rename the file in the cloud storage, or narrow the files with pattern." });
+  }
+  return path;
+}
+
 /** Refuses before anything is fetched when a file to be saved is already there. */
 async function refuseExisting(paths) {
   for (const path of paths) {
@@ -209,13 +222,14 @@ const actions = {
     const keep = matcher(pattern);
     const where = await item(token, folder ?? "", "folder", signal);
     const files = (await children(token, where, signal)).filter((e) => !e.folder && keep(e.name));
-    if (!overwrite) await refuseExisting(files.map((e) => join(to, e.name)));
+    const paths = files.map((e) => placeIn(to, e.name));
+    if (!overwrite) await refuseExisting(paths);
     const saved = [];
     for (const e of files) {
       const response = await graph(token, `${itemUrl({ ...e, drive: e.parentReference?.driveId ?? where.drive })}/content`, { signal });
       if (!response.ok) throw await failure(response, `${e.name} could not be downloaded`);
       const bytes = Buffer.from(await response.arrayBuffer());
-      const path = join(to, e.name);
+      const path = paths[files.indexOf(e)];
       await writeWhole(path, bytes);
       saved.push({ path, ...shape(e), size: bytes.length });
     }
