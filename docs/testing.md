@@ -66,7 +66,7 @@ Use the "Tests" tab of the panel under the chart.
 
 Over MCP, `save_test_case` writes a case and `run_tests` runs them ([mcp.md](mcp.md)). When an AI changes a flow, ask it to "add test cases and fix it until run_tests passes": it then checks after each change that earlier results still hold. Secret inputs cannot be put in a case.
 
-The cases an AI saves are its **promises** for a change. Writer's review lists them first, each with its `description` (write it as what should happen, in business words), the input and expected result, and whether the flow keeps it; the person answers whether each promise is right. So write `description` for the person who reviews, not for the program (see [design/review-evidence.md](design/review-evidence.md)).
+The cases an AI saves are the **expected results** of a change. Writer's review lists them first, each with its `description` (write it as what should happen, in business words), the input and expected values, and whether the result is as expected; the person answers whether each is right. So write `description` for the person who reviews, not for the program (see [design/review-evidence.md](design/review-evidence.md)).
 
 ## From the command line
 

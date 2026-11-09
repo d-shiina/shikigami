@@ -171,7 +171,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ### 送信（`mail.send`）
 
-送ったメールは取り消せないので、`mail.send` は `dangerous` です。ほかの外への影響と同じく確認待ち・承認の対象になります（[policy.md](policy.md)）。`via` で送り方を選びます。
+送ったメールは取り消せないので、`mail.send` は `dangerous` です。ほかの外部に影響する操作と同じく確認待ち・承認の対象になります（[policy.md](policy.md)）。`via` で送り方を選びます。
 
 | `via` | 要るもの | 補足 |
 |---|---|---|
