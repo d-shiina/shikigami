@@ -44,9 +44,14 @@ describe("writerAsk", () => {
   });
 
   it("calls for an AI's requests", () => {
-    const ask = writerAsk({ ...base, approvals: [{ id: "apr_1" }], pickRequests: [{ id: "pick_1" }] });
+    const ask = writerAsk({ ...base, approvals: [{ id: "apr_1" }], pickRequests: [{ id: "pick_1", message: "どれ？" }] });
     expect(ask).toEqual({ tag: "ai:approval:apr_1,pick:pick_1", title: "AI が Writer での操作を待っています", body: "AI が承認を求めています" });
     expect(writerAsk(base)).toBeNull();
+  });
+
+  it("says what an AI's test step waits for the person to do by hand", () => {
+    const ask = writerAsk({ ...base, pickRequests: [{ id: "pck_1", kind: "human", message: "GitHub にログインしてください" }] });
+    expect(ask).toEqual({ tag: "ai:pick:pck_1", title: "AI が Writer での操作を待っています", body: "GitHub にログインしてください" });
   });
 });
 

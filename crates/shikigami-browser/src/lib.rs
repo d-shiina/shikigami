@@ -191,7 +191,9 @@ impl Adapter for BrowserAdapter {
     /// and returns it as a target (`message`, `candidates`, `timeoutMs`),
     /// `"highlight"` outlines `target` / `targets` for a moment, `"record"`
     /// records what the person does on the page until they press 終了
-    /// (`{ status, actions }`; `"stopRecording"` ends it from outside).
+    /// (`{ status, actions }`; `"stopRecording"` ends it from outside),
+    /// `"endHuman"` ends a browser.waitForHuman (`how: "person"` as finished,
+    /// otherwise as stopped).
     fn inspect<'a>(
         &'a self,
         session: &'a str,
@@ -207,6 +209,7 @@ impl Adapter for BrowserAdapter {
                 Some(Value::String(a)) if a == "pick" => "pick",
                 Some(Value::String(a)) if a == "highlight" => "highlight",
                 Some(Value::String(a)) if a == "cancelPick" => "cancelPick",
+                Some(Value::String(a)) if a == "endHuman" => "endHuman",
                 Some(Value::String(a)) if a == "record" => "record",
                 Some(Value::String(a)) if a == "stopRecording" => "stopRecording",
                 _ => "snapshot",
@@ -252,10 +255,21 @@ impl ActionHandler for BrowserStep {
                 }
                 _ => {}
             }
+            // Stopped while the person was at it (the run dropped this step):
+            // the page's wait ends too, the browser staying as it is.
+            let mut end_wait = (self.method == "waitForHuman").then(|| EndHumanOnDrop {
+                client: Some(self.client.clone()),
+                params: json!({ "runId": input.run_id.to_string(), "context": params.get("context") }),
+            });
             let result = self
                 .client
                 .call(self.method, Value::Object(params), &input.cancel)
-                .await?;
+                .await;
+            if let Some(end_wait) = end_wait.as_mut() {
+                // It answered by itself: nothing to end.
+                end_wait.client = None;
+            }
+            let result = result?;
             if self.method == "close" {
                 if let Ok(secrets) = input.secret_provider() {
                     save_sessions(secrets.as_ref(), &result);
@@ -268,6 +282,31 @@ impl ActionHandler for BrowserStep {
 }
 
 const DEFAULT_HUMAN_MESSAGE: &str = "ブラウザで操作してください";
+
+/// Ends the page's browser.waitForHuman when the step is dropped before it
+/// answered (the run was stopped), so a later wait in the same context does
+/// not race a stale one.
+struct EndHumanOnDrop {
+    client: Option<Arc<SidecarClient>>,
+    params: Value,
+}
+
+impl Drop for EndHumanOnDrop {
+    fn drop(&mut self) {
+        let Some(client) = self.client.take() else {
+            return;
+        };
+        let Ok(rt) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let params = self.params.take();
+        rt.spawn(async move {
+            let _ = client
+                .call("endHuman", params, &CancellationToken::new())
+                .await;
+        });
+    }
+}
 
 /// `value: { "secret": .., "field": .. }` becomes the value itself plus the
 /// sites it may be typed into; the adapter refuses other pages and masks

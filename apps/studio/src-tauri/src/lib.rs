@@ -196,6 +196,7 @@ pub fn run() {
             commands::list_pick_requests,
             commands::read_clipboard_text,
             commands::cancel_pick_request,
+            commands::finish_pick_request,
             commands::export_flow,
             commands::package_plan,
             commands::export_package,

@@ -150,6 +150,8 @@ export class Adapter {
   private readonly options: AdapterOptions;
   private readonly browsers = new Map<boolean, Promise<Browser>>();
   private readonly sessions = new Map<string, Session>();
+  /** Ends a context's browser.waitForHuman from outside (endHuman). */
+  private readonly humanWaits = new Map<string, (how: "person" | "stopped") => void>();
 
   constructor(options: AdapterOptions = {}) {
     this.options = options;
@@ -211,6 +213,8 @@ export class Adapter {
           return await this.pick(params);
         case "highlight":
           return await this.highlight(params);
+        case "endHuman":
+          return this.endHuman(params);
         case "cancelPick":
           return await cancelPick(this.session(params).page);
         case "record":
@@ -1101,19 +1105,30 @@ export class Adapter {
    */
   private async waitForHuman(params: Params): Promise<null> {
     const session = this.session(params);
-    if (session.headless) {
+    if (session.headless && !this.options.scriptedHuman) {
       throw new AdapterError("HUMAN_REQUIRED", "this step needs a person, but the browser runs without a window", {
         details: {
           hint: "Run with a visible browser (no `headless`, SHIKIGAMI_BROWSER_HEADLESS unset), or keep the login with browser.open `session` so unattended runs skip it.",
         },
       });
     }
-    await session.page.bringToFront().catch(() => {});
     const timeout = typeof params.timeoutMs === "number" ? params.timeoutMs : 300_000;
+    const key = this.key(params);
+    let end!: (how: "person" | "stopped") => void;
+    const ended = new Promise<"person" | "stopped">((resolve) => (end = resolve));
+    this.humanWaits.get(key)?.("stopped");
+    // Registered before anything awaits, so an early 「終わりました」 is not lost.
+    this.humanWaits.set(key, end);
+    await session.page.bringToFront().catch(() => {});
+    const seen = locate(session.page, params.until as Target | undefined)
+      .first()
+      .waitFor({ state: "visible", timeout })
+      .then(() => "page" as const);
+    // Ended from outside first: the locator's own wait runs out unheard.
+    seen.catch(() => {});
     try {
-      await locate(session.page, params.until as Target | undefined)
-        .first()
-        .waitFor({ state: "visible", timeout });
+      const how = await Promise.race([seen, ended]);
+      if (how === "stopped") throw new AdapterError("CANCELLED", "the wait was stopped");
     } catch (error) {
       if (error instanceof Error && error.name === "TimeoutError") {
         throw new AdapterError("HUMAN_TIMEOUT", `nobody finished it within ${Math.round(timeout / 1000)} s`, {
@@ -1122,8 +1137,23 @@ export class Adapter {
         });
       }
       throw error;
+    } finally {
+      if (this.humanWaits.get(key) === end) this.humanWaits.delete(key);
     }
     return null;
+  }
+
+  /**
+   * Ends the context's browser.waitForHuman: `how: "person"` as if `until`
+   * showed (the person said they finished), otherwise as stopped (the run
+   * was cancelled). The page stays as it is.
+   */
+  private endHuman(params: Params): { ended: boolean } {
+    const end = this.humanWaits.get(this.key(params));
+    if (!end) return { ended: false };
+    this.humanWaits.delete(this.key(params));
+    end(params.how === "person" ? "person" : "stopped");
+    return { ended: true };
   }
 
   /**

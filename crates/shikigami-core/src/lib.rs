@@ -42,7 +42,7 @@ pub use model::{
     Step, VarDirection, VarFormat, VarType, VariableDef, part_ref, takes_part, target_part,
 };
 pub use ops::{EditOp, FlowPatch, Position, StepPatch};
-pub use pick::{PickRequest, PickRequestStore, PickWait};
+pub use pick::{PickAnswer, PickKind, PickRequest, PickRequestStore, PickWait};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
 pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
 pub use registry::{
