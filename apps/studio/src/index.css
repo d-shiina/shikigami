@@ -272,12 +272,22 @@ textarea,
 .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
 }
-/* A frame whose step runs glows as a whole, head to foot, more softly than the node at work inside it. */
-.flow-frame.flow-frame-running {
+/*
+ * A frame whose step runs is marked as a whole, head to foot. Only the
+ * innermost one the run is in now gets a soft ring; the ones around it only
+ * an orange edge, and the node at work inside keeps the one glow.
+ */
+.flow-frame.flow-frame-running,
+.flow-edge-running-around {
+  border-color: color-mix(in srgb, var(--color-accent-500) 45%, var(--color-slate-300)) !important;
+}
+/* Its head and foot are its top and bottom edges: in the frame's colour. */
+.flow-edge-running-here {
+  border-color: var(--color-accent-500) !important;
+}
+.flow-frame.flow-frame-running-here {
   border-color: var(--color-accent-500);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--color-accent-500) 12%, transparent),
-    0 0 28px 4px color-mix(in srgb, var(--color-accent-500) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 10%, transparent);
 }
 /* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
 .react-flow__edgelabel-renderer {

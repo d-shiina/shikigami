@@ -122,7 +122,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; clock?: string; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; clock?: string; frameRun?: FrameRun; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -988,7 +988,7 @@ function StepNode({ data }: StepNodeProps) {
                 : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
         // An open frame glows as a whole (flow-frame-running): its head is only its top edge.
-        data.runState === "running" && head && !head.collapsed ? "!border-accent-500" : data.runState ? RUN_STYLE[data.runState] : ""
+        data.runState === "running" && head && !head.collapsed ? `flow-edge-running-${data.frameRun ?? "here"}` : data.runState ? RUN_STYLE[data.runState] : ""
       }`}
       data-run={data.runState}
     >
@@ -1227,6 +1227,8 @@ type JoinData = JoinNodeData & {
   selected?: boolean;
   /** A loop's foot: the run's line through it. */
   trail?: LineTrail;
+  /** A loop's foot: its frame is running (it is the frame's bottom edge). */
+  frameRun?: FrameRun;
 };
 
 /** How a loop's rounds went: from its last round and how its step ended. */
@@ -1260,7 +1262,7 @@ function LoopFoot({ data }: { data: JoinData }) {
     <div
       style={{ width: foot.width, height: FOOT_H }}
       className={`flow-foot relative flex items-center gap-1.5 rounded-b-lg border px-3 text-[12px] transition-colors ${
-        data.selected ? "flow-foot-selected" : marked ? "flow-foot-marked" : ""
+        data.selected ? "flow-foot-selected" : marked ? "flow-foot-marked" : data.frameRun ? `flow-edge-running-${data.frameRun}` : ""
       }`}
     >
       <CornerDownLeft size={13} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
@@ -1523,7 +1525,10 @@ function TerminalNode({ data }: NodeProps<Node<TerminalData>>) {
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean; running: boolean };
+/** A running frame: the innermost one the run is in now ("here") glows; the ones around it only take its colour on their edge. */
+type FrameRun = "here" | "around";
+
+type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean; running?: FrameRun };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -1538,7 +1543,7 @@ function FrameNode({ data }: NodeProps<Node<FrameData>>) {
       style={{ width: data.width, height: data.height }}
       className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""} ${
         data.selected ? "flow-frame-selected" : ""
-      } ${data.running ? "flow-frame-running" : ""}`}
+      } ${data.running ? `flow-frame-running flow-frame-running-${data.running}` : ""}`}
     />
   );
 }
@@ -1961,11 +1966,16 @@ export function FlowCanvas() {
   };
 
   // Frames first and beneath the lines, outer ones before the ones inside them.
+  // The run is in the innermost running frames; those around them are only on its way.
+  const runningFrames = layout.frames.filter((f) => states[f.id] === "running");
+  const around = (f: (typeof runningFrames)[number]) =>
+    runningFrames.some((g) => g !== f && g.x >= f.x && g.y >= f.y && g.x + g.width <= f.x + f.width && g.y + g.height <= f.y + f.height);
+  const frameRun = new Map<string, FrameRun>(runningFrames.map((f) => [f.id, around(f) ? "around" : "here"]));
   const frames: Node[] = layout.frames.map((f) => ({
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id), running: states[f.id] === "running" } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id), running: frameRun.get(f.id) } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
@@ -1978,6 +1988,7 @@ export function FlowCanvas() {
         ? {}
         : {
             selected: !inside && picked.has(n.data.parentId),
+            frameRun: frameRun.get(n.data.parentId),
             ...(run ? { rounds: { run: run.loops?.[loopKey(path, n.data.parentId)], state: states[n.data.parentId], stopped: !isActiveRun } } : {}),
           };
       return { ...n, data: { ...n.data, ...foot } satisfies JoinData, draggable: false, selectable: false, focusable: false };
@@ -1997,6 +2008,7 @@ export function FlowCanvas() {
           runState: states[id],
           // Only a running node keeps time: the others stay as they were.
           clock: states[id] === "running" ? clockKey(path, id) : undefined,
+          frameRun: frameRun.get(id),
           readOnly: inside,
           breakpoint: breakpoints.includes(id),
           owner: flow?.id ?? "",
