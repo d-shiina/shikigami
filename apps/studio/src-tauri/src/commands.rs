@@ -315,10 +315,11 @@ pub async fn place_in_distribution(
     state: State<'_, AppState>,
     id: FlowId,
     folder: String,
+    only: Option<Vec<shikigami_core::package::FileRef>>,
 ) -> CmdResult<String> {
     let service = state.service.clone();
     let path = tauri::async_runtime::spawn_blocking(move || {
-        service.place_in_distribution(&id, &folder, windows_user())
+        service.place_in_distribution(&id, &folder, only, windows_user())
     })
     .await
     .map_err(|e| err("INTERNAL", e.to_string()))??;

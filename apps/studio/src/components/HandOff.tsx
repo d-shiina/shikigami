@@ -151,11 +151,11 @@ export function HandOffDialog() {
       else next.add(fileKey(f));
       return next;
     });
+  // Exactly the files shown and ticked: anything not listed stays out (saving and placing alike).
+  const only = () => plan.files.filter((f) => picked.has(fileKey(f))).map((f) => ({ flowId: f.flowId, path: f.path }));
   const save = async () => {
     setBusy(true);
-    // Exactly the files shown and ticked: anything not listed stays out.
-    const only = plan.files.filter((f) => picked.has(fileKey(f))).map((f) => ({ flowId: f.flowId, path: f.path }));
-    const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, only });
+    const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, only: only() });
     setBusy(false);
     if (out) void api.revealFile(out.path).catch(() => {});
   };
@@ -164,7 +164,7 @@ export function HandOffDialog() {
   const canPlace = !!published && !current;
   const place = async () => {
     setBusy(true);
-    await placeInDistribution(plan.flowId, target);
+    await placeInDistribution(plan.flowId, target, only());
     setBusy(false);
   };
   return (

@@ -2046,7 +2046,7 @@ fn distribution_cmd(svc: &FlowService, cmd: &DistributionCmd) -> anyhow::Result<
             let by = std::env::var("USERNAME")
                 .or_else(|_| std::env::var("USER"))
                 .ok();
-            let path = svc.place_in_distribution(&FlowId::new(id.as_str()), &name, by)?;
+            let path = svc.place_in_distribution(&FlowId::new(id.as_str()), &name, None, by)?;
             println!("{}", path.display());
         }
     }
