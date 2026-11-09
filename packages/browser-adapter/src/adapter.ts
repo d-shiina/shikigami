@@ -14,7 +14,7 @@ import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog
 
 import { cancelPick, highlight, pick } from "./pick.ts";
 import { record, stopRecording } from "./record.ts";
-import { AdapterError, describe, locate, type Target } from "./targets.ts";
+import { AdapterError, describe, locate, scope, type Frame, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
   /** Browser channel, e.g. "msedge" or "chrome". */
@@ -176,6 +176,8 @@ export class Adapter {
           return await this.scroll(params);
         case "getAttribute":
           return await this.getAttribute(params);
+        case "runScript":
+          return await this.runScript(params);
         case "switchTab":
           return await this.switchTab(params);
         case "closeTab":
@@ -652,6 +654,95 @@ export class Adapter {
       return values.map(mask);
     }
     return mask(await locator.evaluate(read, name, { timeout: this.limit(params) }));
+  }
+
+  /**
+   * Runs `script` (the body of an async function) in the page, or in the
+   * frame of `target` / `frame`, with `args` and `element` (the target, or
+   * null) in scope. Returns what it returns, secrets masked.
+   */
+  private async runScript(params: Params): Promise<unknown> {
+    const script = typeof params.script === "string" ? params.script : "";
+    if (!script.trim()) throw new AdapterError("INVALID_PARAMS", "script is required, e.g. \"return document.title;\"");
+    const session = this.session(params);
+    const timeout = this.limit(params);
+    const hasTarget = params.target !== undefined && params.target !== null;
+    const locator = hasTarget
+      ? locate(session.page, params.target as Target)
+      : scope(session.page, params.frame as Frame | undefined).locator(":root");
+    // Waiting for the element (or the frame's document) fails as ELEMENT_NOT_FOUND like other steps.
+    const element = await locator.elementHandle({ timeout });
+    const frame = await element.ownerFrame();
+    if (!frame) throw new AdapterError("BROWSER_ERROR", "the element's frame is gone");
+    // Compiled through DevTools, so pages whose CSP forbids eval still run it.
+    const source = `(async (args, element) => {\n${script}\n})`;
+    let compiled: Awaited<ReturnType<typeof frame.evaluateHandle>>;
+    try {
+      compiled = await frame.evaluateHandle(source);
+    } catch (error) {
+      throw await this.scriptError(session, error);
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const running = element.evaluate(
+        (el, [fn, args, withElement]) => {
+          const call = fn as unknown as (args: unknown, element: Element | null) => Promise<unknown>;
+          return call(args, withElement ? el : null).then(function plain(value: unknown): unknown {
+            // Only JSON-like values leave the page: elements, functions and the like become null.
+            if (value === undefined || value === null || typeof value === "function" || typeof value === "symbol") return null;
+            if (typeof value === "bigint") return value.toString();
+            if (typeof value === "number") return Number.isFinite(value) ? value : null;
+            if (typeof value !== "object") return value;
+            if (value instanceof Date) return value.toISOString();
+            if (Array.isArray(value)) return value.map(plain);
+            const proto = Object.getPrototypeOf(value);
+            if (proto !== Object.prototype && proto !== null) return null;
+            return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, plain(v)]));
+          });
+        },
+        [compiled, params.args ?? null, hasTarget] as const,
+      );
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AdapterError("SCRIPT_TIMEOUT", `the script did not finish within ${timeout} ms`, {
+                details: { hint: "Make the script return sooner (a promise that never settles waits forever), or raise the step's timeoutMs." },
+              }),
+            ),
+          timeout,
+        );
+      });
+      const value = await Promise.race([running.catch(async (error: unknown) => Promise.reject(await this.scriptError(session, error))), timedOut]);
+      return await this.redactDeep(session, value);
+    } finally {
+      clearTimeout(timer);
+      await compiled.dispose().catch(() => {});
+      await element.dispose().catch(() => {});
+    }
+  }
+
+  /** A script's exception or syntax error, as SCRIPT_ERROR with its own message. */
+  private async scriptError(session: Session, error: unknown): Promise<AdapterError> {
+    if (error instanceof AdapterError) return error;
+    const raw = error instanceof Error ? error.message : String(error);
+    // "elementHandle.evaluate: Error: boom\n    at ..." → "Error: boom"; a script may throw what a password field holds.
+    const message = await this.redact(session, (raw.split("\n")[0] ?? raw).replace(/^[\w.]+: /, ""));
+    return new AdapterError("SCRIPT_ERROR", `the script failed: ${message}`, {
+      details: { hint: "Fix the script. It is the body of an async function: end with `return <value>`; `args` and `element` are in scope." },
+    });
+  }
+
+  /** Masks secrets (and what is typed in password fields) in every text of a value. */
+  private async redactDeep(session: Session, value: unknown): Promise<unknown> {
+    const typed = await this.typedPasswords(session);
+    const walk = (v: unknown): unknown => {
+      if (typeof v === "string") return this.mask(session, v, typed);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [this.mask(session, k, typed), walk(x)]));
+      return v;
+    };
+    return walk(value);
   }
 
   /**
@@ -1205,11 +1296,20 @@ export class Adapter {
 
   /** Replaces secret values (and whatever is typed in password fields, even by hand) with ***. */
   private async redact(session: Session, text: string): Promise<string> {
-    const typed = await session.page
-      .locator(PASSWORD_FIELDS)
-      .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
-      .catch(() => [] as string[]);
-    return this.mask(session, text, typed);
+    return this.mask(session, text, await this.typedPasswords(session));
+  }
+
+  /** What is typed in the password fields of the page and all its frames now (even by hand). */
+  private async typedPasswords(session: Session): Promise<string[]> {
+    const perFrame = await Promise.all(
+      session.page.frames().map((frame) =>
+        frame
+          .locator(PASSWORD_FIELDS)
+          .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
+          .catch(() => [] as string[]),
+      ),
+    );
+    return perFrame.flat();
   }
 
   private mask(session: Session, text: string, extra: string[] = []): string {

@@ -2339,6 +2339,7 @@ export const en: Dict = {
     "browser.download": "Download",
     "browser.fill": "Fill",
     "browser.getAttribute": "Read attribute",
+    "browser.runScript": "Run JavaScript",
     "browser.getTable": "Read table",
     "browser.getText": "Read text",
     "browser.hover": "Hover",

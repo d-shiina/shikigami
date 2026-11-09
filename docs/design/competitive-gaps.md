@@ -210,7 +210,7 @@
 
 | 相手にあるもの | やらない理由 |
 |---|---|
-| 任意のコードの実行（Invoke Code・VBA の直書き・PowerShell の直書き・ブラウザでの JavaScript 実行） | 任意のコードを実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro` |
+| 任意のコードの実行（Invoke Code・VBA の直書き・PowerShell の直書き） | PC の上で任意のコードを実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`。ブラウザでの JavaScript だけは、開いているページの中でしか動かないので `browser.runScript` で扱う（2026-11-09 Daiki 決定、`dangerous`） |
 | 乱数 | 結果が毎回変わる |
 | mac / Linux 対応 | Windows 特化 |
 | Git 連携 | 自前の版管理（[sharing-versioning.md](sharing-versioning.md)） |

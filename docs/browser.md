@@ -53,6 +53,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | `browser.getText` | `target`, `all` (`true` for a list of every match) | text / list |
 | `browser.getTable` | `target` (the first table when omitted) | list of objects keyed by the header cells |
 | `browser.getAttribute` | `target`, `name` (`href`, `src`, `value`, `data-id`…), `all` | text / `null` / list (`href` / `src` as full addresses) |
+| `browser.runScript` | `script` (the body of an async function), `args`, `target`, `frame` | what the script `return`s |
 | `browser.switchTab` | `title` / `url` (part of it) or `index` (0 = first tab) | `{ url, title, index }` |
 | `browser.closeTab` | – | `{ url, title }` of the tab it goes back to |
 | `browser.waitFor` | `target`, `state` (`visible` / `hidden` / `attached` / `detached`) | – |
@@ -147,6 +148,27 @@ Elements inside an iframe, or inside a `<frame>` of an old frameset page, need `
 
 For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that need an OAuth sign-in in the browser (`oauth.signIn`), see [oauth.md](oauth.md).
 
+### Running JavaScript (`browser.runScript`)
+
+Use it only for what no other node can read (a value kept in the page's JavaScript, state not shown on screen, a calculation over many elements). Reading text, attributes and tables, clicking and typing have their own nodes, which read better and survive page changes.
+
+`script` is the body of an async function: `return` the result (`await` works). Inside it, `args` holds the value of `args` and `element` the element of `target` (`null` without `target`). Put flow values **in `args` with `{{ }}`, never inside `script`** (a value with a quote would break the code).
+
+```jsonc
+{ "type": "browser.runScript", "params": { "script": "return window.app.orders.length;" }, "saveAs": "orderCount" }
+{ "type": "browser.runScript", "params": {
+  "script": "const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();",
+  "args": { "code": "{{ order.code }}" }
+}, "saveAs": "detail" }
+```
+
+- The output is text, numbers, true/false, `null` and arrays and objects of them. Elements and functions become `null`, dates ISO text
+- It runs in the frame of `target`, otherwise in `frame` (the page when omitted)
+- It runs even on pages whose CSP forbids eval
+- A returned promise is awaited up to the node's `timeoutMs`, then `SCRIPT_TIMEOUT`. An exception or a syntax error is `SCRIPT_ERROR` with its message
+- It runs **only inside the open page**, never touching the PC's files or programs. It can still do anything the page can (send, delete), so it is `dangerous` and shows under "外への影響" in the review panel
+- Registered secrets cannot be passed in. Secret values and what is typed in password fields come back as `***`
+
 ### Recording
 
 **Record** in the dock under the flow diagram asks where to record. Choose **Browser** and a URL (filled from the flow's first `browser.open`): a browser opens with a red bar at the top, and Writer writes down what you do until you press the bar. While a run's browser is open, recording happens in that browser instead.
@@ -189,6 +211,8 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `DOWNLOAD_FAILED` | The download broke off | yes |
 | `FILE_NOT_FOUND` | A file for `browser.upload` is missing | no |
 | `FILE_CHOOSER_NOT_SHOWN` | The `browser.upload` target is neither a file input nor opens the file picker | no |
+| `SCRIPT_ERROR` | the `browser.runScript` script threw or has a syntax error | no |
+| `SCRIPT_TIMEOUT` | the `browser.runScript` script did not finish within the node's time limit | no |
 | `BROWSER_NOT_OPEN` | No `browser.open` for that `context` | no |
 | `NAVIGATION_FAILED` | The page cannot be opened | yes |
 | `BROWSER_LAUNCH_FAILED` | The browser cannot be started | no |

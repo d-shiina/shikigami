@@ -53,6 +53,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `browser.getText` | `target`, `all`（`true` で全一致の配列） | 文字列 / 配列 |
 | `browser.getTable` | `target`（省略時は最初の表） | 見出しをキーにしたオブジェクトの配列 |
 | `browser.getAttribute` | `target`, `name`（`href`・`src`・`value`・`data-id` など）, `all` | 文字列 / `null` / 配列（`href`・`src` は完全なアドレス） |
+| `browser.runScript` | `script`（async 関数の中身）, `args`, `target`, `frame` | スクリプトが `return` した値 |
 | `browser.switchTab` | `title` / `url`（一部でよい）か `index`（0 が最初のタブ） | `{ url, title, index }` |
 | `browser.closeTab` | – | 戻った先のタブの `{ url, title }` |
 | `browser.waitFor` | `target`, `state`（`visible` / `hidden` / `attached` / `detached`） | – |
@@ -145,6 +146,27 @@ iframe の中や、古いフレームセットのページの `<frame>` の中�
 
 `inspect_page` はページのフレームを `frames` に並べ、`target: { "css": "body", "frame": { "name": "main" } }` を付けて呼ぶとその中を見せます。失敗したノードの `details.frames` にも出ます。
 
+### JavaScript の実行（`browser.runScript`）
+
+ほかのノードで読めない値（ページの JavaScript が持っている値、画面に出ない状態、たくさんの要素をまとめた計算）だけに使います。文字・属性・表を読む、押す、入力するにはそれぞれのノードがあり、そちらのほうが読みやすく、ページが変わっても壊れにくいからです。
+
+`script` は async 関数の中身で、結果は `return` で返します（`await` も使えます）。中では `args` に `args` の値、`element` に `target` の要素（`target` がなければ `null`）が入ります。フローの値は **`args` に `{{ }}` で入れ、`script` には書きません**（値に引用符が入るとコードが壊れるため）。
+
+```jsonc
+{ "type": "browser.runScript", "params": { "script": "return window.app.orders.length;" }, "saveAs": "orderCount" }
+{ "type": "browser.runScript", "params": {
+  "script": "const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();",
+  "args": { "code": "{{ order.code }}" }
+}, "saveAs": "detail" }
+```
+
+- 出力は文字・数値・真偽値・`null` と、それらの配列・オブジェクト。要素や関数は `null`、日付は ISO 形式の文字になります
+- `target` があればその要素のフレーム、なければ `frame` のフレーム（省略時はページ）で動きます
+- ページが eval を禁じていても（CSP）動きます
+- 返した Promise はノードの `timeoutMs` まで待ち、過ぎると `SCRIPT_TIMEOUT`。例外や文法の誤りは `SCRIPT_ERROR` で、その文が出ます
+- 動くのは **開いているページの中だけ** で、PC のファイルやプログラムには触れません。ただしページでできること（送信・削除など）は何でもできるので `dangerous` で、確認パネルの「外への影響」に出ます
+- 登録済みのシークレットは渡せません。シークレットの値やパスワード欄に入っている文字が結果に混ざると `***` になります
+
 ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。ブラウザで OAuth のサインインをする Web API（`oauth.signIn`）は [oauth.md](oauth.md) です。
 
 ### 記録
@@ -189,6 +211,8 @@ Writer では、フローを実行しているあいだ（ノードで止めて�
 | `DOWNLOAD_FAILED` | ダウンロードが途中で切れた | する |
 | `FILE_NOT_FOUND` | `browser.upload` のファイルがない | しない |
 | `FILE_CHOOSER_NOT_SHOWN` | `browser.upload` の対象がファイルの入力欄でも、ファイル選択を開くものでもない | しない |
+| `SCRIPT_ERROR` | `browser.runScript` のスクリプトが例外を出した、または文法の誤り | しない |
+| `SCRIPT_TIMEOUT` | `browser.runScript` のスクリプトがノードの制限時間内に終わらない | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |
 | `BROWSER_LAUNCH_FAILED` | ブラウザを起動できない | しない |
