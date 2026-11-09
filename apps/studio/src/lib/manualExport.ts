@@ -3,6 +3,7 @@
 // can be opened, printed or turned into a PDF anywhere.
 import { locale, t } from "./i18n";
 import {
+  blurRegions,
   type Container,
   cropOf,
   type Leaf,
@@ -34,6 +35,9 @@ export type ExportOptions = {
 /** A place marked on a picture: a numbered operation, or (number null) what the flow waits for. */
 export type SceneMark = { number: number | null; rect: Rect };
 
+/** Where the numbered operations are: kept clear of the blur over values. */
+export const operated = (marks: SceneMark[]): Rect[] => marks.flatMap((m) => (m.number === null ? [] : [m.rect]));
+
 export function sceneMarks(scene: Scene): SceneMark[] {
   const shot = scene.shot;
   if (!shot) return [];
@@ -42,6 +46,19 @@ export function sceneMarks(scene: Scene): SceneMark[] {
     ...scene.waits.flatMap((w) => (w.mark ? [{ number: null, rect: w.mark }] : [])),
   ];
 }
+
+/** lucide icons, drawn inline so the file stands alone (camera, split, repeat, clock, pencil). */
+const ICONS = {
+  camera:
+    '<path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/>',
+  split: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  pencil:
+    '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+};
+const icon = (name: keyof typeof ICONS) =>
+  `<svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
 const esc = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -99,7 +116,7 @@ export async function burnShot(
   };
   // Blurs redraw from the picture, so they go first: a black box drawn
   // before an overlapping blur would come back uncovered.
-  if (blurFields) for (const r of shot.regions ?? []) blur(r);
+  if (blurFields) for (const r of blurRegions(shot.regions, operated(marks))) blur(r);
   for (const box of mask?.boxes ?? []) if (box.kind !== "black") blur(box);
   for (const box of mask?.boxes ?? []) {
     if (box.kind !== "black") continue;
@@ -158,11 +175,11 @@ function label(item: Container, continued: boolean): string {
   const more = continued ? esc(t.manual.continued) : "";
   switch (item.kind) {
     case "branch":
-      return `<div class="cond${item.taken === false ? " off" : ""}">◆ ${esc(item.label)}${more}${
+      return `<div class="cond${item.taken === false ? " off" : ""}">${icon("split")}${esc(item.label)}${more}${
         item.taken === null ? "" : `<span class="took${item.taken ? "" : " not"}">${esc(item.taken ? t.manual.took : t.manual.notTaken)}</span>`
       }</div>`;
     case "loop":
-      return `<div class="lh">↻ ${esc(item.label)}${more}${item.times === null ? "" : ` <span>${esc(t.manual.loopTimes(item.times))}</span>`}</div>`;
+      return `<div class="lh">${icon("repeat")}${esc(item.label)}${more}${item.times === null ? "" : ` <span>${esc(t.manual.loopTimes(item.times))}</span>`}</div>`;
     case "group":
       return `<div class="gh">${esc(item.label)}${more}</div>`;
   }
@@ -175,9 +192,9 @@ function leaf(item: Leaf, pictures: Pictures): string {
       const cap =
         esc(t.manual.screenOf(item.title, item.app === "desktop")) + (src && item.shot?.draft ? ` <span class="draft">${esc(t.manual.draft)}</span>` : "");
       const rows = [...item.steps, null]
-        .map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">⏱ ${esc(w.text)}</li>`).join("") + (s ? step(s) : ""))
+        .map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">${icon("clock")}${esc(w.text)}</li>`).join("") + (s ? step(s) : ""))
         .join("");
-      return `<section class="scene"><div class="cap">◎ ${cap}</div>${src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""}<ol class="steps">${rows}</ol></section>`;
+      return `<section class="scene"><div class="cap">${icon("camera")}${cap}</div>${src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""}<ol class="steps">${rows}</ol></section>`;
     }
     case "action":
       return `<ol class="steps">${step(item.step)}</ol>`;
@@ -196,8 +213,9 @@ const style = (madeWith: string) => `
 *{box-sizing:border-box}
 body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#e6e8ec;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
 .sheet{position:relative;width:210mm;min-height:297mm;margin:24px auto;background:#fff;padding:15mm 16mm 20mm;box-shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.08);break-after:page}
-.sheet>header{display:flex;justify-content:space-between;gap:16px;border-bottom:1.5px solid #1b1d22;padding-bottom:5px;margin-bottom:18px;font-size:12px;color:#50555e}
-.sheet>header b{color:#1b1d22}
+.sheet>header{display:flex;justify-content:space-between;gap:16px;white-space:nowrap;border-bottom:1.5px solid #1b1d22;padding-bottom:5px;margin-bottom:18px;font-size:12px;color:#50555e}
+.sheet>header b{color:#1b1d22;overflow:hidden;text-overflow:ellipsis}
+.ic{display:inline-block;vertical-align:-2px;margin-right:6px;flex:none}
 .sheet>footer{position:absolute;left:16mm;right:16mm;bottom:8mm;display:flex;justify-content:space-between;font-size:11px;color:#8a8f98}
 .kicker{margin:40px 0 2px;color:#50555e;font-size:12.5px}
 h1{font-size:26px;line-height:1.4;margin:0 0 6px}
@@ -233,6 +251,7 @@ h2 .n{width:28px;height:28px;font-size:14px}
 .how{display:block;color:#50555e;font-size:12.5px}
 .v{background:#e8f3fb;color:#0f3a66;border-radius:4px;padding:0 4px}
 .cond{display:inline-flex;gap:8px;align-items:center;margin:2px 0 10px;font-size:13px;background:#fff6d1;border:1px solid #d4a514;color:#5c4500;border-radius:6px;padding:3px 10px}
+.cond .ic{margin-right:0}
 .cond.off{opacity:.7}
 .took{background:#fff;border:1px solid #2f8a4c;color:#2f8a4c;border-radius:20px;padding:0 8px;font-size:11.5px}
 .took.not{border-color:#b9bec6;color:#50555e}
@@ -277,7 +296,7 @@ ${doc.description ? `<p class="lead">${esc(doc.description)}</p>` : ""}
 <dl>${dl}</dl>
 <h3>${esc(t.manual.contents)}</h3>
 <ol class="toc">${toc}</ol>
-<p class="hint">✎ ${esc(t.manual.checkHint)}</p>
+<p class="hint">${icon("pencil")}${esc(t.manual.checkHint)}</p>
 <p class="privacy">${esc(t.manual.footer(options.date))}</p>
 ${foot(page.number)}</section>`;
     }

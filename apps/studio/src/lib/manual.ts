@@ -150,7 +150,16 @@ function varWords(vars: VariableDef[]): Map<string, string> {
 
 /** `order['注文番号']` → `orderの「注文番号」`, variable names → their descriptions. */
 export function humanize(parts: Part[], words: ReadonlyMap<string, string>): Part[] {
-  return parts.map((p) => {
+  // Words can carry `{{ expr }}` holes too (a button named "{{ order['注文番号'] }} を出荷"): the holes become chips.
+  const split = parts.flatMap((p): Part[] =>
+    "text" in p && p.text.includes("{{")
+      ? p.text
+          .split(/(\{\{.*?\}\})/)
+          .filter((piece) => piece !== "")
+          .map((piece) => (piece.startsWith("{{") && piece.endsWith("}}") ? { code: readable(piece.slice(2, -2).trim()) } : { text: piece }))
+      : [p],
+  );
+  return split.map((p) => {
     if (!("code" in p)) return p;
     let text = p.code.replace(/([\p{L}_][\p{L}\p{N}_]*)\[['"]([^'"]+)['"]\]/gu, (_, v: string, col: string) =>
       t.manual.column(words.get(v) ?? v, col),
@@ -547,6 +556,31 @@ function countPictures(list: ManualItem[], drafts = false): number {
       n + (item.kind === "scene" && item.shot && (!drafts || item.shot.draft) ? 1 : 0) + ("items" in item ? countPictures(item.items, drafts) : 0),
     0,
   );
+}
+
+/**
+ * The values to blur on a picture (`regions`), less what the steps operate:
+ * a button inside a table cell must stay readable, or the reader cannot see
+ * what is pressed. A region that is the marked element itself (an input
+ * field) stays blurred; a larger region around a mark is cut into the parts
+ * around it.
+ */
+export function blurRegions(regions: Rect[] | undefined, marks: Rect[]): Rect[] {
+  const area = (r: Rect) => r.width * r.height;
+  const inside = (m: Rect, r: Rect) => m.x >= r.x - 2 && m.y >= r.y - 2 && m.x + m.width <= r.x + r.width + 2 && m.y + m.height <= r.y + r.height + 2;
+  return (regions ?? []).flatMap((r) => {
+    const m = marks.find((mark) => inside(mark, r) && area(mark) < area(r) * 0.7);
+    if (!m) return [r];
+    const top = Math.max(r.y, m.y);
+    const bottom = Math.min(r.y + r.height, m.y + m.height);
+    const parts: Rect[] = [
+      { x: r.x, y: r.y, width: r.width, height: top - r.y },
+      { x: r.x, y: bottom, width: r.width, height: r.y + r.height - bottom },
+      { x: r.x, y: top, width: Math.max(r.x, m.x) - r.x, height: bottom - top },
+      { x: Math.min(r.x + r.width, m.x + m.width), y: top, width: r.x + r.width - Math.min(r.x + r.width, m.x + m.width), height: bottom - top },
+    ];
+    return parts.filter((p) => p.width > 0 && p.height > 0);
+  });
 }
 
 /**

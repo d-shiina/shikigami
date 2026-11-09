@@ -2,7 +2,7 @@
 // run from Studio (docs/design/manual.md). 「編集する」 switches to the
 // editable outline (StoryView).
 import type { Flow, Step } from "@shikigami/schema";
-import { Camera, Clock, Download, EyeOff, Maximize2, MessageSquareText, Pencil, Play, RotateCw, Workflow } from "lucide-react";
+import { Camera, Clock, Download, EyeOff, Maximize2, MessageSquareText, Pencil, Play, Repeat, RotateCw, Split, Workflow } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
 import { currentChat } from "../agent";
@@ -17,6 +17,7 @@ import {
   type ManualManifest,
   type ManualShot,
   type ManualStep,
+  blurRegions,
   type Mask,
   type MaskBox,
   maskStale,
@@ -26,7 +27,7 @@ import {
   type Rect,
   type Scene,
 } from "../lib/manual";
-import { burnShot, manualHtml, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
+import { burnShot, manualHtml, operated, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
 import { describeWhen } from "../lib/schedule";
 import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
@@ -495,7 +496,10 @@ function Cover({ doc, made, when, pages, showMissing }: { doc: ManualDoc; made: 
           </li>
         ))}
       </ol>
-      <p className="mt-6 text-[12.5px] leading-[1.7] text-slate-500">✎ {t.manual.checkHint}</p>
+      <p className="mt-6 flex gap-1.5 text-[12.5px] leading-[1.7] text-slate-500">
+        <Pencil size={12} className="mt-[5px] shrink-0" />
+        {t.manual.checkHint}
+      </p>
       {doc.pictures > 0 && <p className="mt-auto pt-8 text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
     </>
   );
@@ -558,13 +562,15 @@ function BlockView({ block, ctx }: { block: PageBlock; ctx: Ctx }) {
             className="inline-flex items-center gap-2 rounded-md border px-2.5 py-0.5 text-[13px]"
             style={{ background: "var(--flow-decide-fill)", borderColor: "var(--flow-decide-line)" }}
           >
-            ◆ {item.label}
+            <Split size={13} className="shrink-0" />
+            {item.label}
             {more}
             <Taken taken={item.taken} />
           </span>
         ) : item.kind === "loop" ? (
           <span className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
-            ↻ {item.label}
+            <Repeat size={13} className="shrink-0" />
+            {item.label}
             {more}
             {item.times !== null && <span className="text-[12.5px] font-normal text-slate-500">{t.manual.loopTimes(item.times)}</span>}
           </span>
@@ -751,7 +757,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             className="absolute max-w-none"
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
-          <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={crop} k={k} />
+          <MaskBoxes boxes={mask?.boxes ?? []} regions={blurRegions(shot.regions, operated(marks))} crop={crop} k={k} />
           {marks.map((m, i) => (
             <span
               key={m.number ?? `wait-${i}`}

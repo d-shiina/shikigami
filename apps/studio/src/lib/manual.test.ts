@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
+import { blurRegions, buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
 const contract = JSON.parse(readFileSync(new URL("../../../../schemas/contract/step-types.json", import.meta.url), "utf8")) as {
@@ -177,5 +177,30 @@ describe("pictures in the 手順書", () => {
     expect(maskStale({ hidden: false, boxes: [{ x: 0, y: 0, width: 5, height: 5, kind: "blur" }], width: 800, height: 600 }, shot)).toBe(false);
     expect(maskStale({ hidden: false, boxes: [{ x: 0, y: 0, width: 5, height: 5, kind: "blur" }], width: 1024, height: 600 }, shot)).toBe(true);
     expect(maskStale(undefined, shot)).toBe(false);
+  });
+});
+
+describe("what the 手順書 blurs", () => {
+  it("keeps the operated button clear inside a blurred table cell", () => {
+    const cell = { x: 808, y: 313, width: 172, height: 64 };
+    const button = { x: 816, y: 334, width: 93, height: 35 };
+    const parts = blurRegions([cell], [button]);
+    expect(parts.length).toBeGreaterThan(0);
+    const overlaps = (a: { x: number; y: number; width: number; height: number }) =>
+      a.x < button.x + button.width && button.x < a.x + a.width && a.y < button.y + button.height && button.y < a.y + a.height;
+    expect(parts.some(overlaps)).toBe(false);
+    expect(parts.reduce((n, p) => n + p.width * p.height, 0)).toBe(cell.width * cell.height - button.width * button.height);
+  });
+
+  it("still blurs a field that is the operated element itself", () => {
+    const field = { x: 120, y: 245, width: 280, height: 34 };
+    expect(blurRegions([field], [field])).toEqual([field]);
+  });
+});
+
+describe("words with holes", () => {
+  it("turns {{ }} in a name into a chip", () => {
+    const parts = humanize([{ text: "「{{ order['注文番号'] }} を出荷」ボタンを押す" }], new Map([["order", "注文"]]));
+    expect(parts).toEqual([{ text: "「" }, { code: "注文の「注文番号」" }, { text: " を出荷」ボタンを押す" }]);
   });
 });
