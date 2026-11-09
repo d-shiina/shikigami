@@ -227,7 +227,7 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
         RUNNER_WINDOW,
         WebviewUrl::App("index.html?view=runner".into()),
     )
-    .title("SpellSheet")
+    .title("SpellSheet Runner")
     .inner_size(880.0, 600.0)
     .min_inner_size(640.0, 440.0)
     .decorations(false)

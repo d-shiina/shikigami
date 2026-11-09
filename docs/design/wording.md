@@ -16,6 +16,20 @@ Studio・実行画面の文言（`apps/studio/src/lib/locales/`）を書くと�
 - ノードの設定の名前と選択肢は `locales/params.{ja,en}.ts` に置く。プログラムの名前（`sheet`・`okExitCodes`・`visible`）をそのまま見せない。組込ノードの設定を足したら名前も足す（テストで確かめる）。
 - エラー文（`errors.{ja,en}.ts`）も同じ決まりに従う。「何が起きたか」は「〜できませんでした」「〜が見つかりません」、「どうするか」は「〜を確認してください」「再実行してください」で書く。
 
+## 製品の名前
+
+シリーズの名前は **SpellSheet**、製品は「SpellSheet＋役割」で呼びます（2026-11-09 決定）。
+
+| 製品 | 正式な名前 | 略して呼ぶとき | 役割 |
+|---|---|---|---|
+| 作る画面 | SpellSheet Writer | Writer | フローを作る人の画面 |
+| 実行画面（`--runner`） | SpellSheet Runner | Runner | 現場の人が確定版のフローを実行する画面 |
+| 無人実行（`spellsheet worker`） | SpellSheet Worker | Worker | 無人の PC でスケジュールや依頼を実行する |
+| 組織版の管理ツール（準備中） | SpellSheet Controller | Controller | 何台もの PC の Worker と実行の記録をまとめて見る |
+
+- 窓の名前・スタートメニュー・インストーラー・紹介ページの見出しでは正式な名前を使う。画面の中の文や説明では略した名前でよい。
+- 「SpellWriter」のように Spell と役割をつなげない（Spell だけだと英語で「つづり」に読まれ、つづりの道具に見えるため）。「Studio」「実行画面」「エージェント」も製品の名前としては使わない（開発の中のフォルダー名 `apps/studio` などはそのまま）。
+
 ## 決まった言い方
 
 | 場面 | 使う言葉 | 使わない言葉 |
