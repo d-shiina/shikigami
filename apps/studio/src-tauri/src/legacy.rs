@@ -110,7 +110,8 @@ fn mcp_setups(home: &Path, roaming: Option<&Path>) -> Vec<PathBuf> {
 }
 
 /// The project-level setups of the folders Claude Code knows
-/// (`projects` in `~/.claude.json`): `.mcp.json`, and Cursor's, VS Code's and
+/// (`projects` in `~/.claude.json`): `.mcp.json` and the permissions in
+/// `.claude/settings*.json`, and Cursor's, VS Code's and
 /// Gemini CLI's files in the same folders.
 fn project_setups(home: &Path) -> Vec<PathBuf> {
     let Ok(text) = std::fs::read_to_string(home.join(".claude.json")) else {
@@ -128,6 +129,8 @@ fn project_setups(home: &Path) -> Vec<PathBuf> {
         .flat_map(|dir| {
             [
                 dir.join(".mcp.json"),
+                dir.join(".claude").join("settings.json"),
+                dir.join(".claude").join("settings.local.json"),
                 dir.join(".cursor").join("mcp.json"),
                 dir.join(".vscode").join("mcp.json"),
                 dir.join(".gemini").join("settings.json"),
@@ -176,8 +179,16 @@ fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
         });
     let mut all = true;
     for file in files {
-        let Ok(text) = std::fs::read_to_string(file) else {
-            continue;
+        let text = match std::fs::read_to_string(file) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                // Held by another program, say: it may still start the old
+                // command, so that stays until a later start moves it.
+                all = false;
+                tracing::warn!(error = %e, file = %file.display(), "cannot read the MCP setup");
+                continue;
+            }
         };
         let updated = if file.extension().is_some_and(|e| e == "toml") {
             Some(migrate_toml(&text)).filter(|t| *t != text)
@@ -606,6 +617,21 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn an_unreadable_setup_keeps_the_old_command() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("mcp.json");
+        std::fs::write(&file, "{}").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read_to_string(&file).is_ok() {
+            return; // running as root: every file can be read
+        }
+        assert!(!migrate_mcp_setups(std::slice::from_ref(&file)));
+        assert!(migrate_mcp_setups(&[dir.path().join("missing.json")]));
+    }
+
+    #[test]
     fn codex_toml_tables_and_command_move() {
         let old = old();
         let text = format!(
@@ -661,6 +687,10 @@ mod tests {
         )
         .unwrap();
         assert!(project_setups(home.path()).contains(&project.join(".mcp.json")));
+        assert!(
+            project_setups(home.path())
+                .contains(&project.join(".claude").join("settings.local.json"))
+        );
         let plugin = home.path().join("plugins/cache/m/p/1.0.0");
         std::fs::create_dir_all(&plugin).unwrap();
         std::fs::write(plugin.join(".mcp.json"), "{}").unwrap();
