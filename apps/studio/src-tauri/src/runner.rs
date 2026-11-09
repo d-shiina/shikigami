@@ -222,7 +222,7 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
         window.show()?;
         return window.set_focus();
     }
-    WebviewWindowBuilder::new(
+    let window = WebviewWindowBuilder::new(
         app,
         RUNNER_WINDOW,
         WebviewUrl::App("index.html?view=runner".into()),
@@ -231,11 +231,101 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
     .inner_size(880.0, 600.0)
     .min_inner_size(640.0, 440.0)
     .decorations(false)
+    .visible(false)
     .additional_browser_args(
         "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,ElasticOverscroll",
     )
     .build()?;
-    Ok(())
+    // Before it is first shown, so the taskbar files it under Runner.
+    #[cfg(windows)]
+    taskbar::own_button(&window, &runner_app_id(&app.config().identifier));
+    window.show()
+}
+
+/// Runner's AppUserModelID: Writer's with `.runner` after it. The installer
+/// gives the "SpellSheet Runner" shortcut the same one
+/// (windows/installer-hooks.nsh, `RUNNER_APPID`). With Writer's ID on both
+/// shortcuts, the Start menu showed only one of them.
+pub(crate) fn runner_app_id(identifier: &str) -> String {
+    format!("{identifier}.runner")
+}
+
+/// Runner's window gets its own taskbar button, apart from Writer's, which
+/// pins as "SpellSheet Runner" and starts Runner again from the pin.
+#[cfg(windows)]
+pub(crate) mod taskbar {
+    use tauri::WebviewWindow;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Storage::EnhancedStorage::{
+        PKEY_AppUserModel_ID, PKEY_AppUserModel_RelaunchCommand,
+        PKEY_AppUserModel_RelaunchDisplayNameResource,
+    };
+    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::PropertiesSystem::{
+        IPropertyStore, SHGetPropertyStoreForWindow,
+    };
+    use windows::Win32::UI::Shell::{SHStrDupW, SetCurrentProcessExplicitAppUserModelID};
+    use windows::core::HSTRING;
+
+    /// Writer's ID for the whole process; Runner's window overrides it.
+    pub(crate) fn claim_process(app_id: &str) {
+        // SAFETY: plain call with a valid string.
+        if let Err(e) = unsafe { SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(app_id)) } {
+            tracing::warn!(error = %e, "cannot set the app's taskbar ID");
+        }
+    }
+
+    pub(super) fn own_button(window: &WebviewWindow, app_id: &str) {
+        let hwnd = match window.hwnd() {
+            Ok(h) => h.0 as isize,
+            Err(e) => {
+                tracing::warn!(error = %e, "cannot give Runner its own taskbar button");
+                return;
+            }
+        };
+        let app_id = app_id.to_owned();
+        let relaunch = match std::env::current_exe() {
+            Ok(exe) => format!("\"{}\" --runner", exe.display()),
+            Err(_) => return,
+        };
+        // The window's property store belongs to the thread of its window.
+        let _ = window.run_on_main_thread(move || {
+            if let Err(e) = set(HWND(hwnd as *mut _), &app_id, &relaunch) {
+                tracing::warn!(error = %e, "cannot give Runner its own taskbar button");
+            }
+        });
+    }
+
+    fn set(hwnd: HWND, app_id: &str, relaunch: &str) -> windows::core::Result<()> {
+        // SAFETY: a live top-level window of this process, on its thread.
+        let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(hwnd)? };
+        // The relaunch values first: the shell reads them when the ID is set.
+        unsafe {
+            store.SetValue(&PKEY_AppUserModel_RelaunchCommand, &text(relaunch)?)?;
+            store.SetValue(
+                &PKEY_AppUserModel_RelaunchDisplayNameResource,
+                &text("SpellSheet Runner")?,
+            )?;
+            store.SetValue(&PKEY_AppUserModel_ID, &text(app_id)?)?;
+            store.Commit()
+        }
+    }
+
+    /// A VT_LPWSTR value, as these properties want (InitPropVariantFromString
+    /// in C, which is only a header inline). Dropping it frees the copy.
+    fn text(value: &str) -> windows::core::Result<PROPVARIANT> {
+        // SAFETY: SHStrDupW copies into CoTaskMem, which PROPVARIANT's drop
+        // (PropVariantClear) frees for VT_LPWSTR.
+        let copy = unsafe { SHStrDupW(&HSTRING::from(value))? };
+        let mut v = PROPVARIANT::default();
+        unsafe {
+            let inner = &mut *v.Anonymous.Anonymous;
+            inner.vt = VT_LPWSTR;
+            inner.Anonymous.pwszVal = copy;
+        }
+        Ok(v)
+    }
 }
 
 /// `--runner` on the command line: start with the run window only (a
@@ -247,6 +337,17 @@ pub(crate) fn wants_runner_only() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runner_has_an_app_id_of_its_own() {
+        // Must match RUNNER_APPID in windows/installer-hooks.nsh.
+        assert_eq!(
+            runner_app_id("dev.shikigami.studio"),
+            "dev.shikigami.studio.runner"
+        );
+        let hooks = include_str!("../windows/installer-hooks.nsh");
+        assert!(hooks.contains(r#"!define RUNNER_APPID "${BUNDLEID}.runner""#));
+    }
 
     #[test]
     fn only_runs_of_the_published_version_count() {

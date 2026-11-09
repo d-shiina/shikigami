@@ -96,6 +96,11 @@ pub fn run() {
         .manage(extensions::Extensions::default())
         .manage(splash::Splash::default())
         .setup(move |app| {
+            // Before any window shows: Writer's windows go under Writer's
+            // taskbar button even when this copy was started from the
+            // Runner shortcut (which has an ID of its own).
+            #[cfg(windows)]
+            runner::taskbar::claim_process(&app.config().identifier);
             if let Some(path) = opened::spx_arg(std::env::args()) {
                 opened::remember(None, path);
             }
