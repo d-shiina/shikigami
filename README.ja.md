@@ -17,7 +17,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
 2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
 3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
-4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して確定」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
+4. AI の変更はサイドバーの「確認待ち」で確認し、「変更を承諾」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
 
 業務 1 本を最初から最後まで通して試すには、[チュートリアル](docs/ja/tutorials/README.md)（各 15 分ほど、見本のファイル付き）を参照してください。以下は開発者向けの情報です。
 
@@ -112,7 +112,7 @@ echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}
   | spellsheet flow edit scn_example_invoice_summary -
 spellsheet flow undo scn_example_invoice_summary
 spellsheet run scn_example_invoice_summary --draft --json   # 作業中の内容を試す
-spellsheet version publish scn_example_invoice_summary       # 人が確認して確定
+spellsheet version publish scn_example_invoice_summary       # 人が確定
 spellsheet run scn_example_invoice_summary --json           # 無人実行は確定版だけを動かす
 ```
 

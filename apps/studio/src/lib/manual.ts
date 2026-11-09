@@ -800,7 +800,7 @@ export function frameTree(blocks: PageBlock[]): PageNode[] {
 
 /** What the cover says about the version: from the published version and the saved versions. */
 export type Edition = {
-  /** 「第 3 版」, or 「公開前」. */
+  /** 「第 3 版」, or 「確定前」. */
   label: string;
   /** The day it was published, as words. */
   updated: string | null;

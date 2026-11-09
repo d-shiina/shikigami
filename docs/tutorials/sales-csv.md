@@ -43,7 +43,7 @@ The expression function `num()` turns `"6,000"` into a number ([expressions](../
 
 ## 3. Check and publish
 
-Open "To review" in the sidebar. The AI's changes are listed in the same sentences as the procedure view, with what it touches outside (the files it reads and writes) and the results of its test runs. Once you have checked that it writes `output/売上まとめ.xlsx`, press "Review and publish".
+Open "To review" in the sidebar. The AI's changes are listed in the same sentences as the procedure view, with what it touches outside (the files it reads and writes) and the results of its test runs. Once you have checked that it writes `output/売上まとめ.xlsx`, press "Accept changes".
 
 ## 4. Try it
 

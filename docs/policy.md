@@ -24,7 +24,7 @@ Two rules that make "AI builds it, it runs without AI" safe to use:
 
 ### How to publish
 
-- **Review desk in Writer**: look at the AI's changes and click "✓ Review and publish". Approving (the review record) and publishing are one action. When no version matches the current content, a version is made first.
+- **Review desk in Writer**: look at the AI's changes and click "✓ Accept changes". Approving (the review record) and publishing are one action. When no version matches the current content, a version is made first.
 - **"Versions" tab in Writer**: "Publish current content", or "Publish this version" on an earlier version (to go back, you can change only the published version and leave the work in progress as it is). "Unpublish" stops unattended runs.
 - **CLI**: `spellsheet version publish <id> [number] [--name NAME] [--note NOTE]`, `spellsheet version unpublish <id>`. `spellsheet version list <id>` marks the published version with `published`.
 
