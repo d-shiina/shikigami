@@ -236,7 +236,7 @@ impl Runtime {
                 let secret: BTreeSet<&str> = flow
                     .variables
                     .iter()
-                    .filter(|v| v.secret)
+                    .filter(|v| v.masked())
                     .map(|v| v.name.as_str())
                     .collect();
                 shikigami_core::validate::known_variables(&flow, &self.registry)
@@ -285,7 +285,9 @@ impl Runtime {
             &self.registry,
         );
         let log = match (&options.project_dir, options.full_run) {
-            (Some(dir), true) => runlog::RunLog::create(dir, names.clone()),
+            (Some(dir), true) => {
+                runlog::RunLog::create(dir, names.clone(), policy.records.days_kept())
+            }
             _ => None,
         };
         let mut emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
@@ -343,7 +345,7 @@ impl Runtime {
                 secret_vars: flow
                     .variables
                     .iter()
-                    .filter(|v| v.secret)
+                    .filter(|v| v.masked())
                     .map(|v| v.name.clone())
                     .collect(),
                 iteration: None,
@@ -481,7 +483,7 @@ impl Runtime {
                 .filter(|v| v.direction.is_output())
                 .map(|v| {
                     let value = executor.vars.get(&v.name).cloned().unwrap_or(Value::Null);
-                    let value = if v.secret {
+                    let value = if v.masked() {
                         Value::String("***".into())
                     } else {
                         // Also hides secrets a step happened to read back.
@@ -733,7 +735,7 @@ pub(crate) fn init_variables(
     // Know every secret before the first value is reported, so a secret
     // copied into an earlier-declared input is masked too.
     for (var, value) in &values {
-        if var.secret {
+        if var.masked() {
             executor.emitter.add_secret(value);
         }
     }

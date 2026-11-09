@@ -29,6 +29,6 @@ Fields of `--json`: `at`, `source`, `actor`, `who` (client, schedule name or the
 
 ## How long it is kept
 
-`records.keepDays` in `policy.json` ([policy.md](policy.md)) deletes run records and MCP calls older than that many days, on each PC, when a run ends. The change journal is kept: undo and the flow's history need it. Publish records live with the versions and are kept with them.
+Run records, the run logs in each flow's `logs/` and MCP calls are kept for 90 days: older ones are deleted on each PC when a run ends. Change it with `records.keepDays` in `policy.json` ([policy.md](policy.md)); `0` keeps them for good. The change journal is kept: undo and the flow's history need it. Publish records live with the versions and are kept with them.
 
 For a shared workspace, changes, MCP calls and runs are per PC; publishes are shared. A management server ([remote.md](remote.md)) keeps the jobs it handed out, with their events and reports, for all PCs.

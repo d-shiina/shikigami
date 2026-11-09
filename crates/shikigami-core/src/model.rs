@@ -417,6 +417,12 @@ pub struct VariableDef {
     /// Secret values are masked in logs, events and run records.
     #[serde(default, skip_serializing_if = "is_false")]
     pub secret: bool,
+    /// Personal data (names, addresses, mail, rows of customers…): masked
+    /// like a secret in logs, events, run records, errors and notifications,
+    /// and left out of exported bundles and saved test cases. Unlike a
+    /// secret it may have a default and be passed in as plain text.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub personal: bool,
     /// What a `string` input holds, so the run window can offer the right
     /// field (a file picker, a calendar). Runs do not check it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -436,9 +442,16 @@ impl VariableDef {
             default: None,
             description: String::new(),
             secret: false,
+            personal: false,
             format: None,
             choices: Vec::new(),
         }
+    }
+
+    /// Whether its values are masked in what a run leaves behind: secrets
+    /// and personal data.
+    pub fn masked(&self) -> bool {
+        self.secret || self.personal
     }
 }
 
