@@ -92,7 +92,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す。`image: true` でスクリーンショットも AI に返す |
 |  | `ask_user_to_pick` | どの部品かわからないとき、人にブラウザでクリックしてもらい（クリックはページに届かない）、`target` で受け取る。Writer にも依頼が出て、そこから断れる（[browser.md](browser.md)） |
 | デスクトップ | `inspect_ui` | 開いているウィンドウの一覧、または 1 つのウィンドウの部品の一覧（`target` の選び方は [desktop.md](desktop.md)）。ウィンドウを見たときは部品ツリーを証跡に保存し `observationId` を返す |
-| 試行 | `test_step` | ノードを 1 つその場で実行して出力を返す（browser ノードなら実行後のページ、desktop ノードなら操作したウィンドウも）。フローは変更しない。試した結果を証跡に保存し `observationId` を返す |
+| 試行 | `test_step` | ノードを 1 つその場で実行して出力を返す（browser ノードなら実行後のページ、desktop ノードなら操作したウィンドウも）。変数を読むノード（`{{ row.顧客名 }}` や式）は、その時点の値を `variables` に渡せば書いたまま試せる。フローは変更しない。試した結果を証跡に保存し `observationId` を返す |
 
 - 検証結果の各 issue には直し方のヒント（`hint`：近い名前の候補、必須・使える params、式とテンプレートの書き分けなど）が付きます。AI が 1 回で直せるようにするためです。
 - 入力スキーマは Rust の型から自動生成しています。結果は `structuredContent`（JSON）で返します。
