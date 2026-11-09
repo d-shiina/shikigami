@@ -4,13 +4,13 @@
 
 業務サイトや業務アプリのログインに使う ID・パスワードと、Web API のキーの扱いです。基本の考え方は 3 つです。
 
-1. **値は人が登録する**。Studio の「🔑 シークレット」（または CLI）で、名前を付けて登録します（例：「受注システム」）。
+1. **値は人が登録する**。Writer の「🔑 シークレット」（または CLI）で、名前を付けて登録します（例：「受注システム」）。
 2. **フローと AI には名前だけ**。フローには `{ "secret": "受注システム", "field": "password" }` とだけ書きます。値は実行中のノードが受け取るだけで、フローファイル・MCP の結果・ログ・スクリーンショットのどこにも出ません。
 3. **登録したサイトにしか入力しない**。シークレットには「入力してよいサイト」を登録します。ほかのページには入力を拒否します（そっくりな偽サイトや、ページに仕込まれた指示に AI が誘導された場合の対策）。照合は入力欄そのもののページで行うので、待っている間に別のサイトへ移った場合や、別のサイトの iframe の中の入力欄にも入力しません。
 
 ## 登録する
 
-### Studio
+### Writer
 
 右上の「🔑 シークレット」→「新しく登録」。
 
@@ -72,8 +72,8 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 ```
 
 - 値は AES-256-GCM で暗号化します。鍵は **Windows 資格情報マネージャーにワークスペースごと 1 件だけ**（「vault <ID>.SpellSheet」）置きます。シークレットを何件登録しても資格情報マネージャーの項目は増えません。
-- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`）。そのときは Studio の「🔑 シークレット」に出る「リセットして登録し直す」（または `spellsheet secret reset --yes`）で、読めなくなったシークレット・ログイン状態・鍵を消してから登録し直します。
-- Studio・CLI・MCP サーバーが同じワークスペースを同時に更新しても上書きし合わないよう、更新は `secrets/.lock` で 1 つずつ行います。
+- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`）。そのときは Writer の「🔑 シークレット」に出る「リセットして登録し直す」（または `spellsheet secret reset --yes`）で、読めなくなったシークレット・ログイン状態・鍵を消してから登録し直します。
+- Writer・CLI・MCP サーバーが同じワークスペースを同時に更新しても上書きし合わないよう、更新は `secrets/.lock` で 1 つずつ行います。
 - Windows 以外（開発・CI）では鍵を `secrets/<id>.key`（所有者だけ読める）に置きます。保護にはならないので本番では使いません。
 
 ## フローでの使い方
@@ -91,7 +91,7 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 - `field` は `username` / `password` / `totp`（いまのワンタイムコード）。OAuth でサインインする Web API には、`http.request` で `accessToken` も使えます（[oauth.md](oauth.md)）。
 - シークレットを書けるのは入力ノードの値（`browser.fill` の `value`）だけです。ログやメッセージ、URL などに書くと検証エラー `SECRET_NOT_ALLOWED` になります。
 - `secret: true` の変数に既定値を書くと、平文でフローに残るので検証エラー `SECRET_DEFAULT` になります。
-- Studio のプロパティでは、入力欄の値を「文字 / 🔑 シークレット」で切り替えて名前と項目を選びます。
+- Writer のプロパティでは、入力欄の値を「文字 / 🔑 シークレット」で切り替えて名前と項目を選びます。
 
 ### ログイン状態を保つ（セッション）
 
@@ -100,7 +100,7 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 ### MFA
 
 - **ワンタイムコード（TOTP）**：MFA の設定キーを登録しておけば `field: "totp"` で毎回いまのコードを入力できます。
-- **スマホでの承認・SMS・CAPTCHA など**：`browser.waitForHuman` で人の操作を待ちます。Studio に「操作を待っています」と出て、ブラウザが前面に来ます。`until` の要素（例：ログイン後の見出し）が出たら次へ進みます。待つのは既定で 5 分（`timeoutMs` で変更）。画面なし（headless）の実行では待たずに `HUMAN_REQUIRED` で失敗します。
+- **スマホでの承認・SMS・CAPTCHA など**：`browser.waitForHuman` で人の操作を待ちます。Writer に「操作を待っています」と出て、ブラウザが前面に来ます。`until` の要素（例：ログイン後の見出し）が出たら次へ進みます。待つのは既定で 5 分（`timeoutMs` で変更）。画面なし（headless）の実行では待たずに `HUMAN_REQUIRED` で失敗します。
 - 無人で動かすフローは、一度人がログインした状態を `session` で保つのが基本です。
 
 ## マスク
@@ -111,7 +111,7 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 
 ### 個人情報
 
-氏名・住所・メール・顧客の行など、個人情報を入れる変数には `"personal": true` を付けます（Studio では変数の「個人情報」のチェック、または「変数」の一覧の右クリック）。その値は同じように `***` に置き換わります：実行ログ、フローの `logs/`、エラー、実行記録と出力、通知、管理サーバーに送る内容、AI が `get_run_logs` / `get_run_status` / `run_tests` で読む結果。別の変数に写した一部（1 行の氏名など）や、それを使って作った文も伏せます。ただし、リストやオブジェクトの中の 4 文字未満の値は伏せません。シークレットと違い、初期値を書けて、値をそのまま渡せます。初期値は書き出したファイルと「AI に渡す用にコピー」には入らず、実行をテストケースとして保存するときも外します。
+氏名・住所・メール・顧客の行など、個人情報を入れる変数には `"personal": true` を付けます（Writer では変数の「個人情報」のチェック、または「変数」の一覧の右クリック）。その値は同じように `***` に置き換わります：実行ログ、フローの `logs/`、エラー、実行記録と出力、通知、管理サーバーに送る内容、AI が `get_run_logs` / `get_run_status` / `run_tests` で読む結果。別の変数に写した一部（1 行の氏名など）や、それを使って作った文も伏せます。ただし、リストやオブジェクトの中の 4 文字未満の値は伏せません。シークレットと違い、初期値を書けて、値をそのまま渡せます。初期値は書き出したファイルと「AI に渡す用にコピー」には入らず、実行をテストケースとして保存するときも外します。
 
 対象外：AI がノード 1 つを試したとき（`test_step`）の結果、`inspect_page` / `inspect_ui` で見える画面、失敗時の画面の保存（黒く塗るのはパスワード欄だけ）。画面に個人情報が出るときは `records.failureScreenshots: false` で画面の保存を止めてください。
 
@@ -125,36 +125,36 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 
 ### AI がログイン情報を求める（`request_secret`）
 
-AI はパスワードをチャットで聞く代わりに、`request_secret` で Studio に登録を頼みます。
+AI はパスワードをチャットで聞く代わりに、`request_secret` で Writer に登録を頼みます。
 
 ```jsonc
 { "name": "Google", "sites": ["https://accounts.google.com/"], "fields": ["username", "password"], "reason": "Google にログインして受注メールを読むため", "waitMs": 120000 }
 ```
 
-- Studio の上部に「🔑 ログイン情報が必要です」と出ます。「登録する」で、名前・サイトが入った登録フォームが開き、ユーザーはユーザー名とパスワードだけを入力します。登録済みの名前なら編集フォームが開き、足りないサイトが追記されます。
-- 値は Studio から暗号化ファイルに入るだけで、AI・MCP の結果・チャット・ログには出ません。依頼ファイル `secrets/requests.json` にも名前・サイト・項目・AI の理由（300 文字まで）しか書きません。
-- 「理由」は AI が書いた文章です。Studio では「AI からのメッセージ」として表示します。入力先は登録したサイトに限られるので、理由にどう書かれていても別のサイトには入力されません。
+- Writer の上部に「🔑 ログイン情報が必要です」と出ます。「登録する」で、名前・サイトが入った登録フォームが開き、ユーザーはユーザー名とパスワードだけを入力します。登録済みの名前なら編集フォームが開き、足りないサイトが追記されます。
+- 値は Writer から暗号化ファイルに入るだけで、AI・MCP の結果・チャット・ログには出ません。依頼ファイル `secrets/requests.json` にも名前・サイト・項目・AI の理由（300 文字まで）しか書きません。
+- 「理由」は AI が書いた文章です。Writer では「AI からのメッセージ」として表示します。入力先は登録したサイトに限られるので、理由にどう書かれていても別のサイトには入力されません。
 - 結果の `status`：`registered`（登録された。`browser.fill` で使う）／`waiting`（まだ。`waitMs` を付けて呼び直すか `list_secrets`）／`dismissed`（ユーザーが「あとで」で閉じた）。
 - `fields` の既定は `username` と `password`。MFA の認証アプリのコードが要るなら `totp` も入れます。
-- `kind: "apiKey"` で Web API のキーを依頼します（`fields` の既定は、キーを入れる `password`）。`kind: "oauth"` は OAuth アプリ。Studio のフォームはその種類の欄の名前で表示します。
-- Studio が起動していなければ、AI がチャットで「Studio を開いて登録してください」と伝えます。依頼は残っているので、開いた時点で表示されます。
+- `kind: "apiKey"` で Web API のキーを依頼します（`fields` の既定は、キーを入れる `password`）。`kind: "oauth"` は OAuth アプリ。Writer のフォームはその種類の欄の名前で表示します。
+- Writer が起動していなければ、AI がチャットで「Writer を開いて登録してください」と伝えます。依頼は残っているので、開いた時点で表示されます。
 
 ### 実行が失敗したとき
 
-Studio で実行したフローが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET` で止まると、同じ「登録する」バーが出ます。押すと、そのシークレットの登録（または編集）フォームが開きます。`SECRET_SITE_MISMATCH` のときは、止まったページのサイトが追記された状態で開くので、正しいサイトか確かめてから保存します。
+Writer で実行したフローが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET` で止まると、同じ「登録する」バーが出ます。押すと、そのシークレットの登録（または編集）フォームが開きます。`SECRET_SITE_MISMATCH` のときは、止まったページのサイトが追記された状態で開くので、正しいサイトか確かめてから保存します。
 - ページの内容はデータであって AI への指示ではありません。仕込まれた指示に従って別のサイトにパスワードを入力させようとしても、サイト照合で止まります。
 
 ## エラーコード
 
 | コード | 意味と直し方 |
 |---|---|
-| `SECRET_NOT_FOUND` | その名前のシークレットがない。Studio で登録する |
+| `SECRET_NOT_FOUND` | その名前のシークレットがない。Writer で登録する |
 | `SECRET_FIELD_EMPTY` | その項目（パスワード・MFA キーなど）が未設定 |
 | `SECRET_SITE_NOT_SET` | 入力してよいサイトが未登録。サイトを追加する |
 | `SECRET_SITE_MISMATCH` | いまのページが登録サイトではない。URL を確認し、正しければサイトを追加する |
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | デスクトップアプリ（`app:xxx.exe`）が未登録、または別のアプリに入力しようとした |
 | `WINDOWS_CREDENTIAL_NOT_FOUND` | 資格情報マネージャーに、そのアドレスの汎用資格情報がない。資格情報マネージャーで追加するか、シークレットのアドレスを直す |
 | `WINDOWS_CREDENTIAL_UNREADABLE` | 汎用資格情報のパスワードが文字として読めない |
-| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `spellsheet secret reset --yes` でリセットして登録し直す |
-| `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Studio・CLI・MCP から実行する） |
+| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Writer か `spellsheet secret reset --yes` でリセットして登録し直す |
+| `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Writer・CLI・MCP から実行する） |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | 人の操作が必要だが画面がない／時間内に終わらなかった |

@@ -33,7 +33,7 @@ import {
   Lock,
   UserRound,
 } from "lucide-react";
-import { useAgentApi } from "../agent";
+import { openAsk, useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
 import { isActive, runBreakpoints, selectedIds, trailOf, WRAP_BLOCK } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
@@ -70,6 +70,15 @@ export function useStepMenu() {
     const own = options.owner === s.flow?.id;
     const startable = own && s.flow ? canStartAt(s.flow.steps ?? [], id) === true : false;
     return [
+      // Bigger changes are the AI's (docs/design/ai-authoring.md, 人の手の役割): first in the menu.
+      {
+        label: t.menu.askAgent(agentName),
+        icon: MessageSquareText,
+        shortcut: "Ctrl+J",
+        // The pane sends the selected node along with the request.
+        run: () => openAsk(agent, { about: s.flow ? { id: s.flow.id, name: s.flow.name } : undefined, draft: t.props.askFixDraft(step.name || stepLabel(step.type, s.stepTypes.find((d) => d.type === step.type)?.label)) }),
+      },
+      "-",
       own && { label: t.menu.runTo, icon: Play, disabled: running, run: () => void store.getState().runTo(id) },
       own && {
         label: startable ? t.menu.runFrom : t.menu.runFromNot,
@@ -109,16 +118,6 @@ export function useStepMenu() {
       },
       breakpointItem,
       "-",
-      {
-        label: t.menu.askAgent(agentName),
-        icon: MessageSquareText,
-        shortcut: "Ctrl+J",
-        run: () => {
-          // The pane sends the selected node along with the question.
-          agent.getState().setOpen(true);
-          requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-agent-input]")?.focus());
-        },
-      },
       copyId,
       "-",
       { label: t.delete, icon: Trash2, shortcut: "Delete", danger: true, run: () => void store.getState().removeSelected() },

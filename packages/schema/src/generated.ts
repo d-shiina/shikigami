@@ -150,6 +150,18 @@ export type ImportMode = "created" | "updated" | "copied";
  */
 export type SubflowImport = "created" | "updated" | "kept";
 /**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "CheckKind".
+ */
+export type CheckKind = "plugin" | "secret" | "site" | "app";
+/**
+ * State of one requirement on this PC.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "CheckStatus".
+ */
+export type CheckStatus = "ok" | "missing" | "mismatch" | "notAllowed";
+/**
  * What to do when an imported flow's ID already exists.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -301,6 +313,20 @@ export type VarDirection = "local" | "input" | "output" | "inOut";
  */
 export type PartApp = "browser" | "desktop";
 /**
+ * Which content of the flow goes into a package.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageContent".
+ */
+export type PackageContent = "auto" | "published" | "current";
+/**
+ * Which versions come along.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageVersions".
+ */
+export type PackageVersions = "none" | "content" | "all";
+/**
  * The shape of the message posted to a webhook.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -338,6 +364,10 @@ export interface ShikigamiApi {
   flow_diff: FlowDiff;
   flow_bundle: FlowBundle;
   import_outcome: ImportOutcome;
+  package_manifest: PackageManifest;
+  package_plan: PackagePlan;
+  package_options: PackageOptions;
+  package_preview: PackagePreview;
   extract_outcome: ExtractOutcome;
   import_conflict: ImportConflict;
   workspace_info: WorkspaceInfo;
@@ -1277,6 +1307,317 @@ export interface ValidationReport2 {
   issues: ValidationIssue[];
 }
 /**
+ * What a package holds and what the receiving PC needs.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageManifest".
+ */
+export interface PackageManifest {
+  /**
+   * Always `spellsheet.package`.
+   */
+  format: string;
+  formatVersion: number;
+  exportedAt: string;
+  /**
+   * Version of SpellSheet that wrote it.
+   */
+  appVersion: string;
+  /**
+   * Who wrote it (the Windows user name), when known.
+   */
+  exportedBy?: string | null;
+  flow: PackagedFlow;
+  subflows?: PackagedSubflow[];
+  requires?: PackageRequires;
+  /**
+   * Every entry other than the manifest.
+   */
+  contents: PackageEntry[];
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackagedFlow".
+ */
+export interface PackagedFlow {
+  id: FlowId;
+  name: string;
+  description?: string;
+  /**
+   * The version the content is, if it is one.
+   */
+  version?: PackagedVersion | null;
+  /**
+   * Whether the content is the version published on the PC it came from.
+   */
+  published?: boolean;
+  /**
+   * Steps, nested ones included.
+   */
+  stepCount?: number;
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackagedVersion".
+ */
+export interface PackagedVersion {
+  number: number;
+  uid: string;
+  name: string;
+  note?: string;
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackagedSubflow".
+ */
+export interface PackagedSubflow {
+  id: FlowId;
+  name: string;
+}
+/**
+ * What the flow (and the flows it calls) needs on the PC that runs it.
+ */
+export interface PackageRequires {
+  /**
+   * `plugin:<name>` → version range, as in `requires`.
+   */
+  plugins?: {
+    [k: string]: string;
+  };
+  /**
+   * Names of the logins (secrets) the steps use. Never their values.
+   */
+  secrets?: string[];
+  /**
+   * Sites the steps open (`https://host`), when written out literally.
+   */
+  sites?: string[];
+  /**
+   * Programs the steps start, when written out literally.
+   */
+  apps?: string[];
+  /**
+   * Inputs asked for when the flow runs (no default value).
+   */
+  inputs?: PackageInput[];
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageInput".
+ */
+export interface PackageInput {
+  name: string;
+  description?: string;
+}
+/**
+ * One entry of the zip.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageEntry".
+ */
+export interface PackageEntry {
+  path: string;
+  size: number;
+  sha256: string;
+}
+/**
+ * What exporting would put in, for the export dialog.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackagePlan".
+ */
+export interface PackagePlan {
+  flowId: FlowId;
+  name: string;
+  /**
+   * The published version, if any.
+   */
+  published?: PackagedVersion | null;
+  /**
+   * Whether the current content differs from the published version.
+   */
+  hasUnpublishedChanges: boolean;
+  /**
+   * The plan is for the current content (not the published version).
+   */
+  current: boolean;
+  subflows: PackagedSubflow[];
+  files: PackageFileChoice[];
+  requires: PackageRequires1;
+  /**
+   * File name to save as (without folder).
+   */
+  fileName: string;
+}
+/**
+ * A file that may go into a package, for choosing before exporting.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageFileChoice".
+ */
+export interface PackageFileChoice {
+  flowId: FlowId;
+  /**
+   * Name of that flow (the main flow or a sub-flow).
+   */
+  flowName: string;
+  path: string;
+  size: number;
+  /**
+   * Whether it goes in with the default options (`input/` does not).
+   */
+  includedByDefault: boolean;
+}
+/**
+ * What the flow (and the flows it calls) needs on the PC that runs it.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageRequires".
+ */
+export interface PackageRequires1 {
+  /**
+   * `plugin:<name>` → version range, as in `requires`.
+   */
+  plugins?: {
+    [k: string]: string;
+  };
+  /**
+   * Names of the logins (secrets) the steps use. Never their values.
+   */
+  secrets?: string[];
+  /**
+   * Sites the steps open (`https://host`), when written out literally.
+   */
+  sites?: string[];
+  /**
+   * Programs the steps start, when written out literally.
+   */
+  apps?: string[];
+  /**
+   * Inputs asked for when the flow runs (no default value).
+   */
+  inputs?: PackageInput[];
+}
+/**
+ * Options of [`crate::FlowService::export_package`].
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackageOptions".
+ */
+export interface PackageOptions {
+  /**
+   * Which content of the flow goes into a package.
+   */
+  content?: "auto" | "published" | "current";
+  /**
+   * Which versions come along.
+   */
+  versions?: "none" | "content" | "all";
+  /**
+   * Include files under `input/`. Off by default: they are usually real
+   * business data (and may hold personal data).
+   */
+  includeInput?: boolean;
+  /**
+   * Files to leave out (after `include_input`).
+   */
+  exclude?: FileRef[];
+  /**
+   * Exactly these files, when set (`include_input` and `exclude` are then
+   * ignored). A file not listed, such as one of a sub-flow the person did
+   * not see, stays out.
+   */
+  only?: FileRef[] | null;
+  /**
+   * Shown to the receiver as who wrote the package.
+   */
+  exportedBy?: string | null;
+}
+/**
+ * A file of a flow's folder, by flow and path.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "FileRef".
+ */
+export interface FileRef {
+  flowId: FlowId;
+  path: string;
+}
+/**
+ * What importing a package would do, shown before importing.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PackagePreview".
+ */
+export interface PackagePreview {
+  manifest: PackageManifest;
+  existing?: ExistingFlow | null;
+  checks: RequirementCheck[];
+}
+/**
+ * The flow with the same ID that is already in the workspace.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ExistingFlow".
+ */
+export interface ExistingFlow {
+  name: string;
+  /**
+   * Newest version here.
+   */
+  latestVersion?: number | null;
+  /**
+   * Published version here.
+   */
+  publishedVersion?: number | null;
+  /**
+   * The package's version is already here (same `uid`).
+   */
+  hasPackageVersion: boolean;
+  diff: FlowDiff1;
+}
+/**
+ * Differences from `from` to `to`.
+ */
+export interface FlowDiff1 {
+  from: DiffSide;
+  to: DiffSide;
+  /**
+   * True when the contents are the same (names, variables, steps, settings).
+   */
+  identical: boolean;
+  /**
+   * Flow-level fields: name, description, tags, settings, and each
+   * named part (`parts.<name>`; `before` / `after` is absent when it was
+   * added / removed).
+   */
+  flow: FieldChange[];
+  variables: VariableChange[];
+  steps: StepChange[];
+}
+/**
+ * One thing the package needs, checked against this PC.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RequirementCheck".
+ */
+export interface RequirementCheck {
+  kind: CheckKind;
+  /**
+   * Plugin name, login name, site origin or program.
+   */
+  name: string;
+  /**
+   * Version range for plugins.
+   */
+  range?: string | null;
+  /**
+   * Installed version when it does not match.
+   */
+  installed?: string | null;
+  status: CheckStatus;
+}
+/**
  * Result of moving steps into a new sub-flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -2063,6 +2404,16 @@ export type RunEventEnvelope1 =
       stepId: StepId;
       stepType: string;
       attempt: number;
+      /**
+       * How long the step waits on purpose (`flow.delay`), in ms: it
+       * ends then, so Studio can show how much of it is left.
+       */
+      waitMs?: number | null;
+      /**
+       * The longest this attempt may take before it fails with a
+       * timeout (the step's `timeoutMs` or the default), in ms.
+       */
+      limitMs?: number | null;
     }
   | {
       type: "stepFinished";
@@ -2103,6 +2454,19 @@ export type RunEventEnvelope1 =
       type: "humanActionRequired";
       stepId: StepId;
       message: string;
+    }
+  | {
+      type: "loopRound";
+      stepId: StepId;
+      round: number;
+      total?: number | null;
+    }
+  | {
+      type: "loopEnded";
+      stepId: StepId;
+      rounds: number;
+      total?: number | null;
+      leftEarly?: boolean;
     }
   | {
       type: "screenCaptured";

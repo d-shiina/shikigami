@@ -4,7 +4,8 @@ import { nodeIcon } from "../../lib/nodeIcons";
 import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, MessageSquareText } from "lucide-react";
+import { openAsk, useAgentApiMaybe, useAgentMaybe } from "../../agent";
 import { t } from "../../lib/i18n";
 import { GROUP } from "../../lib/stepTypes";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../../lib/dataFlow";
@@ -140,6 +141,8 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
+  const agent = useAgentApiMaybe();
+  const agentName = useAgentMaybe((a) => a.info?.name ?? "AI", "AI");
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -165,13 +168,25 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
         <div>
           <div className="flex items-center gap-2" title={`${step.type} · ID: ${id}`}>
             <StepIcon size={16} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
-            <span className="text-[14px] font-semibold text-ink">{typeTitle(step, def)}</span>
+            <span className="min-w-0 truncate text-[14px] font-semibold text-ink">{typeTitle(step, def)}</span>
             <AppTag def={def} title={typeTitle(step, def)} />
+            {/* Bigger changes go to the AI (docs/design/ai-authoring.md, 人の手の役割). */}
+            {agent && (
+            <button
+              type="button"
+              title={t.props.askFixTitle(agentName)}
+              onClick={() => agent && openAsk(agent, { about: { id: flow.id, name: flow.name }, draft: t.props.askFixDraft(step.name || typeTitle(step, def)) })}
+              className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink"
+            >
+              <MessageSquareText size={12} strokeWidth={1.75} aria-hidden="true" />
+              {t.props.askFix}
+            </button>
+            )}
             <button
               type="button"
               title={t.props.expandTitle}
               onClick={() => openEditor(id)}
-              className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+              className={`${agent ? "" : "ml-auto "}flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 text-[11.5px] text-slate-500 hover:bg-slate-100 hover:text-ink`}
             >
               <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
               {t.props.expand}

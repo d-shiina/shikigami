@@ -67,7 +67,7 @@ describe("text for the AI", () => {
     expect(text).toContain('"format": "shikigami.answer"');
   });
 
-  it("hands the flow over without what Studio owns", () => {
+  it("hands the flow over without what Writer owns", () => {
     const answer = JSON.parse(flowForChat(flow)) as { flow: Record<string, unknown> };
     expect(Object.keys(answer.flow)).toEqual(["name", "parts", "steps"]);
     expect(handOffText(flow)).toContain("```json");

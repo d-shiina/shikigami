@@ -184,7 +184,7 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             let text = encoding::decode(&bytes, "auto", &shown)?;
             let invalid = |why: String| {
                 StepError::permanent("CONFIG_INVALID", format!("{shown}: {why}")).with_details(json!({
-                    "hint": "A settings file is a JSON object, or a shikigami.config file made in Studio (config/ in the flow's folder → New settings file).",
+                    "hint": "A settings file is a JSON object, or a shikigami.config file made in Writer (config/ in the flow's folder → New settings file).",
                 }))
             };
             let json: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
@@ -368,7 +368,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             def(
                 types::CONFIG_READ,
                 "設定ファイル読み込み",
-                "Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
+                "Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Writer) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
                 object_schema(json!({ "path": path }), &["path"]),
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],

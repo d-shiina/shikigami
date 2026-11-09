@@ -65,6 +65,18 @@
                 "update",
                 "copy"
               ]
+            },
+            {
+              "id": "check",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "check",
+              "values": [
+                "true",
+                "false"
+              ]
             }
           ]
         },
@@ -89,12 +101,48 @@
               "short": "o"
             },
             {
+              "id": "current",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "current",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "all_versions",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "all-versions",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
               "id": "no_versions",
               "required": false,
               "takesValue": false,
               "repeatable": false,
               "global": false,
               "long": "no-versions",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "with_input",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "with-input",
               "values": [
                 "true",
                 "false"
@@ -996,7 +1044,7 @@
       ]
     },
     {
-      "name": "agent",
+      "name": "worker",
       "subcommands": [
         {
           "name": "run"

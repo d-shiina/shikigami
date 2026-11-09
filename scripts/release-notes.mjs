@@ -27,8 +27,8 @@ const footer = [
   "",
   "---",
   "",
-  "Install: download `SpellSheet Studio_" + version + "_x64-setup.exe` below (per user, no administrator rights).",
-  "Installed copies of Studio update themselves on their next launch.",
+  "Install: download `SpellSheet Writer_" + version + "_x64-setup.exe` below (per user, no administrator rights).",
+  "Installed copies of Writer update themselves on their next launch.",
 ];
 
 if (start < 0) {

@@ -22,7 +22,7 @@ import { previewSource } from "../lib/preview";
 import { defaultText, parseDefault } from "./VariablesPanel";
 import { askedAtRun } from "../lib/runInputs";
 import { AskedAtRunTag } from "./AskedAtRunTag";
-import { type Chip, type Column, DataTable, FilterChips, SearchBox, SelectionBar } from "./DataTable";
+import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 
 function StepChips({ ids, steps, defs, onOpen }: { ids: string[]; steps: Step[]; defs: ReadonlyMap<string, StepTypeDef>; onOpen: (id: string) => void }) {
   if (ids.length === 0) return <span className="text-slate-300">—</span>;
@@ -148,13 +148,11 @@ function AddRow({ onAdd }: { onAdd: (name: string) => void }) {
   );
 }
 
-type Filter = "all" | "input" | "output" | "local" | "asked";
+type Filter = "input" | "output" | "local" | "asked";
 
 /** Which chips keep a row: an 入出力 variable is both an input and an output. */
 function keeps(u: VariableUsage, filter: Filter): boolean {
   switch (filter) {
-    case "all":
-      return true;
     case "input":
       return u.direction === "input" || u.direction === "inOut";
     case "output":
@@ -177,44 +175,40 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
   const removeVariable = useStudio((s) => s.removeVariable);
   const variableMenu = useVariableMenu();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filters, setFilters] = useState<Set<Filter>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const all = useMemo(() => (flow ? variableUsage(flow.steps ?? [], flow.variables) : []), [flow]);
   // Picks belong to the flow they were made in: another flow's variable of the same name is not picked.
   const flowId = flow?.id;
   useEffect(() => {
     setSelected(new Set());
-    setConfirmDelete(false);
   }, [flowId]);
-  if (!flow) return null;
   const open = (id: string) => {
     onView("flow");
     goTo(id);
   };
   const cols = t.vars.table.columns;
   const q = query.trim().toLowerCase();
-  const rows = all.filter((u) => keeps(u, filter) && (!q || `${u.name}\n${u.def?.description ?? ""}`.toLowerCase().includes(q)));
-  const chips: Chip<Filter>[] = (
+  const rows = all.filter((u) => (!filters.size || [...filters].some((f) => keeps(u, f))) && (!q || `${u.name}\n${u.def?.description ?? ""}`.toLowerCase().includes(q)));
+  const searched = all.filter((u) => !q || `${u.name}\n${u.def?.description ?? ""}`.toLowerCase().includes(q));
+  const options = (
     [
-      ["all", t.vars.table.all],
       ["input", t.direction.input],
       ["output", t.direction.output],
       ["local", t.direction.local],
       ["asked", t.vars.askedAtRun],
     ] as const
   )
-    .map(([value, label]) => ({ value, label, count: all.filter((u) => keeps(u, value)).length }))
-    // A chip that would keep nothing is left out (but never the one in use).
-    .filter((c) => c.value === "all" || c.count > 0 || c.value === filter);
+    .map(([value, label]) => ({ value, label, count: searched.filter((u) => keeps(u, value)).length }))
+    // A value that would keep nothing is left out (but never one in use).
+    .filter((o) => o.count > 0 || filters.has(o.value));
   // Only declared variables can be picked: a node's own result is not one to delete or make secret.
   // Only the rows in view count: a search or a chip must not leave hidden rows picked for a bulk action.
   const picked = new Set([...selected].filter((name) => rows.some((u) => u.name === name && u.def)));
-  const pickedDefs = flow.variables?.filter((v) => picked.has(v.name)) ?? [];
+  const pickedDefs = flow?.variables?.filter((v) => picked.has(v.name)) ?? [];
   const clear = () => {
     setSelected(new Set());
-    setConfirmDelete(false);
   };
 
   const columns: Column<VariableUsage>[] = [
@@ -288,7 +282,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
             style={{ color }}
             className={`${quiet} -my-0.5 cursor-pointer appearance-none text-[12px]`}
           >
-            {/* A type this Studio does not know (a newer flow) stays as it is. */}
+            {/* A type this Writer does not know (a newer flow) stays as it is. */}
             {(TYPES.includes(u.type) ? TYPES : [u.type, ...TYPES]).map((v) => (
               <option key={v} value={v} className="text-ink">
                 {t.varType[v] ?? v}
@@ -325,7 +319,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
       width: "w-[16%]",
       hideBelow: 860,
       sortValue: (u) => u.writers.length,
-      cell: (u) => <StepChips ids={u.writers} steps={flow.steps ?? []} defs={defs} onOpen={open} />,
+      cell: (u) => <StepChips ids={u.writers} steps={flow?.steps ?? []} defs={defs} onOpen={open} />,
     },
     {
       id: "readers",
@@ -333,7 +327,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
       width: "w-[16%]",
       hideBelow: 720,
       sortValue: (u) => u.readers.length,
-      cell: (u) => <StepChips ids={u.readers} steps={flow.steps ?? []} defs={defs} onOpen={open} />,
+      cell: (u) => <StepChips ids={u.readers} steps={flow?.steps ?? []} defs={defs} onOpen={open} />,
     },
     ...(changes
       ? [
@@ -362,77 +356,32 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
       : []),
   ];
 
+  const view = useTableView(columns, { storageKey: "shikigami.studio.variables.sort" });
+  if (!flow) return null;
+
   return (
     <div className="@container h-full overflow-y-auto bg-paper">
       <div className="mx-auto max-w-[1320px] px-6 py-5">
-        {/* As the other lists read: how many and how to narrow them, or, while rows are picked, what to do with them. */}
-        <div className="mb-2 flex items-center gap-2">
-          {picked.size > 0 ? (
-            <SelectionBar count={picked.size} onClear={clear}>
-              {pickedDefs.some((v) => !v.secret) && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // One after another: each edit is made on the revision the one before it left.
-                    for (const v of pickedDefs) if (!v.secret) await setVariable({ ...v, secret: true, default: undefined });
-                    clear();
-                  }}
-                  className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-slate-700 hover:bg-slate-200 hover:text-ink"
-                >
-                  <Lock size={13} strokeWidth={1.75} aria-hidden="true" />
-                  {t.vars.table.makeSecret}
-                </button>
-              )}
-              {pickedDefs.some((v) => !v.secret && !v.personal) && (
-                <button
-                  type="button"
-                  title={t.personalHint}
-                  onClick={async () => {
-                    for (const v of pickedDefs) if (!v.secret && !v.personal) await setVariable({ ...v, personal: true });
-                    clear();
-                  }}
-                  className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-slate-700 hover:bg-slate-200 hover:text-ink"
-                >
-                  <UserRound size={13} strokeWidth={1.75} aria-hidden="true" />
-                  {t.vars.table.makePersonal}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!confirmDelete) return setConfirmDelete(true);
-                  for (const v of pickedDefs) await removeVariable(v.name);
-                  clear();
-                }}
-                onBlur={() => setConfirmDelete(false)}
-                className={`flex h-6 items-center gap-1 rounded-md px-2 text-[12px] ${confirmDelete ? "bg-shu-600 text-white" : "text-slate-700 hover:bg-shu-50 hover:text-shu-600"}`}
-              >
-                <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
-                {confirmDelete ? t.vars.table.confirmDelete(picked.size) : t.vars.table.delete}
-              </button>
-            </SelectionBar>
-          ) : (
-            <>
-              <h2 className="text-[15px] font-bold">{t.vars.table.title}</h2>
-              <span className="text-[12px] text-slate-500">{t.list.count(all.length)}</span>
-              <div className="ml-2">
-                <SearchBox value={query} onChange={setQuery} placeholder={t.vars.table.search} hits={rows.length} />
-              </div>
-            </>
-          )}
-          <span className="ml-auto text-[11px] text-slate-500">{t.vars.table.hint}</span>
+        {/* As the other lists read: what this is, how to narrow it, then how to see it. */}
+        <div className="mb-3 flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <h2 className="mr-1 text-[15px] font-bold">{t.vars.table.title}</h2>
+            <SearchBox value={query} onChange={setQuery} placeholder={t.vars.table.search} hits={rows.length} />
+            <FacetFilter label={cols.direction} value={filters} onChange={setFilters} options={options} />
+            {filters.size > 0 && <ClearFilters onClear={() => setFilters(new Set())} />}
+          </div>
+          <span className="hidden self-center text-[11px] text-slate-500 @min-[1000px]:inline">{t.vars.table.hint}</span>
+          <ViewMenu view={view} />
         </div>
-        <div className="mb-3">
-          <FilterChips chips={chips} value={filter} onChange={setFilter} label={cols.direction} />
-        </div>
-        <div className="border-b border-slate-200 text-[12px]">
+        <div className="text-[12px]">
           <DataTable
             columns={columns}
+            view={view}
             rows={rows}
+            total={all.length}
             rowKey={(u) => u.name}
             selected={picked}
             onSelect={setSelected}
-            storageKey="shikigami.studio.variables.sort"
             empty={all.length === 0 ? t.vars.table.empty : t.list.notFound}
             rowProps={(u) => ({
               // Lights up the same variable on the chart and the inspector.
@@ -443,6 +392,39 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
           />
           <AddRow onAdd={(name) => void setVariable({ name, type: "string", direction: "local" })} />
         </div>
+        <SelectionBar count={picked.size} onClear={clear}>
+          {pickedDefs.some((v) => !v.secret) && (
+            <BulkButton
+              icon={Lock}
+              label={t.vars.table.makeSecret}
+              onClick={async () => {
+                // One after another: each edit is made on the revision the one before it left.
+                for (const v of pickedDefs) if (!v.secret) await setVariable({ ...v, secret: true, default: undefined });
+                clear();
+              }}
+            />
+          )}
+          {pickedDefs.some((v) => !v.secret && !v.personal) && (
+            <BulkButton
+              icon={UserRound}
+              label={t.vars.table.makePersonal}
+              onClick={async () => {
+                for (const v of pickedDefs) if (!v.secret && !v.personal) await setVariable({ ...v, personal: true });
+                clear();
+              }}
+            />
+          )}
+          <BulkButton
+            icon={Trash2}
+            danger
+            label={t.vars.table.delete}
+            confirmLabel={t.vars.table.confirmDelete(picked.size)}
+            onClick={async () => {
+              for (const v of pickedDefs) await removeVariable(v.name);
+              clear();
+            }}
+          />
+        </SelectionBar>
       </div>
     </div>
   );

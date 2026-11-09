@@ -1,5 +1,6 @@
 import type { ConfigItem, Flow } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
+import type { AskAnswer } from "./lib/ask";
 import { CONFIG_FORMAT, formatConfig, itemUsers, latestLog, logStatus, parseConfig, roleOf, shelfFor, usersOf } from "./project";
 
 const flow = {
@@ -65,17 +66,65 @@ describe("the open sheet", () => {
       list: async () => ({ flowId: "s", dir: "", folders: [], files: [] }),
       readText: async (_: string, path: string) => `text of ${path}`,
     } as unknown as Parameters<typeof createProjectStore>[0];
-    const store = createProjectStore(api, { added: () => "", discard: () => "discard?" });
+    let answer: AskAnswer = "cancel";
+    const asked: string[] = [];
+    const store = createProjectStore(api, {
+      added: () => "",
+      unsaved: async (path) => {
+        asked.push(path);
+        return answer;
+      },
+    });
     await store.getState().load("s");
     await store.getState().openFile("input/a.csv");
     store.getState().editSheet("edited");
-    globalThis.confirm = () => false;
     await store.getState().openFile("input/b.csv");
+    expect(asked).toEqual(["input/a.csv"]);
     expect(store.getState().sheet?.path).toBe("input/a.csv");
     expect(store.getState().sheet?.text).toBe("edited");
-    globalThis.confirm = () => true;
+    answer = "other";
     await store.getState().openFile("input/b.csv");
     expect(store.getState().sheet?.text).toBe("text of input/b.csv");
+  });
+});
+
+describe("the unsaved question", () => {
+  it("opens nothing for an answer that comes after another flow was opened", async () => {
+    const { createProjectStore } = await import("./project");
+    const api = {
+      list: async (id: string) => ({ flowId: id, dir: "", folders: [], files: [] }),
+      readText: async (id: string, path: string) => `${id}:${path}`,
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    let answer: (a: AskAnswer) => void = () => {};
+    const store = createProjectStore(api, { added: () => "", unsaved: () => new Promise((r) => (answer = r)) });
+    await store.getState().load("old");
+    await store.getState().openFile("input/a.csv");
+    store.getState().editSheet("edited");
+    const opening = store.getState().openFile("input/b.csv");
+    // While the question is open, the AI makes a flow and it is opened.
+    await store.getState().load("new");
+    answer("other");
+    await opening;
+    expect(store.getState().flowId).toBe("new");
+    expect(store.getState().sheet).toBeNull();
+  });
+
+  it("closes the sheet after 「保存しない」, and keeps it on cancel", async () => {
+    const { createProjectStore } = await import("./project");
+    const api = {
+      list: async (id: string) => ({ flowId: id, dir: "", folders: [], files: [] }),
+      readText: async () => "text",
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    let next: AskAnswer = "cancel";
+    const store = createProjectStore(api, { added: () => "", unsaved: async () => next });
+    await store.getState().load("s");
+    await store.getState().openFile("input/a.csv");
+    store.getState().editSheet("edited");
+    await store.getState().leaveSheet();
+    expect(store.getState().sheet?.text).toBe("edited");
+    next = "other";
+    await store.getState().leaveSheet();
+    expect(store.getState().sheet).toBeNull();
   });
 });
 
@@ -91,7 +140,7 @@ describe("settings autosave", () => {
         return { path, size: text.length };
       },
     } as unknown as Parameters<typeof createProjectStore>[0];
-    const store = createProjectStore(api, { added: () => "", discard: () => "discard?" });
+    const store = createProjectStore(api, { added: () => "", unsaved: async () => "cancel" });
     await store.getState().load("s");
     await store.getState().openFile("config/settings.json");
     store.getState().editConfig({ format: CONFIG_FORMAT, items: [{ name: "締め日", type: "text", value: "20" as unknown as ConfigItem["value"] }] });

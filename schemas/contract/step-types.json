@@ -9867,6 +9867,25 @@
           "headerRow": {
             "type": "integer",
             "minimum": 0
+          },
+          "textKind": {
+            "type": "string",
+            "enum": [
+              "any",
+              "number",
+              "amount",
+              "date",
+              "phone",
+              "alphanumeric",
+              "katakana"
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
           }
         },
         "required": [],

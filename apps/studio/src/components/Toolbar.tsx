@@ -1,7 +1,10 @@
-import { FolderOutput, PanelRight, Search } from "lucide-react";
+import { CircleCheck, CircleDashed, FolderOutput, History, PanelRight, Search, Send } from "lucide-react";
+
+const CHIP = "flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px]";
 import { useStudio } from "../context";
 import { useProjectMaybe } from "../project";
 import { t } from "../lib/i18n";
+import type { ReviewView } from "../lib/reviewView";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
@@ -35,9 +38,14 @@ const CheckIcon = () => (
 
 export type View = "story" | "flow" | "variables";
 
-/** Flow chart, procedure or variables: three ways to read the same flow. */
-function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
+/**
+ * Flow chart, procedure or variables: three ways to read the same flow. On
+ * the review desk the AI's report comes first, as one more way to read it.
+ */
+function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
+  const place = useStudio((s) => s.place);
+  const options: [ReviewView, string][] = [
+    ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
     ["flow", t.viewFlow],
     ["story", t.viewStory],
     ["variables", t.vars.table.view],
@@ -110,12 +118,26 @@ export function FlowTitle() {
   const todos = useTodos().length;
   const unset = useUnsetCount();
   const open = useProjectMaybe((p) => p.open, null);
+  const place = useStudio((s) => s.place);
+  const setPlace = useStudio((s) => s.setPlace);
+  const openHandOff = useStudio((s) => s.openHandOff);
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="min-w-[5em] truncate text-[13px] font-bold" title={flow.name}>
+    <div className="flex min-w-0 items-center gap-1.5">
+      {/* Where it was opened from, as Linear's header starts with the team: back there in one click. */}
+      <button
+        type="button"
+        onClick={() => setPlace(place === "review" ? "review" : "library")}
+        className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink @max-[760px]/title:hidden"
+      >
+        {place === "review" ? t.awaitingReview : t.flows}
+      </button>
+      <span className="shrink-0 text-[13px] text-slate-300 @max-[760px]/title:hidden" aria-hidden="true">
+        /
+      </span>
+      <span className="min-w-[5em] truncate px-0.5 text-[13px] font-semibold text-ink" title={flow.name}>
         {flow.name}
       </span>
       {open && (
@@ -129,37 +151,46 @@ export function FlowTitle() {
           <FolderOutput size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
+      {/* Handing it to another person or PC as one file. */}
+      <button
+        type="button"
+        onClick={() => void openHandOff(flow.id)}
+        title={t.handOff.open}
+        aria-label={t.handOff.open}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
+      >
+        <Send size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
       {/* The revision opens how the flow got here: its record and versions. */}
       <button
         type="button"
         onClick={() => setHistoryOpen(true)}
         title={`${t.shell.historyTitle}（${t.revisionCount(flow.revision ?? 0)}）`}
-        className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        className={`${CHIP} text-slate-500 hover:bg-slate-100 hover:text-ink`}
       >
-        {t.revision}
-        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
-          <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        </svg>
+        <History size={13} strokeWidth={1.75} aria-hidden="true" />
+        <span className="@max-[920px]/title:hidden">{t.revision}</span>
       </button>
       {/* What unattended runs execute; published from the history's versions. */}
       <button
         type="button"
         onClick={() => setHistoryOpen(true, "versions")}
         title={published ? t.publishedLabel(published.version, published.name) : t.publishedHint}
-        className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] ${
+        className={`${CHIP} ${
           published && !published.matchesCurrent
-            ? "bg-shu-50 text-shu-600 hover:bg-shu-100"
+            ? "text-shu-600 hover:bg-shu-50"
             : published
-              ? "bg-moegi-100 text-moegi-500 hover:bg-slate-200"
-              : "text-slate-400 hover:bg-slate-100 hover:text-ink"
+              ? "text-moegi-500 hover:bg-slate-100"
+              : "text-slate-500 hover:bg-slate-100 hover:text-ink"
         }`}
       >
-        {published ? t.publishedBadge(published.version) : t.notPublishedBadge}
+        {published ? <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" /> : <CircleDashed size={13} strokeWidth={1.75} aria-hidden="true" />}
+        <span className="@max-[920px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
       </button>
       <button
         type="button"
         onClick={() => setBottom("issues")}
-        className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium ${
+        className={`${CHIP} font-medium ${
           errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos || unset ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
         }`}
         title={t.toolbar.issuesTitle}
@@ -186,7 +217,7 @@ export function FlowTitle() {
  * What to do with the open flow, at the right of the title bar: how to
  * show it, then running it, the one filled button, at the very end.
  */
-export function FlowActions({ view, onView }: { view: View; onView: (view: View) => void }) {
+export function FlowActions({ view, onView }: { view: ReviewView; onView: (view: ReviewView) => void }) {
   const flow = useStudio((s) => s.flow);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
@@ -316,12 +347,12 @@ export function CanvasDock() {
  * flow's settings open with nothing picked, or closes the pane for the room.
  * The 変数 table edits in place and has no pane, so it has no button.
  */
-function PaneToggle({ view }: { view: View }) {
+function PaneToggle({ view }: { view: ReviewView }) {
   const place = useStudio((s) => s.place);
   const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
   const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
   const showFlowProps = useStudio((s) => s.showFlowProps);
-  if (place !== "flows" || view === "variables") return null;
+  if ((place !== "flows" && place !== "review") || view === "variables" || view === "report") return null;
   return (
     <button
       type="button"

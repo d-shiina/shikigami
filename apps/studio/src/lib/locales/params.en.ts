@@ -55,6 +55,8 @@ export const paramsEn = {
     engine: "OCR engine",
     accurate: "High accuracy (handwriting, slow)",
     table: "Read as a table",
+    textKind: "Kind of text",
+    candidates: "Candidates",
     maxRows: "Row limit",
     // Files
     path: "File",
@@ -237,6 +239,7 @@ export const paramsEn = {
     button: { left: "Left", right: "Right" },
     unit: { line: "Lines", page: "Pages" },
     engine: { paddle: "Standard (PaddleOCR)", windows: "Windows OCR" },
+    textKind: { any: "Any", number: "Number", amount: "Amount", date: "Date", phone: "Phone number", alphanumeric: "Letters and digits", katakana: "Katakana" },
     buttons: { ok: "OK", okCancel: "OK, Cancel", yesNo: "Yes, No", yesNoCancel: "Yes, No, Cancel" },
     kind: { file: "One file", files: "Several files", folder: "A folder", save: "Where to save" },
     align: { left: "Left", center: "Centre", right: "Right" },

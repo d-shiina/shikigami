@@ -232,10 +232,73 @@ async fn loops_with_break_and_continue() {
         .push(var("acc", VarType::String, VarDirection::Output, None));
     s.variables
         .push(var("n", VarType::Number, VarDirection::Output, None));
-    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["acc"], json!("023"));
     assert_eq!(report.outputs["n"], json!(3));
+    // Each loop says which round it starts and how its rounds ended (Studio shows it on the frame).
+    let rounds: Vec<(u64, Option<u64>)> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::LoopRound { round, total, .. } => Some((*round, *total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        rounds,
+        vec![
+            (1, Some(10)),
+            (2, Some(10)),
+            (3, Some(10)),
+            (4, Some(10)),
+            (5, Some(10)),
+            (1, None),
+            (2, None),
+            (3, None),
+        ]
+    );
+    let ended: Vec<(u64, Option<u64>, bool)> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::LoopEnded {
+                rounds,
+                total,
+                left_early,
+                ..
+            } => Some((*rounds, *total, *left_early)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended, vec![(5, Some(10), true), (3, None, false)]);
+}
+
+#[tokio::test]
+async fn for_each_reports_its_rounds() {
+    let s = flow(vec![
+        Step::new("control.forEach")
+            .with_param("items", "[1, 2, 3]")
+            .with_param("itemVar", "x")
+            .with_block("body", vec![log("{{ x }}")]),
+        Step::new("control.forEach")
+            .with_param("items", "[]")
+            .with_param("itemVar", "x")
+            .with_block("body", vec![log("never")]),
+    ]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let ended: Vec<(u64, Option<u64>, bool)> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::LoopEnded {
+                rounds,
+                total,
+                left_early,
+                ..
+            } => Some((*rounds, *total, *left_early)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended, vec![(3, Some(3), false), (0, Some(0), false)]);
 }
 
 #[tokio::test]
@@ -2734,4 +2797,38 @@ async fn a_finished_run_becomes_a_test_case_that_passes() {
         .await
         .unwrap();
     assert_eq!(result.status, RunStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn a_started_step_says_how_long_it_waits_and_when_it_gives_up() {
+    let mut delay = Step::new("flow.delay").with_param("ms", 20);
+    delay.timeout_ms = Some(5_000);
+    let s = flow(vec![
+        delay,
+        Step::new("log.message").with_param("message", "x"),
+    ]);
+    let (_, events) = run(&Runtime::new(), s, json!({})).await;
+    let started: Vec<(String, Option<u64>, Option<u64>)> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::StepStarted {
+                step_type,
+                wait_ms,
+                limit_ms,
+                ..
+            } => Some((step_type.clone(), *wait_ms, *limit_ms)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        started,
+        [
+            ("flow.delay".to_string(), Some(20), Some(5_000)),
+            (
+                "log.message".to_string(),
+                None,
+                Some(crate::exec::DEFAULT_TIMEOUT_MS)
+            ),
+        ]
+    );
 }

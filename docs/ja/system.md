@@ -44,8 +44,8 @@
 ## クリップボードとダイアログ
 
 - Windows のみ。ほかの OS では `PLATFORM_UNSUPPORTED`（定義と検証はどこでも使える）。
-- ダイアログは 1 つずつ別の PowerShell プロセスで出すので、Studio なし（`spellsheet run`）でも出る。止めたり時間切れになったりするとプロセスごと閉じる。
-- メッセージと文字の入力は Studio と同じ見た目（白地、Windows のアプリがダークならダーク、濃紺の文字、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。Enter で塗りのボタン、Esc と × でキャンセル（`yesNo` は Windows のメッセージボックスと同じく答えが必要）。Ctrl+C でメッセージをコピー。ファイル・フォルダーの選択はエクスプローラーの画面。
-- ダイアログは人が見ている実行でだけ使う。既定で 10 分待ち（`timeoutMs` で変更）、無人実行ではタイムアウトまで止まる。待っている間は Studio に「ダイアログに答えてください」と出る。
+- ダイアログは 1 つずつ別の PowerShell プロセスで出すので、Writer なし（`spellsheet run`）でも出る。止めたり時間切れになったりするとプロセスごと閉じる。
+- メッセージと文字の入力は Writer と同じ見た目（白地、Windows のアプリがダークならダーク、濃紺の文字、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。Enter で塗りのボタン、Esc と × でキャンセル（`yesNo` は Windows のメッセージボックスと同じく答えが必要）。Ctrl+C でメッセージをコピー。ファイル・フォルダーの選択はエクスプローラーの画面。
+- ダイアログは人が見ている実行でだけ使う。既定で 10 分待ち（`timeoutMs` で変更）、無人実行ではタイムアウトまで止まる。待っている間は Writer に「ダイアログに答えてください」と出る。
 - パスワードを `dialog.input` で聞かない（シークレットを使う）。
-- `dialog.form` の `fields` は `{ name, label, type, required, default, options }` の並び。`type` は `text`（既定）・`multiline`・`number`（空なら null）・`date`（`"2026-10-28"`、空なら null）・`select`（`options` のどれか）・`checkbox`（true / false）。`required: true` の項目が空なら、OK を押しても閉じずに「入力してください」と出す。Enter で OK（複数行の欄では Ctrl+Enter）。Studio ではノードの設定画面で項目を 1 つずつ足せる。
+- `dialog.form` の `fields` は `{ name, label, type, required, default, options }` の並び。`type` は `text`（既定）・`multiline`・`number`（空なら null）・`date`（`"2026-10-28"`、空なら null）・`select`（`options` のどれか）・`checkbox`（true / false）。`required: true` の項目が空なら、OK を押しても閉じずに「入力してください」と出す。Enter で OK（複数行の欄では Ctrl+Enter）。Writer ではノードの設定画面で項目を 1 つずつ足せる。

@@ -284,7 +284,7 @@ fn windows_missing(name: &str, target: &str) -> SecretError {
         "WINDOWS_CREDENTIAL_NOT_FOUND",
         format!("Windows Credential Manager has no generic credential '{target}' (used by secret '{name}')"),
     )
-    .with_hint("Ask the user to add it in Windows Credential Manager (資格情報マネージャー → Windows 資格情報 → 汎用資格情報の追加) with this address, or to change the secret in Studio.")
+    .with_hint("Ask the user to add it in Windows Credential Manager (資格情報マネージャー → Windows 資格情報 → 汎用資格情報の追加) with this address, or to change the secret in Writer.")
     .with_secret(name)
 }
 
@@ -817,7 +817,7 @@ impl Vault {
                     "SECRET_KEY_MISSING",
                     "the key of this workspace's secrets is not on this PC / Windows user",
                 )
-                .with_hint("Secrets are tied to the Windows user that registered them. Ask the user to reset the secrets in Studio (シークレット) or with `spellsheet secret reset`, then register them again.")
+                .with_hint("Secrets are tied to the Windows user that registered them. Ask the user to reset the secrets in Writer (シークレット) or with `spellsheet secret reset`, then register them again.")
             });
         }
         if !create {
@@ -943,7 +943,7 @@ impl SecretProvider for Vault {
                     reference.field.as_str()
                 ),
             )
-            .with_hint("Call request_secret with this name and the missing field: Studio then asks the user to fill it in. Never ask for it in chat.")
+            .with_hint("Call request_secret with this name and the missing field: Writer then asks the user to fill it in. Never ask for it in chat.")
             .with_secret(&reference.secret)
             .with_field(reference.field)
         };
@@ -1136,7 +1136,7 @@ fn unseal(key: &Key, aad: &[u8], sealed: &Sealed) -> Result<Vec<u8>, SecretError
             "SECRET_DECRYPT_FAILED",
             "a stored secret cannot be decrypted (damaged, or saved with another key)",
         )
-        .with_hint("Register the secret again in Studio (シークレット).")
+        .with_hint("Register the secret again in Writer (シークレット).")
     };
     let cipher = Aes256Gcm::new_from_slice(key).map_err(io_error)?;
     let nonce = B64.decode(&sealed.nonce).map_err(|_| damaged())?;

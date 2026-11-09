@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { fileName, folderOf, insideFolder } from "../lib/fileDrop";
 import { t } from "../lib/i18n";
 import { ProjectContext, type Role, ROLES } from "../project";
+import { useStudioApi } from "../context";
 
 /** What a drop target takes: one file, a folder, or files to make nodes from. */
 export type DropKind = "file" | "folder" | "canvas";
@@ -128,6 +129,7 @@ function shelfAt(x: number, y: number): Role | "panel" | null {
  */
 function useExternalDrop() {
   const project = useContext(ProjectContext);
+  const studio = useStudioApi();
   useEffect(() => {
     if (!project) return;
     const dropOn = async (target: Target, el: Element, paths: string[]) => {
@@ -169,6 +171,9 @@ function useExternalDrop() {
         const shelf = shelfAt(x, y);
         useFileDrag.setState({ external: false, over: null, shelf: null });
         if (payload.paths.length === 0) return;
+        // A flow file someone handed over: shown before it is imported.
+        const handed = payload.paths.find((path) => /\.spx$/i.test(path));
+        if (handed) return void studio.getState().receiveFile({ path: handed });
         if (at) void dropOn(at.target, at.el, payload.paths);
         // Bundles and flow files are imported from the library, not added here.
         else if (panelOpen) void project.getState().copyIn(payload.paths, shelf === "panel" ? null : shelf);
@@ -184,7 +189,7 @@ function useExternalDrop() {
       gone = true;
       off?.();
     };
-  }, [project]);
+  }, [project, studio]);
 }
 
 /** The file under the pointer while it is dragged, and what letting go will do. */

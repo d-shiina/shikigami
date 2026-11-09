@@ -22,7 +22,7 @@ The provider sends the browser back to the **redirect URL registered for the app
 ## Setting up (Box as the example)
 
 1. At the provider, create the app (Box: Developer Console → Create Platform App → User Authentication (OAuth 2.0)) and register the **redirect URL** (e.g. `https://www.example.com/`). Note the client ID and client secret, and give the app the scopes it needs.
-2. In Studio, 🔑 Secrets → New:
+2. In Writer, 🔑 Secrets → New:
 
    | Field | Contents |
    |---|---|
@@ -49,7 +49,7 @@ The provider sends the browser back to the **redirect URL registered for the app
 { "type": "log.message", "params": { "message": "{{ join(map(res.body.entries, e => e.name), ', ') }}" } }
 ```
 
-The first run opens the Box sign-in page. The person signs in and presses "Grant access"; Studio shows "Waiting for you" meanwhile. Later runs finish `oauth.signIn` at once without a person (`via: "saved"` or `"refreshed"`).
+The first run opens the Box sign-in page. The person signs in and presses "Grant access"; Writer shows "Waiting for you" meanwhile. Later runs finish `oauth.signIn` at once without a person (`via: "saved"` or `"refreshed"`).
 
 ## `oauth.signIn` params
 
@@ -62,7 +62,7 @@ The first run opens the Box sign-in page. The person signs in and presses "Grant
 | `scope` | Space-separated scopes, when the provider wants them |
 | `authorizeParams` | Extra parameters for the authorization page, e.g. `{ "prompt": "consent", "access_type": "offline" }` (Google needs these for a refresh token) |
 | `pkce` | `false` only for a provider that rejects PKCE (default `true`) |
-| `message` | What Studio asks the person to do |
+| `message` | What Writer asks the person to do |
 | `context` | The browser context (default `default`) |
 
 It waits for the person for 5 minutes by default (`timeoutMs`). The client secret goes in the body of the token request (`client_secret_post`).
@@ -70,10 +70,10 @@ It waits for the person for 5 minutes by default (`timeoutMs`). The client secre
 ## Tokens
 
 - Saved encrypted in the workspace (`secrets/oauth/`), with the same key as the secrets ([secrets.md](secrets.md)). They never appear in outputs, logs or MCP results; the access token is masked like a password.
-- `http.request` refreshes the access token when it has less than 2 minutes left (a token that cannot be refreshed is used until it really expires). Refreshes are one at a time, also across Studio, the CLI and the MCP server on the same workspace, so a provider that replaces the refresh token on every refresh (Box does) never loses it.
+- `http.request` refreshes the access token when it has less than 2 minutes left (a token that cannot be refreshed is used until it really expires). Refreshes are one at a time, also across Writer, the CLI and the MCP server on the same workspace, so a provider that replaces the refresh token on every refresh (Box does) never loses it.
 - Saved tokens are reused only for the same client ID, `tokenUrl` and a `scope` they cover; asking for more scopes signs in again.
 - When the provider no longer accepts the refresh token, `http.request` fails with `OAUTH_SIGN_IN_REQUIRED` and the next `oauth.signIn` lets the person sign in again. Put `oauth.signIn` at the start of the flow so it happens there.
-- Studio shows "Signed in (OAuth)" on the secret, with Sign out, and when the access token expires, when it was last obtained and whether it renews itself. The CLI: `spellsheet secret logout <name>`. Changing the client ID makes the old tokens unusable; removing the secret removes them.
+- Writer shows "Signed in (OAuth)" on the secret, with Sign out, and when the access token expires, when it was last obtained and whether it renews itself. The CLI: `spellsheet secret logout <name>`. Changing the client ID makes the old tokens unusable; removing the secret removes them.
 - `list_secrets` shows `signedIn: true` for secrets with saved tokens.
 
 ## Unattended runs

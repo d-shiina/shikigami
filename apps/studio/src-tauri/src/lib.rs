@@ -1,4 +1,4 @@
-//! SpellSheet Studio backend.
+//! SpellSheet Writer backend.
 //!
 //! Every command is a thin wrapper over `FlowService` (editing) or
 //! `Runtime` (execution). Studio owns no flow logic of its own, so what
@@ -8,7 +8,9 @@ mod agent;
 mod commands;
 mod debug;
 mod extensions;
+mod instance;
 mod manual;
+mod opened;
 mod picker;
 mod runner;
 mod schedules;
@@ -77,7 +79,11 @@ pub fn run() {
         tests: Mutex::new(None),
     };
 
-    let result = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if let Some(single) = instance::plugin() {
+        builder = builder.plugin(single);
+    }
+    let result = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(updater::PendingUpdate::default())
@@ -87,6 +93,9 @@ pub fn run() {
         .manage(extensions::Extensions::default())
         .setup(move |app| {
             fit_to_screen(app);
+            if let Some(path) = opened::spx_arg(std::env::args()) {
+                opened::remember(None, path);
+            }
             if let Err(e) = tray::create(app.handle()) {
                 // Only a shortcut: Studio works without it.
                 tracing::warn!(error = %e, "cannot show the tray icon");
@@ -166,6 +175,12 @@ pub fn run() {
             commands::read_clipboard_text,
             commands::cancel_pick_request,
             commands::export_flow,
+            commands::package_plan,
+            commands::export_package,
+            commands::preview_package,
+            commands::import_package,
+            commands::reveal_file,
+            opened::take_opened_file,
             manual::get_manual,
             manual::manual_image,
             manual::save_manual_masks,
@@ -201,6 +216,7 @@ pub fn run() {
             commands::submit_review,
             commands::get_observation,
             commands::run_record,
+            commands::step_times,
             commands::run_flow,
             commands::test_step,
             commands::list_test_cases,
@@ -237,6 +253,7 @@ pub fn run() {
             agent::agent_install_cancel,
             agent::agent_open_url,
             agent::agent_open_link,
+            updater::open_cursor_mcp_install,
             runner::runner_list,
             runner::runner_run,
             runner::open_runner,
@@ -256,7 +273,7 @@ pub fn run() {
             });
         });
     if let Err(e) = result {
-        tracing::error!(error = %e, "Studio exited with an error");
+        tracing::error!(error = %e, "Writer exited with an error");
         std::process::exit(1);
     }
 }

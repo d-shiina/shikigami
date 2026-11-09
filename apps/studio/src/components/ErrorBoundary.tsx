@@ -17,7 +17,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Studio crashed", error, info.componentStack);
+    console.error("Writer crashed", error, info.componentStack);
   }
 
   render() {

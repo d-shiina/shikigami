@@ -223,7 +223,7 @@ export function VersionsPanel() {
   const loadVersions = useStudio((s) => s.loadVersions);
   const flowId = useStudio((s) => s.flow?.id);
   const createVersion = useStudio((s) => s.createVersion);
-  const exportFlow = useStudio((s) => s.exportFlow);
+  const openHandOff = useStudio((s) => s.openHandOff);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
@@ -284,10 +284,10 @@ export function VersionsPanel() {
         <h3 className="mb-2 text-sm font-semibold">{t.share}</h3>
         <button
           type="button"
-          onClick={() => void exportFlow()}
+          onClick={() => flowId && void openHandOff(flowId)}
           className="rounded-lg border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
         >
-          {t.exportFlow}
+          {t.handOff.open}
         </button>
       </section>
     </div>

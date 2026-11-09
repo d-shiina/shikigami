@@ -33,6 +33,8 @@
   --color-paper: #fbfbfc;
   /* The flow chart's desk: a shade under paper, so steps stand out on it. */
   --color-desk: #f6f7f8;
+  /* The manual's desk: grey enough that the white A4 sheets read as paper on it. */
+  --manual-desk: #e6e8ec;
   --color-sheet: #ffffff;
   --color-ink: #1b1d22;
 
@@ -115,6 +117,7 @@
   --color-frame: #0c0d0f;
   --color-paper: #121316;
   --color-desk: #0e0f11;
+  --manual-desk: #0a0b0d;
   --color-sheet: #17181b;
   --color-ink: #e6e7ea;
 
@@ -238,6 +241,20 @@ textarea,
   background-color: var(--color-desk);
 }
 
+/* The flow chart's desk: the manual's grey, so the sheet the flow is written on reads as paper. */
+.flow-desk {
+  --xy-background-color: var(--manual-desk);
+  background-color: var(--manual-desk);
+}
+/* The sheet itself (FlowCanvas FlowSheet): the manual page's white and shadow, under the frames (-1) and lines. */
+.flow-sheet {
+  z-index: -10;
+  background-color: var(--color-sheet);
+  box-shadow:
+    0 1px 2px rgb(20 30 50 / 0.08),
+    0 8px 24px rgb(20 30 50 / 0.08);
+}
+
 /*
  * The frame of a loop (if, try, …) around its blocks; the step's own node is
  * its head, over the top edge. A loop's frame is tinted with the control
@@ -254,6 +271,49 @@ textarea,
 }
 .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
+}
+/*
+ * A frame whose step runs is marked as a whole, head to foot. Only the
+ * innermost one the run is in now gets a soft ring; the ones around it only
+ * an orange edge, and the node at work inside keeps the one glow.
+ */
+.flow-frame.flow-frame-running,
+.flow-edge-running-around {
+  border-color: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-slate-300)) !important;
+}
+/*
+ * Its head and foot are its top and bottom edges: in the frame's colour.
+ * Even the innermost frame keeps a softer orange than the node at work and
+ * the progress bars, so the bar along its foot reads apart from the edge.
+ */
+.flow-frame.flow-frame-running-here,
+.flow-edge-running-here {
+  border-color: color-mix(in srgb, var(--color-accent-500) 65%, var(--color-slate-300)) !important;
+}
+/* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
+.react-flow__edgelabel-renderer {
+  z-index: 2;
+}
+/* The answer a line takes out of a decision (はい／いいえ): in the decision's yellow, so it reads as the hexagon's answer. */
+.flow-answer {
+  border-color: var(--flow-decide-line);
+  background-color: var(--flow-decide-fill);
+}
+/* A loop's foot: the bottom edge of its frame, a band like its head, that says where the loop ends. */
+.flow-foot {
+  border-color: var(--color-slate-300);
+  background-color: var(--color-sheet);
+}
+.flow-foot-line {
+  background-color: var(--flow-edge);
+}
+/* Pointing at a break inside the loop: this is where it goes. */
+.flow-foot.flow-foot-marked {
+  border-color: var(--color-slate-500);
+  background-color: color-mix(in srgb, var(--color-slate-100) 80%, var(--color-sheet));
+}
+.flow-foot.flow-foot-selected {
+  border-color: var(--color-primary);
 }
 /* A call holds a flow of its own: two sheets peek out from under it. */
 .flow-call-stack {
@@ -323,6 +383,26 @@ textarea,
 @media (prefers-reduced-motion: reduce) {
   .react-flow__edge-path {
     animation: none !important;
+  }
+}
+/* How far a running node got (RunBar): it grows by itself, one step a second when motion is reduced. */
+@keyframes run-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.run-bar {
+  transform-origin: left;
+  animation-name: run-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-bar {
+    animation-timing-function: steps(var(--run-bar-steps), end);
   }
 }
 /* The step of a frame is picked: the whole frame is marked, its head being its top edge. */

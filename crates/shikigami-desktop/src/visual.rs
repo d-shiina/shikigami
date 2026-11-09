@@ -191,6 +191,7 @@ pub async fn look(
                 language: query.language.clone(),
                 engine: query.engine.as_deref().map(OcrEngine::parse).transpose()?,
                 accurate: query.accurate,
+                kind: None,
             }
             .check()?;
             let lines = read_lines(backend, &picture, options).await?;
@@ -316,6 +317,7 @@ pub fn ocr_options(params: &Value) -> Result<OcrOptions, StepError> {
             .map(OcrEngine::parse)
             .transpose()?,
         accurate: params.get("accurate").and_then(Value::as_bool) == Some(true),
+        kind: crate::ocr_fit::TextKind::parse(text("textKind").as_deref().unwrap_or(""))?,
     }
     .check()
 }

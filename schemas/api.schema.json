@@ -52,6 +52,18 @@
     "import_outcome": {
       "$ref": "#/$defs/ImportOutcome"
     },
+    "package_manifest": {
+      "$ref": "#/$defs/PackageManifest"
+    },
+    "package_plan": {
+      "$ref": "#/$defs/PackagePlan"
+    },
+    "package_options": {
+      "$ref": "#/$defs/PackageOptions"
+    },
+    "package_preview": {
+      "$ref": "#/$defs/PackagePreview"
+    },
     "extract_outcome": {
       "$ref": "#/$defs/ExtractOutcome"
     },
@@ -121,6 +133,10 @@
     "flow_diff",
     "flow_bundle",
     "import_outcome",
+    "package_manifest",
+    "package_plan",
+    "package_options",
+    "package_preview",
     "extract_outcome",
     "import_conflict",
     "workspace_info",
@@ -2104,6 +2120,551 @@
           "description": "It existed and was left as it is.",
           "type": "string",
           "const": "kept"
+        }
+      ]
+    },
+    "PackageManifest": {
+      "description": "What a package holds and what the receiving PC needs.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "description": "Always `spellsheet.package`.",
+          "type": "string"
+        },
+        "formatVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "appVersion": {
+          "description": "Version of SpellSheet that wrote it.",
+          "type": "string"
+        },
+        "exportedBy": {
+          "description": "Who wrote it (the Windows user name), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flow": {
+          "$ref": "#/$defs/PackagedFlow"
+        },
+        "subflows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackagedSubflow"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/PackageRequires",
+          "default": {}
+        },
+        "contents": {
+          "description": "Every entry other than the manifest.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageEntry"
+          }
+        }
+      },
+      "required": [
+        "format",
+        "formatVersion",
+        "exportedAt",
+        "appVersion",
+        "flow",
+        "contents"
+      ]
+    },
+    "PackagedFlow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "description": "The version the content is, if it is one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackagedVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "published": {
+          "description": "Whether the content is the version published on the PC it came from.",
+          "type": "boolean",
+          "default": false
+        },
+        "stepCount": {
+          "description": "Steps, nested ones included.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "PackagedVersion": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "uid",
+        "name"
+      ]
+    },
+    "PackagedSubflow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "PackageRequires": {
+      "description": "What the flow (and the flows it calls) needs on the PC that runs it.",
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "description": "`plugin:<name>` → version range, as in `requires`.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "secrets": {
+          "description": "Names of the logins (secrets) the steps use. Never their values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sites": {
+          "description": "Sites the steps open (`https://host`), when written out literally.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "apps": {
+          "description": "Programs the steps start, when written out literally.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "description": "Inputs asked for when the flow runs (no default value).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageInput"
+          }
+        }
+      }
+    },
+    "PackageInput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "PackageEntry": {
+      "description": "One entry of the zip.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ]
+    },
+    "PackagePlan": {
+      "description": "What exporting would put in, for the export dialog.",
+      "type": "object",
+      "properties": {
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "published": {
+          "description": "The published version, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackagedVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hasUnpublishedChanges": {
+          "description": "Whether the current content differs from the published version.",
+          "type": "boolean"
+        },
+        "current": {
+          "description": "The plan is for the current content (not the published version).",
+          "type": "boolean"
+        },
+        "subflows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackagedSubflow"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageFileChoice"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/PackageRequires"
+        },
+        "fileName": {
+          "description": "File name to save as (without folder).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flowId",
+        "name",
+        "hasUnpublishedChanges",
+        "current",
+        "subflows",
+        "files",
+        "requires",
+        "fileName"
+      ]
+    },
+    "PackageFileChoice": {
+      "description": "A file that may go into a package, for choosing before exporting.",
+      "type": "object",
+      "properties": {
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "flowName": {
+          "description": "Name of that flow (the main flow or a sub-flow).",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "includedByDefault": {
+          "description": "Whether it goes in with the default options (`input/` does not).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "flowId",
+        "flowName",
+        "path",
+        "size",
+        "includedByDefault"
+      ]
+    },
+    "PackageOptions": {
+      "description": "Options of [`crate::FlowService::export_package`].",
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/PackageContent",
+          "default": "auto"
+        },
+        "versions": {
+          "$ref": "#/$defs/PackageVersions",
+          "default": "content"
+        },
+        "includeInput": {
+          "description": "Include files under `input/`. Off by default: they are usually real\nbusiness data (and may hold personal data).",
+          "type": "boolean",
+          "default": false
+        },
+        "exclude": {
+          "description": "Files to leave out (after `include_input`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileRef"
+          }
+        },
+        "only": {
+          "description": "Exactly these files, when set (`include_input` and `exclude` are then\nignored). A file not listed, such as one of a sub-flow the person did\nnot see, stays out.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/FileRef"
+          }
+        },
+        "exportedBy": {
+          "description": "Shown to the receiver as who wrote the package.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PackageContent": {
+      "description": "Which content of the flow goes into a package.",
+      "oneOf": [
+        {
+          "description": "The published version when there is one, otherwise the current content.",
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "description": "The published version (fails when nothing is published).",
+          "type": "string",
+          "const": "published"
+        },
+        {
+          "description": "The current content, also when it is not saved as a version.",
+          "type": "string",
+          "const": "current"
+        }
+      ]
+    },
+    "PackageVersions": {
+      "description": "Which versions come along.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        },
+        {
+          "description": "Only the version the content is (if any).",
+          "type": "string",
+          "const": "content"
+        },
+        {
+          "description": "Every version of the flow.",
+          "type": "string",
+          "const": "all"
+        }
+      ]
+    },
+    "FileRef": {
+      "description": "A file of a flow's folder, by flow and path.",
+      "type": "object",
+      "properties": {
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "flowId",
+        "path"
+      ]
+    },
+    "PackagePreview": {
+      "description": "What importing a package would do, shown before importing.",
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/PackageManifest"
+        },
+        "existing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExistingFlow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequirementCheck"
+          }
+        }
+      },
+      "required": [
+        "manifest",
+        "checks"
+      ]
+    },
+    "ExistingFlow": {
+      "description": "The flow with the same ID that is already in the workspace.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "latestVersion": {
+          "description": "Newest version here.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "publishedVersion": {
+          "description": "Published version here.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "hasPackageVersion": {
+          "description": "The package's version is already here (same `uid`).",
+          "type": "boolean"
+        },
+        "diff": {
+          "description": "From the current content here to the package's content.",
+          "$ref": "#/$defs/FlowDiff"
+        }
+      },
+      "required": [
+        "name",
+        "hasPackageVersion",
+        "diff"
+      ]
+    },
+    "RequirementCheck": {
+      "description": "One thing the package needs, checked against this PC.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CheckKind"
+        },
+        "name": {
+          "description": "Plugin name, login name, site origin or program.",
+          "type": "string"
+        },
+        "range": {
+          "description": "Version range for plugins.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installed": {
+          "description": "Installed version when it does not match.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "status"
+      ]
+    },
+    "CheckKind": {
+      "type": "string",
+      "enum": [
+        "plugin",
+        "secret",
+        "site",
+        "app"
+      ]
+    },
+    "CheckStatus": {
+      "description": "State of one requirement on this PC.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ok"
+          ]
+        },
+        {
+          "description": "Not installed / not registered here.",
+          "type": "string",
+          "const": "missing"
+        },
+        {
+          "description": "Installed at a version outside the range.",
+          "type": "string",
+          "const": "mismatch"
+        },
+        {
+          "description": "The workspace's policy does not allow it.",
+          "type": "string",
+          "const": "notAllowed"
         }
       ]
     },

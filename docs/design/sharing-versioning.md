@@ -21,7 +21,7 @@
 
 ## 共有
 
-### 共有フォルダ（複数人で同じワークスペース）
+### 共有フォルダー（複数人で同じワークスペース）
 
 - OneDrive や社内ファイルサーバーのフォルダをワークスペースにする。`workspace.json` に `{"shared": true}` を置くと共有ワークスペースになる（`shikigami workspace init <dir> --shared`、または Studio の保存先「変更」で「複数人で使う」にチェック）。
 - 共有部分：`flows/`・`versions/`・`trash/`・`.lock`。
@@ -29,20 +29,26 @@
 - 既定のワークスペースは `SHIKIGAMI_HOME` > `%APPDATA%\Shikigami\config.json` の `workspace` > `%APPDATA%\Shikigami\workspace` の順。`shikigami workspace use <dir>` と Studio の「変更」は `config.json` を書くので、Studio・CLI・MCP サーバーが同じ場所を使う。
 - 同時編集の保護は従来どおり：書き込みはワークスペースのロックを取り、リビジョンが変わっていれば `REVISION_CONFLICT`。ファイルサーバー（SMB）ではロックが PC をまたいで効く。OneDrive は同期が遅れるため、同じフローを同時に編集しない運用を前提にする（他の PC で変わった文書は Undo スタックを捨てて読み直す既存の仕組みが働く）。
 
-### ファイルでの受け渡し（バンドル）
+### ファイルで渡す（`.spx`）
 
-- `*.shikigami.json`：`{ "format": "shikigami.flowBundle", "formatVersion": 1, "exportedAt", "flow", "versions": [...] }`。
-- 書き出し時に `secret: true` の変数の初期値を消す。資格情報はもともと名前でしか参照しないので、中身は入らない。
-- 取り込み：
-  - ID がなければそのまま作成（ID を保つので、同じフローを何度でも受け渡せる）。
-  - 同じ ID があれば `IMPORT_CONFLICT`。`onConflict: "update"` で既存を更新（1 回の編集・Undo 可）し、まだない版（`uid` で判定）を後ろに番号を振って追加。`"copy"` で新しい ID の別フローとして追加。
-  - バンドルでない素のフロー文書も受け付ける。
-- `shikigami run <file>` はバンドルもそのまま実行できる（ファイルの内容をそのまま動かす。公開版の決まりはワークスペースのフローに対するもの）。
+フォルダーごと渡すのは現実的でないので、1 ファイルにまとめて渡す。WinActor の `.ums7`、UiPath の `.nupkg` と同じ考え方。
 
-| 操作 | MCP | CLI | Studio |
+- `<フロー名> v<版>.spx`：ふつうの zip。中身は `manifest.json`・`flow.json`・`versions/<n>.json`・`subflows/<id>.json`・`files/<flow-id>/<パス>`。
+- `manifest.json`：`{ "format": "spellsheet.package", "formatVersion": 1, "appVersion", "exportedAt", "exportedBy", "flow": { id, name, description, published, version }, "subflows", "requires", "contents" }`。`contents` は全エントリーの大きさと SHA-256。読むときに照合し、違えば「壊れているか、書き出したあとに変えられています」で断る（エントリー 5000 件・合計 1 GiB まで）。
+- `requires`：相手の PC に必要なもの。拡張機能（`requires` と同じ判定）、ログイン情報の名前、開くサイト（オリジン）、操作するアプリ、実行時に聞く入力。式（`{{ }}`）の値はサイトに数えない。
+- 渡す内容の既定は**公開中の版**（確認済みの内容）。公開していなければ今の内容。「今の内容」も選べる。版の履歴は渡す内容の版だけ（CLI で `--all-versions`／`--no-versions`）。
+- 入らないもの：ログイン情報の中身、`secret: true` の変数の初期値、実行ログ、`output/`・`work/`、手順書の画面。`input/` は業務の実データが多いので最初は外す（チェックを入れれば入る）。
+- 受け取り：開くとまず中身と「この PC で動かすのに必要なこと」を見せる（拡張機能が入っているか、ログイン情報が登録済みか、サイト・アプリが `policy.json` で許可されているか）。足りなくても取り込める。足りないものはその場で「入れる」「登録する」「許可する」。
+- 同じ ID のフローがあれば、この PC の内容からの差分を見せ、「更新として取り込む」か「別のフローとして追加」を選ぶ。更新は 1 回の編集（Undo 可）。版は送り手の番号を保つ（この PC の番号より大きいとき）。
+- **取り込んだフローは公開されない。** この PC の人が確認して公開するまで、自動実行・実行画面・Worker では動かない。
+- 旧形式の `*.shikigami.json`（`shikigami.flowBundle`）と素のフロー文書も引き続き読める。CLI の `-o x.json`／`-o -` は旧形式で書く。
+- インストーラーが `.spx` をアプリに関連付ける。エクスプローラーでダブルクリックするか窓にドロップすると受け取り画面が開く（起動中なら今の窓で）。
+- `spellsheet run <file>` は `.spx` もそのまま実行できる（ファイルの内容をそのまま動かす。公開版の決まりはワークスペースのフローに対するもの）。
+
+| 操作 | MCP | CLI | Writer |
 |---|---|---|---|
-| 書き出し | `export_flow`（`bundle` を返す） | `flow export <id> [-o file] [--no-versions]` | 「版」タブ →「ファイルに書き出す」（ダウンロードフォルダ） |
-| 取り込み | `import_flow` | `flow import <file> [--on-conflict update\|copy]` | 一覧の「ファイルから読み込む」 |
+| 渡す | `export_flow`（`path` で `.spx` を書く。なければ `bundle` を返す） | `flow export <id> [-o dir\|file] [--current] [--all-versions\|--no-versions] [--with-input]` | 一覧の右クリック・タイトル横・「版」タブの「渡す…」 |
+| 受け取る | `import_flow`（`path` または `bundle`、`check: true` で確かめるだけ） | `flow import <file> [--check] [--on-conflict update\|copy]` | `.spx` を開く・ドロップ、一覧の「ファイルから読み込む」 |
 
 ## やらないこと（今回）
 

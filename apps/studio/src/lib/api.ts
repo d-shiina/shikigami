@@ -15,6 +15,10 @@ import type {
   ImportConflict,
   ImportOutcome,
   NewReview,
+  PackageManifest,
+  PackageOptions,
+  PackagePlan,
+  PackagePreview,
   NewFlow,
   NewVersion,
   ObservationContent,
@@ -35,6 +39,12 @@ import type {
 } from "@shikigami/schema";
 import { isErrorPayload } from "@shikigami/schema";
 import type { LogLevel, RunError, RunStatus } from "@shikigami/schema";
+
+/** A flow file to look at or import: a path on disk, or the contents of a chosen file (base64). */
+export type FlowFile = { path: string } | { data: string };
+
+/** A `.spx` file written by 「渡す」. */
+export type ExportedPackage = { path: string; manifest: PackageManifest };
 
 /** What a node run alone gave (Tauri `test_step`). */
 export type StepTestResult = {
@@ -317,8 +327,20 @@ export const api = {
   /** AI clients waiting for the person to point at something in the browser. */
   listPickRequests: () => call<PickRequest[]>("list_pick_requests"),
   cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
-  /** Writes a bundle to the Downloads folder; returns its path. */
+  /** Writes the flow as a `.spx` file (default choices) to the Downloads folder; returns its path. */
   exportFlow: (id: string) => call<string>("export_flow", { id }),
+  /** What handing the flow over would put in the file (「渡す」). */
+  packagePlan: (id: string, content?: "auto" | "current") => call<PackagePlan>("package_plan", { id, content }),
+  /** Writes the flow as a `.spx` file to the Downloads folder. */
+  exportPackage: (id: string, options: PackageOptions) => call<ExportedPackage>("export_package", { id, options }),
+  /** What a flow file holds and what this PC still needs, before importing it. */
+  previewPackage: (file: FlowFile) => call<PackagePreview>("preview_package", { file }),
+  /** Imports a flow file (`.spx`, an older bundle or a flow JSON file). */
+  importPackage: (file: FlowFile, onConflict?: ImportConflict) => call<ImportOutcome>("import_package", { file, onConflict }),
+  /** Shows a file selected in Explorer. */
+  revealFile: (path: string) => call<void>("reveal_file", { path }),
+  /** The `.spx` file opened from Explorer that is waiting to be shown, once. */
+  takeOpenedFile: () => call<string | null>("take_opened_file"),
   /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
   saveAiGuide: () => call<string>("save_ai_guide"),
   /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
@@ -355,6 +377,8 @@ export const api = {
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
   /** A finished run's report and events (runs/<id>/), for what an AI test run did. */
   runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
+  /** How long each step of a flow usually takes (ms, by step id), from its latest finished runs. */
+  stepTimes: (id: string) => call<Record<string, number>>("step_times", { id }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
   run: (
     id: string,
@@ -416,6 +440,8 @@ export interface UpdateProgress {
 // unaware of app updates.
 export const updates = {
   appInfo: () => call<AppInfo>("app_info"),
+  /** Opens Cursor's prompt to add the installed CLI as an MCP server. */
+  addToCursor: () => call<void>("open_cursor_mcp_install"),
   check: () => call<UpdateInfo | null>("check_update"),
   /** Downloads the found update in the background; resolves with its version once ready. */
   download: () => call<string>("download_update"),
@@ -501,6 +527,8 @@ export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; 
 export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin" | "onInstall">;
 
 export const events = {
+  /** A `.spx` file was opened from Explorer while Writer runs: call takeOpenedFile. */
+  onOpenedFile: (handler: () => void): Promise<UnlistenFn> => listen("opened-file", () => handler()),
   onFlowChanged: (handler: (flowId: string) => void): Promise<UnlistenFn> =>
     listen<{ flowId: string }>("flow-changed", (e) => handler(e.payload.flowId)),
   onRunEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>

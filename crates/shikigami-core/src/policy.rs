@@ -566,7 +566,7 @@ impl Policy {
             details: serde_json::json!({
                 "site": shown,
                 "allowed": self.sites,
-                "hint": "A person adds the site to \"sites\" in policy.json (Studio: 許可と承認). Do not work around it with another step.",
+                "hint": "A person adds the site to \"sites\" in policy.json (Writer: 許可と承認). Do not work around it with another step.",
             }),
         })
     }
@@ -588,7 +588,7 @@ impl Policy {
             details: serde_json::json!({
                 "app": program.trim(),
                 "allowed": self.apps,
-                "hint": "A person adds the program to \"apps\" in policy.json (Studio: 許可と承認).",
+                "hint": "A person adds the program to \"apps\" in policy.json (Writer: 許可と承認).",
             }),
         })
     }
@@ -630,6 +630,14 @@ fn origin(url: &str) -> Option<(String, String, Option<String>)> {
         return None;
     }
     Some((scheme, host, port))
+}
+
+/// `https://host[:port]` of an http(s) URL, as the allow-list compares it.
+pub fn site_origin(url: &str) -> Option<String> {
+    origin(url).map(|(scheme, host, port)| match port {
+        Some(port) => format!("{scheme}://{host}:{port}"),
+        None => format!("{scheme}://{host}"),
+    })
 }
 
 /// One `sites` entry: `https://example.com`, `https://*.example.com`,

@@ -153,7 +153,7 @@ describe("browser adapter", () => {
       }),
     );
     expect(elsewhere.code).toBe("SECRET_SITE_MISMATCH");
-    expect(String(elsewhere.details?.hint)).toContain("Studio");
+    expect(String(elsewhere.details?.hint)).toContain("Writer");
 
     await adapter.call("fill", {
       ...r,
@@ -307,7 +307,7 @@ describe("pointing at the page", () => {
     expect(await asked).toMatchObject({ status: "cancelled" });
   });
 
-  it("ends when Studio cancels it", async () => {
+  it("ends when Writer cancels it", async () => {
     const asked = person.call("pick", { ...r, timeoutMs: 5000 });
     for (let i = 0; i < 50; i++) {
       if (await person.call("isVisible", { ...r, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
@@ -340,7 +340,7 @@ describe("pointing at the page", () => {
     await person.call("closeRun", f);
   });
 
-  it("opens the page itself when no browser is open and a url is given (Studio with no run)", async () => {
+  it("opens the page itself when no browser is open and a url is given (Writer with no run)", async () => {
     const s = { runId: "studio-pick" };
     const err = await failure(person.call("pick", { ...s, timeoutMs: 500 }));
     expect(err.code).toBe("BROWSER_NOT_OPEN");

@@ -3,6 +3,8 @@
 //! or `--tray`, Shikigami stays in the tray when the run window is closed,
 //! so the people who only run flows keep it at hand all day.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -30,17 +32,33 @@ impl Default for TrayLabels {
     fn default() -> Self {
         Self {
             tooltip: "SpellSheet".into(),
-            open_runner: "実行画面を開く".into(),
-            open_studio: "Studio を開く".into(),
+            open_runner: "Runner を開く".into(),
+            open_studio: "Writer を開く".into(),
             quit: "終了".into(),
         }
     }
 }
 
+/// Set when a start of Studio (this one, or a later one handed over to it,
+/// see instance.rs) was for running flows.
+static STAYS_IN_TRAY: AtomicBool = AtomicBool::new(false);
+
 /// Whether closing the run window keeps Shikigami in the tray: when it
-/// was started for running flows (`--runner`, or `--tray` with no window).
+/// was started for running flows (`--runner`, or `--tray` with no window),
+/// now or by a later start that came to this Studio.
 pub(crate) fn stays_in_tray() -> bool {
-    std::env::args().any(|a| a == "--runner" || a == "--tray")
+    STAYS_IN_TRAY.load(Ordering::Relaxed) || wants_tray(std::env::args())
+}
+
+/// Whether a start with `args` is for running flows.
+pub(crate) fn wants_tray(mut args: impl Iterator<Item = String>) -> bool {
+    args.any(|a| a == "--runner" || a == "--tray")
+}
+
+/// A later start for running flows came to this Studio: from now on it
+/// stays in the tray as that start would have.
+pub(crate) fn stay_in_tray() {
+    STAYS_IN_TRAY.store(true, Ordering::Relaxed);
 }
 
 /// `--tray`: start with the tray icon only (for a sign-in shortcut).
@@ -95,11 +113,11 @@ pub(crate) fn create(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
 /// [`show_studio`] from an event handler, off the main thread (see
 /// [`show_runner_later`]).
-fn show_studio_later(app: &AppHandle) {
+pub(crate) fn show_studio_later(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = show_studio(&app) {
-            tracing::warn!(error = %e, "cannot open Studio");
+            tracing::warn!(error = %e, "cannot open Writer");
         }
     });
 }

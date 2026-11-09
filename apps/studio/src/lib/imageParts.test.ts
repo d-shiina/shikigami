@@ -93,7 +93,7 @@ describe("image parts", () => {
     expect(missingImages(flow, null)).toEqual([]);
   });
 
-  it("know which pictures Studio can keep in the flow's folder", () => {
+  it("know which pictures Writer can keep in the flow's folder", () => {
     expect(inProject("templates/image1.png")).toBe(true);
     expect(inProject("templates\\a.png")).toBe(true);
     expect(inProject("C:\\RPA\\a.png")).toBe(false);

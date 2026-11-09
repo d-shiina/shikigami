@@ -104,6 +104,24 @@
               "type": "integer",
               "format": "uint32",
               "minimum": 0
+            },
+            "waitMs": {
+              "description": "How long the step waits on purpose (`flow.delay`), in ms: it\nends then, so Studio can show how much of it is left.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "limitMs": {
+              "description": "The longest this attempt may take before it fails with a\ntimeout (the step's `timeoutMs` or the default), in ms.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             }
           },
           "required": [
@@ -251,6 +269,71 @@
             "type",
             "stepId",
             "message"
+          ]
+        },
+        {
+          "description": "A loop (`forEach`, `repeat`, `while`) starts a round: `round` counts\nfrom 1, `total` is how many it will run at most when known (the\nitems of a `forEach`, the count of a `repeat`). Studio shows how far\na loop got on its frame, during the run and after it.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "loopRound"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "total": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "round"
+          ]
+        },
+        {
+          "description": "A loop is done with its rounds (sent before its `stepFinished`,\nnot when a round fails): `rounds` it ran, out of `total` when\nknown, and whether a `control.break` ended it (`leftEarly`).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "loopEnded"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "rounds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "total": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "leftEarly": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "rounds"
           ]
         },
         {

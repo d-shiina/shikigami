@@ -263,7 +263,7 @@ $xaml = @'
     </Style>
   </Grid.Resources>
 
-  <!-- The margin leaves room for the dialog's shadow (24dp in Studio). -->
+  <!-- The margin leaves room for the dialog's shadow (24dp in Writer). -->
   <Border Margin="28,20,28,36" Background="@SHEET@" BorderBrush="@LINE@" BorderThickness="1" CornerRadius="4">
     <Border.Effect>
       <DropShadowEffect Color="#0F1B2A" BlurRadius="36" ShadowDepth="12" Direction="270" Opacity="@SHADOW@"/>

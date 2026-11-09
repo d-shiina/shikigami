@@ -4,17 +4,17 @@ English | [日本語](ja/extensions.md)
 
 Extensions add nodes to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
 
-- An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Studio and runs keep going; only its node fails.
+- An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Writer and runs keep going; only its node fails.
 - Its nodes work like built-in ones: they are listed in the palette, their settings form is built from what the extension declares, and validation, retries, timeouts and secret masking apply as usual.
-- AI clients get them too: MCP `list_step_types` / `get_step_schema` and Studio's "save the spec" include extension nodes.
+- AI clients get them too: MCP `list_step_types` / `get_step_schema` and Writer's "save the spec" include extension nodes.
 
 The design is in [design/plugins.md](design/plugins.md) (Japanese; the code calls extensions "plugins").
 
 ## Using extensions
 
-### Studio's Extensions place
+### Writer's Extensions place
 
-The sidebar's Extensions place lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Studio restarts (the place offers a Restart button).
+The sidebar's Extensions place lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the place offers a Restart button).
 
 An extension's nodes are listed in the palette under the extension's name, with its tag (e.g. "AI-OCR") before node names; their settings form is built from the manifest's JSON Schema.
 
@@ -35,7 +35,7 @@ spellsheet plugin install https://github.com/<owner>/<repo> --yes  # installs it
 
 Before installing, SpellSheet shows the extension's name, publisher, nodes, **the data they send outside**, the secrets they take and the program it starts. An extension runs as a program on this PC: install only what you trust.
 
-Extensions are installed into `%LOCALAPPDATA%\SpellSheet\plugins\<name>\`, never into the workspace (a program placed in a shared workspace must not start on everyone's PC). Restart Studio and AI clients after installing, updating or turning one off.
+Extensions are installed into `%LOCALAPPDATA%\SpellSheet\plugins\<name>\`, never into the workspace (a program placed in a shared workspace must not start on everyone's PC). Restart Writer and AI clients after installing, updating or turning one off.
 
 ### Listing, turning off, updating, removing
 
@@ -80,17 +80,17 @@ spellsheet plugin registry          # show the list
 
 A node that sends data to a cloud service says so in its manifest's `external`.
 
-- Studio's review panel (before publishing) lists it under the effects outside, e.g. "Sent to Azure AI Document Intelligence: the file to read (image or PDF)".
+- Writer's review panel (before publishing) lists it under the effects outside, e.g. "Sent to Azure AI Document Intelligence: the file to read (image or PDF)".
 - A setting holding the address it sends to (declared in `targets` as a `site`) is checked against the workspace `policy.json` `sites`. With only `https://<resource>.cognitiveservices.azure.com` there, nothing can be sent anywhere else ([policy.md](policy.md)).
 - An extension node's `risk` decides whether AI clients need approval to run it (`policy.json` `ai.runFlow` / `ai.testStep`). Make nodes that send files outside `interactive` or higher so an AI cannot try them without a person's approval.
 
 ### Secrets
 
-Register API keys and the like in Studio (Secrets) and pick them by name in a node's settings. The value is never written into the flow or shown to AI.
+Register API keys and the like in Writer (Secrets) and pick them by name in a node's settings. The value is never written into the flow or shown to AI.
 
 - An extension only receives secrets in the settings listed in `secretParams`.
 - A secret reaches an extension only if its allowed sites include `plugin:<name>` (e.g. `plugin:azureocr`); otherwise the node fails with `SECRET_PLUGIN_NOT_ALLOWED`.
-- With `credentials` in the manifest naming the kind (`login` / `apiKey` / `oauth`), Studio offers secrets of that kind and opens the new-secret form with it.
+- With `credentials` in the manifest naming the kind (`login` / `apiKey` / `oauth`), Writer offers secrets of that kind and opens the new-secret form with it.
 
 ## Writing an extension
 
@@ -123,9 +123,9 @@ See the Japanese page for the full field table; in short:
 | `tag` | - | The "where" tag before node names (`AI-OCR`); defaults to `label` |
 | `icon` | - | A [Lucide](https://lucide.dev/icons) icon name (`scan-text`) |
 | `credentials` | - | Secrets taken: `kind` (`login` / `apiKey` / `oauth`), `label`, `description`, `params` (the `secretParams` taking it) |
-| `steps[]` | yes | `action`, `label` (a noun), `description` (for AI), `summary` (one sentence for people, shown in Studio), `params` (JSON Schema; Studio's form), `examples` (validated on load), and optional `hasOutput`, `risk`, `secretParams`, `pathParams` (relative paths resolved from the flow's folder), `targets`, `external` (`service`, `data`, `param`), `resources`, `defaultTimeoutMs`, `deprecated` |
+| `steps[]` | yes | `action`, `label` (a noun), `description` (for AI), `summary` (one sentence for people, shown in Writer), `params` (JSON Schema; Writer's form), `examples` (validated on load), and optional `hasOutput`, `risk`, `secretParams`, `pathParams` (relative paths resolved from the flow's folder), `targets`, `external` (`service`, `data`, `param`), `resources`, `defaultTimeoutMs`, `deprecated` |
 
-A setting's name in Studio is its schema `title`, the line under it `description`; display names for `enum` values go in `x-enumLabels`. Unknown manifest fields are errors.
+A setting's name in Writer is its schema `title`, the line under it `description`; display names for `enum` values go in `x-enumLabels`. Unknown manifest fields are errors.
 
 ### Protocol
 
@@ -147,7 +147,7 @@ Extensions loaded from `SPELLSHEET_PLUGINS` are listed, but cannot be turned off
 [examples/plugins/azure-ocr](../examples/plugins/azure-ocr) adds the node "AI-OCR の読み取り", reading text, tables and invoice or receipt fields from images and PDFs with Azure AI Document Intelligence.
 
 1. Create a Document Intelligence resource in the Azure portal and open "Keys and Endpoint".
-2. In Studio (Secrets), register the key as an API key and add `plugin:azureocr` to its allowed sites.
+2. In Writer (Secrets), register the key as an API key and add `plugin:azureocr` to its allowed sites.
 3. In the node's settings, set the endpoint, the API key (the registered name), the file and the kind of reading.
 4. Keep the result with `saveAs` and use it as `{{ invoice.fields.InvoiceTotal }}` or `{{ invoice.text }}`.
 

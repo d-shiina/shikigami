@@ -135,6 +135,7 @@ impl RunLog {
                 step_id,
                 step_type,
                 attempt,
+                ..
             } => {
                 let retry = if *attempt > 1 {
                     format!(" attempt {attempt}")
@@ -187,6 +188,23 @@ impl RunLog {
             }
             // Pictures for the 手順書 are not part of the readable log.
             RunEvent::ScreenCaptured { .. } => return None,
+            // The rounds show in the steps run inside them; the end says how many there were.
+            RunEvent::LoopRound { .. } => return None,
+            RunEvent::LoopEnded {
+                step_id,
+                rounds,
+                total,
+                left_early,
+            } => {
+                let mut text = format!("  {} rounds: {rounds}", self.name(step_id));
+                if let Some(total) = total {
+                    text.push_str(&format!(" of {total}"));
+                }
+                if *left_early {
+                    text.push_str(" (break)");
+                }
+                text
+            }
             RunEvent::HumanActionRequired { step_id, message } => {
                 format!("  WAITING {}: {message}", self.name(step_id))
             }

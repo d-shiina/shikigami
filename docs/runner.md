@@ -1,13 +1,13 @@
-# The run window
+# SpellSheet Runner
 
 English | [日本語](ja/runner.md)
 
-Studio is for the people who make flows. The people who only run them get a small window of their own, **SpellSheet Run**: pick a published flow, fill in its inputs, press Run, and see what came out.
+Writer is for the people who make flows. The people who only run them get a small window of their own, **SpellSheet Runner**: pick a published flow, fill in its inputs, press Run, and see what came out.
 
-- Open it from Studio's sidebar ("Run window"), from the tray icon, or start Studio with `--runner` to open only this window (a shortcut for people who never edit)
-- Only published flows are listed, and a run always uses the published version. Flows are published in Studio's To review ([policy.md](policy.md))
-- A person starts the run and watches it, so the unattended policy (`unattended` in `policy.json`) does not apply, as with Run in Studio. The run is recorded like any other (`origin.trigger` `studio`, `requestedBy` `runner`)
-- An unhandled error ends the run. Nothing pauses for debugging here: the window says what happened and what to do, in the same words as Studio
+- "SpellSheet Runner" in the Start menu opens only this window (for people who never edit; it is the same app as Writer, started with `--runner`). Writer's sidebar ("Runner") and the tray icon open it too. When SpellSheet is already running, it opens there instead of starting again
+- Only published flows are listed, and a run always uses the published version. Flows are published in Writer's To review ([policy.md](policy.md))
+- A person starts the run and watches it, so the unattended policy (`unattended` in `policy.json`) does not apply, as with Run in Writer. The run is recorded like any other (`origin.trigger` `studio`, `requestedBy` `runner`)
+- An unhandled error ends the run. Nothing pauses for debugging here: the window says what happened and what to do, in the same words as Writer
 
 ## The form
 
@@ -41,6 +41,8 @@ While it runs, the window lists the flow's top-level nodes and ticks them off, w
 
 ## The tray icon
 
-While SpellSheet runs, its icon sits in the task tray (the notification area). Click it to open the run window; right-click for Open the run window, Open Studio and Quit.
+While SpellSheet runs, its icon sits in the task tray (the notification area). Click it to open Runner; right-click for Open Runner, Open Writer and Quit.
 
-Started with `--runner`, closing the run window leaves SpellSheet in the tray, so it stays at hand all day; Quit in the tray menu ends it. `--tray` starts with the tray icon only, for a shortcut in the Startup folder (`shell:startup`). Started without either, SpellSheet ends when its last window closes, as before.
+Started with `--runner`, closing Runner leaves SpellSheet in the tray, so it stays at hand all day; Quit in the tray menu ends it. `--tray` starts with the tray icon only, for a shortcut in the Startup folder (`shell:startup`). Started without either, SpellSheet ends when its last window closes, as before.
+
+SpellSheet runs once per Windows sign-in. Starting it again while it runs (Writer or Runner in the Start menu, a shortcut) opens no second copy: the running one comes to the front, showing Writer, or Runner when started with `--runner` ("SpellSheet Runner" in the Start menu; `--tray` shows nothing new). The development build (`pnpm studio:dev`) is not limited, so it runs beside an installed SpellSheet.

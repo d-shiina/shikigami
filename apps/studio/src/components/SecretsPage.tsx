@@ -9,9 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
 import { relativeTime } from "../lib/changes";
+import { confirmAsk } from "../lib/ask";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
-import { type Chip, type Column, DataTable, FilterChips, SearchBox, SelectionBar } from "./DataTable";
+import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
 
 const KIND_ICON: Record<SecretKind, LucideIcon> = { login: KeyRound, apiKey: Key, oauth: AppWindow };
@@ -277,7 +278,10 @@ function SecretForm({
                 <button
                   type="button"
                   className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
-                  onClick={() => window.confirm(t.secretConfirmSignOut(oauth.name)) && void signOut(oauth.name)}
+                  onClick={async () => {
+                    const yes = await confirmAsk({ title: t.secretSignOutAsk.title(oauth.name), body: t.secretSignOutAsk.body, confirm: t.secretSignOut, danger: true });
+                    if (yes) void signOut(oauth.name);
+                  }}
                 >
                   {t.secretSignOut}
                 </button>
@@ -424,7 +428,7 @@ function Some({ items, n, render }: { items: string[]; n: number; render: (item:
 }
 
 type FlowRef = { id: string; name: string };
-type KindFilter = "all" | SecretKind | "unused";
+type Usage = "used" | "unused";
 
 /** Edit and delete, at the end of a row on hover. Deleting asks once more in place. */
 function RowActions({ secret, onEdit }: { secret: SecretInfo; onEdit: () => void }) {
@@ -612,7 +616,10 @@ function KeyMissing({ secrets }: { secrets: SecretInfo[] }) {
       <button
         type="button"
         className="mt-4 h-8 rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
-        onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
+        onClick={async () => {
+          const ask = t.secretResetAsk;
+          if (await confirmAsk({ title: ask.title, body: ask.body(secrets.length), confirm: ask.confirm, danger: true })) void resetSecrets();
+        }}
       >
         {t.secretReset}
       </button>
@@ -644,42 +651,38 @@ export function SecretsPage() {
     }
     return map;
   }, [summaries]);
-  const [kind, setKind] = useState<KindFilter>("all");
+  const [kinds, setKinds] = useState<Set<SecretKind>>(new Set());
+  const [usage, setUsage] = useState<Set<Usage>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmBulk, setConfirmBulk] = useState(false);
   const removeSecret = useStudio((s) => s.removeSecret);
   const columns = useColumns(usedBy);
+  const view = useTableView(columns, { storageKey: "shikigami.studio.secrets.sort", initialSort: { column: "name", descending: false } });
   const q = query.trim().toLowerCase();
-  const keep = (k: KindFilter) => (s: SecretInfo) =>
-    k === "all" || (k === "unused" ? !(usedBy.get(s.name) ?? []).length : (s.kind ?? "login") === k);
-  const rows = useMemo(
-    () =>
-      secrets.filter(
-        (s) =>
-          keep(kind)(s) &&
-          (!q ||
-            [s.name, s.username, s.description ?? "", ...s.sites, ...(usedBy.get(s.name) ?? []).map((f) => f.name)]
-              .join(" ")
-              .toLowerCase()
-              .includes(q)),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [secrets, q, usedBy, kind],
+  const usageOf = (s: SecretInfo): Usage => ((usedBy.get(s.name) ?? []).length ? "used" : "unused");
+  // Each filter's counts are over the rows the other one keeps.
+  const keep = (s: SecretInfo, skip?: "kind" | "usage") =>
+    (skip === "kind" || !kinds.size || kinds.has(s.kind ?? "login")) &&
+    (skip === "usage" || !usage.size || usage.has(usageOf(s))) &&
+    (!q ||
+      [s.name, s.username, s.description ?? "", ...s.sites, ...(usedBy.get(s.name) ?? []).map((f) => f.name)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q));
+  const rows = secrets.filter((s) => keep(s));
+  const kindOptions = SECRET_KINDS.map((value) => ({ value, label: t.secretKinds[value], count: secrets.filter((s) => keep(s, "kind") && (s.kind ?? "login") === value).length })).filter(
+    (o) => o.count > 0 || kinds.has(o.value),
   );
-  const chips: Chip<KindFilter>[] = (["all", ...SECRET_KINDS, "unused"] as KindFilter[])
-    .map((value) => ({
-      value,
-      label: value === "all" ? t.list.all : value === "unused" ? t.secretPage.unused : t.secretKinds[value],
-      count: secrets.filter(keep(value)).length,
-    }))
-    .filter((c) => c.value === "all" || c.value === kind || (c.count ?? 0) > 0);
+  const usageOptions = (["used", "unused"] as Usage[]).map((value) => ({
+    value,
+    label: value === "used" ? t.secretPage.used : t.secretPage.unused,
+    count: secrets.filter((s) => keep(s, "usage") && usageOf(s) === value).length,
+  }));
   // Picked rows the list no longer shows (deleted, filtered or searched out) drop out,
   // so a bulk delete only ever touches rows on screen.
   const picked = new Set([...selected].filter((name) => rows.some((s) => s.name === name)));
   const deletePicked = async () => {
     for (const name of picked) await removeSecret(name);
     setSelected(new Set());
-    setConfirmBulk(false);
   };
   const add = () => setEditing({ draft: empty, isNew: true });
 
@@ -707,34 +710,21 @@ export function SecretsPage() {
             <>
               {/* Read left to right: how many, how to narrow them, then adding one, the filled button, at the end.
                   While rows are picked, the bar of what to do with them takes the count's place. */}
-              <div className="mb-2 flex items-center gap-2">
-                {picked.size > 0 ? (
-                  <SelectionBar
-                    count={picked.size}
+              <div className="mb-3 flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <SearchBox value={query} onChange={setQuery} placeholder={t.secretPage.search} hits={rows.length} />
+                <FacetFilter label={t.secretKind} value={kinds} onChange={setKinds} options={kindOptions} />
+                <FacetFilter label={t.secretPage.usage} value={usage} onChange={setUsage} options={usageOptions} />
+                {kinds.size + usage.size > 0 && (
+                  <ClearFilters
                     onClear={() => {
-                      setSelected(new Set());
-                      setConfirmBulk(false);
+                      setKinds(new Set());
+                      setUsage(new Set());
                     }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => (confirmBulk ? void deletePicked() : setConfirmBulk(true))}
-                      onBlur={() => setConfirmBulk(false)}
-                      className={`flex h-6 items-center gap-1 rounded-md px-2 text-[12px] ${confirmBulk ? "bg-shu-600 text-white" : "text-slate-700 hover:bg-shu-50 hover:text-shu-600"}`}
-                    >
-                      <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
-                      {confirmBulk ? t.secretPage.confirmDeleteMany(picked.size) : t.secretPage.delete}
-                    </button>
-                  </SelectionBar>
-                ) : (
-                  <>
-                    <span className="text-[12px] text-slate-500">{t.list.count(secrets.length)}</span>
-                    <div className="ml-2">
-                      <SearchBox value={query} onChange={setQuery} placeholder={t.secretPage.search} hits={rows.length} />
-                    </div>
-                  </>
+                  />
                 )}
-                <span className="flex-1" />
+                </div>
+                <ViewMenu view={view} />
                 <button
                   type="button"
                   onClick={add}
@@ -743,22 +733,22 @@ export function SecretsPage() {
                   ＋ {t.secretPage.add}
                 </button>
               </div>
-              <div className="mb-3">
-                <FilterChips chips={chips} value={kind} onChange={setKind} label={t.secretKind} />
-              </div>
-              <div className="border-b border-slate-200">
+              <div>
                 <DataTable
                   columns={columns}
                   rows={rows}
+                  total={secrets.length}
                   rowKey={(s) => s.name}
                   onOpen={(s) => setEditing({ draft: draftOf(s), isNew: false })}
                   selected={picked}
                   onSelect={setSelected}
-                  initialSort={{ column: "name", descending: false }}
+                  view={view}
                   empty={t.list.notFound}
-                  storageKey="shikigami.studio.secrets.sort"
                   rowActions={(s) => <RowActions secret={s} onEdit={() => setEditing({ draft: draftOf(s), isNew: false })} />}
                 />
+                <SelectionBar count={picked.size} onClear={() => setSelected(new Set())}>
+                  <BulkButton icon={Trash2} danger label={t.secretPage.delete} confirmLabel={t.secretPage.confirmDeleteMany(picked.size)} onClick={deletePicked} />
+                </SelectionBar>
               </div>
             </>
           )}

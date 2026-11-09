@@ -1,7 +1,6 @@
 import { focusFirstSetting } from "../lib/focusSetting";
 import { CASE, IF, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
-  Background,
   BaseEdge,
   EdgeLabelRenderer,
   type EdgeProps,
@@ -20,8 +19,9 @@ import {
   type ReactFlowInstance,
   useReactFlow,
   useStore,
+  ViewportPortal,
 } from "@xyflow/react";
-import { ChevronDown, ChevronRight, Plus, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownLeft, Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -31,6 +31,7 @@ import {
   HEAD_H,
   DECIDE_H,
   DECIDE_POINT,
+  FOOT_H,
   ancestorsOf,
   frameAt,
   JOIN_SIZE,
@@ -50,7 +51,7 @@ import {
   type TerminalNodeData,
   WRITE_ROOM,
 } from "../flow/layout";
-import { headSummary } from "../lib/keywords";
+import { headSummary, type LoopOutcome, loopEndLabel, loopRoundsText } from "../lib/keywords";
 import { listToText } from "../lib/listText";
 import { nodeIcon } from "../lib/nodeIcons";
 import { isUnset, PERSON_CODES, todosByStep } from "../lib/todos";
@@ -89,7 +90,7 @@ import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
 import { makeGlider } from "../lib/glide";
 import { keepSame } from "../lib/keepSame";
-import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { clockKey, callKey, diveChain, isActive, loopKey, type LoopRun, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -98,6 +99,7 @@ import { StepTools } from "./StepTools";
 import { menuFor } from "../lib/contextMenu";
 import { usePaneMenu, useSlotMenu, useStepMenu, useVariableMenu } from "./menus";
 import { valuesSeenBy, writesFrom } from "../lib/runValues";
+import { type ClockView, clockView, wholeSpan } from "../lib/runClock";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
@@ -120,7 +122,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; clock?: string; frameRun?: FrameRun; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -144,7 +146,9 @@ const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => s
 /** Which way the chart runs, for rows deciding whether to show chips. */
 
 const RUN_STYLE: Record<StepRunState, string> = {
-  running: "!border-accent-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent-500)_16%,transparent)]",
+  // The step at work glows: the written formula doing its work, in the running orange.
+  running:
+    "!border-accent-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent-500)_16%,transparent),0_0_22px_4px_color-mix(in_srgb,var(--color-accent-500)_24%,transparent)]",
   succeeded: "",
   failed: "!border-shu-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-shu-500)_16%,transparent)]",
   skipped: "opacity-60",
@@ -286,6 +290,8 @@ type BlockEdgeData = {
   intoDecide?: boolean;
   /** A loop's "いいえ": the x it runs down at. */
   railX?: number;
+  /** A loop's "いいえ": when it leaves ("すべて終わったら"), beside the line into the foot. */
+  exit?: string;
   /** A wait's line back: the answer it takes, on the line beside its decision. */
   answer?: string;
   half?: number;
@@ -428,7 +434,7 @@ function FrameLight({ layout }: { layout: Layout }) {
   );
 }
 
-function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   const r = 4;
@@ -513,7 +519,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   }
   if (edge.railX !== undefined) {
     // A loop's "いいえ": out of the right of its decision, down the right of
-    // its frame, and into where the frame is left, on its bottom edge.
+    // its frame, and into its foot (「繰り返し終了」), where the line goes on.
     const x0 = sourceX + (edge.half ?? 0);
     const y0 = sourceY - DECIDE_H / 2;
     const rail = edge.railX;
@@ -526,17 +532,19 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
     return (
       <>
         <BaseEdge id={id} path={path} style={style} />
-        {label && (
-          // On the line, like the "はい" going down: the two answers read alike.
-          <EdgeLabelRenderer>
+        <EdgeLabelRenderer>
+          {/* The answer on the line just where it leaves the decision, as the "はい" going down. */}
+          {label && <AnswerLabel x={x0 + 8} y={y0} text={label} from="left" />}
+          {/* When it leaves, beside the line where it turns into the foot (as 「次の 1 件へ」 on the line back). */}
+          {edge.exit && (
             <span
-              style={{ transform: `translate(${x0 + 12}px, ${y0 - 9}px)` }}
-              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+              style={{ transform: `translate(${rail - 8}px, ${lowY - 20}px) translateX(-100%)` }}
+              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
             >
-              {label}
+              {edge.exit}
             </span>
-          </EdgeLabelRenderer>
-        )}
+          )}
+        </EdgeLabelRenderer>
       </>
     );
   }
@@ -550,11 +558,18 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   const offset = centerY === undefined ? 20 : Math.max(0, Math.min(12, centerY - sourceY - 1));
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset, borderRadius: 4 });
   const straight = Math.abs(sourceX - targetX) <= 1;
+  // An answer out of a decision ("はい", "いいえ"): on the line just after it leaves, not down by the next step.
+  const answer = label && source.endsWith(":decide");
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
       <EdgeLabelRenderer>
-        {label ? (
+        {answer ? (
+          <>
+            <AnswerLabel x={targetX} y={(straight || centerY === undefined ? sourceY : centerY) + 18} text={label} />
+            <InsertButton edgeId={id} data={edge} x={targetX} y={straight ? (sourceY + targetY) / 2 + 6 : targetY - 8} />
+          </>
+        ) : label ? (
           // The "+" sits after the label; a spacer as wide on the other side keeps the label centred on the line.
           <div
             style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
@@ -574,6 +589,23 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
         )}
       </EdgeLabelRenderer>
     </>
+  );
+}
+
+/**
+ * The answer a line out of a decision takes ("はい", "いいえ"), on the line
+ * just where it leaves the decision, the way a flowchart labels it. Above
+ * every line, a run's coloured one too, so the line never crosses it.
+ */
+function AnswerLabel({ x, y, text, from = "center" }: { x: number; y: number; text: React.ReactNode; from?: "center" | "left" }) {
+  // Centred on the point, or (on a line going right) starting at it; above the lines, a run's too (see index.css).
+  return (
+    <span
+      style={{ transform: `translate(${x}px, ${y}px) translate(${from === "center" ? "-50%" : "0"}, -50%)` }}
+      className="pointer-events-none absolute top-0 left-0 flow-answer rounded-md border px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+    >
+      {text}
+    </span>
   );
 }
 
@@ -941,7 +973,7 @@ function StepNode({ data }: StepNodeProps) {
       // says something: the selection (primary), an AI change (blue), a run state.
       // The head of a frame is the frame's top edge: no shadow, its border the frame's.
       className={`group relative border bg-sheet transition-[border-color,box-shadow] ${
-        head ? (head.collapsed ? "rounded-lg shadow-node" : "rounded-t-lg") : stack ? "flow-call-stack rounded-lg" : "rounded-lg shadow-node"
+        head ? (head.collapsed ? "rounded-lg" : "rounded-t-lg") : stack ? "flow-call-stack rounded-lg" : "rounded-lg"
       } ${
         data.diff
           ? DIFF_STYLE[data.diff].border
@@ -954,8 +986,13 @@ function StepNode({ data }: StepNodeProps) {
               : head
                 ? "flow-head-plain border-slate-300 hover:border-slate-400"
                 : "border-slate-200 hover:border-slate-300"
-      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
+      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
+        // An open frame glows as a whole (flow-frame-running): its head is only its top edge.
+        data.runState === "running" && head && !head.collapsed ? `flow-edge-running-${data.frameRun ?? "here"}` : data.runState ? RUN_STYLE[data.runState] : ""
+      }`}
+      data-run={data.runState}
     >
+      {!head && data.clock && <RunBar clock={data.clock} stepId={data.step.id ?? ""} />}
       {(latest || (data.primary && !data.readOnly)) && (
         // Beside the step's head: the flow line runs through the top and bottom
         // centres, and variable chips sit beside the rows below the head.
@@ -970,8 +1007,13 @@ function StepNode({ data }: StepNodeProps) {
       )}
       <FlowHandles x={head?.lineX} />
       {/* A break, continue or fail: no line goes on from it, so say where the flow goes instead. */}
-      {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && !data.runState && (
-        <span className="pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-500">
+      {/* Still there once a run went through it, in the colour of the way it took. */}
+      {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && (!data.runState || data.runState === "succeeded") && (
+        <span
+          className={`pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${
+            data.runState ? "font-medium text-moegi-600" : "text-slate-500"
+          }`}
+        >
           {TERMINAL_NOTE[data.step.type]!()}
         </span>
       )}
@@ -1144,7 +1186,8 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
 }
 
 /** Where the columns of a frame meet again, on its bottom edge (a dot). A single column's line passes through; a loop's only lets its line out. */
-function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
+function JoinNode({ data }: NodeProps<Node<JoinData>>) {
+  if (data.foot) return <LoopFoot data={data} />;
   if (data.question) {
     // A loop's decision: where it asks whether to go round again.
     // A hexagon, the shape of a yes/no question, with the question inside;
@@ -1177,6 +1220,77 @@ function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
   );
 }
 
+/** A join with what the run did there: a loop's foot shows how far the loop got. */
+type JoinData = JoinNodeData & {
+  rounds?: { run: LoopRun | undefined; state: StepRunState | undefined; stopped: boolean };
+  /** A loop's foot: its loop is picked (the whole frame is). */
+  selected?: boolean;
+  /** A loop's foot: the run's line through it. */
+  trail?: LineTrail;
+  /** A loop's foot: its frame is running (it is the frame's bottom edge). */
+  frameRun?: FrameRun;
+};
+
+/** How a loop's rounds went: from its last round and how its step ended. */
+function loopOutcome(run: LoopRun, state: StepRunState | undefined, stopped: boolean): LoopOutcome {
+  if (run.ended) return run.leftEarly ? "left" : "done";
+  if (state === "failed") return "failed";
+  return stopped ? "stopped" : "running";
+}
+
+const OUTCOME_STYLE: Record<LoopOutcome, string> = {
+  running: "text-accent-600",
+  done: "text-moegi-600",
+  left: "text-moegi-600",
+  failed: "text-shu-600",
+  stopped: "text-slate-500",
+};
+
+/**
+ * A loop's foot (see FOOT_H): the band across the bottom of its frame that
+ * says 「繰り返し終了」. Its "いいえ" comes down into it, and so does each
+ * break inside the loop (pointing at one marks the foot); the line passes
+ * through it on to the next step. A run leaves how far the loop got on it.
+ */
+function LoopFoot({ data }: { data: JoinData }) {
+  const foot = data.foot!;
+  const pointed = useFocus();
+  const marked = pointed !== null && foot.breaks.includes(pointed);
+  const rounds = data.rounds;
+  const how = rounds?.run ? loopOutcome(rounds.run, rounds.state, rounds.stopped) : null;
+  return (
+    <div
+      style={{ width: foot.width, height: FOOT_H }}
+      className={`flow-foot relative flex items-center gap-1.5 rounded-b-lg border px-3 text-[12px] transition-colors ${
+        data.selected ? "flow-foot-selected" : marked ? "flow-foot-marked" : data.frameRun ? `flow-edge-running-${data.frameRun}` : ""
+      }`}
+    >
+      <CornerDownLeft size={13} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+      <span className="font-medium whitespace-nowrap text-slate-600">{loopEndLabel()}</span>
+      {/* The line runs through the band on to the next step. */}
+      <span
+        style={{ left: foot.lineX - 1, ...(data.trail ? { background: TRAIL_STROKE[data.trail], width: 2.5 } : {}) }}
+        className="flow-foot-line absolute inset-y-0 w-[1.5px] -translate-x-1/2"
+      />
+      {/* While it runs over a list of known length, how far it got: the one loop whose progress is certain. */}
+      {how === "running" && rounds?.run?.total ? (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-accent-500/15">
+          <span
+            style={{ width: `${Math.min(100, (rounds.run.round / rounds.run.total) * 100)}%` }}
+            className="block h-full bg-accent-500 motion-safe:transition-[width] motion-safe:duration-300"
+          />
+        </span>
+      ) : null}
+      {rounds?.run && how && (
+        <span className={`ml-auto font-medium whitespace-nowrap tabular-nums ${OUTCOME_STYLE[how]}`}>
+          {loopRoundsText(foot.type, rounds.run.round, rounds.run.total, how)}
+        </span>
+      )}
+      <FlowHandles x={foot.lineX} />
+    </div>
+  );
+}
+
 /** A small round mark and a word, the way Linear shows an issue's status. */
 function StatusMark({ kind, text, title }: { kind: "done" | "running" | "paused" | "error" | "todo" | "ai"; text?: string; title?: string }) {
   const mark = {
@@ -1195,10 +1309,109 @@ function StatusMark({ kind, text, title }: { kind: "done" | "running" | "paused"
   );
 }
 
+/** Now, again every second while `on`: what a running node's clock reads. */
+function useNow(on: boolean): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [on]);
+  return now;
+}
+
+/** A running step's clock as the node shows it now; null while the run is paused or it has only just begun. */
+function useClockView(key: string | undefined, stepId: string, frame: boolean): { view: ClockView; since: number } | null {
+  const clock = useStudio((s) => (key && s.run?.status === "running" ? s.run.clocks[key] : undefined));
+  // How long it took before is known for the open flow's own steps.
+  const usual = useStudio((s) => (key?.startsWith("|") && s.stepTimes && s.stepTimes.flowId === s.run?.flowId ? s.stepTimes.times[stepId] : undefined));
+  const now = useNow(!!clock);
+  if (!clock) return null;
+  const view = clockView(clock, usual, now, frame);
+  return view ? { view, since: clock.since } : null;
+}
+
+const CLOCK_UNITS = () => ({ sec: t.runLog.sec, min: t.runLog.min });
+
+/** What a running node's clock says: time left, against the usual time, or against its timeout. */
+function clockText(view: ClockView): string {
+  const units = CLOCK_UNITS();
+  const took = wholeSpan(view.elapsed, units);
+  const total = view.total === null ? "" : wholeSpan(view.total, units);
+  return {
+    // Rounded up: it never says 0 秒 while it still waits.
+    wait: t.flow.clockLeft(wholeSpan(Math.ceil(Math.max(0, (view.total ?? 0) - view.elapsed) / 1000) * 1000, units)),
+    usual: t.flow.clockUsual(took, total),
+    long: t.flow.clockLong(took, total),
+    limit: t.flow.clockLimit(took, total),
+    plain: took,
+  }[view.kind];
+}
+
+/** The mark in a running frame's head and, once it takes a while, how long it has run and when it gives up. */
+function RunClock({ clock, stepId, frame }: { clock?: string; stepId: string; frame: boolean }) {
+  const shown = useClockView(clock, stepId, frame);
+  if (!shown) return <StatusMark kind="running" />;
+  const { view } = shown;
+  const text = clockText(view);
+  return (
+    <span
+      title={t.flow.clockTitle[view.kind]}
+      className={`flex shrink-0 items-center gap-1 text-[11.5px] whitespace-nowrap tabular-nums ${view.kind === "long" ? "text-amber-700" : "text-slate-500"}`}
+    >
+      <span className="h-[10px] w-[10px] shrink-0 animate-pulse rounded-full bg-accent-500" />
+      {text}
+    </span>
+  );
+}
+
+/**
+ * Along the bottom of a running node, how far it got: drawn only when
+ * that is known (a delay, or how long the step took before). It grows by
+ * itself (a CSS animation), so the node is not drawn again for it.
+ */
+function RunBar({ clock, stepId }: { clock: string; stepId: string }) {
+  const shown = useClockView(clock, stepId, false);
+  if (!shown) return null;
+  const { view } = shown;
+  const bar = view.bar;
+  return (
+    <>
+      {bar && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-accent-500/15">
+          {/* A new attempt or pass starts the bar again. */}
+          <RunBarFill key={`${shown.since}:${bar.total}`} elapsed={bar.elapsed} total={bar.total} long={view.kind === "long"} />
+        </span>
+      )}
+      {/* Under the node's right corner, clear of the line out of its centre, so its head keeps its name. */}
+      <span
+        title={t.flow.clockTitle[view.kind]}
+        className={`pointer-events-none absolute top-full right-1 mt-1 text-[11px] leading-4 whitespace-nowrap tabular-nums ${
+          view.kind === "long" ? "font-medium text-amber-700" : "text-slate-500"
+        }`}
+      >
+        {clockText(view)}
+      </span>
+    </>
+  );
+}
+
+function RunBarFill({ elapsed, total, long }: { elapsed: number; total: number; long: boolean }) {
+  // Where the bar was when it appeared: the animation goes on from there.
+  const [from] = useState(elapsed);
+  return (
+    <span
+      className={`run-bar block h-full bg-accent-500 ${long ? "opacity-50" : ""}`}
+      style={{ animationDuration: `${total}ms`, animationDelay: `-${from}ms`, ["--run-bar-steps" as string]: Math.max(1, Math.round(total / 1000)) }}
+    />
+  );
+}
+
 /** The right end of a node's head: how it ran, what is left to do, who changed it. */
 function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
   const marks: React.ReactNode[] = [];
-  if (data.runState === "running") marks.push(<StatusMark key="run" kind="running" />);
+  if (data.runState === "running") marks.push(data.head ? <RunClock key="run" clock={data.clock} stepId={data.step.id ?? ""} frame /> : <StatusMark key="run" kind="running" />);
   if (data.runState === "succeeded") marks.push(<StatusMark key="run" kind="done" title={t.flow.ranOk} />);
   if (data.runState === "paused") marks.push(<StatusMark key="run" kind="paused" />);
   if (data.runState === "failed") marks.push(<StatusMark key="run" kind="error" text={t.flow.ranFailed} />);
@@ -1312,7 +1525,10 @@ function TerminalNode({ data }: NodeProps<Node<TerminalData>>) {
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean };
+/** A running frame: the innermost one the run is in now ("here") glows; the ones around it only take its colour on their edge. */
+type FrameRun = "here" | "around";
+
+type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean; running?: FrameRun };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -1327,7 +1543,7 @@ function FrameNode({ data }: NodeProps<Node<FrameData>>) {
       style={{ width: data.width, height: data.height }}
       className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""} ${
         data.selected ? "flow-frame-selected" : ""
-      }`}
+      } ${data.running ? `flow-frame-running flow-frame-running-${data.running}` : ""}`}
     />
   );
 }
@@ -1355,7 +1571,9 @@ function useBringIntoView() {
   // The outline covers the left edge of the chart while it is open.
   const outlineW = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
   // So does the project panel, with the outline beside it.
-  const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
+  // With the project panel open, the outline sits under it in the same column.
+  const projectCovers = useProjectMaybe((s) => s.panelOpen, false);
+  const covered = projectCovers ? PROJECT_W : outlineW;
   const flow = useStudio((s) => s.flow);
   // One glide for the chart: a step that comes while it is on its way only moves where it goes.
   const glider = useMemo(() => makeGlider(() => rf.getViewport(), (view) => void rf.setViewport(view)), [rf]);
@@ -1504,6 +1722,28 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
         {t.diveOpenLabel} ↗
       </button>
     </div>
+  );
+}
+
+/** Margins of the sheet around the chart, and its narrowest width (a short flow still lies on a page). */
+const SHEET_PAD_X = 48;
+const SHEET_PAD_Y = 48;
+const SHEET_MIN_W = 760;
+
+/**
+ * The flow is written on one white sheet lying on the desk, like the manual's A4 pages: no grid,
+ * no folded corner, only the sheet's soft shadow. It grows down with the flow and sits under the
+ * frames and lines (z-index below the frames' -1), moving with the chart as it pans and zooms.
+ */
+function FlowSheet({ bounds }: { bounds: { x: number; y: number; width: number; height: number } }) {
+  const width = Math.max(bounds.width + SHEET_PAD_X * 2, SHEET_MIN_W);
+  const left = bounds.x + bounds.width / 2 - width / 2;
+  return (
+    <div
+      aria-hidden="true"
+      className="flow-sheet pointer-events-none absolute"
+      style={{ left, top: bounds.y - SHEET_PAD_Y, width, height: bounds.height + SHEET_PAD_Y * 2 }}
+    />
   );
 }
 
@@ -1687,6 +1927,7 @@ export function FlowCanvas() {
   const todoList = useTodos();
   const todos = useMemo(() => (inside ? new Map<string, string[]>() : todosByStep(todoList)), [todoList, inside]);
   const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
+  const isActiveRun = isActive(run);
   // What the flow takes in (shown on its start) and gives back (on its end).
   const terminalVars = useMemo(() => {
     const changes = run && !inside ? run.changes : [];
@@ -1725,18 +1966,33 @@ export function FlowCanvas() {
   };
 
   // Frames first and beneath the lines, outer ones before the ones inside them.
+  // The run is in the innermost running frames; those around them are only on its way.
+  const runningFrames = layout.frames.filter((f) => states[f.id] === "running");
+  const around = (f: (typeof runningFrames)[number]) =>
+    runningFrames.some((g) => g !== f && g.x >= f.x && g.y >= f.y && g.x + g.width <= f.x + f.width && g.y + g.height <= f.y + f.height);
+  const frameRun = new Map<string, FrameRun>(runningFrames.map((f) => [f.id, around(f) ? "around" : "here"]));
   const frames: Node[] = layout.frames.map((f) => ({
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id) } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id), running: frameRun.get(f.id) } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
     zIndex: -1,
   }));
   const nodes: Node[] = layout.nodes.map((n) => {
-    if (n.data.kind === "join") return { ...n, draggable: false, selectable: false, focusable: false };
+    if (n.data.kind === "join") {
+      // A loop's foot shows how far the loop got in the run.
+      const foot = !n.data.foot
+        ? {}
+        : {
+            selected: !inside && picked.has(n.data.parentId),
+            frameRun: frameRun.get(n.data.parentId),
+            ...(run ? { rounds: { run: run.loops?.[loopKey(path, n.data.parentId)], state: states[n.data.parentId], stopped: !isActiveRun } } : {}),
+          };
+      return { ...n, data: { ...n.data, ...foot } satisfies JoinData, draggable: false, selectable: false, focusable: false };
+    }
     if (n.data.kind === "terminal") {
       const data: TerminalData = { ...n.data, vars: n.data.end ? terminalVars.outputs : terminalVars.inputs };
       // Placed by its top centre: it is as wide as what it says.
@@ -1750,6 +2006,9 @@ export function FlowCanvas() {
         data: {
           ...n.data,
           runState: states[id],
+          // Only a running node keeps time: the others stay as they were.
+          clock: states[id] === "running" ? clockKey(path, id) : undefined,
+          frameRun: frameRun.get(id),
           readOnly: inside,
           breakpoint: breakpoints.includes(id),
           owner: flow?.id ?? "",
@@ -1834,10 +2093,26 @@ export function FlowCanvas() {
     return out;
   }, [states, layout.nodes]);
   const taken = trailLines(layout.edges, trailStates, tails, continues);
+  // A loop a break ended never answered "いいえ": it came out through the break.
+  if (run) {
+    for (const e of layout.edges) {
+      if (e.railX === undefined || !e.owner) continue;
+      const loop = run.loops?.[loopKey(path, e.owner)];
+      if (loop?.ended && loop.leftEarly) taken.delete(e.id);
+    }
+  }
   // The line runs on through a hidden 「＋ ノード追加」 at a block's end, in the colour of the way out of it.
   for (const node of nodes) {
     const data = node.data as TailData;
     if (data.kind !== "slot" || !data.tail) continue;
+    const out = layout.edges.find((e) => e.source === node.id);
+    const trail = out && taken.get(out.id);
+    if (trail) node.data = { ...data, trail };
+  }
+  // A loop's foot: the line through it in the colour of the way on from it.
+  for (const node of nodes) {
+    const data = node.data as JoinData;
+    if (data.kind !== "join" || !data.foot) continue;
     const out = layout.edges.find((e) => e.source === node.id);
     const trail = out && taken.get(out.id);
     if (trail) node.data = { ...data, trail };
@@ -1856,6 +2131,7 @@ export function FlowCanvas() {
         fromDecide: e.fromDecide,
         intoDecide: e.intoDecide,
         railX: e.railX,
+        exit: e.exit,
         answer: e.answer,
         half: e.half,
         failure: e.failure,
@@ -1888,7 +2164,7 @@ export function FlowCanvas() {
   const chartEdges = keepSame(keptEdges.current, edges);
 
   if (!flow || !root) {
-    return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+    return <div className="flow-desk flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
       </div>;
@@ -1897,7 +2173,7 @@ export function FlowCanvas() {
   return (
     <ReactFlow
       key={`${root.id}/${callKey(path)}`}
-      className={`canvas-bg ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
+      className={`flow-desk ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
       colorMode={theme}
       nodes={chartNodes}
       edges={chartEdges}
@@ -2025,7 +2301,9 @@ export function FlowCanvas() {
         focus.set((at && frameAt(layout.frames, at.x, at.y)?.id) ?? null);
       }}
     >
-      <Background gap={24} size={1.2} color="var(--color-slate-200)" />
+      <ViewportPortal>
+        <FlowSheet bounds={bounds} />
+      </ViewportPortal>
       <BranchLight layout={layout} />
       <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
@@ -2035,7 +2313,8 @@ export function FlowCanvas() {
         </Panel>
       )}
       {!inside && reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
-      <Controls showInteractive={false} />
+      {/* The left of the chart holds the project and outline column, so the zoom sits in the free corner. */}
+      <Controls position="bottom-right" showInteractive={false} />
     </ReactFlow>
   );
 }

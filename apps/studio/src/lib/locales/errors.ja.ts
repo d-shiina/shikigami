@@ -220,7 +220,7 @@ export const errorsJa: Record<string, ErrorText> = {
   SECRET_APP_MISMATCH: { what: (c) => `このアプリはシークレット${c.q(c.secret)}を入力してよいアプリではありません`, todo: "アプリを確認し、正しければシークレットに追加してください" },
   SECRET_KEY_MISSING: { what: "シークレットは別の PC または別のユーザーで登録されたため、この環境では読み取れません", todo: "シークレットの画面でリセットしてから、登録し直してください" },
   SECRET_DECRYPT_FAILED: { what: (c) => `シークレット${c.q(c.secret)}を読み取れませんでした`, todo: "シークレットの画面で、このシークレットを登録し直してください" },
-  SECRETS_UNAVAILABLE: { what: "この実行ではシークレットが使えません", todo: "Studio または「SpellSheet 実行」から実行してください" },
+  SECRETS_UNAVAILABLE: { what: "この実行ではシークレットが使えません", todo: "Writer または「SpellSheet Runner」から実行してください" },
   SECRET_NOT_ALLOWED: { what: "この項目にはシークレットを使えません", todo: "入力欄に文字を入力するノードで使ってください" },
   SECRET_PLUGIN_NOT_ALLOWED: { what: "このプラグインにはシークレットの使用が許可されていません", todo: "シークレットに plugin:〇〇 を追加してください" },
   OAUTH_SIGN_IN_REQUIRED: { what: "サインインしていません", todo: "このノードより前に「サインイン」を追加してください" },

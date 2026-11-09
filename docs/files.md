@@ -38,11 +38,11 @@ flows/<id>/
 - Bundles (`export_flow`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
 - `spellsheet run orders.shikigami.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
 - Older workspaces with `flows/<id>.json` are moved into folders when the workspace is opened.
-- Add files from Studio, from the AI (`write_project_file`), or with `spellsheet flow add-file <id> <file> --to input`.
+- Add files from Writer, from the AI (`write_project_file`), or with `spellsheet flow add-file <id> <file> --to input`.
 
 ### Settings files
 
-A settings file in `config/` lists named values with a type and a description, so Studio can show it as a form:
+A settings file in `config/` lists named values with a type and a description, so Writer can show it as a form:
 
 ```json
 {
