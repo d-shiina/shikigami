@@ -63,6 +63,12 @@ export type ManualStep = {
   ran: number | null;
   /** Where it is in the scene's picture. */
   mark: Rect | null;
+  /**
+   * It presses, types into or picks the marked thing (a button, a field), so
+   * the mark stays readable through the blur over values. A node that only
+   * reads (getText of a customer's name) keeps its mark blurred.
+   */
+  operates: boolean;
   /** The node's description: said as a 「ポイント」 beside the step. */
   note: string | null;
   /** The login it enters, if any: said as a 「注意」 (the password is never shown). */
@@ -214,6 +220,7 @@ function manualStep(step: Step, callPath: string[], ctx: Ctx): ManualStep {
     ...describe(step, ctx),
     ran: count(ctx, key),
     mark: null,
+    operates: screenMoment(step.type) === "before",
     note: step.description?.trim() || null,
     login: loginOf(step.params),
   };

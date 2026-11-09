@@ -38,16 +38,19 @@ export type ExportOptions = {
 
 /** The numbered marks a scene puts on its picture. */
 /** A place marked on a picture: a numbered operation, or (number null) what the flow waits for. */
-export type SceneMark = { number: number | null; rect: Rect };
+export type SceneMark = { number: number | null; rect: Rect; operates?: boolean };
 
-/** Where the numbered operations are: kept clear of the blur over values. */
-export const operated = (marks: SceneMark[]): Rect[] => marks.flatMap((m) => (m.number === null ? [] : [m.rect]));
+/**
+ * Where the buttons and fields a step works are: kept clear of the blur over
+ * values. Marks of nodes that only read a value stay under the blur.
+ */
+export const operated = (marks: SceneMark[]): Rect[] => marks.flatMap((m) => (m.number !== null && m.operates ? [m.rect] : []));
 
 export function sceneMarks(scene: Scene): SceneMark[] {
   const shot = scene.shot;
   if (!shot) return [];
   return [
-    ...scene.steps.flatMap((s) => (s.mark ? [{ number: s.number, rect: s.mark }] : [])),
+    ...scene.steps.flatMap((s) => (s.mark ? [{ number: s.number, rect: s.mark, operates: s.operates }] : [])),
     ...scene.waits.flatMap((w) => (w.mark ? [{ number: null, rect: w.mark }] : [])),
   ];
 }

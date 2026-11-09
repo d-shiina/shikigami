@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
+import { operated } from "./manualExport";
 import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
@@ -209,6 +210,17 @@ describe("what the 手順書 blurs", () => {
   it("still blurs a field that is the operated element itself", () => {
     const field = { x: 120, y: 245, width: 280, height: 34 };
     expect(blurRegions([field], [field])).toEqual([field]);
+  });
+
+  it("keeps a value a node only reads under the blur", () => {
+    const cell = { x: 100, y: 200, width: 300, height: 40 };
+    const name = { x: 110, y: 208, width: 80, height: 24 };
+    const marks = operated([
+      { number: 1, rect: name, operates: false },
+      { number: null, rect: name },
+    ]);
+    expect(blurRegions([cell], marks)).toEqual([cell]);
+    expect(operated([{ number: 2, rect: name, operates: true }])).toEqual([name]);
   });
 });
 
