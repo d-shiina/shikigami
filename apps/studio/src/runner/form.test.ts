@@ -149,4 +149,12 @@ describe("the run window's progress", () => {
     const dialog = { ...base, seq: 4, type: "humanActionRequired", stepId: "read", message: "答えてください", dialog: true };
     expect(progress(sample, [dialog] as never).waiting?.dialog).toBe(true);
   });
+
+  it("keeps a wait of one parallel branch when another branch's wait ends", () => {
+    const login = { ...base, seq: 0, type: "humanActionRequired", stepId: "read", message: "サインインしてください" };
+    const ask = { ...base, seq: 1, type: "humanActionRequired", stepId: "make", message: "答えてください", dialog: true };
+    expect(progress(sample, [login, ask] as never).waiting?.stepId).toBe("make");
+    const answered = { ...base, seq: 2, type: "stepFinished", stepId: "make", stepType: "dialog.input", outcome: "succeeded", durationMs: 1 };
+    expect(progress(sample, [login, ask, answered] as never).waiting).toEqual({ stepId: "read", message: "サインインしてください", dialog: false });
+  });
 });
