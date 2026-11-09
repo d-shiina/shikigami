@@ -1926,7 +1926,7 @@ export const ja = {
     kind: "業務手順書",
     edition: "版",
     editionOf: (n: number) => `第 ${n} 版`,
-    unpublished: "公開前",
+    unpublished: "確定前",
     changedSince: (n: number) => `第 ${n} 版のあとの変更も含みます`,
     updated: "更新日",
     shotAt: "画面の撮影",
