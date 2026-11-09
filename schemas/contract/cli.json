@@ -530,6 +530,72 @@
       ]
     },
     {
+      "name": "distribution",
+      "subcommands": [
+        {
+          "name": "list"
+        },
+        {
+          "name": "add",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "path",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "check"
+        },
+        {
+          "name": "put",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "folder",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "folder"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "run",
       "args": [
         {

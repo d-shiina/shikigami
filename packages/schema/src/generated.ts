@@ -162,6 +162,13 @@ export type CheckKind = "plugin" | "secret" | "site" | "app";
  */
 export type CheckStatus = "ok" | "missing" | "mismatch" | "notAllowed";
 /**
+ * How a flow in the folder stands against this PC.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DistributedState".
+ */
+export type DistributedState = "new" | "update" | "latest" | "older";
+/**
  * What to do when an imported flow's ID already exists.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -368,6 +375,8 @@ export interface ShikigamiApi {
   package_plan: PackagePlan;
   package_options: PackageOptions;
   package_preview: PackagePreview;
+  distribution_folder: DistributionFolder;
+  distribution_view: DistributionView;
   extract_outcome: ExtractOutcome;
   import_conflict: ImportConflict;
   workspace_info: WorkspaceInfo;
@@ -1616,6 +1625,60 @@ export interface RequirementCheck {
    */
   installed?: string | null;
   status: CheckStatus;
+}
+/**
+ * One registered folder.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DistributionFolder".
+ */
+export interface DistributionFolder {
+  /**
+   * What people call it, such as 経理課.
+   */
+  name: string;
+  /**
+   * The folder, such as `\\fs01\経理\SpellSheet`.
+   */
+  path: string;
+}
+/**
+ * What one folder holds now.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DistributionView".
+ */
+export interface DistributionView {
+  folder: DistributionFolder;
+  /**
+   * Why the folder could not be read (not reachable, no access…).
+   */
+  error?: string | null;
+  flows: DistributedFlow[];
+  checkedAt: string;
+}
+/**
+ * The newest version of one flow in a folder.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DistributedFlow".
+ */
+export interface DistributedFlow {
+  flowId: FlowId;
+  name: string;
+  description?: string;
+  version: PackagedVersion;
+  exportedBy?: string | null;
+  exportedAt: string;
+  /**
+   * The file to take it in from.
+   */
+  path: string;
+  state: DistributedState;
+  /**
+   * Newest version number on this PC, when it has the flow.
+   */
+  localVersion?: number | null;
 }
 /**
  * Result of moving steps into a new sub-flow.

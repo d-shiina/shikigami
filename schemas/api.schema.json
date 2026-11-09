@@ -64,6 +64,12 @@
     "package_preview": {
       "$ref": "#/$defs/PackagePreview"
     },
+    "distribution_folder": {
+      "$ref": "#/$defs/DistributionFolder"
+    },
+    "distribution_view": {
+      "$ref": "#/$defs/DistributionView"
+    },
     "extract_outcome": {
       "$ref": "#/$defs/ExtractOutcome"
     },
@@ -137,6 +143,8 @@
     "package_plan",
     "package_options",
     "package_preview",
+    "distribution_folder",
+    "distribution_view",
     "extract_outcome",
     "import_conflict",
     "workspace_info",
@@ -2665,6 +2673,130 @@
           "description": "The workspace's policy does not allow it.",
           "type": "string",
           "const": "notAllowed"
+        }
+      ]
+    },
+    "DistributionFolder": {
+      "description": "One registered folder.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "What people call it, such as 経理課.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The folder, such as `\\\\fs01\\経理\\SpellSheet`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path"
+      ]
+    },
+    "DistributionView": {
+      "description": "What one folder holds now.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "$ref": "#/$defs/DistributionFolder"
+        },
+        "error": {
+          "description": "Why the folder could not be read (not reachable, no access…).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DistributedFlow"
+          }
+        },
+        "checkedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "folder",
+        "flows",
+        "checkedAt"
+      ]
+    },
+    "DistributedFlow": {
+      "description": "The newest version of one flow in a folder.",
+      "type": "object",
+      "properties": {
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/$defs/PackagedVersion"
+        },
+        "exportedBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The file to take it in from.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/DistributedState"
+        },
+        "localVersion": {
+          "description": "Newest version number on this PC, when it has the flow.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "flowId",
+        "name",
+        "version",
+        "exportedAt",
+        "path",
+        "state"
+      ]
+    },
+    "DistributedState": {
+      "description": "How a flow in the folder stands against this PC.",
+      "oneOf": [
+        {
+          "description": "Not on this PC.",
+          "type": "string",
+          "const": "new"
+        },
+        {
+          "description": "This PC has the flow, and the folder has a newer version.",
+          "type": "string",
+          "const": "update"
+        },
+        {
+          "description": "This PC already has that version.",
+          "type": "string",
+          "const": "latest"
+        },
+        {
+          "description": "This PC has a newer version than the folder.",
+          "type": "string",
+          "const": "older"
         }
       ]
     },

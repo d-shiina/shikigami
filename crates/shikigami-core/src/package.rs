@@ -443,7 +443,13 @@ pub fn is_package(bytes: &[u8]) -> bool {
 
 /// Reads only the manifest (cheap: for listing packages in a folder).
 pub fn read_manifest(bytes: &[u8]) -> CoreResult<PackageManifest> {
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(zip_error)?;
+    read_manifest_from(Cursor::new(bytes))
+}
+
+/// Reads only the manifest, without loading the rest of the file (for
+/// looking through a folder of packages on a file server).
+pub fn read_manifest_from<R: Read + std::io::Seek>(reader: R) -> CoreResult<PackageManifest> {
+    let mut zip = zip::ZipArchive::new(reader).map_err(zip_error)?;
     let manifest: PackageManifest = serde_json::from_slice(&entry(&mut zip, MANIFEST)?)
         .map_err(|e| CoreError::InvalidEdit(format!("manifest.json: {e}")))?;
     check_format(&manifest)?;
