@@ -15,6 +15,8 @@ import type {
   LogLevel,
   PackageOptions,
   PackagePlan,
+  DistributionFolder,
+  DistributionView,
   PackagePreview,
   PauseReason,
   ReviewTimeline,
@@ -421,6 +423,8 @@ export type StudioState = {
   pendingImport: { contents: string; name: string } | null;
   /** The 「渡す」 dialog: what handing the flow over would put in the file. */
   handOff: PackagePlan | null;
+  /** 配布フォルダー: the registered folders, what they held when last looked at, and whether their list is open. */
+  distribution: { folders: DistributionFolder[]; views: DistributionView[] | null; open: boolean };
   /** A flow file being looked at before it is imported (opened from Explorer, dropped, chosen). */
   received: { file: FlowFile; preview: PackagePreview; away: boolean } | null;
   /** The dialog for an answer pasted from an AI chat without MCP: a new flow, or into the open one. */
@@ -583,6 +587,13 @@ export type StudioState = {
   /** Opens (or re-plans) 渡す for the published version ("auto") or the current content. */
   openHandOff(id: string, content?: "auto" | "current"): Promise<void>;
   closeHandOff(): void;
+  /** Reads the registered 配布フォルダー and looks through them (quietly: a folder that cannot be opened says so in its view). */
+  checkDistribution(): Promise<void>;
+  setDistributionFolders(folders: DistributionFolder[]): Promise<boolean>;
+  openDistribution(): void;
+  closeDistribution(): void;
+  /** Puts the published version of a flow into a 配布フォルダー. True once it is there. */
+  placeInDistribution(id: string, folder: string): Promise<boolean>;
   /** Writes the flow as a `.spx` file; the path, or null when it failed (said in `error`). */
   exportPackage(id: string, options: PackageOptions): Promise<ExportedPackage | null>;
   /** Shows what a flow file holds and what this PC needs, before importing it. */
@@ -1093,6 +1104,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       workspace: null,
       pendingImport: null,
       handOff: null,
+      distribution: { folders: [], views: null, open: false },
       received: null,
       pasteOpen: null,
       secrets: [],
@@ -2360,6 +2372,49 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ handOff: null });
       },
 
+      async checkDistribution() {
+        try {
+          const folders = await api.distributionFolders();
+          const views = folders.length > 0 ? await api.scanDistribution() : [];
+          set((s) => ({ distribution: { ...s.distribution, folders, views } }));
+        } catch {
+          // Looking is a convenience: nothing to say when it fails (e.g. outside Writer).
+        }
+      },
+
+      async setDistributionFolders(folders) {
+        try {
+          const saved = await api.setDistributionFolders(folders);
+          set((s) => ({ distribution: { ...s.distribution, folders: saved }, error: null }));
+          void get().checkDistribution();
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      openDistribution() {
+        set((s) => ({ distribution: { ...s.distribution, open: true } }));
+        void get().checkDistribution();
+      },
+
+      closeDistribution() {
+        set((s) => ({ distribution: { ...s.distribution, open: false } }));
+      },
+
+      async placeInDistribution(id, folder) {
+        try {
+          await api.placeInDistribution(id, folder);
+          set({ handOff: null, notice: t.distribution.placed(folder), error: null });
+          void get().checkDistribution();
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
       async exportPackage(id, options) {
         try {
           const out = await api.exportPackage(id, options);
@@ -2401,6 +2456,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           applyOutcome(outcome);
           set({ received: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.flow.name}`, error: null });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          // A version from a 配布フォルダー is now here: its notice goes.
+          if (get().distribution.folders.length > 0) void get().checkDistribution();
           return true;
         } catch (e) {
           set({ error: message(e) });

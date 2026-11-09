@@ -8,6 +8,7 @@ pub mod approval;
 pub mod calendar;
 pub mod call;
 pub mod chat;
+pub mod distribution;
 pub mod error;
 pub mod expr;
 pub mod ids;

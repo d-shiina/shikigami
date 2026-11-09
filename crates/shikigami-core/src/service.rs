@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::call::{self, Subflow};
+use crate::distribution;
 use crate::error::{CoreError, CoreResult};
 use crate::ids::{FlowId, ObservationId, StepId};
 use crate::model::{Flow, FlowSummary, Step, VariableDef, now};
@@ -1808,6 +1809,98 @@ impl FlowService {
         }
         found.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
         found
+    }
+
+    /// The 配布フォルダー this PC looks at.
+    pub fn distribution_folders(&self) -> CoreResult<Vec<distribution::DistributionFolder>> {
+        Ok(distribution::load(self.store.local_root())?.folders)
+    }
+
+    /// Replaces the list of 配布フォルダー (checked: names and full paths).
+    pub fn set_distribution_folders(
+        &self,
+        folders: Vec<distribution::DistributionFolder>,
+    ) -> CoreResult<Vec<distribution::DistributionFolder>> {
+        Ok(distribution::save(
+            self.store.local_root(),
+            &distribution::DistributionSettings { folders },
+        )?
+        .folders)
+    }
+
+    /// What each 配布フォルダー holds, against the flows here. A folder that
+    /// cannot be reached says so instead of failing the rest.
+    pub fn scan_distribution(&self) -> CoreResult<Vec<distribution::DistributionView>> {
+        let local = |id: &FlowId| {
+            if !self.store.exists(id) {
+                return None;
+            }
+            let versions = self.store.load_versions(id).unwrap_or_default();
+            Some(distribution::Local {
+                latest: versions.last().map(|v| v.number),
+                uids: versions.into_iter().map(|v| v.uid).collect(),
+            })
+        };
+        Ok(self
+            .distribution_folders()?
+            .iter()
+            .map(|folder| distribution::view(folder, local))
+            .collect())
+    }
+
+    /// Puts the published version of `id` into the 配布フォルダー `folder`
+    /// as `<name> v<n>.spx`, returning the file. Only a published version
+    /// goes there. When the folder already has that very version, nothing
+    /// is written.
+    pub fn place_in_distribution(
+        &self,
+        id: &FlowId,
+        folder: &str,
+        exported_by: Option<String>,
+    ) -> CoreResult<std::path::PathBuf> {
+        let target = self
+            .distribution_folders()?
+            .into_iter()
+            .find(|f| f.name == folder)
+            .ok_or_else(|| CoreError::Rejected {
+                code: "NOT_FOUND",
+                message: format!("no distribution folder named {folder}"),
+                hint: None,
+            })?;
+        let (manifest, bytes) = self.export_package(
+            id,
+            &package::PackageOptions {
+                content: package::PackageContent::Published,
+                exported_by,
+                ..package::PackageOptions::default()
+            },
+        )?;
+        let version = manifest.flow.version.as_ref().map(|v| v.uid.clone());
+        let dir = std::path::Path::new(&target.path);
+        let existing = distribution::manifests(dir).map_err(|e| CoreError::Rejected {
+            code: "FOLDER_UNREACHABLE",
+            message: format!("{}: {e}", target.path),
+            hint: Some("Check that the folder exists and this PC can open it.".into()),
+        })?;
+        if let Some((path, _)) = existing.iter().find(|(_, m)| {
+            m.flow.id == manifest.flow.id
+                && m.flow.version.as_ref().map(|v| v.uid.clone()) == version
+        }) {
+            return Ok(path.clone());
+        }
+        let path = dir.join(package::file_name(
+            &manifest.flow.name,
+            manifest.flow.version.as_ref().map(|v| v.number),
+        ));
+        if path.exists() {
+            return Err(CoreError::Rejected {
+                code: "FILE_EXISTS",
+                message: format!("{} already exists and holds something else", path.display()),
+                hint: Some("Rename or remove that file in the folder first.".into()),
+            });
+        }
+        std::fs::write(&path, &bytes)?;
+        Ok(path)
     }
 
     /// Writes a `.spx` package of `id`. Secret defaults are removed;

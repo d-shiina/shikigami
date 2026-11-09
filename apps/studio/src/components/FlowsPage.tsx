@@ -2,10 +2,11 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
+import { DistributionNotice, useDistributionCheck } from "./Distribution";
 import { relativeTime } from "../lib/changes";
 import { copyText, menuFor, openMenu } from "../lib/contextMenu";
 import { agent, api, type ScheduleView } from "../lib/api";
@@ -331,6 +332,8 @@ export function FlowsPage() {
   const create = useStudio((s) => s.create);
   const receiveFile = useStudio((s) => s.receiveFile);
   const openHandOff = useStudio((s) => s.openHandOff);
+  const openDistribution = useStudio((s) => s.openDistribution);
+  useDistributionCheck();
   const setPlace = useStudio((s) => s.setPlace);
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
@@ -568,6 +571,7 @@ export function FlowsPage() {
                 openMenu({ clientX: r.right - 220, clientY: r.bottom + 4, preventDefault: () => {} }, [
                   { label: l.emptyFlow, icon: MousePointerClick, run: () => setCreating(true) },
                   { label: t.importFlow, icon: Upload, run: () => picker.current?.click() },
+                  { label: t.distribution.open, icon: FolderSync, run: openDistribution },
                   ...(agentOpen ? [] : [{ label: t.paste.title, icon: ClipboardPaste, run: () => setPasteOpen("new") }]),
                 ]);
               }}
@@ -595,6 +599,7 @@ export function FlowsPage() {
             </button>
           </form>
         )}
+        <DistributionNotice />
         {summaries.length === 0 ? (
           <FirstSteps onCreate={() => setCreating(true)} onImport={() => picker.current?.click()} />
         ) : (

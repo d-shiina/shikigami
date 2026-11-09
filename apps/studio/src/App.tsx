@@ -1,3 +1,4 @@
+import { DistributionDialog } from "./components/Distribution";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -463,6 +464,7 @@ function Shell() {
       <ApprovalDialog />
       <AskDialog />
       <HandOffDialog />
+      <DistributionDialog />
       <ReceiveSheet />
       <OpenedFiles />
       <PickRequestCard />
