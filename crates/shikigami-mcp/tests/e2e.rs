@@ -434,6 +434,19 @@ async fn test_step_runs_one_step_without_touching_flows() {
         .await;
     assert!(is_error);
     assert_eq!(e["code"], "UNKNOWN_STEP_TYPE");
+    // A guessed name gets the real types for that purpose.
+    let (is_error, e) = h
+        .call("get_step_schema", json!({ "type": "control.pause" }))
+        .await;
+    assert!(is_error);
+    assert_eq!(e["code"], "UNKNOWN_STEP_TYPE");
+    assert_eq!(e["details"]["suggestions"][0], "flow.delay");
+    assert!(
+        e["details"]["hint"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("list_step_types")
+    );
     // Without a browser adapter, inspect_page says so.
     let (is_error, e) = h.call("inspect_page", json!({ "url": "http://x/" })).await;
     assert!(is_error);

@@ -22,8 +22,13 @@ beforeAll(async () => {
     stdio: "ignore",
   });
   const file = join(profile, "DevToolsActivePort");
-  for (let i = 0; i < 100 && !existsSync(file); i++) await new Promise((r) => setTimeout(r, 100));
-  port = Number(readFileSync(file, "utf8").split("\n")[0]);
+  // The browser makes the file before it writes the port into it: wait for a real port.
+  port = 0;
+  for (let i = 0; i < 100 && !(port > 0); i++) {
+    if (existsSync(file)) port = Number(readFileSync(file, "utf8").split("\n")[0]);
+    if (!(port > 0)) await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!(port > 0)) throw new Error("the browser did not open its debugging port");
   // As a person's browser would be: up, with its page shown.
   for (let i = 0; i < 100; i++) {
     const tabs = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json() as Promise<{ title: string }[]>).catch(() => []);

@@ -2,7 +2,7 @@
 
 英語版：[../audit.md](../audit.md)
 
-`spellsheet audit` は、この PC で誰がどのフローを変更・公開・実行したかを 1 つの一覧で表示します。Writer の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
+`spellsheet audit` は、この PC で誰がどのフローを変更・確定・実行したかを 1 つの一覧で表示します。Writer の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
 
 ```powershell
 spellsheet audit                              # すべて（古い順）
@@ -21,7 +21,7 @@ spellsheet audit --flow scn_01a1… --json      # 1 つのフローだけ、1 �
 | 種類 | 内容 | 場所 |
 |---|---|---|
 | `change` | フローの変更すべて（作成・編集・元に戻す・やり直す・削除）。誰が変更したかと、AI の要約 | `history/<flow-id>/journal.jsonl`（PC ごと） |
-| `publish` | 公開と公開の取り下げすべて。誰がしたかとメモ | `versions/<flow-id>/publish.jsonl`（ワークスペースで共有） |
+| `publish` | 確定と確定の取り消しすべて。誰がしたかとメモ | `versions/<flow-id>/publish.jsonl`（ワークスペースで共有） |
 | `mcp` | MCP のツール呼び出しすべて。読み取りと、拒否された呼び出し（`ok: false`、`errorCode`）も含む | `audit/mcp.jsonl`（PC ごと） |
 | `run` | 実行すべて。どこから始まったか（`studio`・`cli`・`mcp`・`schedule`・`remote`）、依頼した人、結果 | `runs/<run-id>/report.json`（PC ごと） |
 
@@ -29,6 +29,6 @@ spellsheet audit --flow scn_01a1… --json      # 1 つのフローだけ、1 �
 
 ## 保存期間
 
-実行記録、各フローの `logs/` の実行ログ、MCP の呼び出しは 90 日残します。それより古いものは、各 PC で実行が終わったときに削除します。日数は `policy.json` の `records.keepDays`（[policy.md](policy.md)）で変えられ、`0` にするとずっと残します。変更の記録は残します（元に戻す操作とフローの履歴に必要なため）。公開の記録は版と一緒に保存され、版と同じだけ残ります。
+実行記録、各フローの `logs/` の実行ログ、MCP の呼び出しは 90 日残します。それより古いものは、各 PC で実行が終わったときに削除します。日数は `policy.json` の `records.keepDays`（[policy.md](policy.md)）で変えられ、`0` にするとずっと残します。変更の記録は残します（元に戻す操作とフローの履歴に必要なため）。確定の記録は版と一緒に保存され、版と同じだけ残ります。
 
-共有ワークスペースでは、変更・MCP の呼び出し・実行は PC ごと、公開は共有です。管理サーバー（[remote.md](remote.md)）は、渡したジョブをイベントとレポートごと、すべての PC の分を保存します。
+共有ワークスペースでは、変更・MCP の呼び出し・実行は PC ごと、確定は共有です。管理サーバー（[remote.md](remote.md)）は、渡したジョブをイベントとレポートごと、すべての PC の分を保存します。

@@ -188,6 +188,7 @@ const INSTRUCTIONS: &str = "\
 SpellSheet is a desktop RPA tool. You edit the same flows a human edits in \
 SpellSheet Writer, and flows run later without you.\n\
 - Call list_step_types / get_step_schema before writing steps; params are validated against the schema.\n\
+- Use only step type names that list_step_types returns; never guess one from what you want to do (there is no control.pause or control.confirm). Common needs: wait for an element browser.waitFor / desktop.waitFor; wait until a condition holds wait.until; wait a fixed time flow.delay; ask the person to confirm dialog.message with buttons \"yesNo\" (its output is the button pressed); ask for values dialog.input / dialog.form; let the person log in or approve MFA in the browser browser.waitForHuman. An UNKNOWN_STEP_TYPE error lists the likely types in details.suggestions.\n\
 - Prefer small edits (add_step, update_step) or one update_flow with several ops; each call is one undo step for the human.\n\
 - The human may be watching the flow chart in Writer while you work. Build a new flow so they see it grow: create_flow with its name and variables (or, when the human opened an empty one for you, build in that), then add the steps in flow order a few at a time (update_flow with a handful of addStep ops per call), not all in one call.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the flow: re-read it and redo your change, never overwrite blindly.\n\
@@ -202,7 +203,7 @@ SpellSheet Writer, and flows run later without you.\n\
 - Name nodes and describe flows in the user's business words (\"注文番号を入力\", not \"browser.fill #3\"): Writer's 手順書 (the illustrated manual made from a run) uses them as its headings. Pass flowId to test_step: the screen a tried step meets is the person's first picture of that node in the 手順書, before any run.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - Versions: when the user says a flow works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
-- Unattended runs (spellsheet run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the flow is ready, ask the user to review it in Writer's レビュー台 and press 確認して公開. get_flow `published` shows the version in force and whether the working content matches it. run_flow runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
+- Unattended runs (spellsheet run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the flow is ready, ask the user to review it in Writer's レビュー台 and press 確認して確定. get_flow `published` shows the version in force and whether the working content matches it. run_flow runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
 - The workspace policy (get_policy) limits sites and programs (SITE_NOT_ALLOWED / APP_NOT_ALLOWED) and may hold run_flow, test_step or delete_flow for the user's approval: APPROVAL_REQUIRED returns an approvalId and Writer shows the request. Tell the user in chat what you want to do and why, then repeat the exact same call with approvalId (and approvalWaitMs to wait). On APPROVAL_DENIED or POLICY_DENIED stop and ask the user; never work around a refusal with other steps or tools.\n\
 - Sharing: to hand a flow to another person or PC, export_flow with path writes a .spx file (published version, the flows it calls, folder files except input/, logins by name only). import_flow with path and check: true shows what a received .spx holds and what this PC still needs; then import_flow with path imports it. On IMPORT_CONFLICT ask the user whether to update the existing flow or import a copy. An imported flow runs unattended only after a person publishes it here.\n\
 - Logins: never ask the user for a password or other secret in chat, and never write one into a flow or a tool call. The user registers secrets by name in SpellSheet Writer (シークレット); list_secrets shows the names and sites. Type them with browser.fill value { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (also in test_step); they work only on the registered sites. When inspect_page reports `login` (or a step fails with SECRET_NOT_FOUND, SECRET_FIELD_EMPTY or SECRET_SITE_*) and no secret fits, call request_secret with a name, the site and the fields: Writer asks the user to register it in a form you never see. Tell the user in chat to enter it in Writer, then call request_secret again with waitMs (or list_secrets). Or let them log in by hand with test_step browser.waitForHuman. In flows, browser.open `session` keeps the login between runs.\n\
@@ -525,12 +526,9 @@ impl ShikigamiMcp {
     ) -> Result<(Gate<'static>, Vec<shikigami_core::Subflow>), ErrorPayload> {
         // A typo is an error to fix, not an action to approve.
         if self.inner.runtime.registry().get(&step.step_type).is_none() {
-            return Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!(
-                    "unknown step type '{}' (see list_step_types)",
-                    step.step_type
-                ),
+            return Err(unknown_step_type(
+                self.inner.runtime.registry(),
+                &step.step_type,
             ));
         }
         let mut wrapper = shikigami_core::Flow::new("test_step");
@@ -585,6 +583,23 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
         code: code.to_owned(),
         message: message.into(),
         details: None,
+    }
+}
+
+/// UNKNOWN_STEP_TYPE with the types the name most likely meant, so an AI
+/// client fixes a guessed name (`control.confirm`) in one step.
+fn unknown_step_type(registry: &shikigami_core::StepRegistry, name: &str) -> ErrorPayload {
+    let suggestions: Vec<&str> = shikigami_core::suggest::suggest_step_types(registry, name)
+        .into_iter()
+        .map(|d| d.step_type.as_str())
+        .collect();
+    ErrorPayload {
+        code: "UNKNOWN_STEP_TYPE".to_owned(),
+        message: format!("unknown step type: {name}"),
+        details: Some(json!({
+            "hint": shikigami_core::suggest::unknown_step_type_hint(registry, name),
+            "suggestions": suggestions,
+        })),
     }
 }
 
@@ -759,10 +774,7 @@ impl ShikigamiMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let outcome = match self.svc().registry().get(&p.step_type) {
             Some(def) => Ok(to_value(def)),
-            None => Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!("unknown step type: {}", p.step_type),
-            )),
+            None => Err(unknown_step_type(self.svc().registry(), &p.step_type)),
         };
         self.finish("get_step_schema", &peer, None, outcome)
     }
@@ -2161,12 +2173,9 @@ impl ShikigamiMcp {
             .map(|id| self.svc().project_dir(&FlowId::new(id)))
             .transpose()?;
         if self.inner.runtime.registry().get(&step.step_type).is_none() {
-            return Err(err(
-                "UNKNOWN_STEP_TYPE",
-                format!(
-                    "unknown step type '{}' (see list_step_types)",
-                    step.step_type
-                ),
+            return Err(unknown_step_type(
+                self.inner.runtime.registry(),
+                &step.step_type,
             ));
         }
         // The AI names no result variable: it gets the result as `output`.
