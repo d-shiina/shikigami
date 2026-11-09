@@ -307,9 +307,61 @@
             </tbody>
           </table>
         </div>
+        <h3 class="cmp-h3">1 年にかかる費用の目安</h3>
+        <p class="sub cmp-sub">作る人が 1 人、無人で動かす PC が 1 台の場合の、ソフトウェアの定価です。PC・電気代・作る人の手間は含めていません。値引きや契約の形で変わるので、実際の金額は各社にお問い合わせください。</p>
+        <div class="cmp-scroll" tabindex="0" role="region" aria-label="1 年にかかる費用（横に動かせます）">
+          <table class="cmp">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col" class="me">SpellSheet</th>
+                <th scope="col">UiPath</th>
+                <th scope="col">Power Automate for desktop</th>
+                <th scope="col">WinActor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">作る</th>
+                <td class="me">0 円</td>
+                <td>Community は 0 円。Basic は月 $25 から<a class="fn" href="#src-1">1</a></td>
+                <td>PC で作って手で動かすだけなら追加費用なし。クラウドから動かすなどには Premium（1 人年 $180）<a class="fn" href="#src-2">2</a></td>
+                <td>フル機能版 年 908,000 円<a class="fn" href="#src-3">3</a></td>
+              </tr>
+              <tr>
+                <th scope="row">無人で動かす</th>
+                <td class="me">0 円（Worker）</td>
+                <td>Basic にロボット 2 台が含まれる。それより多ければ Standard（問い合わせ）<a class="fn" href="#src-1">1</a></td>
+                <td>Process 1 台 年 $1,800（クラウドの仮想 PC で動かす Hosted Process は年 $2,580）<a class="fn" href="#src-2">2</a></td>
+                <td>実行版 年 248,000 円<a class="fn" href="#src-3">3</a></td>
+              </tr>
+              <tr>
+                <th scope="row">管理サーバー</th>
+                <td class="me">不要。予定どおりの実行も失敗の知らせも PC の中で行う</td>
+                <td>UiPath のクラウド（プランの料金に含まれる）<a class="fn" href="#src-1">1</a></td>
+                <td>Power Automate のクラウド（プランの料金に含まれる）<a class="fn" href="#src-2">2</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">AI</th>
+                <td class="me">作るときだけ、お使いの AI の契約で（例：Claude Pro は月 $20 で Claude Code も使える<a class="fn" href="#src-15">15</a>）。動かすときは 0 円</td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+              </tr>
+              <tr class="sum">
+                <th scope="row">合計（AI を除く）</th>
+                <td class="me">0 円</td>
+                <td>0 円（Community）、または年 $300 から（Basic）</td>
+                <td>年 $1,800 から</td>
+                <td>年 1,156,000 円（税別）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <details class="cmp-src">
           <summary>出典と測り方</summary>
-          <p>2026 年 11 月 9 日に各社の公開資料で確かめた内容です。「—」は公開資料で確かめられなかった項目です。価格は定価で、契約によって変わります。動作要件・推奨環境は各社が示す値で、SpellSheet の実測値とは測り方が違います。</p>
+          <p>2026 年 11 月 9 日に各社の公開資料で確かめた内容です。「—」は公開資料で確かめられなかった項目です。価格は定価（ドルは換算していません）で、契約によって変わります。動作要件・推奨環境は各社が示す値で、SpellSheet の実測値とは測り方が違います。</p>
           <ol>
             <li id="src-1"><a href="https://www.uipath.com/pricing">UiPath Plans and Pricing</a></li>
             <li id="src-2"><a href="https://www.microsoft.com/en-us/power-platform/products/power-automate/pricing">Power Automate pricing</a>・<a href="https://learn.microsoft.com/en-us/power-platform-release-plan/2021wave2/power-automate/power-automate-availability-windows">Power Automate availability in Windows</a></li>
@@ -325,6 +377,7 @@
             <li id="src-12"><a href="https://docs.uipath.com/de/studio/standalone/2025.10/user-guide/extension-for-java">UiPath Studio: Extension for Java</a></li>
             <li id="src-13"><a href="https://learn.microsoft.com/en-us/power-automate/desktop-flows/how-to/java">Power Automate: Automate Java applications</a></li>
             <li id="src-14"><a href="https://winactor.com/product/winactor/environment/">WinActor 動作・ソフトウェア環境情報</a>（Ver.7.6.1。ディスクの容量は載っていません）</li>
+            <li id="src-15"><a href="https://claude.com/pricing">Claude の料金</a>（Pro は月払いで $20、年払いで月 $17）</li>
             <li id="src-m" class="nonum">* SpellSheet は 0.1.20 を測りました。インストーラーは GitHub の Releases にあるファイルの大きさです。メモリは ___ で、Writer で見本のフローを開いて待っているときの、Writer と付属のプロセスの合計です。</li>
           </ol>
           <p>UiPath は UiPath, Inc.、Power Automate は Microsoft Corporation、WinActor は NTT アドバンステクノロジ株式会社の商標または登録商標です。記載に誤りがあれば <a data-gh="/issues" href="https://github.com/d-shiina/spellsheet/issues">GitHub の Issues</a> でお知らせください。すぐに直します。</p>

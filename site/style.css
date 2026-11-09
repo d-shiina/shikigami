@@ -420,3 +420,6 @@ footer a { color: var(--fg-muted); }
 .cmp-src li.nonum { list-style: none; margin-left: -1.6em; margin-top: 10px; }
 .cmp tbody th, .cmp thead th:first-child { position: sticky; left: 0; background: var(--bg); z-index: 1; }
 @media (max-width: 560px) { .cmp tbody th { width: 88px; white-space: normal; } }
+.cmp-h3 { margin: 48px 0 8px; font-size: 20px; }
+.cmp-sub { margin-bottom: 20px; }
+.cmp tr.sum th, .cmp tr.sum td { font-weight: 600; border-top: 2px solid var(--line); }
