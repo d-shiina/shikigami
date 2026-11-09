@@ -973,8 +973,7 @@ pub async fn run_flow(
     // Writer steps aside for a run that works on the screen, unless it
     // pauses before its first node anyway.
     let band =
-        (debug.band.shrink && !debug.step && crate::run_band::works_on_screen(&flow, &subflows))
-            .then_some(debug.band);
+        debug.band.shrink && !debug.step && crate::run_band::works_on_screen(&flow, &subflows);
     let project_dir = Some(state.service.project_dir(&id)?);
     // A run of the whole flow keeps the pictures for its 手順書.
     let run_id = RunId::generate();
@@ -984,7 +983,11 @@ pub async fn run_flow(
         .then(|| crate::manual::screens_dir(state.service.store().local_root(), &id, &run_id))
         .flatten();
     let manual = screens_dir.clone().map(crate::manual::Collector::new);
-    let handle = state
+    // Known to the band before the run's first event.
+    if band {
+        crate::run_band::prepare(run_id.clone(), id.clone(), debug.band);
+    }
+    let started = state
         .runtime
         .start(
             flow,
@@ -992,7 +995,7 @@ pub async fn run_flow(
                 project_dir,
                 full_run: true,
                 inputs: inputs.unwrap_or_default(),
-                run_id: Some(run_id),
+                run_id: Some(run_id.clone()),
                 screens_dir,
                 version,
                 debug: Some(DebugOptions {
@@ -1011,12 +1014,20 @@ pub async fn run_flow(
             code: e.code,
             message: e.message,
             details: e.details,
-        })?;
-    let run_id = track_run(app.clone(), &state, id.clone(), handle, RUN_EVENT, manual)?;
-    if let Some(band) = band {
-        crate::run_band::begin(&app, run_id.clone(), id, band);
+        })
+        .and_then(|handle| track_run(app.clone(), &state, id, handle, RUN_EVENT, manual));
+    match started {
+        Ok(run_id) => {
+            if band {
+                crate::run_band::begin(&app, &run_id);
+            }
+            Ok(run_id)
+        }
+        Err(e) => {
+            crate::run_band::forget(&run_id);
+            Err(e)
+        }
     }
-    Ok(run_id)
 }
 
 /// A test case with its name (`tests/<name>.json`).

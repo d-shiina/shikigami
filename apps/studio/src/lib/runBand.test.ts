@@ -85,6 +85,22 @@ describe("the run band", () => {
     expect(state.human).toBeNull();
   });
 
+  it("ends the wait when the step asked about finishes, inside a loop or a call", () => {
+    let state = play([started("rows", "control.forEach"), started("type"), ev({ type: "humanActionRequired", stepId: "type", message: "承認してください" })]);
+    state = bandStep(state, finished("type"), steps);
+    expect(state.human).toBeNull();
+    expect(state.running).toEqual(["rows"]);
+    state = play([
+      started("open", "flow.call"),
+      ev({ type: "humanActionRequired", stepId: "login", message: "ログインしてください" }, ["open"]),
+    ]);
+    expect(state.human).toBe("ログインしてください");
+    state = bandStep(state, ev({ type: "stepFinished", stepId: "other", stepType: "x", outcome: "succeeded", durationMs: 1 }, ["open"]), steps);
+    expect(state.human).toBe("ログインしてください");
+    state = bandStep(state, ev({ type: "stepFinished", stepId: "login", stepType: "x", outcome: "succeeded", durationMs: 1 }, ["open"]), steps);
+    expect(state.human).toBeNull();
+  });
+
   it("does not count an event twice when the replay and the live ones overlap", () => {
     const once = started("open");
     const state = bandStep(bandStep(emptyBand(), once, steps), finished("open"), steps);

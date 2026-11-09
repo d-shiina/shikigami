@@ -55,15 +55,32 @@ pub struct BandRun {
     flow_id: FlowId,
     #[serde(skip)]
     restore_at_end: bool,
+    /// [`begin`] has run: Writer may step aside from now on.
+    #[serde(skip)]
+    begun: bool,
     /// Writer is out of the way now (minimised, the band up).
     #[serde(skip)]
     out: bool,
+    /// The run is paused: Writer stays up until it goes on.
+    #[serde(skip)]
+    paused: bool,
     /// The person brought Writer back themselves: leave it up until the run ends.
     #[serde(skip)]
     kept: bool,
 }
 
 static CURRENT: Mutex<Option<BandRun>> = Mutex::new(None);
+
+/// Held while Writer and the band change places, so that the run's events
+/// (another thread) and [`begin`] take turns: a pause or the end that comes
+/// while Writer is stepping aside is never lost or undone. Never taken on
+/// the main thread, which the window calls wait for.
+static TURN: Mutex<()> = Mutex::new(());
+
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn current() -> Option<BandRun> {
     CURRENT.lock().ok().and_then(|c| c.clone())
@@ -75,6 +92,14 @@ fn update(f: impl FnOnce(&mut Option<BandRun>)) {
     }
 }
 
+fn update_run(run_id: &RunId, f: impl FnOnce(&mut BandRun)) {
+    update(|c| {
+        if let Some(run) = c.as_mut().filter(|r| &r.run_id == run_id) {
+            f(run);
+        }
+    });
+}
+
 /// Whether the run works on the screen: a `desktop.*` or `browser.*` node
 /// in the flow or in a flow it calls. Excel, files, mail and the like work
 /// without the screen, so Writer stays as it is for them.
@@ -84,16 +109,43 @@ pub(crate) fn works_on_screen(flow: &Flow, subflows: &[Subflow]) -> bool {
         .any(|s| s.step_type.starts_with("desktop.") || s.step_type.starts_with("browser."))
 }
 
-/// Gets Writer out of the way for `run_id`.
-pub(crate) fn begin(app: &AppHandle, run_id: RunId, flow_id: FlowId, settings: BandSettings) {
-    let run = BandRun {
-        run_id,
-        flow_id,
-        restore_at_end: settings.restore_at_end,
-        out: true,
-        kept: false,
+/// Names the run before it starts, so that none of its events (a pause at
+/// its first node, a quick end) pass by before the band knows it.
+pub(crate) fn prepare(run_id: RunId, flow_id: FlowId, settings: BandSettings) {
+    update(|c| {
+        *c = Some(BandRun {
+            run_id,
+            flow_id,
+            restore_at_end: settings.restore_at_end,
+            begun: false,
+            out: false,
+            paused: false,
+            kept: false,
+        })
+    });
+}
+
+/// The run did not start after [`prepare`].
+pub(crate) fn forget(run_id: &RunId) {
+    update(|c| {
+        if c.as_ref().is_some_and(|r| &r.run_id == run_id) {
+            *c = None;
+        }
+    });
+}
+
+/// Gets Writer out of the way for the run [`prepare`]d, unless it has
+/// already paused or ended.
+pub(crate) fn begin(app: &AppHandle, run_id: &RunId) {
+    let _turn = turn();
+    let Some(run) = current().filter(|r| &r.run_id == run_id) else {
+        return;
     };
-    update(|c| *c = Some(run.clone()));
+    update_run(run_id, |r| r.begun = true);
+    if run.paused || run.kept {
+        return;
+    }
+    update_run(run_id, |r| r.out = true);
     step_aside(app, Some(&run));
 }
 
@@ -130,61 +182,93 @@ fn hide_band(app: &AppHandle) {
     }
 }
 
-/// Follows a Studio run's events (called for every one, from `track_run`).
-pub(crate) fn on_event(app: &AppHandle, event: &RunEventEnvelope) {
-    let Some(run) = current().filter(|r| r.run_id == event.run_id) else {
-        return;
-    };
-    match &event.event {
+/// What the band does about a run event.
+#[derive(Debug, PartialEq, Eq)]
+enum Move {
+    Nothing,
+    StepAside,
+    ComeBack,
+}
+
+/// Updates `run` for `event` and says what Writer and the band do, and
+/// whether the band still follows the run (not after its end).
+fn react(run: &mut BandRun, event: &RunEvent) -> (Move, bool) {
+    match event {
         RunEvent::Paused { .. } => {
+            run.paused = true;
             if run.out {
-                update(|c| set_out(c, false));
-                come_back(app);
+                run.out = false;
+                return (Move::ComeBack, true);
             }
+            (Move::Nothing, true)
         }
         // Going on to the end (not one step at a time, which pauses again
         // right away): out of the way again.
         RunEvent::Resumed { action, .. } => {
-            if !run.out
-                && !run.kept
-                && matches!(
-                    action,
-                    ResumeAction::Continue | ResumeAction::Retry | ResumeAction::Skip
-                )
-            {
-                update(|c| set_out(c, true));
-                step_aside(app, None);
+            run.paused = false;
+            let to_the_end = matches!(
+                action,
+                ResumeAction::Continue | ResumeAction::Retry | ResumeAction::Skip
+            );
+            if run.begun && !run.out && !run.kept && to_the_end {
+                run.out = true;
+                return (Move::StepAside, true);
             }
+            (Move::Nothing, true)
         }
+        // The band shows the result when it stays; a run that did not
+        // complete always brings Writer back, where its log is.
         RunEvent::RunFinished { status, .. } => {
-            update(|c| *c = None);
-            // The band shows the result when it stays; a run that did not
-            // complete always brings Writer back, where its log is.
-            if run.out && (run.restore_at_end || *status != RunStatus::Succeeded) {
-                come_back(app);
-            }
+            let back = run.out && (run.restore_at_end || *status != RunStatus::Succeeded);
+            run.out = false;
+            (if back { Move::ComeBack } else { Move::Nothing }, false)
         }
-        _ => {}
+        _ => (Move::Nothing, true),
     }
 }
 
-fn set_out(c: &mut Option<BandRun>, out: bool) {
-    if let Some(run) = c.as_mut() {
-        run.out = out;
+/// Follows a Studio run's events (called for every one, from `track_run`,
+/// on the run's own thread).
+pub(crate) fn on_event(app: &AppHandle, event: &RunEventEnvelope) {
+    if !matches!(
+        event.event,
+        RunEvent::Paused { .. } | RunEvent::Resumed { .. } | RunEvent::RunFinished { .. }
+    ) || current().is_none_or(|r| r.run_id != event.run_id)
+    {
+        return;
+    }
+    let _turn = turn();
+    let mut todo = Move::Nothing;
+    update(|c| {
+        let Some(run) = c.as_mut().filter(|r| r.run_id == event.run_id) else {
+            return;
+        };
+        let (move_, keep) = react(run, &event.event);
+        todo = move_;
+        if !keep {
+            *c = None;
+        }
+    });
+    match todo {
+        Move::StepAside => step_aside(app, None),
+        Move::ComeBack => come_back(app),
+        Move::Nothing => {}
     }
 }
 
 /// Writer got the focus while the band was up (the person clicked it in the
-/// taskbar): Writer stays up for the rest of the run.
+/// taskbar): Writer stays up for the rest of the run. On the main thread:
+/// only the band is put away.
 pub(crate) fn writer_focused(app: &AppHandle) {
-    let Some(run) = current() else { return };
-    if run.out {
-        update(|c| {
-            if let Some(r) = c.as_mut() {
-                r.out = false;
-                r.kept = true;
-            }
-        });
+    let mut hide = false;
+    update(|c| {
+        if let Some(r) = c.as_mut().filter(|r| r.out) {
+            r.out = false;
+            r.kept = true;
+            hide = true;
+        }
+    });
+    if hide {
         hide_band(app);
     }
 }
@@ -199,6 +283,7 @@ pub fn run_band_current() -> Option<BandRun> {
 /// and stays up for the rest of the run, which goes on.
 #[tauri::command]
 pub async fn run_band_writer(app: AppHandle) -> Result<(), ErrorPayload> {
+    let _turn = turn();
     update(|c| {
         if let Some(r) = c.as_mut() {
             r.out = false;
@@ -295,6 +380,104 @@ mod tests {
         ));
         assert!(works_on_screen(&flow(&["browser.open"]), &[]));
         assert!(!works_on_screen(&flow(&["excel.open", "file.copy"]), &[]));
+    }
+
+    fn band_run(restore_at_end: bool) -> BandRun {
+        BandRun {
+            run_id: RunId::generate(),
+            flow_id: FlowId::new("scn_a"),
+            restore_at_end,
+            begun: true,
+            out: true,
+            paused: false,
+            kept: false,
+        }
+    }
+
+    fn paused() -> RunEvent {
+        RunEvent::Paused {
+            step_id: shikigami_core::StepId::new("s1"),
+            step_type: "desktop.click".into(),
+            reason: shikigami_runtime::PauseReason::Error,
+            error: None,
+            variables: Default::default(),
+            revision: 1,
+        }
+    }
+
+    fn resumed(action: ResumeAction) -> RunEvent {
+        RunEvent::Resumed {
+            action,
+            revision: None,
+        }
+    }
+
+    fn finished(status: RunStatus) -> RunEvent {
+        RunEvent::RunFinished {
+            status,
+            error: None,
+            duration_ms: 1,
+        }
+    }
+
+    #[test]
+    fn a_pause_brings_writer_back_and_going_on_steps_aside_again() {
+        let mut run = band_run(true);
+        assert_eq!(react(&mut run, &paused()), (Move::ComeBack, true));
+        assert!(run.paused && !run.out);
+        // One step at a time: Writer stays up.
+        assert_eq!(
+            react(&mut run, &resumed(ResumeAction::StepOver)),
+            (Move::Nothing, true)
+        );
+        assert_eq!(react(&mut run, &paused()), (Move::Nothing, true));
+        assert_eq!(
+            react(&mut run, &resumed(ResumeAction::Continue)),
+            (Move::StepAside, true)
+        );
+        assert!(run.out && !run.paused);
+    }
+
+    #[test]
+    fn a_pause_before_writer_stepped_aside_keeps_it_up() {
+        let mut run = BandRun {
+            begun: false,
+            out: false,
+            ..band_run(true)
+        };
+        assert_eq!(react(&mut run, &paused()), (Move::Nothing, true));
+        // `begin` then finds it paused and leaves Writer as it is.
+        assert!(run.paused);
+    }
+
+    #[test]
+    fn writer_kept_up_by_the_person_stays_up() {
+        let mut run = BandRun {
+            out: false,
+            kept: true,
+            ..band_run(true)
+        };
+        assert_eq!(react(&mut run, &paused()), (Move::Nothing, true));
+        assert_eq!(
+            react(&mut run, &resumed(ResumeAction::Continue)),
+            (Move::Nothing, true)
+        );
+    }
+
+    #[test]
+    fn the_end_brings_writer_back_as_set_and_always_after_a_failure() {
+        assert_eq!(
+            react(&mut band_run(true), &finished(RunStatus::Succeeded)),
+            (Move::ComeBack, false)
+        );
+        assert_eq!(
+            react(&mut band_run(false), &finished(RunStatus::Succeeded)),
+            (Move::Nothing, false)
+        );
+        assert_eq!(
+            react(&mut band_run(false), &finished(RunStatus::Cancelled)),
+            (Move::ComeBack, false)
+        );
     }
 
     #[test]

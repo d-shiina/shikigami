@@ -24,6 +24,8 @@ export type BandState = {
   lanes: Record<string, string>;
   /** A step waiting for a person, with what to do. */
   human: string | null;
+  /** That step (its calls and id), whose end ends the wait. */
+  humanAt: string | null;
   status: RunStatus;
   startedAt: number | null;
   finishedAt: number | null;
@@ -38,6 +40,7 @@ export const emptyBand = (): BandState => ({
   rounds: {},
   lanes: {},
   human: null,
+  humanAt: null,
   status: "running",
   startedAt: null,
   finishedAt: null,
@@ -90,6 +93,12 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
   const at = Date.parse(env.at);
   const when = Number.isNaN(at) ? now : at;
   const inner = (env.callPath ?? []).length > 0;
+  const waitKey = `${(env.callPath ?? []).join("/")}|${"stepId" in env ? env.stepId : ""}`;
+  // The step a person was asked about is done (inside a call too): the wait is over.
+  if (env.type === "stepFinished" && state.humanAt === waitKey) {
+    next.human = null;
+    next.humanAt = null;
+  }
   switch (env.type) {
     case "runStarted":
       next.startedAt = when;
@@ -118,7 +127,6 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
       next.running = state.running.filter((id) => id !== env.stepId);
       if (env.outcome === "failed" && !env.willRetry) next.failed = new Set(state.failed).add(env.stepId);
       else if (env.outcome !== "failed") next.done = new Set(state.done).add(env.stepId);
-      if (state.human && !next.running.length) next.human = null;
       break;
     }
     case "loopRound": {
@@ -132,18 +140,19 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
     }
     case "humanActionRequired":
       next.human = env.message;
+      next.humanAt = waitKey;
       break;
     case "paused":
       next.status = "paused";
       break;
     case "resumed":
       next.status = "running";
-      next.human = null;
       break;
     case "runFinished":
       next.status = env.status;
       next.running = [];
       next.human = null;
+      next.humanAt = null;
       next.finishedAt = when;
       break;
     default:
