@@ -120,6 +120,21 @@ describe("cloudChange", () => {
     expect(adds[3]?.step.name).toBe("….csv をアップロード");
   });
 
+  it("keeps the folders under input/, so two files of the same name do not share work/", () => {
+    const change = cloudChange({
+      ...base,
+      flow: flow([
+        { id: "e", type: "excel.readRows", params: { path: "input/east/orders.csv" } },
+        { id: "w", type: "excel.readRows", params: { path: "input/west/orders.csv" } },
+      ]),
+      file: "input/east/orders.csv",
+      target: "1",
+      name: "east",
+    });
+    expect(change?.ops).toContainEqual({ op: "updateStep", stepId: "e", patch: { params: { path: "work/east/orders.csv" } } });
+    expect(change?.ops.find((o) => o.op === "addStep" && o.step.type === "box.download")).toMatchObject({ step: { params: { to: "work/east/orders.csv" } } });
+  });
+
   it("does nothing when no node uses the file", () => {
     expect(cloudChange({ ...base, flow: flow([]), file: null, target: "x", name: "n" })).toBeNull();
   });

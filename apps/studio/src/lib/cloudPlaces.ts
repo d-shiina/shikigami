@@ -201,7 +201,8 @@ export function cloudChange(args: {
 
   if (file !== null) {
     const fileName = norm(file).split("/").pop() ?? file;
-    const local = `work/${fileName}`;
+    // input/east/orders.csv → work/east/orders.csv: two files of the same name stay apart.
+    const local = `work/${norm(file).replace(/^input\//i, "")}`;
     let count = 0;
     for (const step of walkSteps(tree)) {
       if (!step.id) continue;
