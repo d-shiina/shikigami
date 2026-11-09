@@ -564,18 +564,10 @@ impl Cx<'_> {
                 format!("{path}/type"),
                 id,
             );
-            let names: Vec<&str> = self
-                .validator
-                .registry
-                .iter()
-                .map(|d| d.step_type.as_str())
-                .collect();
-            self.hint(match closest(&step.step_type, names.iter().copied()) {
-                Some(near) => {
-                    format!("Did you mean '{near}'? Call list_step_types for every available type.")
-                }
-                None => "Call list_step_types for every available type.".to_owned(),
-            });
+            self.hint(crate::suggest::unknown_step_type_hint(
+                &self.validator.registry,
+                &step.step_type,
+            ));
             // Still descend so nested IDs are checked.
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);

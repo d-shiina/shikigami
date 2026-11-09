@@ -222,7 +222,7 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
         window.show()?;
         return window.set_focus();
     }
-    WebviewWindowBuilder::new(
+    let window = WebviewWindowBuilder::new(
         app,
         RUNNER_WINDOW,
         WebviewUrl::App("index.html?view=runner".into()),
@@ -231,11 +231,50 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
     .inner_size(880.0, 600.0)
     .min_inner_size(640.0, 440.0)
     .decorations(false)
+    .visible(false)
     .additional_browser_args(
         "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,ElasticOverscroll",
     )
     .build()?;
-    Ok(())
+    // Before it is first shown, so the taskbar files it under Runner.
+    own_taskbar_button(&window, &app.config().identifier);
+    window.show()
+}
+
+/// Runner's AppUserModelID: Writer's with `.runner` after it. The installer
+/// gives the "SpellSheet Runner" shortcut the same one
+/// (windows/installer-hooks.nsh, `RUNNER_APPID`). With Writer's ID on both
+/// shortcuts, the Start menu showed only one of them.
+pub(crate) fn runner_app_id(identifier: &str) -> String {
+    format!("{identifier}.runner")
+}
+
+/// Runner's window gets its own taskbar button, apart from Writer's, which
+/// pins as "SpellSheet Runner" and starts Runner again from the pin.
+fn own_taskbar_button(window: &tauri::WebviewWindow, identifier: &str) {
+    #[cfg(windows)]
+    let hwnd = match window.hwnd() {
+        Ok(h) => h.0 as isize,
+        Err(e) => {
+            tracing::warn!(error = %e, "cannot give Runner its own taskbar button");
+            return;
+        }
+    };
+    #[cfg(not(windows))]
+    let hwnd = 0;
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let relaunch = format!("\"{}\" --runner", exe.display());
+    let app_id = runner_app_id(identifier);
+    // The window's property store belongs to the thread of its window.
+    let _ = window.run_on_main_thread(move || {
+        if let Err(e) =
+            spellsheet_desktop::taskbar::own_button(hwnd, &app_id, &relaunch, "SpellSheet Runner")
+        {
+            tracing::warn!(error = %e, "cannot give Runner its own taskbar button");
+        }
+    });
 }
 
 /// `--runner` on the command line: start with the run window only (a
@@ -247,6 +286,17 @@ pub(crate) fn wants_runner_only() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runner_has_an_app_id_of_its_own() {
+        // Must match RUNNER_APPID in windows/installer-hooks.nsh.
+        assert_eq!(
+            runner_app_id("dev.spellsheet.studio"),
+            "dev.spellsheet.studio.runner"
+        );
+        let hooks = include_str!("../windows/installer-hooks.nsh");
+        assert!(hooks.contains(r#"!define RUNNER_APPID "${BUNDLEID}.runner""#));
+    }
 
     #[test]
     fn only_runs_of_the_published_version_count() {

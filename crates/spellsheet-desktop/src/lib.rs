@@ -65,6 +65,7 @@ pub mod session;
 mod snip;
 pub mod table;
 pub mod target;
+pub mod taskbar;
 #[cfg(windows)]
 mod uia;
 pub mod vision;

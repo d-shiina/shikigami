@@ -83,8 +83,8 @@ Kinds: **Broken** (does not work, or a path dead-ends) / **Missing** / **Noise**
 
 ### Publish [40][41]
 - Missing: publishing gives no warning with to-dos left or after a failed last run.
-- Unclear: publishing and named versions share one dialog with two filled buttons. "v1「v1」を公開中" repeats itself. The version row says "rev 7 · 3 steps" (English, developer terms).
-- Noise: the "v1 を公開しました" banner stays on every place afterwards [50][60][61].
+- Unclear: publishing and named versions share one dialog with two filled buttons. "v1「v1」を確定済み" repeats itself. The version row says "rev 7 · 3 steps" (English, developer terms).
+- Noise: the "v1 を確定しました" banner stays on every place afterwards [50][60][61].
 
 ### Run window [70]
 - **Broken**: pressing Run crashes Studio. `runner_run` was a sync command; it started the run outside the Tokio runtime, panicked and aborted. Windows too (Tauri runs sync commands on the main thread). **Fixed in this PR** (now `async fn`).

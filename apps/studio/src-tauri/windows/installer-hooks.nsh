@@ -27,8 +27,38 @@
 ; The second Start menu entry: the same app opening only its Runner window,
 ; for people who run published flows and never edit them.
 !define RUNNER_LNK "$SMPROGRAMS\SpellSheet Runner.lnk"
+; Runner's own AppUserModelID (runner.rs, `runner_app_id`). The Start menu
+; lists one entry per ID, so with Writer's ID Runner did not show there.
+!define RUNNER_APPID "${BUNDLEID}.runner"
 
 !define LEGACY_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_PRODUCTNAME}"
+
+; Tauri's SetLnkAppUserModelId (utils.nsh), with the ID to give.
+!macro SetLnkAppUserModelIdTo shortcut appid
+  !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 ""
+  ${If} $0 P<> 0
+    ${IUnknown::QueryInterface} $0 '("${IID_IPersistFile}",.r1)'
+    ${If} $1 P<> 0
+      ${IPersistFile::Load} $1 '("${shortcut}", ${STGM_READWRITE})'
+      ${IUnknown::QueryInterface} $0 '("${IID_IPropertyStore}",.r2)'
+      ${If} $2 P<> 0
+        System::Call 'Oleaut32::SysAllocString(w "${appid}") i.r3'
+        System::Call '*${SYSSTRUCT_PROPERTYKEY}(${PKEY_AppUserModel_ID})p.r4'
+        System::Call '*${SYSSTRUCT_PROPVARIANT}(${VT_BSTR},,&i4 $3)p.r5'
+        ${IPropertyStore::SetValue} $2 '($4,$5)'
+
+        System::Call 'Oleaut32::SysFreeString($3)'
+        System::Free $4
+        System::Free $5
+        ${IPropertyStore::Commit} $2 ""
+        ${IUnknown::Release} $2 ""
+        ${IPersistFile::Save} $1 '("${shortcut}",1)'
+      ${EndIf}
+      ${IUnknown::Release} $1 ""
+    ${EndIf}
+    ${IUnknown::Release} $0 ""
+  ${EndIf}
+!macroend
 
 ; The old install's folder, when this install takes it over.
 Var LegacyInstallDir
@@ -77,7 +107,7 @@ Var LegacyInstallDir
 !macro NSIS_HOOK_POSTINSTALL
   ; Made on every install and update, so existing installs get it too.
   CreateShortcut "${RUNNER_LNK}" "$INSTDIR\${MAINBINARYNAME}.exe" "--runner"
-  !insertmacro SetLnkAppUserModelId "${RUNNER_LNK}"
+  !insertmacro SetLnkAppUserModelIdTo "${RUNNER_LNK}" "${RUNNER_APPID}"
 
   ${If} $LegacyInstallDir != ""
     ; Start menu: the old shortcut goes, the new one is made even on a

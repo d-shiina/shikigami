@@ -70,7 +70,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
 |  | `list_versions` / `get_version` | 名前付きの版の一覧と、版のスナップショット |
 |  | `diff_versions` | 版どうし・版と現在の差分（ノード ID 単位。既定は「最新の版 → 現在」） |
-|  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く）。`path` を渡すと、人や別の PC に渡す `.spx` ファイルを書く。既定は公開中の版（`current` で今の内容）、`include_input` で `input/` のファイルも入れる。既にあるファイルは上書きしない（[設計](../design/sharing-versioning.md)） |
+|  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く）。`path` を渡すと、人や別の PC に渡す `.spx` ファイルを書く。既定は確定版（`current` で今の内容）、`include_input` で `input/` のファイルも入れる。既にあるファイルは上書きしない（[設計](../design/sharing-versioning.md)） |
 |  | `list_project_files` / `read_project_file` | フローのフォルダー（入力・設定・ひな形・出力・作業・ログ）のファイル一覧と、テキストファイルの中身（[files.md](files.md#フローのフォルダー)） |
 |  | `list_secrets` | Writer で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 |  | `get_policy` | ワークスペースの `policy.json`：許可するサイト・アプリ、AI の操作の承認（allow / ask / deny）。書き換えるツールはない（[policy.md](policy.md)） |
@@ -81,12 +81,12 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `undo` / `redo` | Writer・CLI と共通の Undo スタック |
 |  | `delete_flow` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き。他のフローから呼ばれていると `FLOW_IN_USE`。既定で人の承認が要る（下の「承認」） |
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
-|  | `import_flow` | バンドル・フロー文書・`.spx` ファイル（`path`）を取り込む。`check: true` なら取り込まずに、この PC に足りないもの（拡張機能・ログイン情報・許可されていないサイトやアプリ）と同じ ID のフローとの違いだけを返す。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブフローもいっしょに取り込む。取り込んだフローは公開されない |
+|  | `import_flow` | バンドル・フロー文書・`.spx` ファイル（`path`）を取り込む。`check: true` なら取り込まずに、この PC に足りないもの（拡張機能・ログイン情報・許可されていないサイトやアプリ）と同じ ID のフローとの違いだけを返す。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブフローもいっしょに取り込む。取り込んだフローは確定されない |
 |  | `extract_subflow` | 同じブロックに並んだノードを新しいフローに切り出し、`flow.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](../design/subflows.md)） |
 |  | `write_project_file` / `delete_project_file` | フローのフォルダーにファイルを置く（`text`、またはこの PC のファイルを `copyFrom`。置き換えは `overwrite`）/ ごみ箱へ移す |
 |  | `save_test_case` | テストケースを保存（`tests/<名前>.json`：`description`・`inputs`・`expect`。置き換えは `overwrite`）。`description` は業務の言葉の約束として書く：Writer の確認パネルは AI が保存したケースを「約束」として結果と一緒に見せる。入力変数でない名前とシークレットの入力は断る（[testing.md](testing.md)） |
 |  | `request_secret` | ログイン情報をユーザーに求める。Writer に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Writer でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
-| run | `run_flow` | Runtime で作業中の内容を実行（AI の試し実行。AI は実行に関与しない）。`waitMs` で完了まで待てる。`published: true` で公開版を実行。`secret: true` の入力変数には値を渡せない |
+| run | `run_flow` | Runtime で作業中の内容を実行（AI の試し実行。AI は実行に関与しない）。`waitMs` で完了まで待てる。`published: true` で確定版を実行。`secret: true` の入力変数には値を渡せない |
 |  | `stop_flow` | 実行のキャンセル |
 |  | `run_tests` | フローのテストケース（`tests/`、全部か `cases`）を作業中の内容で流し、期待と比べる：`passed`・`failed`・`cases[]`（`mismatches[]`）（[testing.md](testing.md)）。全部終わるまで待つ。承認は `run_flow` と同じ |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す。`image: true` でスクリーンショットも AI に返す |
@@ -99,7 +99,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 - 失敗は MCP のツールエラー（`isError: true`）として `{ code, message, details }` を返すので、AI がエラーコードを見て対処できます。例：`REVISION_CONFLICT`（`details.actual` が現在のリビジョン）、`VALIDATION_FAILED`、`FLOW_NOT_FOUND`。
 - 書き込み系は `expectedRevision` を受け付けます。省略時は最新に適用、指定時は他者の変更と競合すると `REVISION_CONFLICT` になり、上書きしません。
 - 各ツールには `readOnlyHint` / `destructiveHint` / `openWorldHint` の注釈を付けています（クライアントの承認 UI が利用します）。
-- `get_flow` の `published` は公開中の版と、作業中の内容がそれと同じか（`matchesCurrent`）。無人実行は公開版だけを動かし、公開できるのは人だけです（公開のツールはありません）。
+- `get_flow` の `published` は確定版と、作業中の内容がそれと同じか（`matchesCurrent`）。無人実行は確定版だけを動かし、確定できるのは人だけです（確定のツールはありません）。
 
 ## 承認
 

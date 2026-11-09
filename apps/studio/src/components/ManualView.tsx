@@ -1,8 +1,8 @@
 // The 手順書: the open flow read as a procedure, with the screens of the last
 // run from Studio (docs/design/manual.md). 「編集する」 switches to the
 // editable outline (StoryView).
-import type { Flow, Step } from "@spellsheet/schema";
-import { Camera, Clock, Download, EyeOff, Maximize2, MessageSquareText, Pencil, Play, RotateCw, Workflow } from "lucide-react";
+import type { Flow, PublishedState, Step, VersionSummary } from "@spellsheet/schema";
+import { AppWindow, Clock, Download, EyeOff, Lightbulb, Maximize2, MessageSquareText, Pencil, Play, Repeat, RotateCw, Split, TriangleAlert, Workflow } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
 import { currentChat } from "../agent";
@@ -13,20 +13,24 @@ import {
   buildManual,
   cropOf,
   type Drafts,
+  type Edition,
+  editionOf,
+  frameTree,
   type ManualDoc,
   type ManualManifest,
   type ManualShot,
   type ManualStep,
+  blurRegions,
   type Mask,
   type MaskBox,
   maskStale,
   type Page,
-  type PageBlock,
+  type PageNode,
   pagesOf,
   type Rect,
   type Scene,
 } from "../lib/manual";
-import { burnShot, manualHtml, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
+import { burnShot, manualHtml, operated, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
 import { describeWhen } from "../lib/schedule";
 import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
@@ -77,6 +81,25 @@ function madeLine(manifest: ManualManifest | null): string | null {
     minute: "2-digit",
   });
   return t.manual.made(when, duration(manifest.durationMs));
+}
+
+/** A day as the cover and the revision history say it (2026/11/09). */
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+/** Where the screens came from, short: 「11月9日 09:20 の実行」. */
+function shotLine(manifest: ManualManifest | null, doc: ManualDoc): string {
+  if (manifest) {
+    const when = new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return t.manual.shotRun(when);
+  }
+  return doc.drafts > 0 ? t.manual.shotDrafts : t.manual.shotNone;
 }
 
 /** Loads pictures as data URLs, each once. */
@@ -207,6 +230,8 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const [masks, setMasks] = useState<Record<string, Mask>>({});
   const [drafts, setDrafts] = useState<Drafts>({});
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
+  const [published, setPublished] = useState<PublishedState | null>(null);
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [masking, setMasking] = useState<ManualShot | null>(null);
   const [whole, setWhole] = useState<ManualShot | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -227,6 +252,14 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
         setMasks(m.masks ?? {});
         setDrafts(m.drafts ?? {});
       })
+      .catch(() => {});
+    void api
+      .publishedState(flowId)
+      .then((p) => live && setPublished(p))
+      .catch(() => {});
+    void api
+      .listVersions(flowId)
+      .then((list) => live && setVersions(list))
       .catch(() => {});
     void api
       .listSchedules()
@@ -292,6 +325,8 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   };
   const made = madeLine(manifest);
   const when = schedules.map((s) => describeWhen(s.when));
+  const edition = editionOf(published, versions, day);
+  const shotAt = shotLine(manifest, doc);
 
   return (
     <div className="@container/manual h-full min-h-0">
@@ -318,9 +353,17 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
           </div>
           <div style={{ zoom: fit }}>
             {pages.map((page) => (
-              <Sheet key={page.number} page={page} total={pages.length} title={doc.title} made={made}>
+              <Sheet key={page.number} page={page} total={pages.length} title={doc.title} edition={edition}>
                 {page.kind === "cover" ? (
-                  <Cover doc={doc} made={made} when={when} pages={pages} showMissing={doc.missing > 0 && (manifest !== null || doc.drafts > 0)} />
+                  <Cover
+                    doc={doc}
+                    made={made}
+                    shotAt={shotAt}
+                    edition={edition}
+                    when={when}
+                    pages={pages}
+                    showMissing={doc.missing > 0 && (manifest !== null || doc.drafts > 0)}
+                  />
                 ) : (
                   <BodyPage page={page} ctx={ctx} />
                 )}
@@ -341,7 +384,9 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
           />
         )}
         {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
-        {exporting && <ExportDialog doc={doc} flowId={flow.id} made={made} when={when} masks={masks} onClose={() => setExporting(false)} />}
+        {exporting && (
+          <ExportDialog doc={doc} flowId={flow.id} made={made} shotAt={shotAt} edition={edition} when={when} masks={masks} onClose={() => setExporting(false)} />
+        )}
       </div>
     </div>
   );
@@ -375,21 +420,29 @@ function ToolButton({ icon: Icon, label, title, disabled, onClick }: { icon: typ
 }
 
 function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
-  const rows: [string, string[]][] = [
-    [t.manual.uses, doc.uses],
-    [t.manual.inputs, doc.inputs],
-    [t.manual.outputs, doc.outputs],
-    [t.manual.runsWhen, [...when, t.manual.byHand]],
+  const rows: [string, string[], string | null][] = [
+    [t.manual.uses, doc.uses, null],
+    [t.manual.inputs, doc.inputs, "var(--color-role-input)"],
+    [t.manual.outputs, doc.outputs, "var(--color-role-output)"],
+    [t.manual.runsWhen, [...when, t.manual.byHand], null],
   ];
   return (
-    <dl className="grid grid-cols-[120px_1fr] border-t border-slate-200 text-[13.5px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="border-b border-slate-200 py-2 text-slate-500">{k}</dt>
-          <dd className="border-b border-slate-200 py-2">{v.length > 0 ? v.join("、") : <span className="text-slate-400">{t.manual.none}</span>}</dd>
-        </div>
-      ))}
-    </dl>
+    <table className="w-full border-collapse text-[13px]">
+      <tbody>
+        {rows.map(([k, v, colour]) => (
+          <tr key={k}>
+            <th
+              scope="row"
+              className="w-[118px] border border-slate-200 bg-paper px-2.5 py-1.5 text-left font-normal text-slate-500"
+              style={colour ? { boxShadow: `inset 3px 0 ${colour}` } : undefined}
+            >
+              {k}
+            </th>
+            <td className="border border-slate-200 px-2.5 py-1.5">{v.length > 0 ? v.join("、") : <span className="text-slate-400">{t.manual.none}</span>}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -445,69 +498,144 @@ function shortTitle(title: string): string {
   return parts.length > 1 ? (parts.at(-1) ?? title) : title;
 }
 
-/** One A4 sheet on the desk: the flow's name above, the page number below. */
-function Sheet({ page, total, title, made, children }: { page: Page; total: number; title: string; made: string | null; children: React.ReactNode }) {
+/** The four colours of the swirl as a thin band: across the cover's title and the top of each sheet. */
+function Stripe({ className }: { className: string }) {
+  return (
+    <span aria-hidden className={`absolute inset-x-0 flex ${className}`}>
+      <i className="flex-1 bg-[var(--color-role-input)]" />
+      <i className="flex-1 bg-[var(--color-role-config)]" />
+      <i className="flex-1 bg-[var(--color-role-templates)]" />
+      <i className="flex-1 bg-[var(--color-role-output)]" />
+    </span>
+  );
+}
+
+/** One A4 sheet on the desk: the flow's name and version above, the page number below. */
+function Sheet({ page, total, title, edition, children }: { page: Page; total: number; title: string; edition: Edition; children: React.ReactNode }) {
   return (
     <section
       data-page={page.number}
-      className="relative mx-auto mb-7 flex min-h-[1123px] w-[794px] scroll-mt-14 flex-col bg-sheet px-12 pt-10 pb-14 shadow-[0_1px_2px_rgb(20_30_50/0.08),0_8px_24px_rgb(20_30_50/0.08)]"
+      className={`relative mx-auto mb-7 flex min-h-[1123px] w-[794px] scroll-mt-14 flex-col overflow-hidden bg-sheet px-12 pb-16 shadow-[0_1px_2px_rgb(20_30_50/0.08),0_8px_24px_rgb(20_30_50/0.08)] ${page.kind === "cover" ? "" : "pt-11"}`}
     >
       {page.kind === "body" && (
-        <header className="mb-5 flex items-baseline justify-between gap-4 border-b-[1.5px] border-ink pb-1.5 text-[12px] text-slate-500">
-          <b className="truncate font-semibold text-ink">{title}</b>
-          {made && <span className="shrink-0">{made}</span>}
-        </header>
+        <>
+          <Stripe className="top-0 h-1" />
+          <header className="mb-5 flex items-baseline justify-between gap-4 border-b border-[var(--manual-navy)] pb-1.5 text-[11.5px] text-slate-500">
+            <b className="truncate font-semibold text-[var(--manual-navy)]">{title}</b>
+            <span className="shrink-0">{[edition.label, edition.updated].filter(Boolean).join("　")}</span>
+          </header>
+        </>
       )}
       {children}
-      <footer className="absolute inset-x-12 bottom-5 flex justify-between text-[11px] text-slate-400">
-        <span>{t.manual.madeWith}</span>
+      <footer className="absolute inset-x-12 bottom-6 flex justify-between border-t border-slate-200 pt-1.5 text-[10.5px] text-slate-400">
+        <span className="text-[var(--manual-navy)]">{t.manual.madeWith}</span>
         <span>{t.manual.pageOf(page.number, total)}</span>
       </footer>
     </section>
   );
 }
 
-function Cover({ doc, made, when, pages, showMissing }: { doc: ManualDoc; made: string | null; when: string[]; pages: Page[]; showMissing: boolean }) {
-  const firstPage = (n: number) => pages.find((p) => p.kind === "body" && p.chapter.number === n && p.first)?.number;
+function CoverHeading({ children }: { children: React.ReactNode }) {
   return (
-    <>
-      <p className="mt-16 text-[12.5px] tracking-wide text-slate-500">{t.manual.title}</p>
-      <h1 className="mt-1 mb-2 text-[26px] leading-snug font-semibold">{doc.title}</h1>
-      <p className="mb-6 text-[12.5px] text-slate-500">{made ?? (doc.drafts > 0 ? t.manual.draftsOnly : t.manual.noRun)}</p>
-      {doc.description && <p className="mb-6 text-[14.5px] leading-[1.85] text-slate-700">{doc.description}</p>}
-      <Facts doc={doc} when={when} />
-      {showMissing && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
-      {made && doc.drafts > 0 && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}
-      <h2 className="mt-9 mb-2 text-[14px] font-semibold">{t.manual.contents}</h2>
-      <ol aria-label={t.manual.contents}>
-        {doc.chapters.map((c) => (
-          <li key={c.number} className="flex items-baseline gap-3 border-b border-dotted border-slate-300 py-2 text-[14px]">
-            <Num n={c.number} />
-            <span>
-              {c.title}
-              {c.alongside.length > 0 && <span className="ml-2 text-[12px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
-              <span className="block text-[12px] text-slate-500">
-                {c.screens > 0 ? t.manual.screens(c.screens) : t.manual.noScreen}
-                {c.loops ? `・${t.manual.loop}` : ""}
-              </span>
-            </span>
-            <span className="ml-auto shrink-0 text-[12.5px] text-slate-500 tabular-nums">{firstPage(c.number) ?? ""}</span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-6 text-[12.5px] leading-[1.7] text-slate-500">✎ {t.manual.checkHint}</p>
-      {doc.pictures > 0 && <p className="mt-auto pt-8 text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
-    </>
+    <h2 className="mt-6 mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-[var(--manual-navy)]">
+      <span className="h-3.5 w-1 bg-[var(--manual-navy)]" />
+      {children}
+    </h2>
   );
 }
 
-function Num({ n, big }: { n: number; big?: boolean }) {
+function Cover({
+  doc,
+  made,
+  shotAt,
+  edition,
+  when,
+  pages,
+  showMissing,
+}: {
+  doc: ManualDoc;
+  made: string | null;
+  shotAt: string;
+  edition: Edition;
+  when: string[];
+  pages: Page[];
+  showMissing: boolean;
+}) {
+  const firstPage = (n: number) => pages.find((p) => p.kind === "body" && p.chapter.number === n && p.first)?.number;
+  const info: [string, string][] = [
+    [t.manual.edition, edition.label],
+    ...(edition.updated ? ([[t.manual.updated, edition.updated]] as [string, string][]) : []),
+    [t.manual.shotAt, shotAt],
+  ];
   return (
-    <span
-      className={`grid shrink-0 translate-y-[3px] place-items-center rounded-[5px] bg-ink font-semibold text-sheet ${big ? "h-7 w-7 text-[14px]" : "h-6 w-6 text-[12.5px]"}`}
-    >
-      {n}
-    </span>
+    <>
+      <div className="relative -mx-12 mb-6 bg-[var(--manual-band)] px-12 pt-14 pb-10 text-white">
+        <p className="text-[12.5px] tracking-wider text-[#a9c4de]">{t.manual.kind}</p>
+        <h1 className="mt-3 mb-4 text-[27px] leading-snug font-semibold">{doc.title}</h1>
+        <dl className="flex flex-wrap gap-x-7 gap-y-1 border-t border-white/35 pt-2.5 text-[12px] text-[#a9c4de]">
+          {info.map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd className="text-[13px] font-semibold text-white">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        {edition.changedSince !== null && <p className="mt-2 text-[12px] text-[#d6e3f0]">{t.manual.changedSince(edition.changedSince)}</p>}
+        <Stripe className="-bottom-1.5 h-1.5" />
+      </div>
+      {doc.description && (
+        <>
+          <CoverHeading>{t.manual.about}</CoverHeading>
+          <p className="text-[14px] leading-[1.85] text-slate-700">{doc.description}</p>
+        </>
+      )}
+      <CoverHeading>{t.manual.usesAndValues}</CoverHeading>
+      <Facts doc={doc} when={when} />
+      {showMissing && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
+      {made && doc.drafts > 0 && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}
+      <CoverHeading>{t.manual.contents}</CoverHeading>
+      <ol aria-label={t.manual.contents}>
+        {doc.chapters.map((c) => (
+          <li key={c.number} className="flex items-baseline gap-2.5 py-1 text-[13.5px]">
+            <span className="w-[18px] shrink-0 font-bold text-[var(--manual-navy)]">{c.number}</span>
+            <span className="min-w-0">
+              {c.title}
+              {c.alongside.length > 0 && <span className="ml-2 text-[12px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
+            </span>
+            <span className="min-w-4 flex-1 -translate-y-1 border-b border-dotted border-slate-300" />
+            <span className="shrink-0 text-[12.5px] text-slate-500 tabular-nums">{firstPage(c.number) ?? ""}</span>
+          </li>
+        ))}
+      </ol>
+      {edition.revisions.length > 0 && (
+        <>
+          <CoverHeading>{t.manual.revisions}</CoverHeading>
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="bg-paper text-left text-slate-600">
+                <th className="w-[84px] border border-slate-200 px-2 py-1 font-semibold">{t.manual.edition}</th>
+                <th className="w-[120px] border border-slate-200 px-2 py-1 font-semibold">{t.manual.revisionDate}</th>
+                <th className="border border-slate-200 px-2 py-1 font-semibold">{t.manual.revisionText}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {edition.revisions.map((r) => (
+                <tr key={r.label}>
+                  <td className="border border-slate-200 px-2 py-1">{r.label}</td>
+                  <td className="border border-slate-200 px-2 py-1 tabular-nums">{r.date}</td>
+                  <td className="border border-slate-200 px-2 py-1">{r.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      <p className="mt-6 flex gap-1.5 text-[12.5px] leading-[1.7] text-slate-500">
+        <Pencil size={12} className="mt-[5px] shrink-0" />
+        {t.manual.checkHint}
+      </p>
+      {doc.pictures > 0 && <p className="mt-auto pt-8 text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
+    </>
   );
 }
 
@@ -517,12 +645,11 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
     <>
       {page.first ? (
         <>
-          <h2 className="mb-1 flex items-center gap-3 text-[20px] font-semibold">
-            <Num n={chapter.number} big />
+          <h2 className="mb-1.5 flex items-center gap-3 border-b-2 border-[var(--manual-navy)] pb-2 text-[19px] font-semibold text-[var(--manual-navy)]">
+            <span className="rounded-[4px] bg-[var(--manual-navy)] px-2 py-0.5 text-[12px] text-sheet">{chapter.number}</span>
             {chapter.title}
           </h2>
-          {chapter.alongside.length > 0 && <p className="mb-4 ml-10 text-[12.5px] text-slate-500">{t.manual.alongsideNote(chapter.alongside)}</p>}
-          {chapter.alongside.length === 0 && <div className="mb-4" />}
+          <p className="mb-4 min-h-[1px] text-[12.5px] text-slate-500">{chapter.alongside.length > 0 ? t.manual.alongsideNote(chapter.alongside) : ""}</p>
         </>
       ) : (
         <p className="mb-4 text-[12.5px] text-slate-500">
@@ -530,8 +657,8 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
           {t.manual.continued}
         </p>
       )}
-      {page.blocks.map((block, i) => (
-        <BlockView key={i} block={block} ctx={ctx} />
+      {frameTree(page.blocks).map((n, i) => (
+        <NodeView key={i} node={n} ctx={ctx} />
       ))}
     </>
   );
@@ -540,80 +667,112 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
 function Taken({ taken }: { taken: boolean | null }) {
   if (taken === null) return null;
   return (
-    <span className={`rounded-full border bg-sheet px-2 text-[11.5px] ${taken ? "border-moegi-500 text-moegi-600" : "border-slate-300 text-slate-500"}`}>
+    <span className={`rounded-full border bg-sheet px-2 text-[11.5px] font-normal ${taken ? "border-moegi-500 text-moegi-600" : "border-slate-300 text-slate-500"}`}>
       {taken ? t.manual.took : t.manual.notTaken}
     </span>
   );
 }
 
-function BlockView({ block, ctx }: { block: PageBlock; ctx: Ctx }) {
-  const inset = { paddingLeft: block.depth * 18 };
-  if (block.kind === "label") {
-    const item = block.item;
-    const more = block.continued ? t.manual.continued : "";
+/** A branch, loop or group as a frame with its heading; anything else as itself. */
+function NodeView({ node, ctx }: { node: PageNode; ctx: Ctx }) {
+  if (node.kind === "item") {
+    const item = node.block.item;
+    if (item.kind === "scene") return <SceneCard scene={item} ctx={ctx} />;
+    if (item.kind === "action")
+      return (
+        <div className="mb-3">
+          <ol className="border-t border-slate-200">
+            <StepRow step={item.step} ctx={ctx} />
+          </ol>
+          <Logins steps={[item.step]} />
+        </div>
+      );
     return (
-      <div style={inset} className={`mb-2.5 ${item.kind === "branch" && item.taken === false ? "opacity-70" : ""}`}>
-        {item.kind === "branch" ? (
-          <span
-            className="inline-flex items-center gap-2 rounded-md border px-2.5 py-0.5 text-[13px]"
-            style={{ background: "var(--flow-decide-fill)", borderColor: "var(--flow-decide-line)" }}
-          >
-            ◆ {item.label}
-            {more}
-            <Taken taken={item.taken} />
-          </span>
-        ) : item.kind === "loop" ? (
-          <span className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
-            ↻ {item.label}
-            {more}
-            {item.times !== null && <span className="text-[12.5px] font-normal text-slate-500">{t.manual.loopTimes(item.times)}</span>}
-          </span>
-        ) : (
-          <span className="text-[14px] font-semibold">
-            {item.label}
-            {more}
-          </span>
-        )}
+      <div className="my-2.5 flex items-start gap-2 text-[12.5px] leading-[1.7] text-slate-500">
+        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-slate-100">
+          <Workflow size={11} />
+        </span>
+        <div>
+          <b className="font-semibold text-slate-600">{t.manual.quiet}</b>　{item.texts.join("・")}
+        </div>
       </div>
     );
   }
-  const item = block.item;
+  const item = node.label.item;
+  const more = node.label.continued ? t.manual.continued : "";
+  const look =
+    item.kind === "branch"
+      ? { border: "var(--flow-decide-line)", head: "var(--flow-decide-fill)", colour: undefined }
+      : item.kind === "loop"
+        ? { border: "var(--manual-loop-line)", head: "var(--manual-loop-bg)", colour: "var(--manual-navy)" }
+        : { border: "var(--color-slate-300)", head: "var(--color-paper)", colour: undefined };
   return (
-    <div style={inset} className={block.depth > 0 ? "border-l-2 border-slate-200" : ""}>
-      <div className={block.depth > 0 ? "pl-3" : ""}>
-        {item.kind === "scene" ? (
-          <SceneCard scene={item} ctx={ctx} />
-        ) : item.kind === "action" ? (
-          <ol className="mb-3">
-            <StepRow step={item.step} ctx={ctx} />
-          </ol>
-        ) : (
-          <div className="mb-3 flex items-start gap-2 text-[13px] leading-[1.7] text-slate-500">
-            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-slate-100">
-              <Workflow size={11} />
-            </span>
-            <div>
-              <b className="font-semibold text-slate-600">{t.manual.quiet}</b>　{item.texts.join("・")}
-            </div>
-          </div>
-        )}
+    <div className="my-3 rounded-md border" style={{ borderColor: look.border }}>
+      <div
+        className="flex flex-wrap items-center gap-2 rounded-t-md border-b px-3.5 py-1.5 text-[13px] font-semibold"
+        style={{ borderColor: look.border, background: look.head, color: look.colour }}
+      >
+        {item.kind === "branch" && <Split size={14} className="shrink-0" />}
+        {item.kind === "loop" && <Repeat size={14} className="shrink-0" />}
+        <span>
+          {item.label}
+          {more}
+        </span>
+        {item.kind === "branch" && <Taken taken={item.taken} />}
+        {item.kind === "loop" && item.times !== null && <span className="ml-auto text-[12px] font-normal text-slate-500">{t.manual.loopTimes(item.times)}</span>}
+      </div>
+      <div className={`px-3.5 pt-0.5 pb-2.5 ${item.kind === "branch" && item.taken === false ? "opacity-70" : ""}`}>
+        {node.children.map((c, i) => (
+          <NodeView key={i} node={c} ctx={ctx} />
+        ))}
       </div>
     </div>
   );
 }
 
+/** A boxed note under a step: 確認 (what the flow waits for), 注意 (a login), ポイント (the node's メモ). */
+function Note({ kind, text }: { kind: "check" | "caution" | "point"; text: string }) {
+  const [name, Icon, line, bg, colour] =
+    kind === "check"
+      ? [t.manual.noteCheck, Clock, "var(--manual-check)", "var(--manual-check-bg)", "var(--manual-check)"]
+      : kind === "caution"
+        ? [t.manual.noteCaution, TriangleAlert, "var(--manual-caution)", "var(--manual-caution-bg)", "var(--manual-caution)"]
+        : [t.manual.notePoint, Lightbulb, "var(--manual-point-line)", "var(--manual-point-bg)", "var(--manual-point)"];
+  return (
+    <div className="my-2 flex gap-2.5 rounded-[4px] border-l-[3px] px-3 py-2 text-[12.5px] leading-[1.7] font-normal text-slate-600" style={{ borderColor: line, background: bg }}>
+      <Icon size={15} className="mt-[3px] shrink-0" style={{ color: colour }} />
+      <div>
+        <b className="block font-semibold text-ink">{name}</b>
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function Logins({ steps }: { steps: ManualStep[] }) {
+  const names = [...new Set(steps.flatMap((s) => (s.login ? [s.login] : [])))];
+  return (
+    <>
+      {names.map((name) => (
+        <Note key={name} kind="caution" text={t.manual.loginCaution(name)} />
+      ))}
+    </>
+  );
+}
+
 function StepRow({ step, ctx }: { step: ManualStep; ctx: Ctx }) {
   return (
-    <li className="group/step relative flex gap-2.5 border-b border-slate-200 py-2.5">
-      <span className="mt-0.5 grid h-[21px] w-[21px] shrink-0 place-items-center rounded-full bg-primary text-[12px] font-bold text-on-primary">{step.number}</span>
-      <div className="min-w-0 flex-1 text-[14px] leading-[1.65]">
+    <li className="group/step relative flex gap-2.5 border-b border-slate-200 py-2">
+      <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full bg-primary text-[13px] font-bold text-on-primary">{step.number}</span>
+      <div className="min-w-0 flex-1 text-[14.5px] leading-[1.65] font-semibold">
         {step.text}
         {step.how && (
-          <span className="block text-[12.5px] leading-[1.6] text-slate-500">
+          <span className="block text-[12.5px] leading-[1.6] font-normal text-slate-500">
             <Sentence parts={step.how} />
           </span>
         )}
-        <span className="mt-1 hidden gap-1.5 group-hover/step:flex group-focus-within/step:flex">
+        {step.note && <Note kind="point" text={step.note} />}
+        <span className="mt-1 hidden gap-1.5 font-normal group-hover/step:flex group-focus-within/step:flex">
           <button
             type="button"
             title={t.manual.differsTitle}
@@ -649,9 +808,8 @@ function SceneRows({ waits, step, ctx }: { waits: Scene["waits"]; step: ManualSt
   return (
     <>
       {waits.map((w, i) => (
-        <li key={i} className="flex items-start gap-2 py-1 text-[12.5px] text-slate-500">
-          <Clock size={13} className="mt-[3px] shrink-0" />
-          {w.text}
+        <li key={i}>
+          <Note kind="check" text={w.text} />
         </li>
       ))}
       {step && <StepRow step={step} ctx={ctx} />}
@@ -663,9 +821,9 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
   const shot = scene.shot;
   const mask = shot ? ctx.masks[shot.key] : undefined;
   return (
-    <div className="mb-5">
+    <div className="mt-3 mb-4">
       <div className="mb-1.5 flex items-center gap-2 text-[12.5px] text-slate-500">
-        <Camera size={13} />
+        <AppWindow size={14} />
         <b className="font-semibold text-ink">{t.manual.screenOf(scene.title, scene.app === "desktop")}</b>
         {shot?.draft && (
           <span title={shot.draft === "ai" ? t.manual.draftByAi : t.manual.draftByStudio} className="rounded-[4px] border border-slate-300 px-1.5 text-[11.5px] text-slate-500">
@@ -693,11 +851,12 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
       ) : (
         <p className="text-[12px] text-slate-400">{t.manual.noPicture}</p>
       )}
-      <ol className="mt-2 border-t border-slate-200">
+      <ol className="mt-2.5 border-t border-slate-200">
         {[...scene.steps, null].map((s, i) => (
           <SceneRows key={s?.key ?? "end"} waits={scene.waits.filter((w) => w.at === i)} step={s} ctx={ctx} />
         ))}
       </ol>
+      <Logins steps={scene.steps} />
     </div>
   );
 }
@@ -751,7 +910,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             className="absolute max-w-none"
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
-          <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={crop} k={k} />
+          <MaskBoxes boxes={mask?.boxes ?? []} regions={blurRegions(shot.regions, operated(marks))} crop={crop} k={k} />
           {marks.map((m, i) => (
             <span
               key={m.number ?? `wait-${i}`}
@@ -947,6 +1106,8 @@ function ExportDialog({
   doc,
   flowId,
   made,
+  shotAt,
+  edition,
   when,
   masks,
   onClose,
@@ -954,6 +1115,8 @@ function ExportDialog({
   doc: ManualDoc;
   flowId: string;
   made: string | null;
+  shotAt: string;
+  edition: Edition;
   when: string[];
   masks: Record<string, Mask>;
   onClose: () => void;
@@ -974,7 +1137,7 @@ function ExportDialog({
         }
       }
       const date = new Date().toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US");
-      const html = manualHtml(doc, pictures, { blurFields, noPictures, made, when, date });
+      const html = manualHtml(doc, pictures, { blurFields, noPictures, made, shotAt, edition, when, date });
       setState({ kind: "done", path: await manualApi.saveExport(doc.title, html) });
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : String(e) });
