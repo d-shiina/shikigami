@@ -1,0 +1,81 @@
+---
+title: SpellSheet でできること
+description: SpellSheet の全体像と、Writer・Runner・Worker の違い、このマニュアルの読み方。
+---
+
+import { AppWindow, ArrowRight, CalendarClock, ClipboardCheck, Monitor, Pencil, Play, Sparkles } from "@lucide/astro";
+import Screen from "../../components/Screen.astro";
+import writer from "../../assets/screens/writer.webp";
+import writerDark from "../../assets/screens/writer-dark.webp";
+
+SpellSheet は、Windows の PC でいつもの事務作業を自動で行うソフトです。Excel や CSV の集計、Web の業務システムへの入力、デスクトップアプリの操作、メールや PDF の処理などを、**フロー**としてまとめておき、ボタン 1 つや決まった時刻に動かせます。
+
+フローは AI に頼んで作ってもらえます。作ったフローは日本語の手順と画面の写真で読めるので、人が確かめてから使います。確かめたあとのフローは AI を使わずに PC の中だけで動きます。
+
+<Screen src={writer} dark={writerDark} alt="SpellSheet Writer の画面。左にサイドバー、真ん中にフロー図、右にノードの設定が並ぶ" caption="フローを作る画面（SpellSheet Writer）" />
+
+## 3 つの使い方
+
+SpellSheet は 1 つのインストーラーで入り、使う人や場面に合わせて 3 つの形で動きます。
+
+<div class="ss-cards">
+  <div class="ss-card" data-tone="cyan">
+    <div class="ss-card-head"><Pencil class="ss-icon" />Writer<small>作る人</small></div>
+    <p>フローを作り、直し、試す画面です。AI に頼んで作ってもらうのも、確かめて確定するのもここです。</p>
+  </div>
+  <div class="ss-card" data-tone="orange">
+    <div class="ss-card-head"><AppWindow class="ss-icon" />Runner<small>使う人</small></div>
+    <p>確定したフローを選んで、入力を埋めて実行するだけの小さな画面です。フローの中身は変えられません。</p>
+  </div>
+  <div class="ss-card" data-tone="green">
+    <div class="ss-card-head"><Monitor class="ss-icon" />Worker<small>決まった時刻に</small></div>
+    <p>画面の裏で動き、スケジュールの時刻やファイル・メールが届いたときに、確定したフローを自動で実行します。</p>
+  </div>
+</div>
+
+## 仕事の流れ
+
+どの業務も、だいたい次の 3 段階で自動化します。
+
+<div class="ss-flow">
+  <div class="ss-card" data-tone="cyan">
+    <div class="ss-card-head"><Sparkles class="ss-icon" />作る</div>
+    <p>やりたいことを業務の言葉で AI に頼みます。手で組むこともできます。</p>
+  </div>
+  <div class="ss-flow-arrow"><ArrowRight class="ss-icon" /></div>
+  <div class="ss-card" data-tone="green">
+    <div class="ss-card-head"><ClipboardCheck class="ss-icon" />確かめて確定する</div>
+    <p>何が変わったか、外に何をするか、試した結果を読み、問題なければ「変更を承諾」します。</p>
+  </div>
+  <div class="ss-flow-arrow"><ArrowRight class="ss-icon" /></div>
+  <div class="ss-card" data-tone="orange">
+    <div class="ss-card-head"><CalendarClock class="ss-icon" />動かす</div>
+    <p>Runner から実行するか、スケジュールで自動で実行します。AI は要りません。</p>
+  </div>
+</div>
+
+:::note[データは PC の中に残ります]
+実行の記録・画面の写真・ログイン情報は、あなたの PC（または会社の共有フォルダー）にだけ保存されます。SpellSheet のサーバーへ送られることはありません。AI に渡るのは、フローを作るときにあなたが頼んだ内容と、AI が調べた画面だけです。
+:::
+
+## このマニュアルの読み方
+
+初めての方は、上から順に読むと一通り使えるようになります。
+
+| 知りたいこと | 読むページ |
+|---|---|
+| 入れ方と更新 | [インストールと更新](install/) |
+| 画面のどこに何があるか | [Writer の画面](writer/) |
+| フローの作り方 | [フローを作る](make-flow/)、[AI の変更を確認する](review/) |
+| 動かし方・止まったとき | [実行と直し方](run/)、[困ったとき](troubleshooting/) |
+| 直したあとに前と同じ結果になるか確かめたい | [テストケース](tests/) |
+| 毎日・毎月決まった時刻に動かしたい | [確定とスケジュール実行](publish-and-schedule/) |
+| パスワードの扱い | [ログイン情報と個人情報](secrets/) |
+| フローをほかの人に渡したい | [フローを人に渡す](share/) |
+| フォルダーの中身が何か知りたい | [フォルダー構成](folders/) |
+
+まず手を動かしてみたいときは、見本のファイル付きの[チュートリアル](https://github.com/spellsheet/spellsheet/blob/main/docs/ja/tutorials/README.md)（各 15 分ほど）で、業務 1 本を最初から最後まで試せます。
+
+:::caution[開発中の版です]
+SpellSheet は 1.0 より前の版です。大事な業務で使う前に、テスト用のデータや環境で動きを確かめてください。このマニュアルは最新の版の画面で説明しています。
+:::

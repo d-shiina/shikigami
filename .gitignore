@@ -18,3 +18,4 @@ examples/tutorials/*/output/
 examples/tutorials/*/logs/
 examples/tutorials/*/work/
 site/release.json
+site/manual/

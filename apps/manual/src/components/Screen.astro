@@ -1,0 +1,30 @@
+---
+// A screenshot of SpellSheet, with an optional dark version shown in the
+// dark theme, and a caption.
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+
+interface Props {
+  src: ImageMetadata;
+  dark?: ImageMetadata;
+  alt: string;
+  caption?: string;
+}
+const { src, dark, alt, caption } = Astro.props;
+const widths = [800, 1600];
+const sizes = "(max-width: 50rem) 100vw, 50rem";
+---
+
+<figure>
+  {
+    dark ? (
+      <>
+        <Image class="ss-light" src={src} alt={alt} widths={widths} sizes={sizes} />
+        <Image class="ss-dark" src={dark} alt={alt} widths={widths} sizes={sizes} />
+      </>
+    ) : (
+      <Image src={src} alt={alt} widths={widths} sizes={sizes} />
+    )
+  }
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

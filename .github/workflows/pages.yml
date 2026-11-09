@@ -1,8 +1,9 @@
 name: Pages
 
 # The product site (site/) on GitHub Pages: the introduction and the
-# download page. It is published again after each release so release.json
-# names the newest installer; the page also checks the GitHub API itself.
+# download page, and the manual (apps/manual, built with Starlight) under
+# manual/. It is published again after each release so release.json names
+# the newest installer; the page also checks the GitHub API itself.
 #
 # Once per repository: Settings → Pages → Build and deployment → Source:
 # "GitHub Actions".
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "apps/manual/**"
       - ".github/workflows/pages.yml"
   workflow_run:
     workflows: [Release]
@@ -36,6 +38,24 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @spellsheet/manual
+      # The manual's addresses start with the repository's page:
+      # https://<owner>.github.io/<repository>/manual/.
+      - name: Build the manual into site/manual
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          owner="${REPOSITORY%%/*}"
+          export MANUAL_SITE="https://${owner,,}.github.io"
+          export MANUAL_BASE="/${REPOSITORY#*/}/manual"
+          pnpm --filter @spellsheet/manual check
+          cp -r apps/manual/dist site/manual
       - name: Write release.json (the latest installer)
         env:
           GH_TOKEN: ${{ github.token }}

@@ -17,6 +17,7 @@
 
 ### 変更
 
+- 業務で使う人向けの製品マニュアルを、製品サイトの「マニュアル」（https://spellsheet.github.io/spellsheet/manual/）に載せました。画面の見方、フローの作り方と確かめ方、実行と直し方、テストケース（フローのフォルダーの `tests/`）、確定とスケジュール、ログイン情報、フローの渡し方、AI と MCP の登録、カスタム ノード、フォルダー構成、困ったときを、日本語で説明しています。検索もできます
 - カスタム ノードの「一覧」に、SpellSheet 公式の一覧（spellsheet/plugins）が最初から入るようになりました。組織やコミュニティの一覧を複数足せます。一覧からは、載せたときの版と中身（SHA-256）が一致するものだけをインストール・更新し、取り下げられたものはインストールできず、入っている PC には知らせます。`spellsheet plugin install <名前>` で一覧から入れられます
 - 形式の名前を変えました：フローのまとめ `spellsheet.flowBundle`、設定ファイル `spellsheet.config`、AI の答え `spellsheet.answer`、カスタム ノードの `spellsheet-plugin.json`、ファイル名の `.spellsheet.json`、環境変数 `SPELLSHEET_*`、JSON Schema の `$id`（`https://spellsheet.dev/schemas/…`）。以前の名前のものも読めます
 - MCP サーバーの名前を `spellsheet` に、管理サーバーとの通信のヘッダーを `x-spellsheet-*` にしました（以前の Worker からの要求も受け付けます）

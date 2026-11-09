@@ -145,6 +145,8 @@ jobs:
       - run: pnpm -r test
       - name: Generated TypeScript types are up to date
         run: pnpm --filter @spellsheet/schema exec node scripts/generate.mjs --check
+      - name: The manual builds and every link in it leads somewhere
+        run: pnpm --filter @spellsheet/manual check
 
   contract:
     name: Contract changes are in the changelog
