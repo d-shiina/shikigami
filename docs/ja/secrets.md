@@ -125,7 +125,7 @@ spellsheet secret reset --yes               # すべて消して登録し直す�
 ### MFA
 
 - **ワンタイムコード（TOTP）**：MFA の設定キーを登録しておけば `field: "totp"` で毎回いまのコードを入力できます。
-- **スマホでの承認・SMS・CAPTCHA など**：`browser.waitForHuman` で人の操作を待ちます。Writer に「操作を待っています」と出て、ブラウザが前面に来ます。`until` の要素（例：ログイン後の見出し）が出たら次へ進みます。待つのは既定で 5 分（`timeoutMs` で変更）。画面なし（headless）の実行では待たずに `HUMAN_REQUIRED` で失敗します。
+- **スマホでの承認・SMS・CAPTCHA など**：`browser.waitForHuman` で人の操作を待ちます。Writer（Runner）に「操作を待っています」と出て、ブラウザが前面に来ます。Writer・Runner が後ろにあるときは、タスクバーのボタンが点滅し、Windows の通知でも知らせます。`until` の要素（例：ログイン後の見出し）が出たら次へ進みます。待つのは既定で 5 分（`timeoutMs` で変更）。画面なし（headless）の実行では待たずに `HUMAN_REQUIRED` で失敗します。
 - 無人で動かすフローは、一度人がログインした状態を `session` で保つのが基本です。
 
 ## マスク

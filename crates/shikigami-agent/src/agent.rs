@@ -102,6 +102,9 @@ pub struct RemoteStatus {
 
 /// Called with every report of a run the agent started (notifications).
 pub type FinishedHook = Arc<dyn Fn(&RunReport) + Send + Sync>;
+/// Called when a run the agent started begins to wait for a person
+/// (notifications with `waiting`).
+pub type WaitingHook = Arc<dyn Fn(&crate::notify::Waiting) + Send + Sync>;
 
 struct Active {
     info: RunningRun,
@@ -137,6 +140,7 @@ pub struct Agent {
     started_at: String,
     active: Mutex<HashMap<RunId, Active>>,
     hooks: Mutex<Vec<FinishedHook>>,
+    waiting_hooks: Mutex<Vec<WaitingHook>>,
     state: Mutex<Loop>,
     stop: CancellationToken,
     keys: Mutex<Arc<dyn KeyStore>>,
@@ -167,6 +171,7 @@ impl Agent {
             started_at: now_text(),
             active: Mutex::new(HashMap::new()),
             hooks: Mutex::new(Vec::new()),
+            waiting_hooks: Mutex::new(Vec::new()),
             state: Mutex::new(Loop::default()),
             stop: CancellationToken::new(),
             keys: Mutex::new(crate::remote::default_key_store(svc.store().local_root())),
@@ -213,6 +218,10 @@ impl Agent {
 
     pub fn on_finished(&self, hook: FinishedHook) {
         lock(&self.hooks).push(hook);
+    }
+
+    pub fn on_waiting(&self, hook: WaitingHook) {
+        lock(&self.waiting_hooks).push(hook);
     }
 
     /// Starts the published version of a flow. Fails like
@@ -278,10 +287,17 @@ impl Agent {
         let agent = Arc::clone(self);
         let id = run_id.clone();
         tokio::spawn(async move {
+            let mut watch = crate::notify::WaitWatch::default();
             let result = handle
                 .wait_with(|e| {
                     if let Err(err) = recorder.write_event(e) {
                         tracing::warn!(error = %err, "failed to record event");
+                    }
+                    if let Some(waiting) = watch.on_event(e) {
+                        let hooks = lock(&agent.waiting_hooks).clone();
+                        for hook in hooks {
+                            hook(&waiting);
+                        }
                     }
                 })
                 .await;

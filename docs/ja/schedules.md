@@ -112,7 +112,7 @@ spellsheet schedule disable sch_…   # enable / remove
 | 項目 | 既定 | 意味 |
 |---|---|---|
 | `webhook` | （必須） | 送り先。`https://`（`http://` は `localhost` だけ）。URL を知っていれば誰でも投稿できるので、パスワードと同じように扱う |
-| `on` | `["failed"]` | どの終わり方を知らせるか：`failed`・`succeeded`・`cancelled` |
+| `on` | `["failed"]` | どの終わり方を知らせるか：`failed`・`succeeded`・`cancelled`。`waiting` を入れると、ブラウザでのサインインやダイアログなど**人の操作を待ち始めたとき**にも知らせる（待つたびに 1 回。時間切れで止まれば `failed` として知らせる） |
 | `format` | `teams` | `teams`：Teams の「ワークフロー」の Webhook 向けのカード（Power Automate の「HTTP 要求の受信時」でも受けられ、メールにもできる）。`slack`：Slack などの `{ "text": … }`。`json`：自社のシステム向けの実行の要約 |
 | `flows` | すべて | このフロー ID だけ |
 

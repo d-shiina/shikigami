@@ -1,5 +1,4 @@
 import { DistributionDialog } from "./components/Distribution";
-import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
@@ -46,12 +45,22 @@ import { WindowControls } from "./components/WindowControls";
 import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
+import { Hand } from "lucide-react";
+import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
+
+/** Calls the person in another window when a run or an AI starts waiting for them (lib/attention.ts). */
+function Attention() {
+  const store = useStudioApi();
+  const tag = useStudio((s) => writerAsk(s)?.tag ?? null);
+  useAttention(tag ? writerAsk(store.getState()) : null);
+  return null;
+}
 
 /** The desk's left gutter, the files column and the gap after it. */
 const OUTLINE_BESIDE_FILES = 12 + 264 + 12;
@@ -61,8 +70,8 @@ function HumanBanner() {
   const human = useStudio((s) => s.human);
   if (!human) return null;
   return (
-    <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
-      <span className="bg-shu-500 h-2 w-2 rounded-full" />
+    <div role="status" className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
+      <Hand size={15} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
       <span>
         {t.waitingForYou}
         {t.colon}
@@ -512,6 +521,7 @@ function Shell() {
         <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 pr-1.5 pb-1.5">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
+            <Attention />
             <HumanBanner />
             <Banner />
             {work}
@@ -680,18 +690,6 @@ export function App() {
       void store.getState().loadPickRequests();
     };
     window.addEventListener("focus", onFocus);
-    // A new request flashes Studio in the taskbar: the user is likely in the AI's chat.
-    const stopAttention = store.subscribe((s, prev) => {
-      const asked =
-        s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name)) ||
-        s.approvals.some((r) => !prev.approvals.some((p) => p.id === r.id)) ||
-        s.pickRequests.some((r) => !prev.pickRequests.some((p) => p.id === r.id));
-      if (asked) {
-        void getCurrentWindow()
-          .requestUserAttention(UserAttentionType.Informational)
-          .catch(() => {});
-      }
-    });
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const mod = e.ctrlKey || e.metaKey;
@@ -758,7 +756,6 @@ export function App() {
       stopMenu();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("focus", onFocus);
-      stopAttention();
       stopProject();
       stopDrafting();
       for (const p of unlisten) void p.then((off) => off());

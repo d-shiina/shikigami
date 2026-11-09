@@ -1640,10 +1640,19 @@ async fn run(
     });
 
     let mut recorder = RunRecorder::create(workspace, &handle.run_id)?.prune_on_finish(policy);
+    // `notify` with `waiting`: an unattended run waits for a person.
+    let mut watch = shikigami_agent::notify::WaitWatch::default();
+    let mut waits = tokio::task::JoinSet::new();
     let report = handle
         .wait_with(|e| {
             if let Err(err) = recorder.write_event(e) {
                 tracing::warn!(error = %err, "failed to record event");
+            }
+            if let Some(waiting) = watch.on_event(e) {
+                let policy = policy.to_path_buf();
+                waits.spawn(async move {
+                    shikigami_agent::notify::notify_waiting(&policy, &waiting).await;
+                });
             }
             if json {
                 if let Ok(line) = serde_json::to_string(e) {
@@ -1712,6 +1721,7 @@ async fn run(
     recorder.finish(&report)?;
     // `notify` in policy.json: Task Scheduler and batch runs are unattended.
     shikigami_agent::notify::notify(policy, &report).await;
+    while waits.join_next().await.is_some() {}
     if !json {
         if !report.outputs.is_empty() {
             println!("outputs: {}", serde_json::to_string(&report.outputs)?);

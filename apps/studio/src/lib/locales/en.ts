@@ -1695,6 +1695,14 @@ export const en: Dict = {
       "web-orders": { name: "Ship pending orders in a web order system", uses: "Browser, sign-in" },
     } as Record<string, { name: string; uses: string }>,
   },
+  // Windows notifications: shown when a run starts waiting for the person while the window is behind (lib/attention.ts).
+  attention: {
+    waiting: (flow: string | null) => (flow ? `"${flow}" is waiting for you` : "A flow is waiting for you"),
+    pausedOnError: (flow: string | null) => (flow ? `"${flow}" paused on an error` : "A flow paused on an error"),
+    pausedAtBreakpoint: (flow: string | null) => (flow ? `"${flow}" paused at a breakpoint` : "A flow paused at a breakpoint"),
+    pauseBody: (node: string | null) => (node ? `Stopped at "${node}". Choose how to go on in Writer` : "Choose how to go on in Writer"),
+    aiTitle: "The AI is waiting for you in Writer",
+  },
   tray: {
     tooltip: "SpellSheet",
     openRunner: "Open Runner",

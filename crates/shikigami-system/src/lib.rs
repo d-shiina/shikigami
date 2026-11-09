@@ -126,7 +126,7 @@ impl ActionHandler for SystemStep {
                 | Kind::DialogInput
                 | Kind::DialogForm
                 | Kind::DialogSelectFile => {
-                    input.request_human("SpellSheet のダイアログに答えてください");
+                    input.request_human_in_dialog("SpellSheet のダイアログに答えてください");
                     // Each dialog is its own process: a stop or timeout kills
                     // it and closes the window.
                     match kind {

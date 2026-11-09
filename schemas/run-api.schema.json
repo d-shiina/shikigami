@@ -251,7 +251,7 @@
           ]
         },
         {
-          "description": "A step waits for a person (e.g. to log in or approve MFA on the\nscreen). Studio shows `message` until the step finishes.",
+          "description": "A step waits for a person (e.g. to log in or approve MFA on the\nscreen). Studio shows `message` until the step finishes. `dialog`:\nthe step shows its own window in front of the others (a SpellSheet\ndialog), so the screens do not call the person themselves.",
           "type": "object",
           "properties": {
             "type": {
@@ -263,6 +263,9 @@
             },
             "message": {
               "type": "string"
+            },
+            "dialog": {
+              "type": "boolean"
             }
           },
           "required": [

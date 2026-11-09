@@ -3776,7 +3776,7 @@
       "type": "object",
       "properties": {
         "on": {
-          "description": "Which endings to report. Default: failures only.",
+          "description": "Which endings to report (and `waiting`). Default: failures only.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RunOutcome"
@@ -3807,12 +3807,21 @@
       ]
     },
     "RunOutcome": {
-      "description": "How an unattended run ended, for [`NotifyRule::on`].",
-      "type": "string",
-      "enum": [
-        "succeeded",
-        "failed",
-        "cancelled"
+      "description": "How an unattended run ended, for [`NotifyRule::on`], or that it waits.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        {
+          "description": "Not an ending: a step started waiting for a person (a login in the\nbrowser, a dialog). Sent once for each wait, while it waits.",
+          "type": "string",
+          "const": "waiting"
+        }
       ]
     },
     "NotifyFormat": {
