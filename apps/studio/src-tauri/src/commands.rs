@@ -111,7 +111,7 @@ pub fn publish_flow(
     Ok(state.service.publish(&id, input, studio())?)
 }
 
-/// The review desk's 「確認して確定」: approves `revision` and publishes it.
+/// The review desk's 「変更を承諾」: approves `revision` and publishes it.
 #[tauri::command]
 pub fn approve_and_publish(
     state: State<'_, AppState>,

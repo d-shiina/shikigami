@@ -44,7 +44,7 @@ The AI opens the page, looks at its elements (`inspect_page`) and builds nodes f
 
 ## 4. Check and publish
 
-Under "To review", what it touches lists the site `http://127.0.0.1:8787` and how the secret デモ受注システム is used. Check the destination and press "Review and publish".
+Under "To review", what it touches lists the site `http://127.0.0.1:8787` and how the secret デモ受注システム is used. Check the destination and press "Accept changes".
 
 ## 5. Try it
 
