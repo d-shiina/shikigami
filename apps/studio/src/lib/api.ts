@@ -392,7 +392,14 @@ export const api = {
   run: (
     id: string,
     inputs?: Record<string, unknown>,
-    debug?: { breakpoints: string[]; step?: boolean; startAt?: string; startValues?: Record<string, unknown> },
+    debug?: {
+      breakpoints: string[];
+      step?: boolean;
+      startAt?: string;
+      startValues?: Record<string, unknown>;
+      /** Whether Writer steps aside for a run that works on the screen (src-tauri/src/run_band.rs). */
+      band?: { shrink: boolean; restoreAtEnd: boolean };
+    },
   ) =>
     call<string>("run_flow", { id, inputs, debug }),
   /** Step commands for a paused run; resuming swaps in the stored revision first (e.g. the AI's fix). */
