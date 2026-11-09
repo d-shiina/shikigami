@@ -20,11 +20,11 @@ SpellSheet には下のプロトコルを話す小さな**参考実装のサー�
    }
    ```
 
-4. Worker（`spellsheet worker install`、または Writer の「自動実行」の「自動実行を開始」）は、**何も実行していないときだけ**サーバーに仕事を取りに行きます。そのとき `remote.flows` で許していて、この PC で公開版があるフローを伝え、サーバーは合うジョブがあれば渡します。
-5. ジョブはほかの無人実行と同じく動きます。**公開版**を、`policy.json` のサイト・アプリ・`unattended` の決まりのもとで、この PC の金庫の秘密を使って。記録の `origin` は `trigger: "remote"`、`requestedBy`（サーバーで頼んだ人）、`jobId`。イベントは 2 秒ごと、レポートは最後にサーバーへ送ります。サーバーに届かないあいだも実行は最後まで続き、つながったら送ります。
+4. Worker（`spellsheet worker install`、または Writer の「自動実行」の「自動実行を開始」）は、**何も実行していないときだけ**サーバーに仕事を取りに行きます。そのとき `remote.flows` で許していて、この PC で確定版があるフローを伝え、サーバーは合うジョブがあれば渡します。
+5. ジョブはほかの無人実行と同じく動きます。**確定版**を、`policy.json` のサイト・アプリ・`unattended` の決まりのもとで、この PC の金庫の秘密を使って。記録の `origin` は `trigger: "remote"`、`requestedBy`（サーバーで頼んだ人）、`jobId`。イベントは 2 秒ごと、レポートは最後にサーバーへ送ります。サーバーに届かないあいだも実行は最後まで続き、つながったら送ります。
 6. サーバーで取り消したジョブは、PC の次の連絡で取り消します（`finally` は動きます）。
 
-最後に決めるのは PC です。サーバーが何を頼んでも、`policy.json` で許していないフロー（`REMOTE_NOT_ALLOWED`）、公開していないもの（`NOT_PUBLISHED`）、ジョブが指定した版と違う公開版（`VERSION_MISMATCH`）は動かさず、**断った**ことをサーバーに返します。秘密は PC から出ません。ジョブが運ぶのは入力の値で、パスワードではありません。
+最後に決めるのは PC です。サーバーが何を頼んでも、`policy.json` で許していないフロー（`REMOTE_NOT_ALLOWED`）、確定していないもの（`NOT_PUBLISHED`）、ジョブが指定した版と違う確定版（`VERSION_MISMATCH`）は動かさず、**断った**ことをサーバーに返します。秘密は PC から出ません。ジョブが運ぶのは入力の値で、パスワードではありません。
 
 ```powershell
 spellsheet worker enroll https://manager.example.co.jp 3f9a1c0d2b7e4a55
@@ -86,6 +86,6 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
 
 ## 制約
 
-- バンドルを送ること（`remote.acceptBundles`）はまだできません。ジョブは PC のワークスペースの公開版を動かします。
+- バンドルを送ること（`remote.acceptBundles`）はまだできません。ジョブは PC のワークスペースの確定版を動かします。
 - 1 台の PC で一度に 1 つ、ほかに何も動いていないときだけ。
 - 参考実装のサーバーは、メモリとファイル 1 つで動き、管理用トークンのほかにアカウントはありません。

@@ -71,7 +71,7 @@ AI が保存したケースは、その変更の**約束**として扱います�
 ## コマンドで流す
 
 ```bash
-spellsheet test <フローの ID>                 # 公開版で全部のケース
+spellsheet test <フローの ID>                 # 確定版で全部のケース
 spellsheet test <フローの ID> --draft         # 作業中の内容で
 spellsheet test <フローの ID> --case 3支店の合計  # 1 ケースだけ（繰り返し指定できます）
 spellsheet test examples/tutorials/sales-csv/flow.json   # ファイルのフローも

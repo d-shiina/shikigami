@@ -795,7 +795,7 @@ const BADGE: Record<Tone, { pill: string; dot: string }> = {
 /** The dot color of a tone, for a FacetFilter option that names the same state. */
 export const toneDot = (tone: Tone) => BADGE[tone].dot;
 
-/** A row's state in a cell (公開中, 有効, 読み込みエラー…): the same pill in every table. */
+/** A row's state in a cell (確定済み, 有効, 読み込みエラー…): the same pill in every table. */
 export function StatusBadge({ tone, label, title }: { tone: Tone; label: string; title?: string }) {
   return (
     <span className={`inline-flex h-5 max-w-full items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap ${BADGE[tone].pill}`} title={title}>

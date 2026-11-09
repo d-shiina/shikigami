@@ -17,7 +17,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
 2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
 3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
-4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
+4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して確定」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
 
 業務 1 本を最初から最後まで通して試すには、[チュートリアル](docs/ja/tutorials/README.md)（各 15 分ほど、見本のファイル付き）を参照してください。以下は開発者向けの情報です。
 
@@ -31,10 +31,10 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 | [docs/architecture.md](docs/ja/architecture.md) | システム構成、フロー形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/ja/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
 | [docs/ai-chat.md](docs/ja/ai-chat.md) | MCP を使えない AI のチャット（Microsoft Copilot など）でフローを作る：渡す仕様書、答えの貼り付け、人の手直し |
-| [docs/runner.md](docs/ja/runner.md) | 動かすだけの人の実行画面：公開されたフロー、入力変数から作るフォーム、結果とファイル |
-| [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
+| [docs/runner.md](docs/ja/runner.md) | 動かすだけの人の実行画面：確定されたフロー、入力変数から作るフォーム、結果とファイル |
+| [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・確定した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
 | [docs/schedules.md](docs/ja/schedules.md) | スケジュールとファイルのきっかけ、それを PC ごとに動かす Worker |
-| [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・公開・実行したか（`spellsheet audit`）と保存期間 |
+| [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・確定・実行したか（`spellsheet audit`）と保存期間 |
 | [docs/remote.md](docs/ja/remote.md) | 管理サーバー：PC の登録、空いた PC へのジョブの振り分け、プロトコル v1 と参考実装のサーバー |
 | [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
 | [docs/ja/extensions.md](docs/ja/extensions.md) | カスタム ノード：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
@@ -112,8 +112,8 @@ echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}
   | spellsheet flow edit scn_example_invoice_summary -
 spellsheet flow undo scn_example_invoice_summary
 spellsheet run scn_example_invoice_summary --draft --json   # 作業中の内容を試す
-spellsheet version publish scn_example_invoice_summary       # 人が確認して公開
-spellsheet run scn_example_invoice_summary --json           # 無人実行は公開版だけを動かす
+spellsheet version publish scn_example_invoice_summary       # 人が確認して確定
+spellsheet run scn_example_invoice_summary --json           # 無人実行は確定版だけを動かす
 ```
 
 Writer を開いたまま CLI でフローを編集すると、変更が Writer に即座に反映されます。
