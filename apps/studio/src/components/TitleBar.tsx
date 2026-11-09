@@ -21,6 +21,7 @@ const PAGE_TITLE: Partial<Record<Place, () => string>> = {
 
 export function TitleBar({ view, onView }: { view: View; onView: (view: View) => void }) {
   const place = useStudio((s) => s.place);
+  const setPlace = useStudio((s) => s.setPlace);
   const hasFlow = useStudio((s) => s.flow !== null);
   // The flow places open a flow into the editor; the others are pages.
   const editing = (place === "flows" || place === "review") && hasFlow;
@@ -30,7 +31,22 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
   const setReviewView = useReviewView((s) => s.setView);
   return (
     <header data-tauri-drag-region className="@container/title relative flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet px-3 select-none">
-      {editing ? <FlowTitle /> : page && <span className="truncate text-[13px] font-bold">{page}</span>}
+      {editing ? (
+        <FlowTitle />
+      ) : place === "extensions" ? (
+        // Custom nodes are managed from Settings, so the page reads as a part of it.
+        <>
+          <button type="button" onClick={() => setPlace("settings")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+            {t.shell.settings}
+          </button>
+          <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
+            /
+          </span>
+          <span className="truncate px-0.5 text-[13px] font-semibold text-ink">{t.extensions.place}</span>
+        </>
+      ) : (
+        page && <span className="truncate text-[13px] font-bold">{page}</span>
+      )}
       <span data-tauri-drag-region className="min-w-4 flex-1 self-stretch" />
       {editing &&
         (place === "review" ? <FlowActions view={reviewView} onView={setReviewView} /> : <FlowActions view={view} onView={(v) => v !== "report" && onView(v)} />)}
