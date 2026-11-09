@@ -152,12 +152,45 @@ fn clean_downloads(dir: &Path, current_version: &str) {
     }
 }
 
-#[tauri::command]
-pub fn app_info(app: AppHandle) -> AppInfo {
-    let cli_path = install_dir()
+/// The CLI installed with Studio, which MCP clients run; none in development.
+fn installed_cli() -> Option<String> {
+    install_dir()
         .map(|dir| dir.join(CLI_EXE))
         .filter(|p| !cfg!(debug_assertions) && p.is_file())
-        .map(|p| p.display().to_string());
+        .map(|p| p.display().to_string())
+}
+
+/// Cursor's "add MCP server" link for the installed CLI
+/// (`cursor://anysphere.cursor-deeplink/mcp/install`): Cursor shows the
+/// server and asks before adding it, so nobody edits `mcp.json` by hand.
+fn cursor_install_url(cli: &str) -> String {
+    use base64::Engine as _;
+    let config = serde_json::json!({ "command": cli, "args": ["mcp"] }).to_string();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(config);
+    // Standard base64 in a query: only +, / and = need escaping.
+    let query = encoded
+        .replace('+', "%2B")
+        .replace('/', "%2F")
+        .replace('=', "%3D");
+    format!("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config={query}")
+}
+
+/// Opens Cursor's "add MCP server" prompt for the installed CLI. The link is
+/// built here from the install folder, never taken from the page.
+#[tauri::command]
+pub fn open_cursor_mcp_install() -> CmdResult<()> {
+    let Some(cli) = installed_cli() else {
+        return Err(err(
+            "NOT_FOUND",
+            "インストールされた SpellSheet が見つかりません",
+        ));
+    };
+    crate::agent::open_external(&cursor_install_url(&cli))
+}
+
+#[tauri::command]
+pub fn app_info(app: AppHandle) -> AppInfo {
+    let cli_path = installed_cli();
     AppInfo {
         version: app.package_info().version.to_string(),
         updates_enabled: updates_enabled(&app),
@@ -424,5 +457,30 @@ mod tests {
         assert_eq!(read(&node), "v1");
         assert!(!dir.path().join("node/node-0.1.0.exe.old").exists());
         Ok(())
+    }
+
+    #[test]
+    fn cursor_link_carries_the_cli_as_its_command() {
+        use base64::Engine as _;
+        let url = cursor_install_url(r"C:\Program Files\SpellSheet\spellsheet.exe");
+        let config = url
+            .strip_prefix("cursor://anysphere.cursor-deeplink/mcp/install?name=shikigami&config=")
+            .unwrap();
+        assert!(!config.contains(['+', '/', '=']));
+        let config = config
+            .replace("%2B", "+")
+            .replace("%2F", "/")
+            .replace("%3D", "=");
+        let json: serde_json::Value = serde_json::from_slice(
+            &base64::engine::general_purpose::STANDARD
+                .decode(config)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            json["command"],
+            r"C:\Program Files\SpellSheet\spellsheet.exe"
+        );
+        assert_eq!(json["args"], serde_json::json!(["mcp"]));
     }
 }

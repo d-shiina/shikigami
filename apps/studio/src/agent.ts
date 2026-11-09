@@ -624,3 +624,29 @@ export function useAgentApi(): StoreApi<AgentState> {
   if (!store) throw new Error("AgentContext is missing");
   return store;
 }
+
+/**
+ * Opens the AI pane ready to ask: a new conversation when `fresh` is given
+ * (null: one that creates a flow), else the conversation about `about` when
+ * given (the person may have been reading another one), `draft` written in
+ * when the box is empty, and the cursor in the box. The person sends it.
+ */
+export function openAsk(api: StoreApi<AgentState>, options: { fresh?: FlowLabel | null; about?: FlowLabel; draft?: string } = {}) {
+  const a = api.getState();
+  if (options.fresh !== undefined) a.newChat(options.fresh);
+  else if (options.about) a.focus(options.about);
+  a.setOpen(true);
+  const chat = currentChat(api.getState());
+  if (options.draft && !chat.draft.trim()) a.setDraft(chat.id, options.draft);
+  requestAnimationFrame(() => {
+    const box = document.querySelector<HTMLTextAreaElement>("[data-agent-input]");
+    if (!box) return;
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  });
+}
+
+/** The store when the AI pane is around, else null (parts also drawn in tests). */
+export function useAgentApiMaybe(): StoreApi<AgentState> | null {
+  return useContext(AgentContext);
+}

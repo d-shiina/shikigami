@@ -38,6 +38,8 @@ args = ["mcp"]
 
 ### Cursor
 
+Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor に追加」** で、インストールした CLI の場所を入れた状態で Cursor の「MCP サーバーの追加」が開きます。ファイルを手で書く必要はありません。同じ場所に Claude Code・Codex・Gemini CLI・GitHub Copilot の登録コマンドもあります。ファイルを自分で書く場合は次のとおりです。
+
 `.cursor/mcp.json`（プロジェクト）または `~/.cursor/mcp.json`：
 
 ```json

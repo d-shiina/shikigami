@@ -8,7 +8,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgent } from "../agent";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
-import { AboutSection } from "./AppMenu";
+import { AboutSection, McpSetupRow } from "./AppMenu";
 import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
 import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
@@ -70,6 +70,7 @@ function AgentSection() {
           </code>
         </SettingsRow>
       )}
+      <McpSetupRow />
     </SettingsGroup>
   );
 }
