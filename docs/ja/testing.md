@@ -60,7 +60,7 @@ flows/<フローの ID>/
 - **この実行をテストケースとして保存**：フローを実行したあとに押すと、その実行の入力・終わり方・出力を期待する結果として `tests/` に保存します。エラーで中断した実行なら、エラーの種類と止まったノードを期待にします。シークレットの入力・出力と、記録で切り詰められた長い値は保存しません（そう表示します）
 - **すべて実行**・行の ▶：作業中の内容で 1 ケースずつ流し、期待どおりか、違うならどこがどう違うか（「出力『total』 期待 3 実際 4」）を並べます。エラーで止まったケースは、止まったノードへ移れます
 - 実行中は「中止」で今のケースを止め、残りは流しません
-- 中身を直したいときは、プロジェクトの棚の `tests/` のファイルを開いて書き換えます
+- 中身を直したいときは、左の「プロジェクト」の `tests/` のファイルを開いて書き換えます
 
 ## AI から
 
@@ -91,4 +91,4 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # ファイルのフロ
 - 1 つでも違うと終了コードは 1 です。バッチや CI の判定にそのまま使えます
 - `--json` は結果を 1 つの JSON（`passed`・`failed`・`cases[]`、各ケースに `passed`・`runId`・`status`・`error`・`mismatches[]`）で出します。`mismatches[]` は `at`（`outputs.total` など）・`expected`・`actual` です
 
-見本：[売上 CSV のチュートリアル](tutorials/sales-csv.md) の `examples/tutorials/sales-csv/tests/`。
+見本：支店の売上 CSV を 1 つの Excel にまとめるフローの `examples/tutorials/sales-csv/tests/`。

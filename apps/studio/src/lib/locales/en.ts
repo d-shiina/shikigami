@@ -1721,21 +1721,7 @@ export const en: Dict = {
     withAi: "Ask the AI",
     withAiBody: "You review what it builds before it is used (Ctrl+Enter sends too)",
     otherWays: "Other ways to start:",
-    sample: "Open a sample",
     byHand: "Make an empty flow",
-  },
-  samples: {
-    title: "Samples",
-    lead: "Open a finished flow to see how it works, or follow the steps to build it yourself or with the AI",
-    all: "All tutorials",
-    open: "Open finished",
-    read: "Read the steps",
-    needsSite: "Tried on a practice site",
-    items: {
-      "sales-csv": { name: "Combine branch sales CSVs into one Excel workbook", uses: "CSV, Excel" },
-      invoices: { name: "Make an invoice per customer from an order list", uses: "Excel, Word template" },
-      "web-orders": { name: "Ship pending orders in a web order system", uses: "Browser, sign-in" },
-    } as Record<string, { name: string; uses: string }>,
   },
   // Windows notifications: shown when a run starts waiting for the person while the window is behind (lib/attention.ts).
   attention: {

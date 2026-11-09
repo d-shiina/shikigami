@@ -19,16 +19,19 @@ MCP-native desktop RPA where AI and humans build, edit, and run the same automat
 
 SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-![SpellSheet Writer](docs/assets/studio-phase1.png)
+<picture>
+  <source srcset="docs/assets/writer-en-dark.webp" media="(prefers-color-scheme: dark)">
+  <img src="docs/assets/writer-en.webp" alt="SpellSheet Writer with a flow open in the middle and the AI chat on the right, where the AI is asked to add a node">
+</picture>
 
 ## Getting started
 
 1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
-2. Start **SpellSheet Writer** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
-3. To have AI build flows, open the AI pane with "AI chat" at the top right of Writer (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
+2. Start **SpellSheet Writer** from the Start menu.
+3. To have AI build flows, open "AI chat" at the top of Writer (Ctrl+J), pick the AI you use (Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot) and press its button, such as "Install Claude Code": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
 
-To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.
+The rest of this page is for developers.
 
 The [user manual](https://spellsheet.github.io/manual/) (in Japanese for now) explains every screen, the folders a flow keeps, test cases, sharing a flow and the AI setup for the people who use SpellSheet at work. Its source is [apps/manual](apps/manual/).
 
@@ -40,7 +43,6 @@ Writer's UI is available in English and Japanese (the language menu under "Spell
 
 | Document | Contents |
 |---|---|
-| [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, flow format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/ai-chat.md](docs/ai-chat.md) | Building flows with an AI chat that has no MCP (Microsoft Copilot): the guide to give it, pasting its answer into Writer, what is left for a person |
@@ -92,7 +94,7 @@ packages/schema         TypeScript types generated from the Rust types
 packages/browser-adapter  Browser automation process (Playwright)
 plugins/spellsheet      Claude Code plugin (MCP settings + skill)
 schemas/                Generated JSON Schema (public contract)
-examples/               Sample flows, tutorials and example custom nodes
+examples/               Sample flows (CI runs them end to end) and example custom nodes
 ```
 
 `spellsheet-core` depends on no other crate in the workspace; every entry point (Writer, CLI, MCP server, Worker) edits flows through it. The crates that touch Windows APIs keep `unsafe` to the modules that call them; everywhere else it is forbidden by the workspace lints. See [docs/architecture.md](docs/architecture.md) for the full design.
@@ -166,7 +168,7 @@ In Claude Code, install the plugin (the `spellsheet` command must be on PATH):
 /plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from the version menu at the bottom right of Writer; see [docs/release.md](docs/release.md)).
+If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from "MCP server registration" under Settings → AI in Writer; see [docs/release.md](docs/release.md)).
 
 To register only the MCP server: `claude mcp add spellsheet -- spellsheet mcp`. When developing from the repository without `spellsheet` on PATH, register the built executable by its absolute path (`cargo build -p spellsheet-cli` updates it):
 

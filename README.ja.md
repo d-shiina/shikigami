@@ -17,16 +17,19 @@
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
-![SpellSheet Writer](docs/assets/studio-phase1.png)
+<picture>
+  <source srcset="docs/assets/writer-ja-dark.webp" media="(prefers-color-scheme: dark)">
+  <img src="docs/assets/writer-ja.webp" alt="SpellSheet Writer の画面。中央にフロー図、右の AI チャットで AI にノードの追加を頼んでいる">
+</picture>
 
 ## 使い始める
 
 1. [最新のリリース](https://github.com/spellsheet/spellsheet/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
-2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
-3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
+2. スタートメニューから **SpellSheet Writer** を起動します。
+3. AI にフローの作成を依頼するには、Writer 上部の「AI チャット」（Ctrl+J）を開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「Claude Code をインストールする」のようなボタンを押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「変更を承諾」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
 
-業務 1 本を最初から最後まで通して試すには、[チュートリアル](docs/ja/tutorials/README.md)（各 15 分ほど、見本のファイル付き）を参照してください。以下は開発者向けの情報です。
+以下は開発者向けの情報です。
 
 画面の見方・フローのフォルダーの中身・テストケース・フローの渡し方・AI の準備など、業務で使う人向けの説明は[製品マニュアル](https://spellsheet.github.io/manual/)にあります。原稿は [apps/manual](apps/manual/) です。
 
@@ -34,9 +37,10 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 Flow Core、Runtime、CLI、Writer と Runner（Tauri 2 + React）、MCP サーバー、Worker が動作します。組み込みのノードで、ブラウザ（[docs/browser.md](docs/ja/browser.md)、`pnpm demo:browser` でデモ）、UI Automation による Windows のデスクトップアプリ（[docs/desktop.md](docs/ja/desktop.md)）、Excel なしでの Excel ブックの読み書き（[docs/office.md](docs/ja/office.md)）、Word、メール、ファイル、PDF、データベース、OCR を扱えます。1.0 より前の版です。フローの形式と MCP のツールは [docs/compatibility.md](docs/ja/compatibility.md) に従い、分かっている制約は [アーキテクチャ設計 §13](docs/ja/architecture.md#13-実装状況と制約) にあります。
 
+Writer の画面は日本語と英語に対応しています（左上の「SpellSheet Writer」のメニューか「設定」で切り替えます。選ぶまでは OS の言語に合わせます）。
+
 | ドキュメント | 内容 |
 |---|---|
-| [docs/tutorials/](docs/ja/tutorials/README.md) | チュートリアル：業務 1 本を、AI への依頼から毎月の実行まで通しで（売上 CSV を Excel に、受注一覧から請求書、Web の受注システム） |
 | [docs/architecture.md](docs/ja/architecture.md) | システム構成、フロー形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/ja/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
 | [docs/ai-chat.md](docs/ja/ai-chat.md) | MCP を使えない AI のチャット（Microsoft Copilot など）でフローを作る：渡す仕様書、答えの貼り付け、人の手直し |
@@ -80,7 +84,7 @@ packages/schema         Rust の型から生成した TypeScript 型
 packages/browser-adapter  ブラウザ操作のプロセス（Playwright）
 plugins/spellsheet      Claude Code プラグイン（MCP 設定＋スキル）
 schemas/                生成された JSON Schema（公開している約束）
-examples/               サンプルフロー、チュートリアル、カスタム ノードの例
+examples/               サンプルフロー（CI が最後まで実行して確かめる）、カスタム ノードの例
 ```
 
 `spellsheet-core` はワークスペース内のどのクレートにも依存せず、入口（Writer・CLI・MCP サーバー・Worker）はすべてこれを通してフローを編集します。`unsafe` は Windows API を呼ぶモジュールだけに許し、それ以外はワークスペースの lint で禁止しています。設計の全体は [docs/architecture.md](docs/ja/architecture.md) を参照してください。
@@ -154,7 +158,7 @@ Claude Code ならプラグインを入れるだけです（`spellsheet` コマ�
 /plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-Writer をインストールしている場合は、Writer と同じフォルダーにある `spellsheet.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
+Writer をインストールしている場合は、Writer と同じフォルダーにある `spellsheet.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer の「設定」→「AI」の「MCP サーバーの登録」でコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
 
 MCP サーバーだけを登録する場合は `claude mcp add spellsheet -- spellsheet mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p spellsheet-cli` で更新されます）。
 
