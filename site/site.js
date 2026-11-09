@@ -128,3 +128,11 @@
     })
     .catch(function () {});
 })();
+
+// Footnotes in the comparison table point into the closed "出典" box: open it first.
+document.addEventListener("click", function (e) {
+  var a = e.target.closest && e.target.closest(".cmp .fn");
+  if (!a) return;
+  var box = document.querySelector(".cmp-src");
+  if (box) box.open = true;
+});

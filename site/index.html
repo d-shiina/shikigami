@@ -24,6 +24,7 @@
       <nav class="nav" aria-label="ページ内">
         <a class="hide-sm" href="#points">特長</a>
         <a class="hide-sm" href="#how">使い方</a>
+        <a class="hide-sm" href="#compare">比較</a>
         <a class="hide-sm" href="#faq">よくある質問</a>
         <a class="hide-sm" data-gh="" href="https://github.com/d-shiina/spellsheet">GitHub</a>
         <a class="btn btn-primary" href="download.html">ダウンロード</a>
@@ -214,6 +215,118 @@
             <p>何台もの PC の Worker と実行の記録を、1 か所でまとめて見る組織向けの管理ツールです。<em class="tag">準備中</em></p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="compare" class="soft">
+      <div class="wrap">
+        <h2>ほかの製品との比較</h2>
+        <p class="sub">よく比べられる RPA 製品と、公開されている情報で並べました。大きな組織での管理の仕組みや導入の実績では、ほかの製品が先を行っています。SpellSheet は、無料で始められること、いつもの AI で作れること、PC の中だけで動くことを大事にしています。</p>
+        <div class="cmp-scroll" tabindex="0" role="region" aria-label="比較表（横に動かせます）">
+          <table class="cmp">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col" class="me">SpellSheet</th>
+                <th scope="col">UiPath</th>
+                <th scope="col">Power Automate for desktop</th>
+                <th scope="col">WinActor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">料金</th>
+                <td class="me">無料（すべての機能）</td>
+                <td>Community は無料。Basic は月 $25 から、Standard 以上は問い合わせ<a class="fn" href="#src-1">1</a></td>
+                <td>Windows 10・11 では追加費用なしで使える。有人実行の Premium は 1 人月 $15、無人実行の Process は 1 台月 $150（年払い）<a class="fn" href="#src-2">2</a></td>
+                <td>フル機能版は年 908,000 円、実行版は年 248,000 円（税別・PC 1 台ごと）<a class="fn" href="#src-3">3</a></td>
+              </tr>
+              <tr>
+                <th scope="row">ソースコード</th>
+                <td class="me">オープンソース（Apache-2.0）</td>
+                <td>非公開</td>
+                <td>非公開</td>
+                <td>非公開</td>
+              </tr>
+              <tr>
+                <th scope="row">ディスク</th>
+                <td class="me">インストーラー 214 MB（Node.js・ブラウザ操作・OCR のモデル込み）<a class="fn" href="#src-m">*</a></td>
+                <td>3.4 GB 以上（動作要件）<a class="fn" href="#src-4">4</a></td>
+                <td>1 GB 以上（動作要件）<a class="fn" href="#src-5">5</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">メモリ</th>
+                <td class="me">実測 ___ MB（フローを開いて待っているとき）<a class="fn" href="#src-m">*</a></td>
+                <td>8 GB 以上、推奨 12 GB（動作要件）<a class="fn" href="#src-4">4</a></td>
+                <td>2 GB 以上（動作要件）<a class="fn" href="#src-5">5</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">サインイン</th>
+                <td class="me">不要。インターネットにつながっていなくても動く</td>
+                <td>—</td>
+                <td>サインインとインターネット接続が必要<a class="fn" href="#src-5">5</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">AI に頼んで作る</th>
+                <td class="me">Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor から、日本語で頼める。AI が画面を調べながら組む</td>
+                <td>コーディング エージェントから、UiPath の CLI とスキルを通して作れる（組織へのサインインが必要）<a class="fn" href="#src-6">6</a></td>
+                <td>Copilot に言葉で頼んで作れる（プレビュー。米国の環境・英語・職場や学校のアカウントのみ）<a class="fn" href="#src-7">7</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">MCP</th>
+                <td class="me">MCP サーバーを同梱。フローを作る・試す・直す・実行するまで AI から使える</td>
+                <td>Orchestrator の MCP サーバーで、作ったワークフローを AI エージェントから呼べる<a class="fn" href="#src-8">8</a></td>
+                <td>—</td>
+                <td>管理製品 WinActor Manager on Cloud 4.0 の MCP サーバーで、作ったシナリオを AI エージェントから実行できる<a class="fn" href="#src-9">9</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Excel</th>
+                <td class="me">あり（読む・書く・並べ替え・ピボット・マクロなど）</td>
+                <td>あり</td>
+                <td>あり</td>
+                <td>あり</td>
+              </tr>
+              <tr>
+                <th scope="row">SAP GUI</th>
+                <td class="me">SAP GUI Scripting を通して操作（実際の SAP ではまだ確かめていません）</td>
+                <td>あり<a class="fn" href="#src-10">10</a></td>
+                <td>あり（SAP 専用のアクション）<a class="fn" href="#src-11">11</a></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th scope="row">Java のアプリ</th>
+                <td class="me">Java Access Bridge を通して操作</td>
+                <td>あり<a class="fn" href="#src-12">12</a></td>
+                <td>あり<a class="fn" href="#src-13">13</a></td>
+                <td>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details class="cmp-src">
+          <summary>出典と測り方</summary>
+          <p>2026 年 11 月 9 日に各社の公開資料で確かめた内容です。「—」は公開資料で確かめられなかった項目です。価格は定価で、契約によって変わります。動作要件は各社が示す最低限の値で、SpellSheet の実測値とは測り方が違います。</p>
+          <ol>
+            <li id="src-1"><a href="https://www.uipath.com/pricing">UiPath Plans and Pricing</a></li>
+            <li id="src-2"><a href="https://www.microsoft.com/en-us/power-platform/products/power-automate/pricing">Power Automate pricing</a>・<a href="https://learn.microsoft.com/en-us/power-platform-release-plan/2021wave2/power-automate/power-automate-availability-windows">Power Automate availability in Windows</a></li>
+            <li id="src-3"><a href="https://winactor.com/redirect/winactor-price-list">WinActor 価格表</a>（ノードロックライセンス、年間・サポート料込）</li>
+            <li id="src-4"><a href="https://docs.uipath.com/studio/standalone/latest/user-guide/hardware-and-software-requirements">UiPath Studio: Hardware and Software Requirements</a></li>
+            <li id="src-5"><a href="https://learn.microsoft.com/en-us/power-automate/desktop-flows/setup">Power Automate for desktop: Prerequisites and limitations</a></li>
+            <li id="src-6"><a href="https://docs.uipath.com/coding-agents/standalone/latest/user-guide/overview">UiPath for Coding Agents: Overview</a></li>
+            <li id="src-7"><a href="https://learn.microsoft.com/en-us/power-automate/desktop-flows/copilot-in-power-automate-for-desktop">Copilot in Power Automate for desktop</a></li>
+            <li id="src-8"><a href="https://docs.uipath.com/agents/automation-cloud/latest/user-guide/mcp-servers">UiPath Agents: MCP servers</a></li>
+            <li id="src-9"><a href="https://www.excite.co.jp/news/article/Prtimes_2026-02-05-23654-363/">NTT-AT のプレスリリース（2026 年 2 月 5 日）</a></li>
+            <li id="src-10"><a href="https://docs.uipath.com/studio/standalone/latest/user-guide/enabling-sap-gui-scripting">UiPath Studio: Enabling SAP GUI Scripting</a></li>
+            <li id="src-11"><a href="https://learn.microsoft.com/en-us/power-automate/desktop-flows/actions-reference/sap">Power Automate: SAP automation actions</a></li>
+            <li id="src-12"><a href="https://docs.uipath.com/de/studio/standalone/2025.10/user-guide/extension-for-java">UiPath Studio: Extension for Java</a></li>
+            <li id="src-13"><a href="https://learn.microsoft.com/en-us/power-automate/desktop-flows/how-to/java">Power Automate: Automate Java applications</a></li>
+            <li id="src-m" class="nonum">* SpellSheet は 0.1.20 を測りました。インストーラーは GitHub の Releases にあるファイルの大きさです。メモリは ___ で、Writer で見本のフローを開いて待っているときの、Writer と付属のプロセスの合計です。</li>
+          </ol>
+        </details>
       </div>
     </section>
 
