@@ -1,0 +1,60 @@
+name: 不具合の報告 / Bug report
+description: 思ったとおりに動かないときに / Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        脆弱性は公開の Issue に書かず、SECURITY.md の方法で連絡してください。
+        Please report vulnerabilities privately as described in SECURITY.md, not here.
+  - type: input
+    id: version
+    attributes:
+      label: バージョン / Version
+      description: Writer の右上のメニュー、または `spellsheet --version` / The menu at the top right of Writer, or `spellsheet --version`
+      placeholder: 0.1.19
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: どこで起きたか / Where
+      multiple: true
+      options:
+        - Writer
+        - Runner
+        - Worker
+        - CLI
+        - MCP サーバー / MCP server
+        - その他 / Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows のバージョン / Windows version
+      placeholder: Windows 11 24H2
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      description: できればフローのファイル（個人情報・ログイン情報は消してください）も添えてください / Attach the flow if you can, with personal data and logins removed
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した動き / Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動き / Actual
+      description: エラーの文、画面の写真、実行ログがあれば / Error text, screenshots or the run log
+    validations:
+      required: true
