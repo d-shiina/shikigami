@@ -390,6 +390,19 @@ describe("studio store", () => {
     expect(trailOf(store.getState())?.runId).toBe("run_2");
   });
 
+  it("keeps a running step's clock still while the run is paused, as its timeout is", () => {
+    const store = createStudioStore(fakeApi({}));
+    const ev = (seq: number, at: string, rest: Record<string, unknown>) =>
+      store.getState().onRunEvent({ runId: "run_1", seq, at, ...rest } as Parameters<ReturnType<typeof store.getState>["onRunEvent"]>[0]);
+    ev(0, "2026-10-28T00:00:00Z", { type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    ev(1, "2026-10-28T00:00:01Z", { type: "stepStarted", stepId: "w", stepType: "wait.until", attempt: 1, limitMs: 30000 });
+    expect(store.getState().run!.clocks["|w"]).toEqual({ since: Date.parse("2026-10-28T00:00:01Z"), waitMs: null, limitMs: 30000 });
+    ev(2, "2026-10-28T00:00:05Z", { type: "paused", stepId: "c", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1 });
+    ev(3, "2026-10-28T00:01:05Z", { type: "resumed", action: "continue" });
+    // A minute paused: the wait still has 4 seconds behind it, not 64.
+    expect(store.getState().run!.clocks["|w"]!.since).toBe(Date.parse("2026-10-28T00:01:01Z"));
+  });
+
   it("pauses on an error, keeps the evidence and resumes", async () => {
     const debugRun = vi.fn(async () => ({ revision: 2, updated: true }));
     const store = createStudioStore(fakeApi({ debugRun }));

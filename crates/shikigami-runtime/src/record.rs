@@ -13,9 +13,11 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use shikigami_core::RunId;
+use std::collections::HashMap;
 
-use crate::event::{RunEventEnvelope, RunReport};
+use shikigami_core::{FlowId, RunId, StepId};
+
+use crate::event::{RunEvent, RunEventEnvelope, RunReport, StepOutcome};
 
 pub struct RunRecorder {
     workspace: PathBuf,
@@ -134,6 +136,67 @@ pub fn list_runs(workspace: &Path) -> std::io::Result<Vec<RunId>> {
     ids.sort();
     ids.reverse();
     Ok(ids)
+}
+
+/// Most records [`step_times`] looks through for runs of the flow.
+const STEP_TIMES_SCAN: usize = 200;
+
+/// How long each step of a flow usually takes, in ms: the median of the
+/// times it succeeded in the last `runs` finished runs of the flow (each
+/// pass of a loop counts). Steps of called flows are left out. Studio
+/// shows a running step's progress against it.
+pub fn step_times(workspace: &Path, flow_id: &FlowId, runs: usize) -> HashMap<StepId, u64> {
+    let mut samples: HashMap<StepId, Vec<u64>> = HashMap::new();
+    let mut found = 0;
+    for run_id in list_runs(workspace)
+        .unwrap_or_default()
+        .into_iter()
+        .take(STEP_TIMES_SCAN)
+    {
+        if found >= runs {
+            break;
+        }
+        let Ok(dir) = run_dir(workspace, &run_id) else {
+            continue;
+        };
+        // Runs still going (or left behind) have no report yet.
+        if !dir.join("report.json").is_file() || run_flow(&dir).as_ref() != Some(flow_id) {
+            continue;
+        }
+        let Ok(events) = read_events(workspace, &run_id) else {
+            continue;
+        };
+        found += 1;
+        for env in events {
+            if let RunEvent::StepFinished {
+                step_id,
+                outcome: StepOutcome::Succeeded,
+                duration_ms,
+                ..
+            } = env.event
+                && env.call_path.is_empty()
+            {
+                samples.entry(step_id).or_default().push(duration_ms);
+            }
+        }
+    }
+    samples
+        .into_iter()
+        .map(|(id, mut times)| {
+            times.sort_unstable();
+            (id, times[times.len() / 2])
+        })
+        .collect()
+}
+
+/// The flow a recorded run ran, from its first event.
+fn run_flow(dir: &Path) -> Option<FlowId> {
+    let file = File::open(dir.join("events.jsonl")).ok()?;
+    let line = BufReader::new(file).lines().next()?.ok()?;
+    match serde_json::from_str::<RunEventEnvelope>(&line).ok()?.event {
+        RunEvent::RunStarted { flow_id, .. } => Some(flow_id),
+        _ => None,
+    }
 }
 
 /// Error code of runs whose process ended before they did (power loss, a
@@ -405,6 +468,77 @@ mod interrupted_tests {
 
         assert!(close_interrupted(tmp.path()).is_empty());
         assert!(read_report(tmp.path(), &going).unwrap().is_none());
+    }
+
+    fn finished(
+        run_id: &RunId,
+        seq: u64,
+        step: &str,
+        ms: u64,
+        call_path: Vec<shikigami_core::StepId>,
+    ) -> RunEventEnvelope {
+        RunEventEnvelope {
+            run_id: run_id.clone(),
+            seq,
+            at: time::OffsetDateTime::now_utc(),
+            call_path,
+            event: RunEvent::StepFinished {
+                step_id: shikigami_core::StepId::new(step),
+                step_type: "flow.delay".into(),
+                outcome: crate::event::StepOutcome::Succeeded,
+                duration_ms: ms,
+                error: None,
+                will_retry: false,
+            },
+        }
+    }
+
+    #[test]
+    fn step_times_are_the_median_of_finished_runs_of_the_flow() {
+        let tmp = tempfile::tempdir().unwrap();
+        for times in [[100, 4000], [300, 6000], [200, 5000]] {
+            let id = RunId::generate();
+            let mut recorder = RunRecorder::create(tmp.path(), &id).unwrap();
+            recorder.write_event(&started(&id)).unwrap();
+            recorder
+                .write_event(&finished(&id, 1, "s1", times[0], Vec::new()))
+                .unwrap();
+            recorder
+                .write_event(&finished(&id, 2, "s2", times[1], Vec::new()))
+                .unwrap();
+            // A step of a called flow with the same id is not this flow's.
+            recorder
+                .write_event(&finished(
+                    &id,
+                    3,
+                    "s1",
+                    90_000,
+                    vec![shikigami_core::StepId::new("c1")],
+                ))
+                .unwrap();
+            fs::write(
+                tmp.path()
+                    .join("runs")
+                    .join(id.as_str())
+                    .join("report.json"),
+                "{}",
+            )
+            .unwrap();
+        }
+        // A run still going does not count.
+        let going = RunId::generate();
+        let mut live = RunRecorder::create(tmp.path(), &going).unwrap();
+        live.write_event(&started(&going)).unwrap();
+        live.write_event(&finished(&going, 1, "s1", 9_000_000, Vec::new()))
+            .unwrap();
+
+        let times = step_times(tmp.path(), &FlowId::new("scn_a"), 5);
+        assert_eq!(times.get(&shikigami_core::StepId::new("s1")), Some(&200));
+        assert_eq!(times.get(&shikigami_core::StepId::new("s2")), Some(&5000));
+        // The two newest runs only.
+        let times = step_times(tmp.path(), &FlowId::new("scn_a"), 2);
+        assert_eq!(times.get(&shikigami_core::StepId::new("s1")), Some(&300));
+        assert!(step_times(tmp.path(), &FlowId::new("scn_b"), 5).is_empty());
     }
 }
 

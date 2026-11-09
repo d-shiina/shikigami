@@ -2057,6 +2057,16 @@ export type RunEventEnvelope1 =
       stepId: StepId;
       stepType: string;
       attempt: number;
+      /**
+       * How long the step waits on purpose (`flow.delay`), in ms: it
+       * ends then, so Studio can show how much of it is left.
+       */
+      waitMs?: number | null;
+      /**
+       * The longest this attempt may take before it fails with a
+       * timeout (the step's `timeoutMs` or the default), in ms.
+       */
+      limitMs?: number | null;
     }
   | {
       type: "stepFinished";

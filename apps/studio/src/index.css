@@ -272,6 +272,23 @@ textarea,
 .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
 }
+/*
+ * A frame whose step runs is marked as a whole, head to foot. Only the
+ * innermost one the run is in now gets a soft ring; the ones around it only
+ * an orange edge, and the node at work inside keeps the one glow.
+ */
+.flow-frame.flow-frame-running,
+.flow-edge-running-around {
+  border-color: color-mix(in srgb, var(--color-accent-500) 45%, var(--color-slate-300)) !important;
+}
+/* Its head and foot are its top and bottom edges: in the frame's colour. */
+.flow-edge-running-here {
+  border-color: var(--color-accent-500) !important;
+}
+.flow-frame.flow-frame-running-here {
+  border-color: var(--color-accent-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+}
 /* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
 .react-flow__edgelabel-renderer {
   z-index: 2;
@@ -365,6 +382,26 @@ textarea,
 @media (prefers-reduced-motion: reduce) {
   .react-flow__edge-path {
     animation: none !important;
+  }
+}
+/* How far a running node got (RunBar): it grows by itself, one step a second when motion is reduced. */
+@keyframes run-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.run-bar {
+  transform-origin: left;
+  animation-name: run-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-bar {
+    animation-timing-function: steps(var(--run-bar-steps), end);
   }
 }
 /* The step of a frame is picked: the whole frame is marked, its head being its top edge. */

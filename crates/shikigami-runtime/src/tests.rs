@@ -2765,3 +2765,37 @@ async fn a_finished_run_becomes_a_test_case_that_passes() {
         .unwrap();
     assert_eq!(result.status, RunStatus::Cancelled);
 }
+
+#[tokio::test]
+async fn a_started_step_says_how_long_it_waits_and_when_it_gives_up() {
+    let mut delay = Step::new("flow.delay").with_param("ms", 20);
+    delay.timeout_ms = Some(5_000);
+    let s = flow(vec![
+        delay,
+        Step::new("log.message").with_param("message", "x"),
+    ]);
+    let (_, events) = run(&Runtime::new(), s, json!({})).await;
+    let started: Vec<(String, Option<u64>, Option<u64>)> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::StepStarted {
+                step_type,
+                wait_ms,
+                limit_ms,
+                ..
+            } => Some((step_type.clone(), *wait_ms, *limit_ms)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        started,
+        [
+            ("flow.delay".to_string(), Some(20), Some(5_000)),
+            (
+                "log.message".to_string(),
+                None,
+                Some(crate::exec::DEFAULT_TIMEOUT_MS)
+            ),
+        ]
+    );
+}

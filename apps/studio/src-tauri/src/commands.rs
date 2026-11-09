@@ -725,6 +725,24 @@ pub fn get_observation(
     Ok(state.service.get_observation(&id)?)
 }
 
+/// How many of a flow's latest runs `step_times` learns from.
+const STEP_TIMES_RUNS: usize = 5;
+
+/// How long each step of a flow usually takes (ms, by step id), from its
+/// latest finished runs: the chart shows a running step's progress against it.
+#[tauri::command]
+pub async fn step_times(
+    state: State<'_, AppState>,
+    id: FlowId,
+) -> CmdResult<std::collections::HashMap<StepId, u64>> {
+    let root = state.service.store().local_root().to_path_buf();
+    Ok(tokio::task::spawn_blocking(move || {
+        shikigami_runtime::record::step_times(&root, &id, STEP_TIMES_RUNS)
+    })
+    .await
+    .unwrap_or_default())
+}
+
 /// Most events `run_record` returns; a long loop's tail is dropped.
 const MAX_RECORD_EVENTS: usize = 20_000;
 
