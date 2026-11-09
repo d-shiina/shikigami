@@ -162,6 +162,9 @@ enum Command {
         /// Tool classes to expose, comma separated: read, write, run.
         #[arg(long, value_delimiter = ',', default_value = "read,write,run")]
         allow: Vec<String>,
+        /// The client is the AI chat in SpellSheet Writer (it shows ask_user_to_choose as a card).
+        #[arg(long, hide = true)]
+        writer_chat: bool,
     },
 }
 
@@ -782,10 +785,11 @@ fn real_main() -> Result<ExitCode> {
                 println!("wrote {}", path.display());
             }
         }
-        Command::Mcp { allow } => {
+        Command::Mcp { allow, writer_chat } => {
             let mut options = shikigami_mcp::ServerOptions {
                 allow: Vec::new(),
                 adapters: adapters.clone(),
+                writer_chat: *writer_chat,
             };
             for name in allow {
                 let Some(class) = shikigami_mcp::ToolClass::parse(name) else {

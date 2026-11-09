@@ -469,6 +469,32 @@ pub struct AskUserToPickParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AskUserToChooseParams {
+    /// The question, in one short sentence in the person's language, e.g.
+    /// 「在庫切れの注文はどうしますか？」.
+    pub question: String,
+    /// 2 to 4 answers to pick from, each different in what happens.
+    pub options: Vec<ChoiceOption>,
+    /// Index (from 0) of the option you recommend, if one is better.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended: Option<usize>,
+    /// Why you recommend it, in one sentence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChoiceOption {
+    /// A short name for the answer (a few words), e.g. 「飛ばして一覧に残す」.
+    pub label: String,
+    /// One sentence on what happens if the person picks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct InspectUiParams {
     /// The window to look into, e.g. { "process": "notepad.exe" } or { "title": "請求" }
     /// (title matches partially). Omit to list the open windows.

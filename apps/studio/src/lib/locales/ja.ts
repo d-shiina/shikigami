@@ -698,6 +698,13 @@ export const ja = {
       inspect_page: "Web画面を確認",
       inspect_ui: "アプリ画面を確認",
       test_step: "ノードを単体実行",
+      ask_user_to_choose: "選択肢を表示",
+    },
+    choice: {
+      recommended: "おすすめ",
+      reason: (why: string) => `おすすめの理由：${why}`,
+      other: "ほかの考えがあれば、下の欄に書いて送ってください。",
+      answered: (question: string) => (/[？?]$/.test(question) ? `${question} ` : `${question}：`),
     },
     newChat: "新しい会話",
     newChatAbout: (name: string) => `「${name}」で新しい会話`,
