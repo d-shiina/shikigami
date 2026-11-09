@@ -84,7 +84,7 @@ describe("the run window's form", () => {
 
   it("shows results in the person's way", () => {
     expect(formatValue(3842500)).toBe("3,842,500");
-    expect(formatValue(true)).toBe("はい");
+    expect(formatValue(true)).toBe("TRUE");
     expect(formatValue([1, 2])).toBe("2 件");
     setLocale("en", false);
     expect(formatValue([1])).toBe("1 item");
