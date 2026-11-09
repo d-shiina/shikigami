@@ -1,8 +1,8 @@
 // Where the flow's files come from and go to, when that is not its own
 // folder. The input part of the files panel lists the files the flow reads
 // that are not there yet, and offers three ways: put the file in the
-// folder, read it from a file server, or read it from a Box Drive /
-// OneDrive folder. The output/ part of the files panel offers the same for where
+// folder, read it from a file server, or read it from cloud storage
+// (through its API: CloudPlace.tsx; or a sync app's folder). The output/ part of the files panel offers the same for where
 // files are written. A place outside is kept as a folder setting
 // (lib/filePlaces.ts), so the flow can be handed over and the receiver
 // only changes the setting.
@@ -15,6 +15,7 @@ import { chooseAsk } from "../lib/ask";
 import { placeChange, placeName, portable } from "../lib/filePlaces";
 import { t } from "../lib/i18n";
 import { ProjectContext, projectApi, useProjectMaybe } from "../project";
+import { CloudPlaceDialog } from "./CloudPlace";
 import { stepName } from "./ProjectPanel";
 
 const NONE: NeededFile[] = [];
@@ -112,6 +113,8 @@ export function NeededFiles() {
   const select = useStudio((s) => s.select);
   const needed = useNeededFiles();
   const place = usePlace();
+  // The file whose cloud dialog is open.
+  const [cloud, setCloud] = useState<string | null>(null);
   if (!flow || needed.length === 0) return null;
   const nameOf = (stepId: string) => {
     const find = (list: typeof flow.steps): string | null => {
@@ -161,10 +164,20 @@ export function NeededFiles() {
           <div className="mt-1.5 grid gap-1">
             <Choice icon={FileInput} label={t.places.put} title={t.places.putTitle(n.path)} onClick={() => void put(n.path)} />
             <Choice icon={Server} label={t.places.fileServer} title={t.places.fileServerTitle} onClick={() => void place("fileServer", n.path)} />
-            <Choice icon={Cloud} label={t.places.cloud} title={t.places.cloudTitle} onClick={() => void place("cloud", n.path)} />
+            <Choice icon={Cloud} label={t.places.cloud} title={t.places.cloudTitle} onClick={() => setCloud(n.path)} />
           </div>
         </div>
       ))}
+      {cloud && (
+        <CloudPlaceDialog
+          file={cloud}
+          onClose={() => setCloud(null)}
+          onSynced={() => {
+            setCloud(null);
+            void place("cloud", cloud);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -186,6 +199,7 @@ function Choice({ icon: Icon, label, title, onClick }: { icon: typeof Server; la
 /** In the output/ part of the files panel: write somewhere else instead. */
 export function OutputPlaceMenu() {
   const [open, setOpen] = useState(false);
+  const [cloud, setCloud] = useState(false);
   const place = usePlace();
   return (
     <span className="relative">
@@ -214,7 +228,8 @@ export function OutputPlaceMenu() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  void place(where, null);
+                  if (where === "cloud") setCloud(true);
+                  else void place(where, null);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-slate-100"
               >
@@ -224,6 +239,16 @@ export function OutputPlaceMenu() {
             ))}
           </div>
         </>
+      )}
+      {cloud && (
+        <CloudPlaceDialog
+          file={null}
+          onClose={() => setCloud(false)}
+          onSynced={() => {
+            setCloud(false);
+            void place("cloud", null);
+          }}
+        />
       )}
     </span>
   );
