@@ -2279,13 +2279,17 @@ impl ShikigamiMcp {
                     match wait.answer() {
                         PickAnswer::Waiting => {}
                         PickAnswer::Done => {
-                            ended_by = Some(PickAnswer::Done);
-                            human = None;
                             let mut end = json!({ "action": "endHuman", "how": "person" });
                             if let Some(context) = &context {
                                 end["context"] = context.clone();
                             }
-                            let _ = self.inspect("browser", end).await;
+                            // The page may not be waiting yet (still bringing the
+                            // window forward): keep the request and try again.
+                            let ended = self.inspect("browser", end).await.is_ok_and(|r| r["ended"] == json!(true));
+                            if ended {
+                                ended_by = Some(PickAnswer::Done);
+                                human = None;
+                            }
                         }
                         PickAnswer::Cancelled => {
                             ended_by = Some(PickAnswer::Cancelled);

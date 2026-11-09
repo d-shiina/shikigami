@@ -1112,13 +1112,14 @@ export class Adapter {
         },
       });
     }
-    await session.page.bringToFront().catch(() => {});
     const timeout = typeof params.timeoutMs === "number" ? params.timeoutMs : 300_000;
     const key = this.key(params);
     let end!: (how: "person" | "stopped") => void;
     const ended = new Promise<"person" | "stopped">((resolve) => (end = resolve));
     this.humanWaits.get(key)?.("stopped");
+    // Registered before anything awaits, so an early 「終わりました」 is not lost.
     this.humanWaits.set(key, end);
+    await session.page.bringToFront().catch(() => {});
     const seen = locate(session.page, params.until as Target | undefined)
       .first()
       .waitFor({ state: "visible", timeout })

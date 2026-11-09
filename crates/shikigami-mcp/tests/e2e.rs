@@ -1290,6 +1290,7 @@ mod by_hand {
         pub finished: Notify,
         /// The step saw the stop itself (it is dropped instead, as a real one).
         pub stopped: AtomicBool,
+        pub refused_once: AtomicBool,
     }
 
     pub struct FakeBrowser(pub Arc<Shared>);
@@ -1346,7 +1347,13 @@ mod by_hand {
         ) -> BoxFuture<'a, Result<Value, StepError>> {
             Box::pin(async move {
                 if params["action"] == "endHuman" && params["how"] == "person" {
+                    // The first time the page is not waiting yet (still coming
+                    // to the front): the server must ask again, not drop it.
+                    if !self.0.refused_once.swap(true, Ordering::SeqCst) {
+                        return Ok(json!({ "ended": false }));
+                    }
                     self.0.finished.notify_one();
+                    return Ok(json!({ "ended": true }));
                 }
                 Ok(json!({ "title": "ダッシュボード", "url": "https://github.com/" }))
             })
@@ -1413,6 +1420,11 @@ async fn a_wait_by_hand_ends_when_the_person_says_so_in_writer() {
     // The AI sees the page the person left, to pick a better `until`.
     assert_eq!(out["state"]["title"], "ダッシュボード");
     assert!(!shared.stopped.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(
+        shared
+            .refused_once
+            .load(std::sync::atomic::Ordering::SeqCst)
+    );
     assert!(by_hand::gone(&h.root));
     h.client.cancel().await.unwrap();
 }
