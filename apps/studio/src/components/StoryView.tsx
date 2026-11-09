@@ -1,3 +1,4 @@
+import { ArrowRight, MessageSquareText } from "lucide-react";
 import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
 import { IF } from "../lib/stepTypes";
 import { useEffect, useMemo } from "react";
@@ -64,7 +65,7 @@ function ReviewTag({ entry, added, stepId }: { entry: HistoryEntry; added: boole
             <div key={d.field} className="flex flex-wrap items-baseline gap-x-1.5">
               <dt className="text-slate-500">{d.field}</dt>
               {d.before !== undefined && <dd className="text-shu-600 line-through decoration-shu-500/50">{formatValue(d.before)}</dd>}
-              {d.before !== undefined && <span className="text-slate-400">→</span>}
+              {d.before !== undefined && <ArrowRight size={11} className="shrink-0 self-center text-slate-400" aria-hidden="true" />}
               <dd className="text-moegi-500">{formatValue(d.after)}</dd>
             </div>
           ))}
@@ -184,7 +185,12 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
             <span>{stepLabel(step.type, def?.label)}</span>
             {issues > 0 && <span className="rounded-md bg-shu-100 px-1.5 font-semibold text-shu-600">! {issues}</span>}
           </div>
-          {rationale && <p className="mt-1 text-xs text-slate-500">💬 {rationale}</p>}
+          {rationale && (
+            <p className="mt-1 flex gap-1 text-xs text-slate-500">
+              <MessageSquareText size={12} className="mt-[2px] shrink-0" aria-hidden="true" />
+              <span>{rationale}</span>
+            </p>
+          )}
           {marks.map((m) => (
             <ReviewTag key={m.entry.revision} entry={m.entry} added={m.added} stepId={id} />
           ))}

@@ -993,6 +993,7 @@ export const en: Dict = {
     open: "Open",
     moreSteps: (n: number) => `…${n} more nodes (Open shows all)`,
     stoppedHere: "An error occurred here",
+    secretMark: "Secret",
     pausedHere: "Paused here",
     note: "Note",
     /** The tag on the frame around a loop, if, … and its blocks. */
@@ -1288,7 +1289,7 @@ export const en: Dict = {
   recording: {
     record: "Record",
     recordTitle: "Record what you do in desktop apps or in the browser",
-    bannerTitle: "● Recording ({n})  Click here to finish",
+    bannerTitle: "Recording ({n})  Click here to finish",
     bannerHint: "Recording clicks, text typed into fields and keys (record the browser with Browser)",
     browserBannerHint: "Recording clicks, typing, choices, check boxes and Enter",
     where: "Record in",
@@ -1596,6 +1597,7 @@ export const en: Dict = {
     unanswered: (n: number) => ` (${n} open)`,
     whatChanges: "What changes",
     seen: (seen: number, total: number) => `${seen} of ${total} seen`,
+    seenMark: "Seen",
     before: "Before",
     after: "After",
     showInFlow: "Show in flow",
@@ -1965,6 +1967,7 @@ export const en: Dict = {
     restoreHint: "When off, a completed run leaves Writer small with the result in the band. Errors and stops always bring Writer back",
   },
   shell: {
+    openNow: "Open now",
     aiChat: "AI chat",
     recentFlows: "Recent flows",
     pin: "Pin to the top",

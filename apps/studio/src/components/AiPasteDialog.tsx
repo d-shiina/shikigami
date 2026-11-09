@@ -3,7 +3,7 @@
 // for the person (pick the screen parts, register logins, put files) apart
 // from what the AI must fix, which goes back to the chat as text.
 import type { EditOutcome, ProjectFiles } from "@shikigami/schema";
-import { ExternalLink, FileDown } from "lucide-react";
+import { Check, ExternalLink, FileDown, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { agent, api, type AnswerProblem } from "../lib/api";
@@ -97,7 +97,7 @@ export function AiPasteDialog() {
             aria-label={t.close}
             title={`${t.close} (Esc)`}
           >
-            ✕
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -252,7 +252,10 @@ function Done({ outcome, fresh, onAct }: { outcome: EditOutcome; fresh: boolean;
           <TodoList todos={todos} onAct={onAct} />
         </div>
       ) : (
-        forAi.length === 0 && <p className="px-4 text-[13px] text-moegi-600">✓ {t.paste.noTodos}</p>
+        forAi.length === 0 && <p className="flex items-center gap-1.5 px-4 text-[13px] text-moegi-600">
+          <Check size={14} strokeWidth={2} aria-hidden="true" />
+          {t.paste.noTodos}
+        </p>
       )}
       {forAi.length > 0 && (
         <section className="mx-4 rounded-lg border border-shu-200 bg-shu-50/60 px-3 py-2.5">

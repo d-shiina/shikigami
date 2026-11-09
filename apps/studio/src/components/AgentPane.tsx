@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { Check, ChevronDown, ClipboardPaste, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, agent } from "../lib/api";
@@ -141,9 +141,10 @@ export function AgentPane({ width }: { width: number }) {
               type="button"
               onClick={() => void openFlow(chat.flowId!)}
               title={t.agent.openFlow}
-              className="truncate rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
+              className="flex min-w-0 items-center gap-0.5 rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
             >
-              {chat.title} ↗
+              <span className="truncate">{chat.title}</span>
+              <ArrowUpRight size={12} className="shrink-0" aria-hidden="true" />
             </button>
           )}
           {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}

@@ -1,7 +1,7 @@
 // The review desk: AI edits waiting to be looked at, across every flow.
 // Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
-import { CloudUpload } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, CloudUpload, Undo2, X } from "lucide-react";
 import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
@@ -264,7 +264,10 @@ function Reviewed() {
   const next = inbox.find((i) => i.flowId !== flow?.id && !i.waiting);
   return (
     <div className="mx-auto max-w-[520px] text-[13px]">
-      <div className="flex items-center gap-2 font-bold text-moegi-500">✓ {t.desk.reviewed}</div>
+      <div className="flex items-center gap-2 font-bold text-moegi-500">
+        <Check size={14} strokeWidth={2} aria-hidden="true" />
+        {t.desk.reviewed}
+      </div>
       {next ? (
         <button
           type="button"
@@ -276,7 +279,7 @@ function Reviewed() {
         >
           <span className="text-[11px] text-slate-400">{t.desk.next}</span>
           <span className="flex-1 truncate font-semibold">{next.name}</span>
-          <span className="text-slate-400">→</span>
+          <ArrowRight size={14} className="shrink-0 text-slate-400" aria-hidden="true" />
         </button>
       ) : (
         <p className="mt-2 text-slate-500">{t.desk.noneLeft}</p>
@@ -434,7 +437,7 @@ export function ReviewReport() {
                 onClick={() => setRunsOpen(!showRuns)}
                 className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-[13px] font-bold text-slate-600 hover:text-ink"
               >
-                <span className="w-3 text-slate-400">{showRuns ? "▾" : "▸"}</span>
+                <span className="w-3 text-slate-400">{showRuns ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}</span>
                 {t.desk.tryRuns}
                 {runs.at(-1) && <span className="ml-auto text-[12px] font-normal text-slate-500">{relativeTime(runs.at(-1)!.finishedAt)}</span>}
               </button>
@@ -598,7 +601,7 @@ function ChangeCardView({
         <span className="min-w-0 truncate text-[13px] font-bold">{name ?? stepLabel(step.type, defs.get(step.type)?.label)}</span>
         <span className={`shrink-0 rounded-md px-1.5 text-[10px] leading-4 font-bold ${tag.style}`}>{tag.label()}</span>
         {card.afterFeedback && <span className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[10px] leading-4 font-bold text-shu-600">{t.desk.afterFeedback}</span>}
-        {seen && <span className="shrink-0 text-[11px] text-moegi-500">✓</span>}
+        {seen && <Check size={12} strokeWidth={2.25} className="shrink-0 text-moegi-500" aria-label={t.desk.seenMark} />}
         {card.after && (
           <button type="button" onClick={show} className="ml-auto shrink-0 text-[12px] text-brand-600 hover:underline">
             {t.desk.showInFlow} ›
@@ -640,8 +643,9 @@ function ChangeCardView({
       )}
       {lines.length > 0 && (
         <div className="mt-1">
-          <button type="button" onClick={() => setOpen(!open)} className="text-[11.5px] text-slate-500 hover:text-ink">
-            {open ? "▾" : "▸"} {t.desk.details}
+          <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-1 text-[11.5px] text-slate-500 hover:text-ink">
+            {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+            {t.desk.details}
           </button>
           {open && (
             <div className="mt-1">
@@ -703,8 +707,9 @@ function EffectList({ effects }: { effects: Effect[] }) {
       ))}
       {same.length > 0 && (
         <>
-          <button type="button" onClick={() => setShowSame(!showSame)} className="text-[11px] text-slate-500 hover:text-ink">
-            {showSame ? "▾" : "▸"} {t.desk.sameEffects(same.length)}
+          <button type="button" onClick={() => setShowSame(!showSame)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink">
+            {showSame ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+            {t.desk.sameEffects(same.length)}
           </button>
           {showSame && same.map((e) => <EffectRow key={`same${e.action}${e.target}`} effect={e} />)}
         </>
@@ -824,8 +829,9 @@ function TestResult({ runs, revision, changedIds }: { runs: TestRun[]; revision:
       {result && result.missed.length > 0 && <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.notCovered(result.missed.length)}</p>}
       {runs.length > 1 && (
         <div>
-          <button type="button" onClick={() => setOlder(!older)} className="text-[11px] text-slate-500 hover:text-ink">
-            {older ? "▾" : "▸"} {t.desk.olderRuns(runs.length - 1)}
+          <button type="button" onClick={() => setOlder(!older)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink">
+            {older ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+            {t.desk.olderRuns(runs.length - 1)}
           </button>
           {older && <TestRuns runs={runs.slice(0, -1)} revision={revision} />}
         </div>
@@ -849,11 +855,11 @@ function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; 
         return (
           <li key={q} className="flex flex-wrap items-start gap-x-4 gap-y-1.5 border-b border-slate-100 px-1 py-2.5">
             <span
-              className={`mt-[4px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border text-[9px] text-white ${
+              className={`mt-[4px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border text-white ${
                 value === "ok" ? "border-moegi-500 bg-moegi-500" : value === "no" ? "border-shu-500 bg-shu-500" : "border-slate-400"
               }`}
             >
-              {value === "ok" ? "✓" : value === "no" ? "×" : ""}
+              {value === "ok" ? <Check size={10} strokeWidth={3} /> : value === "no" ? <X size={10} strokeWidth={3} /> : null}
             </span>
             <p className="min-w-[16em] flex-1 text-[13px] leading-relaxed font-semibold whitespace-pre-wrap">{q}</p>
             <div className="flex shrink-0 gap-1.5">
@@ -950,9 +956,10 @@ export function ReviewActions({
             disabled={blocker !== null}
             title={blocker ?? `${t.desk.allEdits(pending.length)}\n${t.desk.revertTitle}`}
             {...hover("revert")}
-            className="text-[12px] whitespace-nowrap text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
+            className="flex items-center gap-1 text-[12px] whitespace-nowrap text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
           >
-            ↶ {t.desk.revertAll}
+            <Undo2 size={12} aria-hidden="true" />
+            {t.desk.revertAll}
           </button>
         )}
         <button
@@ -969,9 +976,10 @@ export function ReviewActions({
           onClick={() => void approveAndPublish()}
           title={t.desk.keepTitle}
           {...hover("keep")}
-          className="h-8 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary hover:bg-primary-hover"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary hover:bg-primary-hover"
         >
-          ✓ {t.desk.keep}
+          <Check size={14} strokeWidth={2} aria-hidden="true" />
+          {t.desk.keep}
           {unanswered > 0 && <span className="font-normal opacity-75">{t.desk.unanswered(unanswered)}</span>}
         </button>
       </div>

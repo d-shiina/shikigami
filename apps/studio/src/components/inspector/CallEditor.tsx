@@ -1,4 +1,5 @@
 // The settings of a `flow.call` node: which flow, what goes in and out.
+import { ArrowUpRight } from "lucide-react";
 import type { Step, StepPatch } from "@shikigami/schema";
 import { useStudio } from "../../context";
 import { t } from "../../lib/i18n";
@@ -37,13 +38,14 @@ export function CallEditor({
           callee && (
             <button
               type="button"
-              className="text-[10px] text-brand-600 hover:underline"
+              className="inline-flex items-center gap-0.5 text-[10px] text-brand-600 hover:underline"
               onClick={(e) => {
                 e.preventDefault();
                 void open(target);
               }}
             >
-              {t.flow.open} ↗
+              {t.flow.open}
+              <ArrowUpRight size={10} aria-hidden="true" />
             </button>
           )
         }

@@ -2,6 +2,7 @@
 // stopped), the screen and the variables at that point, and what to do next:
 // ask the AI to fix it, retry, skip, step, or end the run. Also tells about
 // a run that ended in failure instead of letting it end quietly.
+import { Play, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
@@ -267,7 +268,8 @@ export function RunPausePanel() {
                     : t.pause.copyTitle
               }
             >
-              ✦ {t.pause.askFix(agentAvailable ? agentName : "AI")}
+              <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
+              {t.pause.askFix(agentAvailable ? agentName : "AI")}
             </Button>
             <Button
               tone="primary"
@@ -289,7 +291,8 @@ export function RunPausePanel() {
         {pause && !onError && (
           <>
             <Button tone="primary" onClick={() => void debug({ action: "continue" })} disabled={unreviewed > 0} title={resumeBlocked} keys="F5">
-              ▶ {t.runMsg.resume.continue}
+              <Play size={14} strokeWidth={2} aria-hidden="true" />
+              {t.runMsg.resume.continue}
             </Button>
             <Button onClick={() => void debug({ action: "stepOver" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.stepOverTitle} keys="F10">
               {t.pause.stepOver}
