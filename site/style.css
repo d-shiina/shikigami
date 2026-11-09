@@ -387,19 +387,6 @@ footer a { color: var(--fg-muted); }
 .shot-after { padding-top: 0; }
 .shot-after .shot { margin-top: -56px; position: relative; }
 
-/* The slogan as a spell: three numbered lines, one logo color each. */
-.spell { list-style: none; padding: 0; margin: 0 0 24px; font-weight: 700; line-height: 1.35;
-  font-size: clamp(28px, 4.8vw, 48px); }
-.spell li { display: flex; align-items: center; gap: 0.4em; margin: 0.12em 0; }
-.spell .n {
-  flex: none; display: inline-grid; place-items: center;
-  width: 1.05em; height: 1.05em; border-radius: 50%;
-  font-size: 0.5em; font-weight: 700; color: #ffffff; background: var(--c-mark);
-}
-.hero:not(.hero-night) .spell { display: inline-block; text-align: left; color: var(--heading); }
-.hero-night .spell { color: #ffffff; }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
 /* Writer, Runner, Worker, Controller */
 .roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 @media (max-width: 960px) { .roles { grid-template-columns: repeat(2, 1fr); } }
