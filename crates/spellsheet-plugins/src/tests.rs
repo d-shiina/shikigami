@@ -540,7 +540,15 @@ fn the_box_example_takes_an_oauth_access_token() {
         .iter()
         .map(|d| d.step_type.clone())
         .collect();
-    assert_eq!(types, ["box.list", "box.download", "box.upload"]);
+    assert_eq!(
+        types,
+        [
+            "box.list",
+            "box.download",
+            "box.downloadFolder",
+            "box.upload"
+        ]
+    );
     let download = &plugin.step_defs()[1];
     assert_eq!(download.path_params, ["to"]);
     assert_eq!(
