@@ -31,6 +31,8 @@ export function RunBand() {
   // The run: the one going now, and each new one the band is shown for.
   useEffect(() => {
     const show = (next: BandRun | null) => {
+      // Told again when Writer steps aside again: the same run goes on.
+      if (next && next.runId === runRef.current) return;
       runRef.current = next?.runId ?? null;
       setRun(next);
       setState(emptyBand());

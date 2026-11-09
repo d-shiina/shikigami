@@ -70,6 +70,9 @@ pub struct BandRun {
 }
 
 static CURRENT: Mutex<Option<BandRun>> = Mutex::new(None);
+/// The run the band shows: the current one, or after it ended the last
+/// one (a band that stays with the result may load only after the end).
+static SHOWN: Mutex<Option<BandRun>> = Mutex::new(None);
 
 /// Held while Writer and the band change places, so that the run's events
 /// (another thread) and [`begin`] take turns: a pause or the end that comes
@@ -112,17 +115,19 @@ pub(crate) fn works_on_screen(flow: &Flow, subflows: &[Subflow]) -> bool {
 /// Names the run before it starts, so that none of its events (a pause at
 /// its first node, a quick end) pass by before the band knows it.
 pub(crate) fn prepare(run_id: RunId, flow_id: FlowId, settings: BandSettings) {
-    update(|c| {
-        *c = Some(BandRun {
-            run_id,
-            flow_id,
-            restore_at_end: settings.restore_at_end,
-            begun: false,
-            out: false,
-            paused: false,
-            kept: false,
-        })
-    });
+    let run = BandRun {
+        run_id,
+        flow_id,
+        restore_at_end: settings.restore_at_end,
+        begun: false,
+        out: false,
+        paused: false,
+        kept: false,
+    };
+    if let Ok(mut shown) = SHOWN.lock() {
+        *shown = Some(run.clone());
+    }
+    update(|c| *c = Some(run));
 }
 
 /// The run did not start after [`prepare`].
@@ -146,19 +151,18 @@ pub(crate) fn begin(app: &AppHandle, run_id: &RunId) {
         return;
     }
     update_run(run_id, |r| r.out = true);
-    step_aside(app, Some(&run));
+    step_aside(app, &run);
 }
 
-/// Minimises Writer and shows the band. `announce`: the run to tell the
-/// band about (when it starts showing a new run).
-fn step_aside(app: &AppHandle, announce: Option<&BandRun>) {
+/// Minimises Writer and shows the band, telling it the run to show (it
+/// may still show an earlier one, or not have loaded yet: then it asks
+/// [`run_band_current`]).
+fn step_aside(app: &AppHandle, run: &BandRun) {
     if let Err(e) = show_band(app) {
         tracing::warn!(error = %e, "cannot show the run band");
         return;
     }
-    if let Some(run) = announce
-        && let Err(e) = app.emit_to(BAND_WINDOW, BAND_RUN_EVENT, run)
-    {
+    if let Err(e) = app.emit_to(BAND_WINDOW, BAND_RUN_EVENT, run) {
         tracing::warn!(error = %e, "cannot tell the run band about the run");
     }
     if let Some(main) = app.get_webview_window("main") {
@@ -239,18 +243,24 @@ pub(crate) fn on_event(app: &AppHandle, event: &RunEventEnvelope) {
     }
     let _turn = turn();
     let mut todo = Move::Nothing;
+    let mut shown = None;
     update(|c| {
         let Some(run) = c.as_mut().filter(|r| r.run_id == event.run_id) else {
             return;
         };
         let (move_, keep) = react(run, &event.event);
         todo = move_;
+        shown = Some(run.clone());
         if !keep {
             *c = None;
         }
     });
     match todo {
-        Move::StepAside => step_aside(app, None),
+        Move::StepAside => {
+            if let Some(run) = &shown {
+                step_aside(app, run);
+            }
+        }
         Move::ComeBack => come_back(app),
         Move::Nothing => {}
     }
@@ -276,7 +286,7 @@ pub(crate) fn writer_focused(app: &AppHandle) {
 /// The run the band shows, if any (read by the band when it opens).
 #[tauri::command]
 pub fn run_band_current() -> Option<BandRun> {
-    current()
+    SHOWN.lock().ok().and_then(|s| s.clone())
 }
 
 /// 「Writer に戻す」 on the band (or the band clicked): Writer comes back
