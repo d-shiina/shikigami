@@ -1,5 +1,5 @@
 // The inspector for a named screen part (`flow.parts`).
-import type { Part } from "@shikigami/schema";
+import type { Part } from "@spellsheet/schema";
 import { useStudio } from "../../context";
 import { Boxes, Image as ImageIcon, Pencil } from "lucide-react";
 import { useState } from "react";

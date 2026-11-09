@@ -5,7 +5,7 @@
 // are the flow's own words and read as such; lines SpellSheet wrote are
 // quieter. Colour says only the state (ui-principles.md): green done, 朱
 // failed, orange running, and the selection's blue.
-import type { StepTypeDef } from "@shikigami/schema";
+import type { StepTypeDef } from "@spellsheet/schema";
 import { ArrowDown, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CirclePause, CircleX, Copy, LoaderCircle, MessageSquareText, Play, RotateCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";

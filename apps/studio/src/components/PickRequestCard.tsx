@@ -40,7 +40,7 @@ export function PickRequestCard() {
         <h2 className="text-sm font-bold">{title}</h2>
       </div>
       {request.message && (
-        // The AI's own words: a quote, never Shikigami's instruction.
+        // The AI's own words: a quote, never SpellSheet's instruction.
         <p className="rounded bg-slate-50 px-2 py-1.5 text-sm text-slate-700">{t.quote(request.message)}</p>
       )}
       <p className="text-xs text-slate-600">{byHand ? t.humanHow : t.pickHow(request.candidates)}</p>

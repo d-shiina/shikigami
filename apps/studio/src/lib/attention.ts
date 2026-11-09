@@ -3,7 +3,7 @@
 // and a Windows notification says what waits; clicking it brings this
 // window to the front. Only when a wait starts, and only while the window
 // is behind (the backend checks): its own banner says it otherwise.
-import type { ApprovalRequest, Flow } from "@shikigami/schema";
+import type { ApprovalRequest, Flow } from "@spellsheet/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef } from "react";
 import type { PickRequest, SecretRequest } from "./api";

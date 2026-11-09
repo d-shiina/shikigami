@@ -1,6 +1,6 @@
 // The settings of a `flow.call` node: which flow, what goes in and out.
 import { ArrowUpRight } from "lucide-react";
-import type { Step, StepPatch } from "@shikigami/schema";
+import type { Step, StepPatch } from "@spellsheet/schema";
 import { useStudio } from "../../context";
 import { t } from "../../lib/i18n";
 import { callMap, referencedVariables, TYPE_COLOR } from "../../lib/nodeRows";

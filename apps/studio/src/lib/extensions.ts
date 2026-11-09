@@ -4,7 +4,7 @@
 // secret a setting takes. Filled from the step type definitions when they
 // load, so the display helpers (paramLabel, groupLabel, appTag…) can stay
 // plain functions of a type, as they are for built-in nodes.
-import type { PluginCredential, PluginInfo, StepTypeDef } from "@shikigami/schema";
+import type { PluginCredential, PluginInfo, StepTypeDef } from "@spellsheet/schema";
 
 /** An extension's own palette group: `ext:<name>`. */
 export const EXT_GROUP = "ext:";

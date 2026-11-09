@@ -28,17 +28,17 @@ flowchart LR
   subgraph local[The user's PC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
     STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
-    CLI["shikigami CLI"]
+    CLI["spellsheet CLI"]
 
     subgraph libs[Shared libraries (Rust)]
-      CORE["shikigami-core<br/>Flow Core"]
-      RT["shikigami-runtime<br/>RPA Runtime"]
-      WIN["shikigami-desktop<br/>(UIA, dedicated MTA thread)"]
-      BRC["shikigami-browser<br/>(client of a Node child process)"]
+      CORE["spellsheet-core<br/>Flow Core"]
+      RT["spellsheet-runtime<br/>RPA Runtime"]
+      WIN["spellsheet-desktop<br/>(UIA, dedicated MTA thread)"]
+      BRC["spellsheet-browser<br/>(client of a Node child process)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
-    WS[("Workspace<br/>flows/*.json<br/>history/ runs/<br/>shikigami.db")]
+    WS[("Workspace<br/>flows/*.json<br/>history/ runs/<br/>spellsheet.db")]
   end
 
   CC & CX & CU -- MCP stdio --> MCP
@@ -56,9 +56,9 @@ flowchart LR
 
 | Process | Started by | Role |
 |---|---|---|
-| `shikigami-studio` | The user | GUI. Embeds Core/Runtime as libraries |
+| `spellsheet-studio` | The user | GUI. Embeds Core/Runtime as libraries |
 | `spellsheet mcp` | The AI client (stdio child process) | Provides the MCP tools. Runs on its own, without a GUI. A subcommand of the CLI executable (so there is one thing to distribute) |
-| `shikigami` (CLI) | The user / a scheduler | Headless runs and management |
+| `spellsheet` (CLI) | The user / a scheduler | Headless runs and management |
 | `spellsheet worker` | Windows sign-in (one per PC, user and workspace) | Runs schedules and jobs from the management server one at a time ([remote.md](remote.md), [schedules.md](schedules.md)) |
 | `spellsheet manager` | An administrator (a server) | The management server: hands queued jobs to free workers, over signed HTTP ([remote.md](remote.md)) |
 | `browser-adapter` (Node) | The Runtime | Playwright operations. Started only when needed |
@@ -90,36 +90,36 @@ sequenceDiagram
 ## 2. Monorepo layout
 
 ```text
-shikigami/
+spellsheet/
 ├─ Cargo.toml                 Rust workspace
 ├─ package.json               pnpm workspace (scripts only)
 ├─ pnpm-workspace.yaml
 ├─ crates/
-│  ├─ shikigami-core/         Flow Core (model, expressions, validation, EditOp, history, storage, schema output)
-│  ├─ shikigami-runtime/      RPA Runtime (interpreter, handler interface, run records)
-│  ├─ shikigami-cli/          CLI (the `shikigami` binary)
-│  ├─ shikigami-mcp/          MCP server (rmcp, started with `spellsheet mcp`)
-│  ├─ shikigami-adapters/ every built-in adapter plus installed plugins, in one list (all Runtimes are built from it)
-│  ├─ shikigami-secrets/  the workspace vault (encrypted file, key in Windows Credential Manager)
-│  ├─ shikigami-agent/    `spellsheet worker`: the one process per PC that runs schedules and remote jobs
-│  ├─ shikigami-manager/  `spellsheet manager`: the management server workers take jobs from
-│  ├─ shikigami-browser/  browser.* (client of the Node sidecar)
-│  ├─ shikigami-desktop/  desktop.* (UI Automation)
-│  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly; macros through COM)
-│  ├─ shikigami-word/     word.* (fills and reads docx)
-│  ├─ shikigami-mail/     mail.* (Outlook: drafts, listing, saving attachments)
-│  ├─ shikigami-com/      Office COM calls (shared by Excel macros and Outlook)
-│  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
-│  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  ├─ shikigami-pdf/      pdf.readText, pdf.merge / extractPages / split
-│  ├─ shikigami-db/       db.query / db.execute (SQL through ODBC)
-│  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
+│  ├─ spellsheet-core/         Flow Core (model, expressions, validation, EditOp, history, storage, schema output)
+│  ├─ spellsheet-runtime/      RPA Runtime (interpreter, handler interface, run records)
+│  ├─ spellsheet-cli/          CLI (the `spellsheet` binary)
+│  ├─ spellsheet-mcp/          MCP server (rmcp, started with `spellsheet mcp`)
+│  ├─ spellsheet-adapters/ every built-in adapter plus installed plugins, in one list (all Runtimes are built from it)
+│  ├─ spellsheet-secrets/  the workspace vault (encrypted file, key in Windows Credential Manager)
+│  ├─ spellsheet-agent/    `spellsheet worker`: the one process per PC that runs schedules and remote jobs
+│  ├─ spellsheet-manager/  `spellsheet manager`: the management server workers take jobs from
+│  ├─ spellsheet-browser/  browser.* (client of the Node sidecar)
+│  ├─ spellsheet-desktop/  desktop.* (UI Automation)
+│  ├─ spellsheet-excel/    excel.* (reads and writes xlsx directly; macros through COM)
+│  ├─ spellsheet-word/     word.* (fills and reads docx)
+│  ├─ spellsheet-mail/     mail.* (Outlook: drafts, listing, saving attachments)
+│  ├─ spellsheet-com/      Office COM calls (shared by Excel macros and Outlook)
+│  ├─ spellsheet-files/    file.* (text, CSV, copy/move/delete, zip)
+│  ├─ spellsheet-system/   http.* / process.* / clipboard.* / dialog.*
+│  ├─ spellsheet-pdf/      pdf.readText, pdf.merge / extractPages / split
+│  ├─ spellsheet-db/       db.query / db.execute (SQL through ODBC)
+│  └─ spellsheet-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)
 ├─ packages/
-│  ├─ schema/                 @shikigami/schema: TS types generated from Rust
+│  ├─ schema/                 @spellsheet/schema: TS types generated from Rust
 │  └─ browser-adapter/        Node.js + Playwright
-├─ plugins/shikigami/        Claude Code plugin (MCP settings + skill)
+├─ plugins/spellsheet/        Claude Code plugin (MCP settings + skill)
 ├─ schemas/                   Generated JSON Schema (committed; CI detects drift)
 ├─ examples/                  Sample flows (also used in tests)
 └─ docs/                      Design, research, assets
@@ -131,18 +131,18 @@ shikigami/
 
 | Crate | Depends on | Main public API |
 |---|---|---|
-| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
-| `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-adapters` | runtime, every adapter crate, plugins | `all()` / `load()` (the adapters of this build and PC), `runtime()`, `table_columns()` |
-| `shikigami-secrets` | core | `Vault` (a `SecretProvider`) |
-| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp/agent/manager` |
-| `shikigami-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri commands (§7.1) |
-| `shikigami-mcp` | core, runtime, secrets, rmcp | `ShikigamiMcp` (MCP tools, §6), `serve_stdio` |
-| `shikigami-agent` | core, runtime, secrets | `Agent` (schedules, the job queue, the remote protocol) |
-| `shikigami-manager` | core, runtime, agent (protocol only), axum | `Manager`, `router()` |
-| adapter crates (`shikigami-browser`, `-desktop`, `-excel`, …) | core, runtime | `impl Adapter`: pairs of `StepTypeDef` + `ActionHandler` |
+| `spellsheet-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
+| `spellsheet-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
+| `spellsheet-adapters` | runtime, every adapter crate, plugins | `all()` / `load()` (the adapters of this build and PC), `runtime()`, `table_columns()` |
+| `spellsheet-secrets` | core | `Vault` (a `SecretProvider`) |
+| `spellsheet-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp/agent/manager` |
+| `spellsheet-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri commands (§7.1) |
+| `spellsheet-mcp` | core, runtime, secrets, rmcp | `SpellSheetMcp` (MCP tools, §6), `serve_stdio` |
+| `spellsheet-agent` | core, runtime, secrets | `Agent` (schedules, the job queue, the remote protocol) |
+| `spellsheet-manager` | core, runtime, agent (protocol only), axum | `Manager`, `router()` |
+| adapter crates (`spellsheet-browser`, `-desktop`, `-excel`, …) | core, runtime | `impl Adapter`: pairs of `StepTypeDef` + `ActionHandler` |
 
-Every process that runs flows builds its `Runtime` the same way: `shikigami_adapters::runtime(&adapters)` and then `Runtime::for_workspace(root, vault)` (secrets and `policy.json`). A node run on its own (the AI's `test_step`, Studio's 「ノードの単体実行」) is built by `shikigami_runtime::single::flow_for`.
+Every process that runs flows builds its `Runtime` the same way: `spellsheet_adapters::runtime(&adapters)` and then `Runtime::for_workspace(root, vault)` (secrets and `policy.json`). A node run on its own (the AI's `test_step`, Studio's 「ノードの単体実行」) is built by `spellsheet_runtime::single::flow_for`.
 
 Dependencies go one way: **core ← runtime ← adapters ← (studio | mcp | cli)**. Core depends on neither tokio nor Tauri (a synchronous API usable from anywhere).
 
@@ -251,14 +251,14 @@ Semantic information first; coordinates as a fallback.
 - `CoInitializeEx(COINIT_MULTITHREADED)` on a **dedicated worker thread** (with no window). Every UIA call goes through a request queue to this thread (Microsoft's recommendation).
 - Elements are held only within a request; raw pointers never leave the thread. Flows store only Targets (semantic information), resolved again on every run.
 - `IUIAutomation2` connection and transaction timeouts protect against hung apps. Privilege differences (an elevated app cannot be operated from a non-elevated process) give the dedicated error `ELEVATION_REQUIRED`.
-- **Implemented** ([desktop.md](desktop.md)): crate `shikigami-desktop`, 11 `desktop.*` node types, MCP's `inspect_ui`. Nodes are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
+- **Implemented** ([desktop.md](desktop.md)): crate `spellsheet-desktop`, 11 `desktop.*` node types, MCP's `inspect_ui`. Nodes are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
 
 ### 4.2 Browser adapter
 
 - Starts Node.js + Playwright as a **child process** and talks newline-delimited JSON-RPC 2.0 over stdin/stdout (§7.3).
 - Waiting uses Playwright's auto-waiting / `locator.waitFor` / `page.waitForLoadState`, never fixed sleeps.
 - The Rust side detects a crashed child process, fails the running node with `ADAPTER_CRASHED`, and restarts it on the next request.
-- **Implemented** ([browser.md](browser.md)): crate `shikigami-browser` (child process management, 10 `browser.*` nodes), `packages/browser-adapter` (runs TypeScript directly on Node 22.18+). The browser is Edge by default on Windows and is not bundled. Pages are split into one BrowserContext per "run × `context` name" and closed when the run ends.
+- **Implemented** ([browser.md](browser.md)): crate `spellsheet-browser` (child process management, 10 `browser.*` nodes), `packages/browser-adapter` (runs TypeScript directly on Node 22.18+). The browser is Edge by default on Windows and is not bundled. Pages are split into one BrowserContext per "run × `context` name" and closed when the run ends.
 
 ## 6. MCP tool interface (Phase 2)
 
@@ -322,7 +322,7 @@ Events: `flow-changed { flowId }` (file watching, including changes by other pro
 - Newline-delimited JSON-RPC 2.0 over stdio. Request: `{"jsonrpc":"2.0","id":1,"method":"click","params":{...}}`.
 - Methods (implemented): `open`, `click`, `fill`, `select`, `press`, `getText`, `getTable`, `waitFor`, `screenshot`, `snapshot` (accessibility tree), `close`, `closeRun`, `ping`, `shutdown`. `download` / `upload` are not implemented.
 - A heartbeat (`ping`) and child process exit monitoring detect crashes. stderr is forwarded to tracing.
-- The protocol types are also generated into `@shikigami/schema` and shared by Rust and TS.
+- The protocol types are also generated into `@spellsheet/schema` and shared by Rust and TS.
 
 ### 7.4 MCP (Phase 2)
 
@@ -348,7 +348,7 @@ In a shared workspace, `history/` and `runs/` are kept on each PC ([design/shari
   runs/<run-id>/report.json   run result
   runs/<run-id>/artifacts/    screenshots etc. (Phase 3 on)
   trash/                      deleted flows
-  shikigami.db                SQLite (Phase 2 on)
+  spellsheet.db                SQLite (Phase 2 on)
 ```
 
 `events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which node it changed (MCP: `get_run_logs(runId, variable)`, CLI: `spellsheet run --vars`).
@@ -440,7 +440,7 @@ Running several things at once is meant to be a feature of the product. There ar
 | Between flows | Several flows (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_flow` several times) |
 | Within a flow | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
 | Within a flow (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
-| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing flows never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the flow's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented**. `desktop.input` is also exclusive between processes of the same Windows user (Studio, CLI, MCP server): they share a lock file in `%TEMP%\shikigami-locks\`. Before taking it, a node checks that the desktop takes input (not locked, not a disconnected remote session) and otherwise stops with `DESKTOP_UNAVAILABLE` |
+| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing flows never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the flow's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented**. `desktop.input` is also exclusive between processes of the same Windows user (Studio, CLI, MCP server): they share a lock file in `%TEMP%\spellsheet-locks\`. Before taking it, a node checks that the desktop takes input (not locked, not a disconnected remote session) and otherwise stops with `DESKTOP_UNAVAILABLE` |
 
 - **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so nodes using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
 - **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
@@ -535,7 +535,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 - MCP server (Phase 2): `spellsheet mcp` (stdio), 20 tools for flows, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
 - Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
 - Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
-- Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-flows`) and the marketplace definition. Passes `claude plugin validate`
+- Claude Code plugin: `plugins/spellsheet` (MCP settings + skill `spellsheet-flows`) and the marketplace definition. Passes `claude plugin validate`
 
 ### Not implemented (later phases)
 

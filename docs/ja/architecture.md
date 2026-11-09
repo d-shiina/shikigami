@@ -28,17 +28,17 @@ flowchart LR
   subgraph local[ユーザーのPC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
     STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
-    CLI["shikigami CLI"]
+    CLI["spellsheet CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]
-      CORE["shikigami-core<br/>Flow Core"]
-      RT["shikigami-runtime<br/>RPA Runtime"]
-      WIN["shikigami-desktop<br/>(UIA, 専用MTAスレッド)"]
-      BRC["shikigami-browser<br/>(Node子プロセスのクライアント)"]
+      CORE["spellsheet-core<br/>Flow Core"]
+      RT["spellsheet-runtime<br/>RPA Runtime"]
+      WIN["spellsheet-desktop<br/>(UIA, 専用MTAスレッド)"]
+      BRC["spellsheet-browser<br/>(Node子プロセスのクライアント)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
-    WS[("ワークスペース<br/>flows/*.json<br/>history/ runs/<br/>shikigami.db")]
+    WS[("ワークスペース<br/>flows/*.json<br/>history/ runs/<br/>spellsheet.db")]
   end
 
   CC & CX & CU -- MCP stdio --> MCP
@@ -56,9 +56,9 @@ flowchart LR
 
 | プロセス | 起動者 | 役割 |
 |---|---|---|
-| `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
+| `spellsheet-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
 | `spellsheet mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
-| `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
+| `spellsheet` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
 | `spellsheet worker` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
 | `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いた Worker に渡す（署名付き HTTP、[remote.md](remote.md)） |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
@@ -90,36 +90,36 @@ sequenceDiagram
 ## 2. Monorepo 構成
 
 ```text
-shikigami/
+spellsheet/
 ├─ Cargo.toml                 Rust ワークスペース
 ├─ package.json               pnpm ワークスペース（scripts のみ）
 ├─ pnpm-workspace.yaml
 ├─ crates/
-│  ├─ shikigami-core/         Flow Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
-│  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
-│  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
-│  ├─ shikigami-mcp/          MCP サーバー（rmcp、`spellsheet mcp` で起動）
-│  ├─ shikigami-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
-│  ├─ shikigami-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
-│  ├─ shikigami-agent/    `spellsheet worker`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
-│  ├─ shikigami-manager/  `spellsheet manager`：Worker がジョブを取りに行く管理サーバー
-│  ├─ shikigami-browser/  browser.*（Node サイドカーのクライアント）
-│  ├─ shikigami-desktop/  desktop.*（UI Automation）
-│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
-│  ├─ shikigami-word/     word.*（docx の差し込み・読み取り）
-│  ├─ shikigami-mail/     mail.*（Outlook：下書き・一覧・添付保存）
-│  ├─ shikigami-com/      Office の COM 呼び出し（Excel マクロ・Outlook で共用）
-│  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
-│  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  ├─ shikigami-pdf/      pdf.readText・pdf.merge・extractPages・split（PDF を読む・結合・分割）
-│  ├─ shikigami-db/       db.query・db.execute（ODBC で SQL を実行）
-│  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
+│  ├─ spellsheet-core/         Flow Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
+│  ├─ spellsheet-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
+│  ├─ spellsheet-cli/          CLI（`spellsheet` バイナリ）
+│  ├─ spellsheet-mcp/          MCP サーバー（rmcp、`spellsheet mcp` で起動）
+│  ├─ spellsheet-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
+│  ├─ spellsheet-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
+│  ├─ spellsheet-agent/    `spellsheet worker`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
+│  ├─ spellsheet-manager/  `spellsheet manager`：Worker がジョブを取りに行く管理サーバー
+│  ├─ spellsheet-browser/  browser.*（Node サイドカーのクライアント）
+│  ├─ spellsheet-desktop/  desktop.*（UI Automation）
+│  ├─ spellsheet-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
+│  ├─ spellsheet-word/     word.*（docx の差し込み・読み取り）
+│  ├─ spellsheet-mail/     mail.*（Outlook：下書き・一覧・添付保存）
+│  ├─ spellsheet-com/      Office の COM 呼び出し（Excel マクロ・Outlook で共用）
+│  ├─ spellsheet-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
+│  ├─ spellsheet-system/   http.* / process.* / clipboard.* / dialog.*
+│  ├─ spellsheet-pdf/      pdf.readText・pdf.merge・extractPages・split（PDF を読む・結合・分割）
+│  ├─ spellsheet-db/       db.query・db.execute（ODBC で SQL を実行）
+│  └─ spellsheet-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
 ├─ packages/
-│  ├─ schema/                 @shikigami/schema：Rust から生成した TS 型
+│  ├─ schema/                 @spellsheet/schema：Rust から生成した TS 型
 │  └─ browser-adapter/        Node.js + Playwright
-├─ plugins/shikigami/        Claude Code プラグイン（MCP 設定＋スキル）
+├─ plugins/spellsheet/        Claude Code プラグイン（MCP 設定＋スキル）
 ├─ schemas/                   生成された JSON Schema（コミット対象、CI でズレ検出）
 ├─ examples/                  サンプルフロー（テストでも使用）
 └─ docs/                      設計書・調査・アセット
@@ -131,18 +131,18 @@ shikigami/
 
 | クレート | 依存 | 主な公開 API |
 |---|---|---|
-| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
-| `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp` |
-| `shikigami-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri コマンド（§7.1） |
-| `shikigami-mcp` | core, runtime, secrets, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
-| `shikigami-adapters` | runtime, 各アダプターのクレート, plugins | `all()` / `load()`（このビルドと PC のアダプター）, `runtime()`, `table_columns()` |
-| `shikigami-secrets` | core | `Vault`（`SecretProvider`） |
-| `shikigami-agent` | core, runtime, secrets | `Agent`（スケジュール・ジョブの列・リモートの通信） |
-| `shikigami-manager` | core, runtime, agent（通信の型だけ）, axum | `Manager`, `router()` |
-| アダプターのクレート（`shikigami-browser`・`-desktop`・`-excel` …） | core, runtime | `impl Adapter`：`StepTypeDef` + `ActionHandler` の組 |
+| `spellsheet-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
+| `spellsheet-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
+| `spellsheet-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp` |
+| `spellsheet-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri コマンド（§7.1） |
+| `spellsheet-mcp` | core, runtime, secrets, rmcp | `SpellSheetMcp`（MCP ツール、§6）, `serve_stdio` |
+| `spellsheet-adapters` | runtime, 各アダプターのクレート, plugins | `all()` / `load()`（このビルドと PC のアダプター）, `runtime()`, `table_columns()` |
+| `spellsheet-secrets` | core | `Vault`（`SecretProvider`） |
+| `spellsheet-agent` | core, runtime, secrets | `Agent`（スケジュール・ジョブの列・リモートの通信） |
+| `spellsheet-manager` | core, runtime, agent（通信の型だけ）, axum | `Manager`, `router()` |
+| アダプターのクレート（`spellsheet-browser`・`-desktop`・`-excel` …） | core, runtime | `impl Adapter`：`StepTypeDef` + `ActionHandler` の組 |
 
-フローを実行するプロセスはどれも同じ形で `Runtime` を作る：`shikigami_adapters::runtime(&adapters)` のあと `Runtime::for_workspace(root, vault)`（シークレットと `policy.json`）。ノードを単独で動かすとき（AI の `test_step`、Studio の「ノードの単体実行」）の一ノードのフローは `shikigami_runtime::single::flow_for` が作る。
+フローを実行するプロセスはどれも同じ形で `Runtime` を作る：`spellsheet_adapters::runtime(&adapters)` のあと `Runtime::for_workspace(root, vault)`（シークレットと `policy.json`）。ノードを単独で動かすとき（AI の `test_step`、Studio の「ノードの単体実行」）の一ノードのフローは `spellsheet_runtime::single::flow_for` が作る。
 
 依存方向は **core ← runtime ← adapters ← (studio | mcp | cli)** の一方向。core は tokio にも Tauri にも依存しない（同期 API、どこからでも使える）。
 
@@ -251,14 +251,14 @@ Runtime::builder()
 - **専用ワーカースレッド**（ウィンドウを持たない）で `CoInitializeEx(COINIT_MULTITHREADED)`。全 UIA 呼び出しをこのスレッドへの要求キュー経由にする（Microsoft の推奨）。
 - 要素はリクエスト内でのみ保持し、スレッド外へ生ポインタを出さない。フローには Target（意味情報）だけを保存し、実行時に毎回解決する。
 - `IUIAutomation2` の接続・トランザクションタイムアウトで応答停止アプリから保護。権限差（管理者権限のアプリは非管理者から操作不可）は専用エラー `ELEVATION_REQUIRED` で返す。
-- **実装済み**（[desktop.md](desktop.md)）：クレート `shikigami-desktop`、ノード型 `desktop.*` 11 種、MCP の `inspect_ui`。ノードはアプリの技術（Win32 / WPF / SAP GUI / Java）で分けず 1 セットとし、掴み方はウィンドウから自動で選ぶ（今は UI Automation のみ。SAP GUI と Java のウィンドウは判別して注記する）。
+- **実装済み**（[desktop.md](desktop.md)）：クレート `spellsheet-desktop`、ノード型 `desktop.*` 11 種、MCP の `inspect_ui`。ノードはアプリの技術（Win32 / WPF / SAP GUI / Java）で分けず 1 セットとし、掴み方はウィンドウから自動で選ぶ（今は UI Automation のみ。SAP GUI と Java のウィンドウは判別して注記する）。
 
 ### 4.2 Browser Adapter
 
 - Node.js + Playwright を **子プロセス** として起動し、stdin/stdout の改行区切り JSON-RPC 2.0 で通信（§7.3）。
 - 待機は Playwright のオートウェイト / `locator.waitFor` / `page.waitForLoadState` を使い、固定 sleep を使わない。
 - 子プロセスの異常終了は Rust 側で検知し、実行中ノードを `ADAPTER_CRASHED` で失敗させ、次回要求時に再起動する。
-- **実装済み**（[browser.md](browser.md)）：クレート `shikigami-browser`（子プロセス管理・`browser.*` ノード 10 種）、`packages/browser-adapter`（Node 22.18+ で TypeScript を直接実行）。ブラウザは Windows 既定で Edge を使い、同梱しない。ページは「実行 × `context` 名」ごとの BrowserContext に分け、実行終了時に閉じる。
+- **実装済み**（[browser.md](browser.md)）：クレート `spellsheet-browser`（子プロセス管理・`browser.*` ノード 10 種）、`packages/browser-adapter`（Node 22.18+ で TypeScript を直接実行）。ブラウザは Windows 既定で Edge を使い、同梱しない。ページは「実行 × `context` 名」ごとの BrowserContext に分け、実行終了時に閉じる。
 
 ## 6. MCP Tool Interface（Phase 2）
 
@@ -322,7 +322,7 @@ Runtime::builder()
 - 改行区切り JSON-RPC 2.0 over stdio。要求：`{"jsonrpc":"2.0","id":1,"method":"click","params":{...}}`。
 - メソッド（実装済み）：`open`, `click`, `fill`, `select`, `press`, `getText`, `getTable`, `waitFor`, `screenshot`, `snapshot`（アクセシビリティツリー）, `close`, `closeRun`, `ping`, `shutdown`。`download` / `upload` は未実装。
 - ハートビート（`ping`）と子プロセス終了監視で異常終了を検知。stderr は tracing に転送。
-- プロトコルの型も `@shikigami/schema` に生成し、Rust/TS で共有する。
+- プロトコルの型も `@spellsheet/schema` に生成し、Rust/TS で共有する。
 
 ### 7.4 MCP（Phase 2）
 
@@ -348,7 +348,7 @@ Runtime::builder()
   runs/<run-id>/report.json   実行結果
   runs/<run-id>/artifacts/    スクリーンショット等（Phase 3〜）
   trash/                      削除済みフロー
-  shikigami.db                SQLite（Phase 2〜）
+  spellsheet.db                SQLite（Phase 2〜）
 ```
 
 `events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのノードで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `spellsheet run --vars`）。
@@ -440,7 +440,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | フロー間 | 複数のフロー（同じフローの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_flow` を複数呼べる） |
 | フロー内 | `control.parallel`（`branches` の各ノードを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ノードのブランチは `control.group` で包む | **実装済み** |
 | フロー内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
-| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。フローを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスはフローのフォルダーから解決し、フォルダーの外を指すと検証で `PATH_OUTSIDE_PROJECT` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み**。`desktop.input` は同じ Windows ユーザーの別プロセス（Studio・CLI・MCP サーバー）の間でも排他（`%TEMP%\shikigami-locks\` のロックファイルを共有）。取る前に、画面がロック中や切断されたリモートセッションでないかを調べ、入力できなければ `DESKTOP_UNAVAILABLE` で止める |
+| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。フローを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスはフローのフォルダーから解決し、フォルダーの外を指すと検証で `PATH_OUTSIDE_PROJECT` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み**。`desktop.input` は同じ Windows ユーザーの別プロセス（Studio・CLI・MCP サーバー）の間でも排他（`%TEMP%\spellsheet-locks\` のロックファイルを共有）。取る前に、画面がロック中や切断されたリモートセッションでないかを調べ、入力できなければ `DESKTOP_UNAVAILABLE` で止める |
 
 - **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うノードは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう型ごとに宣言する（実装済み：`desktop.click` / `setValue` などは使用権なし、`desktop.mouseClick` / `type` / `press` は使用権あり。どれも同じアプリ（`window:<process>`）へは 1 つずつ）。
 - **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
@@ -535,7 +535,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - MCP サーバー（Phase 2）：`spellsheet mcp`（stdio）、フロー・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
 - デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
 - Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
-- Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-flows`）とマーケットプレイス定義。`claude plugin validate` 合格
+- Claude Code プラグイン：`plugins/spellsheet`（MCP 設定＋スキル `spellsheet-flows`）とマーケットプレイス定義。`claude plugin validate` 合格
 
 ### 未実装（後続フェーズ）
 

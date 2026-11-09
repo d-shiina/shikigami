@@ -1,29 +1,30 @@
 [package]
-name = "shikigami-studio"
-description = "Shikigami RPA Writer (Tauri 2 desktop app)"
+name = "spellsheet-studio"
+description = "SpellSheet Writer (Tauri 2 desktop app)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 # Only the rlib: the staticlib and cdylib that the Tauri template adds are for
 # iOS/Android, and each one is a full extra link (with LTO) of the whole app.
 [lib]
-name = "shikigami_studio_lib"
+name = "spellsheet_studio_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
-shikigami-core.workspace = true
-shikigami-runtime.workspace = true
-shikigami-adapters.workspace = true
-shikigami-desktop.workspace = true
-shikigami-secrets.workspace = true
-shikigami-agent.workspace = true
-shikigami-system.workspace = true
-shikigami-plugins.workspace = true
+spellsheet-core.workspace = true
+spellsheet-runtime.workspace = true
+spellsheet-adapters.workspace = true
+spellsheet-desktop.workspace = true
+spellsheet-secrets.workspace = true
+spellsheet-agent.workspace = true
+spellsheet-system.workspace = true
+spellsheet-plugins.workspace = true
 base64.workspace = true
 tauri = { version = "2.12.5", features = ["tray-icon"] }
 tauri-plugin-updater = "2.14.1"

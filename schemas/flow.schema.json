@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "$schema": {
-      "description": "Optional JSON Schema reference for editors. Ignored by Shikigami.",
+      "description": "Optional JSON Schema reference for editors. Ignored by SpellSheet.",
       "type": [
         "string",
         "null"
@@ -416,5 +416,5 @@
       "additionalProperties": true
     }
   },
-  "$id": "https://shikigami.dev/schemas/flow.schema.json"
+  "$id": "https://spellsheet.dev/schemas/flow.schema.json"
 }

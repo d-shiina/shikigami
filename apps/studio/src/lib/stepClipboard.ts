@@ -1,10 +1,10 @@
 // Copying and pasting nodes. What goes on the clipboard is plain JSON in the
 // flow's own shape (`steps`, and the named parts they use), so it pastes into
 // another flow or another Studio window, and an AI can read it as it is.
-import type { EditOp, Part, Step } from "@shikigami/schema";
+import type { EditOp, Part, Step } from "@spellsheet/schema";
 import { partRef } from "./parts";
 
-export const CLIPBOARD_FORMAT = "shikigami.steps";
+export const CLIPBOARD_FORMAT = "spellsheet.steps";
 
 export type Copied = { steps: Step[]; parts: Record<string, Part> };
 

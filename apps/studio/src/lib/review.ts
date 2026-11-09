@@ -1,7 +1,7 @@
 // What a group of unreviewed AI edits did to a flow, for the review desk:
 // which steps were added, changed or removed, read straight from the ops and
 // inverse ops Core recorded. Display only.
-import type { HistoryEntry, Step, StepPatch } from "@shikigami/schema";
+import type { HistoryEntry, Step, StepPatch } from "@spellsheet/schema";
 import type { RunRecord } from "./api";
 import type { Part } from "./sentence";
 import { t } from "./i18n";

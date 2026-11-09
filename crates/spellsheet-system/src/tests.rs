@@ -1,0 +1,642 @@
+use std::sync::{Arc, Mutex};
+
+use serde_json::{Value, json};
+use spellsheet_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
+use spellsheet_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
+use spellsheet_runtime::{RunOptions, RunReport, RunStatus, Runtime};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use super::*;
+
+fn runtime() -> Runtime {
+    adapters()
+        .iter()
+        .fold(Runtime::builder(), |b, a| b.adapter(a.as_ref()))
+        .build()
+}
+
+async fn run(runtime: &Runtime, step_type: &str, params: Value) -> RunReport {
+    let mut s = Flow::new("system");
+    s.variables.push(VariableDef {
+        direction: VarDirection::Output,
+        ..VariableDef::new("out", VarType::Any)
+    });
+    let mut step = Step::new(step_type);
+    for (k, v) in params.as_object().unwrap() {
+        step = step.with_param(k, v.clone());
+    }
+    step.save_as = Some("out".into());
+    spellsheet_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    runtime
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap()
+}
+
+#[test]
+fn examples_validate() {
+    let runtime = runtime();
+    let validator = Validator::new(runtime.registry().clone());
+    let defs = definitions();
+    assert_eq!(defs.len(), 10);
+    for def in &defs {
+        assert!(runtime.registry().get(&def.step_type).is_some());
+        assert!(!def.examples.is_empty(), "{}", def.step_type);
+        for example in &def.examples {
+            let mut step: Step = serde_json::from_value(example.clone()).unwrap();
+            spellsheet_core::ops::assign_missing_ids(&mut step);
+            let mut s = Flow::new("example");
+            s.variables = [
+                "count", "rows", "res", "copied", "answer", "month", "csvPath",
+            ]
+            .iter()
+            .map(|n| VariableDef::new(*n, VarType::Any))
+            .collect();
+            s.steps = vec![step];
+            let report = validator.validate(&s);
+            assert_eq!(
+                report.error_count(),
+                0,
+                "{}: {:?}",
+                def.step_type,
+                report.issues
+            );
+        }
+    }
+}
+
+/// A one-shot HTTP server: records the raw request, answers with `response`.
+async fn serve(response: &'static str) -> (String, Arc<Mutex<String>>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let seen = Arc::new(Mutex::new(String::new()));
+    let record = seen.clone();
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let n = socket.read(&mut chunk).await.unwrap();
+            buf.extend_from_slice(&chunk[..n]);
+            let text = String::from_utf8_lossy(&buf).to_string();
+            if let Some(head_end) = text.find("\r\n\r\n") {
+                let length = text[..head_end]
+                    .lines()
+                    .find_map(|l| {
+                        l.to_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap())
+                    })
+                    .unwrap_or(0);
+                if buf.len() >= head_end + 4 + length {
+                    *record.lock().unwrap() = text;
+                    break;
+                }
+            }
+            if n == 0 {
+                break;
+            }
+        }
+        socket.write_all(response.as_bytes()).await.unwrap();
+        socket.shutdown().await.unwrap();
+    });
+    (format!("http://{addr}"), seen)
+}
+
+struct ApiToken(Vec<String>);
+
+impl SecretProvider for ApiToken {
+    fn resolve(&self, reference: &SecretRef) -> Result<ResolvedSecret, SecretError> {
+        Ok(ResolvedSecret {
+            name: reference.secret.clone(),
+            field: reference.field,
+            value: match reference.field.as_str() {
+                "username" => "robot".into(),
+                _ => "tok-123".into(),
+            },
+            sites: self.0.clone(),
+        })
+    }
+    fn load_session(&self, _: &str) -> Result<Option<Value>, SecretError> {
+        Ok(None)
+    }
+    fn save_session(&self, _: &str, _: &Value) -> Result<(), SecretError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn http_sends_json_and_parses_the_response() {
+    let (base, seen) = serve(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 21\r\n\r\n{\"ok\":true,\"id\":\"42\"}",
+    )
+    .await;
+    let report = run(
+        &runtime().with_secrets(Arc::new(ApiToken(vec![base.clone()]))),
+        types::HTTP_REQUEST,
+        json!({
+            "method": "POST",
+            "url": format!("{base}/orders"),
+            "query": { "date": "2026-10-28", "q": "東京" },
+            "json": { "name": "山田" },
+            "auth": { "secret": "受注API", "field": "password" },
+        }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["status"], 200);
+    assert_eq!(
+        report.outputs["out"]["body"],
+        json!({ "ok": true, "id": "42" })
+    );
+    let request = seen.lock().unwrap().clone();
+    assert!(
+        request.starts_with("POST /orders?date=2026-10-28&q=%E6%9D%B1%E4%BA%AC HTTP/1.1"),
+        "{request}"
+    );
+    assert!(
+        request
+            .to_lowercase()
+            .contains("authorization: bearer tok-123")
+    );
+    assert!(request.contains("{\"name\":\"山田\"}"));
+}
+
+#[tokio::test]
+async fn http_refuses_to_send_a_secret_to_another_site() {
+    let (base, seen) = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let report = run(
+        &runtime().with_secrets(Arc::new(ApiToken(vec!["https://api.example.com".into()]))),
+        types::HTTP_REQUEST,
+        json!({ "url": base, "auth": { "secret": "受注API", "field": "password" } }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn http_basic_auth_form_and_errors() {
+    let (base, seen) = serve(
+        "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 9\r\n\r\nno order!",
+    )
+    .await;
+    let report = run(
+        &runtime().with_secrets(Arc::new(ApiToken(vec![base.clone()]))),
+        types::HTTP_REQUEST,
+        json!({
+            "method": "POST",
+            "url": base,
+            "form": { "a": "x y", "b": 1 },
+            "auth": { "secret": "受注API", "field": "password" },
+            "authType": "basic",
+        }),
+    )
+    .await;
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "HTTP_ERROR");
+    assert_eq!(error.details.as_ref().unwrap()["status"], 404);
+    assert_eq!(error.details.as_ref().unwrap()["body"], "no order!");
+    let request = seen.lock().unwrap().clone();
+    // robot:tok-123
+    assert!(request.contains("Basic cm9ib3Q6dG9rLTEyMw=="), "{request}");
+    assert!(request.ends_with("a=x+y&b=1"), "{request}");
+}
+
+#[tokio::test]
+async fn http_saves_downloads_and_rejects_two_bodies() {
+    let (base, _) = serve("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nPDF").await;
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("dl/report.pdf").display().to_string();
+    let report = run(
+        &runtime(),
+        types::HTTP_REQUEST,
+        json!({ "url": base, "saveTo": target }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["body"], json!(target));
+    assert_eq!(std::fs::read(&target).unwrap(), b"PDF");
+
+    let report = run(
+        &runtime(),
+        types::HTTP_REQUEST,
+        json!({ "url": "http://127.0.0.1:9/", "json": {}, "body": "x" }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "INVALID_PARAMS");
+}
+
+#[tokio::test]
+async fn process_runs_and_checks_the_exit_code() {
+    let (program, ok, fail) = if cfg!(windows) {
+        (
+            "cmd",
+            vec!["/c", "echo hello & echo err 1>&2"],
+            vec!["/c", "exit 3"],
+        )
+    } else {
+        (
+            "sh",
+            vec!["-c", "echo hello; echo err >&2"],
+            vec!["-c", "exit 3"],
+        )
+    };
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": program, "args": ok }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["exitCode"], 0);
+    assert!(
+        report.outputs["out"]["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("hello")
+    );
+    assert!(
+        report.outputs["out"]["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("err")
+    );
+
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": program, "args": fail }),
+    )
+    .await;
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "PROCESS_FAILED");
+    assert_eq!(error.details.unwrap()["exitCode"], 3);
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": program, "args": fail, "okExitCodes": [0, 3] }),
+    )
+    .await;
+    assert_eq!(report.outputs["out"]["exitCode"], 3);
+
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": "surely-not-a-program-xyz" }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "PROCESS_NOT_FOUND");
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn desktop_steps_need_windows() {
+    let report = run(&runtime(), types::CLIPBOARD_GET, json!({})).await;
+    assert_eq!(report.error.unwrap().code, "PLATFORM_UNSUPPORTED");
+    let report = run(&runtime(), types::DIALOG_MESSAGE, json!({ "message": "x" })).await;
+    assert_eq!(report.error.unwrap().code, "PLATFORM_UNSUPPORTED");
+}
+
+#[tokio::test]
+async fn secrets_do_not_follow_redirects_to_other_sites() {
+    let (other, other_seen) = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let redirect: &'static str = Box::leak(
+        format!("HTTP/1.1 302 Found\r\nLocation: {other}/steal\r\nContent-Length: 0\r\n\r\n")
+            .into_boxed_str(),
+    );
+    let (base, _) = serve(redirect).await;
+    let report = run(
+        &runtime().with_secrets(Arc::new(ApiToken(vec![base.clone()]))),
+        types::HTTP_REQUEST,
+        json!({
+            "url": base,
+            "auth": { "secret": "受注API", "field": "password" },
+            "authType": "header",
+            "authHeader": "X-API-Key",
+        }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["status"], 302);
+    assert!(other_seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_site_list_keeps_redirects_on_the_allowed_origin() {
+    let (other, other_seen) = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let redirect: &'static str = Box::leak(
+        format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {other}/steal\r\nContent-Length: 0\r\n\r\n")
+            .into_boxed_str(),
+    );
+    let (base, _) = serve(redirect).await;
+    let dir = tempfile::tempdir().unwrap();
+    let policy = spellsheet_core::Policy::path(dir.path());
+    std::fs::write(&policy, json!({ "sites": [base] }).to_string()).unwrap();
+    let report = run(
+        &runtime().with_policy(policy),
+        types::HTTP_REQUEST,
+        json!({ "url": base, "method": "POST", "json": { "order": 1 } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["status"], 307);
+    assert!(other_seen.lock().unwrap().is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn process_streams_large_stdin_through_a_filter() {
+    let big = "あ".repeat(1_000_000);
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": "cat", "stdin": big }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        report.outputs["out"]["stdout"].as_str().unwrap().len(),
+        big.len()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_timed_out_process_takes_its_children_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.txt");
+    let mut s = Flow::new("system");
+    let mut step = Step::new(types::PROCESS_RUN)
+        .with_param("program", json!("sh"))
+        .with_param(
+            "args",
+            json!([
+                "-c",
+                format!("(sleep 1; echo changed > '{}') & wait", target.display())
+            ]),
+        );
+    step.timeout_ms = Some(200);
+    spellsheet_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    let report = runtime()
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    assert_eq!(report.status, RunStatus::Failed);
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    assert!(!target.exists(), "a background child outlived the step");
+}
+
+/// A client secret ("Box": client ID `cid`, secret `csecret`) with OAuth
+/// token storage.
+struct OAuthClient {
+    sites: Vec<String>,
+    tokens: Mutex<Option<Value>>,
+}
+
+impl OAuthClient {
+    fn new(sites: Vec<String>, tokens: Option<Value>) -> Arc<Self> {
+        Arc::new(Self {
+            sites,
+            tokens: Mutex::new(tokens),
+        })
+    }
+}
+
+impl SecretProvider for OAuthClient {
+    fn resolve(&self, reference: &SecretRef) -> Result<ResolvedSecret, SecretError> {
+        Ok(ResolvedSecret {
+            name: reference.secret.clone(),
+            field: reference.field,
+            value: match reference.field.as_str() {
+                "username" => "cid".into(),
+                _ => "csecret".into(),
+            },
+            sites: self.sites.clone(),
+        })
+    }
+    fn load_session(&self, _: &str) -> Result<Option<Value>, SecretError> {
+        Ok(None)
+    }
+    fn save_session(&self, _: &str, _: &Value) -> Result<(), SecretError> {
+        Ok(())
+    }
+    fn load_oauth_tokens(&self, _: &str) -> Result<Option<Value>, SecretError> {
+        Ok(self.tokens.lock().unwrap().clone())
+    }
+    fn save_oauth_tokens(&self, _: &str, tokens: &Value) -> Result<(), SecretError> {
+        *self.tokens.lock().unwrap() = Some(tokens.clone());
+        Ok(())
+    }
+}
+
+fn saved_tokens(token_url: &str, expires_at: i64) -> Value {
+    json!({
+        "tokenUrl": token_url,
+        "clientId": "cid",
+        "accessToken": "at-old",
+        "refreshToken": "rt-old",
+        "expiresAt": expires_at,
+    })
+}
+
+const OK: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}";
+
+#[tokio::test]
+async fn http_uses_the_saved_oauth_access_token() {
+    let (api, seen) = serve(OK).await;
+    let secrets = OAuthClient::new(
+        vec![api.clone()],
+        Some(saved_tokens("https://auth.example.com/token", i64::MAX / 2)),
+    );
+    let report = run(
+        &runtime().with_secrets(secrets),
+        types::HTTP_REQUEST,
+        json!({ "url": format!("{api}/2.0/folders/0/items"), "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let request = seen.lock().unwrap().to_lowercase();
+    assert!(
+        request.contains("authorization: bearer at-old"),
+        "{request}"
+    );
+}
+
+#[tokio::test]
+async fn http_refreshes_an_expired_oauth_token_first() {
+    let (token, token_seen) = serve(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 68\r\n\r\n{\"access_token\":\"at-new\",\"refresh_token\":\"rt-new\",\"expires_in\":3600}",
+    )
+    .await;
+    let (api, api_seen) = serve(OK).await;
+    let secrets = OAuthClient::new(
+        vec![token.clone(), api.clone()],
+        Some(saved_tokens(&format!("{token}/oauth2/token"), 0)),
+    );
+    let report = run(
+        &runtime().with_secrets(secrets.clone()),
+        types::HTTP_REQUEST,
+        json!({ "url": api, "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let refresh = token_seen.lock().unwrap().clone();
+    assert!(refresh.starts_with("POST /oauth2/token "), "{refresh}");
+    assert!(
+        refresh.ends_with(
+            "grant_type=refresh_token&refresh_token=rt-old&client_id=cid&client_secret=csecret"
+        ),
+        "{refresh}"
+    );
+    assert!(
+        api_seen
+            .lock()
+            .unwrap()
+            .to_lowercase()
+            .contains("authorization: bearer at-new")
+    );
+    // The rotated refresh token is kept for next time.
+    let saved = secrets.tokens.lock().unwrap().clone().unwrap();
+    assert_eq!(saved["accessToken"], "at-new");
+    assert_eq!(saved["refreshToken"], "rt-new");
+    assert!(saved["expiresAt"].as_i64().unwrap() > 0);
+}
+
+#[tokio::test]
+async fn http_asks_for_a_sign_in_when_the_refresh_is_refused() {
+    let (token, _) = serve(
+        "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 25\r\n\r\n{\"error\":\"invalid_grant\"}",
+    )
+    .await;
+    let secrets = OAuthClient::new(
+        vec![token.clone(), "https://api.example.com".into()],
+        Some(saved_tokens(&format!("{token}/token"), 0)),
+    );
+    let report = run(
+        &runtime().with_secrets(secrets),
+        types::HTTP_REQUEST,
+        json!({ "url": "https://api.example.com/", "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "OAUTH_SIGN_IN_REQUIRED");
+
+    // Never signed in.
+    let report = run(
+        &runtime().with_secrets(OAuthClient::new(vec![], None)),
+        types::HTTP_REQUEST,
+        json!({ "url": "https://api.example.com/", "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "OAUTH_SIGN_IN_REQUIRED");
+}
+
+#[tokio::test]
+async fn http_sends_the_access_token_only_to_the_secret_sites() {
+    let (api, seen) = serve(OK).await;
+    let secrets = OAuthClient::new(
+        vec!["https://api.box.com".into()],
+        Some(saved_tokens(
+            "https://api.box.com/oauth2/token",
+            i64::MAX / 2,
+        )),
+    );
+    let report = run(
+        &runtime().with_secrets(secrets),
+        types::HTTP_REQUEST,
+        json!({ "url": api, "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[test]
+fn oauth_builds_the_request_and_checks_the_answer() {
+    let client = oauth::Client::for_tests("Box", "cid");
+    let attempt = oauth::Attempt::new().unwrap();
+    let extra = json!({ "prompt": "consent" });
+    let url = oauth::authorize_url(
+        &client,
+        &oauth::Request {
+            authorize_url: "https://account.box.com/api/oauth2/authorize",
+            redirect_url: "https://www.example.com/",
+            scope: Some("root_readonly"),
+            extra: extra.as_object(),
+            pkce: true,
+        },
+        &attempt,
+    )
+    .unwrap();
+    let parsed = reqwest::Url::parse(&url).unwrap();
+    let query: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+    assert_eq!(query["response_type"], "code");
+    assert_eq!(query["client_id"], "cid");
+    assert_eq!(query["redirect_uri"], "https://www.example.com/");
+    assert_eq!(query["state"], attempt.state);
+    assert_eq!(query["scope"], "root_readonly");
+    assert_eq!(query["code_challenge_method"], "S256");
+    assert_eq!(query["code_challenge"].len(), 43);
+    assert_eq!(query["prompt"], "consent");
+
+    let back = |q: &str| format!("https://www.example.com/?{q}");
+    assert_eq!(
+        oauth::code_from_redirect(&back(&format!("code=c1&state={}", attempt.state)), &attempt)
+            .unwrap(),
+        "c1"
+    );
+    assert_eq!(
+        oauth::code_from_redirect(&back("code=c1&state=forged"), &attempt)
+            .unwrap_err()
+            .code,
+        "OAUTH_STATE_MISMATCH"
+    );
+    assert_eq!(
+        oauth::code_from_redirect(&back("code=c1"), &attempt)
+            .unwrap_err()
+            .code,
+        "OAUTH_STATE_MISMATCH"
+    );
+    assert_eq!(
+        oauth::code_from_redirect(
+            &back(&format!("error=access_denied&state={}", attempt.state)),
+            &attempt
+        )
+        .unwrap_err()
+        .code,
+        "OAUTH_DENIED"
+    );
+}
+
+#[tokio::test]
+async fn http_keeps_using_a_valid_token_that_cannot_be_refreshed() {
+    let (api, seen) = serve(OK).await;
+    let mut tokens = saved_tokens("https://auth.example.com/token", 0);
+    // Valid for one more minute, and no refresh token.
+    let soon = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 60;
+    tokens["expiresAt"] = json!(soon);
+    tokens.as_object_mut().unwrap().remove("refreshToken");
+    let report = run(
+        &runtime().with_secrets(OAuthClient::new(vec![api.clone()], Some(tokens))),
+        types::HTTP_REQUEST,
+        json!({ "url": api, "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert!(
+        seen.lock()
+            .unwrap()
+            .to_lowercase()
+            .contains("authorization: bearer at-old")
+    );
+}

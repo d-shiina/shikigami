@@ -4,7 +4,7 @@
 // node needs no change here. Tables keyed by type for display (sentences,
 // icons, keywords) stay with what they display.
 
-/** Control steps, as in `shikigami_core::registry::control`. */
+/** Control steps, as in `spellsheet_core::registry::control`. */
 export const IF = "control.if";
 export const SWITCH = "control.switch";
 export const CASE = "control.case";

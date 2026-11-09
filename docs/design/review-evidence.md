@@ -58,7 +58,7 @@
 - `lastApproval`：最後の承認。`openFeedback`：最新のレビューが差し戻しなら、それ（承認されると消える）。
 - MCP の `get_flow` は `openFeedback` があるとき `feedback` として付ける。AI は読み直すたびに差し戻しに気づける。
 
-Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_review(id, input: NewReview)`、`get_observation(id)`（ツリー本文と、スクリーンショットを data URL で返す）。型は `@shikigami/schema` の `ReviewTimeline` / `Evidence` / `NewReview` / `ObservationContent`。
+Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_review(id, input: NewReview)`、`get_observation(id)`（ツリー本文と、スクリーンショットを data URL で返す）。型は `@spellsheet/schema` の `ReviewTimeline` / `Evidence` / `NewReview` / `ObservationContent`。
 
 ## 規則
 
@@ -85,7 +85,7 @@ Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_revie
 
 ### 紙のレポート（2026-11-08）
 
-右の欄（420px）に収まる量ではなかった（Daiki）ので、確認待ちでフローを開くと、手順書と同じ「机の上の白い紙 1 枚」のレポートが作業面いっぱいに出る形にした。比べた案：右の欄を 640px に広げる（図が狭くなり、約束はカードのまま見比べられない）、紙とフロー図を左右に並べる（両方とも窮屈）。試作画像は Project files の `shikigami/review-paper/`。
+右の欄（420px）に収まる量ではなかった（Daiki）ので、確認待ちでフローを開くと、手順書と同じ「机の上の白い紙 1 枚」のレポートが作業面いっぱいに出る形にした。比べた案：右の欄を 640px に広げる（図が狭くなり、約束はカードのまま見比べられない）、紙とフロー図を左右に並べる（両方とも窮屈）。試作画像は Project files の `spellsheet/review-paper/`。
 
 - タイトルバーの表示切り替えに、確認待ちのときだけ「確認」が先頭に付く（`lib/reviewView.ts`、エディターで覚えている表示とは別）。一覧からフローを開くと必ず「確認」から始まる。「フロー図」「手順書」「変数」に切り替えても、下に判断の帯（守れていない約束・未確認の数、「確認に戻る」、取り消す・差し戻す・変更を承諾）が残る。図ではノードを選ぶと右の欄が開く（エディターと同じ）。
 - 小さな変更も同じ紙で出す（中身が少なく短くなるだけ）。出し方が 2 通りあると迷うため。
@@ -111,7 +111,7 @@ Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_revie
 
 ボタンと意味：
 
-- **変更を承諾**：見たことを Core に記録し（`submit_review` approved）、その内容を確定版にする（[policy.md](../policy.md)）。AI の編集は作業中の内容に入った時点で、Studio の実行と AI の試し実行ではもう動く。無人実行（`shikigami run`・スケジュール）は確定版だけを動かすので、ここで確定するまで変わらない。ボタンの左に、いま無人実行で動く版を出す。未回答の確かめがあれば「（未確認 n）」と添えるが、押せなくはしない。
+- **変更を承諾**：見たことを Core に記録し（`submit_review` approved）、その内容を確定版にする（[policy.md](../policy.md)）。AI の編集は作業中の内容に入った時点で、Studio の実行と AI の試し実行ではもう動く。無人実行（`spellsheet run`・スケジュール）は確定版だけを動かすので、ここで確定するまで変わらない。ボタンの左に、いま無人実行で動く版を出す。未回答の確かめがあれば「（未確認 n）」と添えるが、押せなくはしない。
 - **差し戻す…**：理由とノードへの指摘を AI に送る。変更は直るまで残る。
 - **変更を取り消す**：AI が変える前の内容に戻す（新しい編集として記録）。
 

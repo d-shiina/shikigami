@@ -18,7 +18,7 @@ To keep the number of ways the AI has to learn small, the same action is never a
 
 ## Excel (`excel.*`, implemented)
 
-Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.xls` gives `UNSUPPORTED_FORMAT`; save it as `.xlsx` with `excel.saveAs` first).
+Crate `crates/spellsheet-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.xls` gives `UNSUPPORTED_FORMAT`; save it as `.xlsx` with `excel.saveAs` first).
 
 | type | Main params | Output |
 |---|---|---|
@@ -124,7 +124,7 @@ Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFOR
 
 ## Word (`word.*`, implemented)
 
-Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`), except for `word.exportPdf`.
+Crate `crates/spellsheet-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`), except for `word.exportPdf`.
 
 | type | Main params | Output |
 |---|---|---|
@@ -147,7 +147,7 @@ Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`)
 
 ## Mail (`mail.*`, implemented)
 
-Crate `crates/shikigami-mail`. One `mail.*` set regardless of app. Reading, sorting and drafts use this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported), with the account signed in to Outlook, so no passwords or server settings are needed. They can also work on a Microsoft 365 mailbox without Outlook (`via: "microsoft365"`, below). `mail.send` can also send through Microsoft 365 or an SMTP server.
+Crate `crates/spellsheet-mail`. One `mail.*` set regardless of app. Reading, sorting and drafts use this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported), with the account signed in to Outlook, so no passwords or server settings are needed. They can also work on a Microsoft 365 mailbox without Outlook (`via: "microsoft365"`, below). `mail.send` can also send through Microsoft 365 or an SMTP server.
 
 | type | Main params | Output |
 |---|---|---|

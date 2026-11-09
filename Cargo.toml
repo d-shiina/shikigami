@@ -1,25 +1,25 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/shikigami-core",
-    "crates/shikigami-runtime",
-    "crates/shikigami-cli",
-    "crates/shikigami-mcp",
-    "crates/shikigami-browser",
-    "crates/shikigami-secrets",
-    "crates/shikigami-adapters",
-    "crates/shikigami-desktop",
-    "crates/shikigami-plugins",
-    "crates/shikigami-files",
-    "crates/shikigami-system",
-    "crates/shikigami-pdf",
-    "crates/shikigami-excel",
-    "crates/shikigami-word",
-    "crates/shikigami-com",
-    "crates/shikigami-mail",
-    "crates/shikigami-db",
-    "crates/shikigami-agent",
-    "crates/shikigami-manager",
+    "crates/spellsheet-core",
+    "crates/spellsheet-runtime",
+    "crates/spellsheet-cli",
+    "crates/spellsheet-mcp",
+    "crates/spellsheet-browser",
+    "crates/spellsheet-secrets",
+    "crates/spellsheet-adapters",
+    "crates/spellsheet-desktop",
+    "crates/spellsheet-plugins",
+    "crates/spellsheet-files",
+    "crates/spellsheet-system",
+    "crates/spellsheet-pdf",
+    "crates/spellsheet-excel",
+    "crates/spellsheet-word",
+    "crates/spellsheet-com",
+    "crates/spellsheet-mail",
+    "crates/spellsheet-db",
+    "crates/spellsheet-agent",
+    "crates/spellsheet-manager",
     "apps/studio/src-tauri",
 ]
 
@@ -28,27 +28,27 @@ version = "0.1.20"
 edition = "2024"
 rust-version = "1.90"
 license = "Apache-2.0"
-repository = "https://github.com/d-shiina/shikigami"
+repository = "https://github.com/d-shiina/spellsheet"
 
 [workspace.dependencies]
-shikigami-core = { path = "crates/shikigami-core" }
-shikigami-runtime = { path = "crates/shikigami-runtime" }
-shikigami-mcp = { path = "crates/shikigami-mcp" }
-shikigami-browser = { path = "crates/shikigami-browser" }
-shikigami-secrets = { path = "crates/shikigami-secrets" }
-shikigami-adapters = { path = "crates/shikigami-adapters" }
-shikigami-desktop = { path = "crates/shikigami-desktop" }
-shikigami-plugins = { path = "crates/shikigami-plugins" }
-shikigami-files = { path = "crates/shikigami-files" }
-shikigami-system = { path = "crates/shikigami-system" }
-shikigami-pdf = { path = "crates/shikigami-pdf" }
-shikigami-excel = { path = "crates/shikigami-excel" }
-shikigami-word = { path = "crates/shikigami-word" }
-shikigami-com = { path = "crates/shikigami-com" }
-shikigami-mail = { path = "crates/shikigami-mail" }
-shikigami-db = { path = "crates/shikigami-db" }
-shikigami-agent = { path = "crates/shikigami-agent" }
-shikigami-manager = { path = "crates/shikigami-manager" }
+spellsheet-core = { path = "crates/spellsheet-core" }
+spellsheet-runtime = { path = "crates/spellsheet-runtime" }
+spellsheet-mcp = { path = "crates/spellsheet-mcp" }
+spellsheet-browser = { path = "crates/spellsheet-browser" }
+spellsheet-secrets = { path = "crates/spellsheet-secrets" }
+spellsheet-adapters = { path = "crates/spellsheet-adapters" }
+spellsheet-desktop = { path = "crates/spellsheet-desktop" }
+spellsheet-plugins = { path = "crates/spellsheet-plugins" }
+spellsheet-files = { path = "crates/spellsheet-files" }
+spellsheet-system = { path = "crates/spellsheet-system" }
+spellsheet-pdf = { path = "crates/spellsheet-pdf" }
+spellsheet-excel = { path = "crates/spellsheet-excel" }
+spellsheet-word = { path = "crates/spellsheet-word" }
+spellsheet-com = { path = "crates/spellsheet-com" }
+spellsheet-mail = { path = "crates/spellsheet-mail" }
+spellsheet-db = { path = "crates/spellsheet-db" }
+spellsheet-agent = { path = "crates/spellsheet-agent" }
+spellsheet-manager = { path = "crates/spellsheet-manager" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }

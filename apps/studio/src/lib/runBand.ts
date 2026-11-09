@@ -5,7 +5,7 @@
 // branches (if, try, …) shows only the branch it took, once it has taken one.
 //
 // Pure: the band feeds it the run's events and draws what comes back.
-import type { RunEventEnvelope, RunReport, RunStatus, Step, StepTypeDef } from "@shikigami/schema";
+import type { RunEventEnvelope, RunReport, RunStatus, Step, StepTypeDef } from "@spellsheet/schema";
 import { LOOP_TYPES } from "./stepTypes";
 import type { StepClock } from "../store";
 

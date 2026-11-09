@@ -6,7 +6,7 @@
 
 English | [日本語](README.ja.md)
 
-> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The settings and data folders now use the new name too (`%APPDATA%\SpellSheet`, `%LOCALAPPDATA%\SpellSheet`): an update moves the old `Shikigami` folders there by itself, and `SHIKIGAMI_HOME` / `SHIKIGAMI_PLUGINS` still work. The command is now `spellsheet` (`shikigami` still works as the same program). The repository and the installer keep the old name for now.
+> The name comes from a spell written on a sheet. Updating from a build released under the product's earlier name carries everything over by itself: the settings and data folders, secrets, scheduled tasks, Writer's screen settings, and the MCP setup of your AI clients (renamed to `spellsheet`; restart the AI client once).
 
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
 
@@ -16,7 +16,7 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 
 ## Getting started
 
-1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/shikigami/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
+1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
 2. Start **SpellSheet Writer** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
 3. To have AI build flows, open the AI pane with "AI chat" at the top right of Writer (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
@@ -58,13 +58,13 @@ The design notes under `docs/design/` and `docs/research.md` are in Japanese. Ja
 ## Layout
 
 ```text
-crates/shikigami-core      Flow Core (the only source of truth for flow data)
-crates/shikigami-runtime   RPA Runtime (runs without AI or GUI)
-crates/shikigami-cli       CLI (the `shikigami` command; `spellsheet mcp` is the MCP server)
-crates/shikigami-mcp       MCP server (rmcp)
+crates/spellsheet-core      Flow Core (the only source of truth for flow data)
+crates/spellsheet-runtime   RPA Runtime (runs without AI or GUI)
+crates/spellsheet-cli       CLI (the `spellsheet` command; `spellsheet mcp` is the MCP server)
+crates/spellsheet-mcp       MCP server (rmcp)
 apps/studio                SpellSheet Writer (Tauri 2 + React + React Flow)
 packages/schema            TypeScript types generated from Rust
-plugins/shikigami          Claude Code plugin (MCP settings + skill)
+plugins/spellsheet          Claude Code plugin (MCP settings + skill)
 schemas/                   Generated JSON Schema
 examples/                  Sample flows
 ```
@@ -92,15 +92,15 @@ pnpm install
 
 # Build Writer's frontend (Tauri's build script needs dist, so after a fresh
 # clone this is needed once before cargo test / cargo build)
-pnpm --filter @shikigami/studio build
+pnpm --filter @spellsheet/studio build
 
 # Tests
 cargo test --workspace
 pnpm -r test
 
 # Run a sample with the CLI (no AI, no GUI)
-cargo run -p shikigami-cli -- run examples/invoice-summary.json
-cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=10000
+cargo run -p spellsheet-cli -- run examples/invoice-summary.json
+cargo run -p spellsheet-cli -- run examples/invoice-summary.json -i threshold=10000
 
 # Full-feature demo on screen: browser, dialogs, Excel, Word, Notepad + OCR,
 # Outlook and more in one flow (see examples/full-demo/README.md)
@@ -113,7 +113,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\SpellSheet\workspace`. Change it with the `SPELLSHEET_HOME` environment variable (the old `SHIKIGAMI_HOME` still works) or the CLI's `--workspace`.
+The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\SpellSheet\workspace`. Change it with the `SPELLSHEET_HOME` environment variable or the CLI's `--workspace`.
 
 ### CLI examples
 
@@ -132,21 +132,21 @@ Edits made with the CLI while Writer is open show up in Writer immediately.
 
 ## Using it from AI (MCP)
 
-In Claude Code, install the plugin (the `shikigami` command must be on PATH):
+In Claude Code, install the plugin (the `spellsheet` command must be on PATH):
 
 ```text
-/plugin install shikigami --marketplace d-shiina/shikigami
+/plugin install spellsheet --marketplace d-shiina/spellsheet
 ```
 
-If you installed Writer, register the `shikigami.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from the version menu at the bottom right of Writer; see [docs/release.md](docs/release.md)).
+If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from the version menu at the bottom right of Writer; see [docs/release.md](docs/release.md)).
 
-To register only the MCP server: `claude mcp add shikigami -- spellsheet mcp`. When developing from the repository without `shikigami` on PATH, register the built executable by its absolute path (`cargo build -p shikigami-cli` updates it):
+To register only the MCP server: `claude mcp add spellsheet -- spellsheet mcp`. When developing from the repository without `spellsheet` on PATH, register the built executable by its absolute path (`cargo build -p spellsheet-cli` updates it):
 
 ```powershell
-claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp
+claude mcp add --scope user spellsheet -- C:\path\to\spellsheet\target\debug\spellsheet.exe mcp
 ```
 
-With this registration and the plugin both in place, the plugin's own `shikigami` server (which starts `shikigami` from PATH) fails to connect, but its skill still works.
+With this registration and the plugin both in place, the plugin's own `spellsheet` server (which starts `spellsheet` from PATH) fails to connect, but its skill still works.
 
 See [docs/mcp.md](docs/mcp.md) for Codex / Cursor settings and the tool list. AI edits show up in Writer immediately and can be undone from Writer.
 

@@ -1,7 +1,7 @@
 // The run window's form, made from a flow's input variables, so the
 // author (person or AI) writes nothing for it: the label is the variable's
 // description, the type picks the field, the default fills it in.
-import type { Flow, Step, VariableDef } from "@shikigami/schema";
+import type { Flow, Step, VariableDef } from "@spellsheet/schema";
 import { t } from "../lib/i18n";
 
 export type FieldKind = "text" | "password" | "number" | "checkbox" | "lines" | "json" | "file" | "folder" | "date" | "month" | "select";

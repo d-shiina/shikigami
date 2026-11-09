@@ -6,7 +6,7 @@
 // and work with no screen (variables, logs) folded into one quiet line.
 // This module only builds that outline; ManualView draws it and
 // manualExport writes it as one HTML file.
-import type { Flow, PublishedState, Step, StepTypeDef, VariableDef, VersionSummary } from "@shikigami/schema";
+import type { Flow, PublishedState, Step, StepTypeDef, VariableDef, VersionSummary } from "@spellsheet/schema";
 import { t } from "./i18n";
 import { blockLabel } from "./keywords";
 import { type Part, plain, readable, secretName, sentence } from "./sentence";
@@ -126,7 +126,7 @@ const WAITS = new Set(["browser.waitFor", "desktop.waitFor", "browser.isVisible"
 
 const QUIET = new Set(["variable.set", "log.message", "flow.delay", "control.break", "control.continue"]);
 
-/** When a node's picture is taken (crates/shikigami-runtime/src/screens.rs). */
+/** When a node's picture is taken (crates/spellsheet-runtime/src/screens.rs). */
 export function screenMoment(type: string): "before" | "after" | null {
   const [adapter, action] = type.split(".");
   const before =

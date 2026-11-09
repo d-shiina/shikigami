@@ -5,7 +5,7 @@
 毎月、支店ごとに届く売上の CSV を 1 つの Excel にまとめ、支店別の合計を付けます。
 
 - できるもの：`output/売上まとめ.xlsx`（シート「明細」と「支店別」）
-- 見本：`examples/tutorials/sales-csv/`（完成形は `examples/tutorials/sales-csv.shikigami.json`）
+- 見本：`examples/tutorials/sales-csv/`（完成形は `examples/tutorials/sales-csv.spellsheet.json`）
 - かかる時間：約 10 分
 
 ![フロー図](../../assets/tutorials/sales-csv-flow.png)

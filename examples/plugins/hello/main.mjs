@@ -1,4 +1,4 @@
-// Sample Shikigami plugin: newline-delimited JSON-RPC 2.0 on stdin/stdout.
+// Sample SpellSheet plugin: newline-delimited JSON-RPC 2.0 on stdin/stdout.
 //
 // Each request's method is a step's `action`, and its params are the step's
 // params (templates already filled in) plus `runId` and `timeoutMs`.

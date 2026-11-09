@@ -1088,7 +1088,7 @@ export const en: Dict = {
       yes: "TRUE",
       no: "FALSE",
       removeItem: "Remove the setting",
-      notForm: "Not a settings file (format: shikigami.config), so it cannot be shown as a form",
+      notForm: "Not a settings file (format: spellsheet.config), so it cannot be shown as a form",
       howToRead: (path: string) => `In the flow, read it with "Read settings file" (config.read) on ${path}`,
       duplicate: (name: string) => `"${name}" appears twice`,
       log: "Run log",
@@ -1193,7 +1193,7 @@ export const en: Dict = {
     lead: "Ask an AI chat that is not connected to SpellSheet, such as Microsoft Copilot, to write a flow, and take its answer in.",
     step1: "Give the AI the guide",
     step1Lead:
-      "Save the two guide files and give them to the AI. For a Copilot Studio agent, paste shikigami-ai-instructions.md into the instructions and add shikigami-ai-reference.md as knowledge.",
+      "Save the two guide files and give them to the AI. For a Copilot Studio agent, paste spellsheet-ai-instructions.md into the instructions and add spellsheet-ai-reference.md as knowledge.",
     saveGuide: "Save the guide",
     savedGuide: (path: string) => `Saved: ${path}`,
     howTo: "How to",
@@ -2275,7 +2275,7 @@ export const en: Dict = {
     registry: {
       intro: "Set the URL of a catalog (a JSON index file) of your organisation's or community's custom nodes to install them from here.",
       url: "Catalog URL",
-      urlPlaceholder: "https://…/shikigami-extensions.json",
+      urlPlaceholder: "https://…/spellsheet-extensions.json",
       save: "Save",
       loading: "Loading…",
       empty: "The catalog lists no custom nodes.",

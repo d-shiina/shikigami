@@ -10,6 +10,7 @@ mod commands;
 mod debug;
 mod extensions;
 mod instance;
+mod legacy;
 mod manual;
 mod opened;
 mod picker;
@@ -24,10 +25,10 @@ mod watcher;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use shikigami_core::FlowId;
-use shikigami_core::{ApprovalStore, FileStore, FlowService, RunId};
-use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime, Stopper};
-use shikigami_secrets::Vault;
+use spellsheet_core::FlowId;
+use spellsheet_core::{ApprovalStore, FileStore, FlowService, RunId};
+use spellsheet_runtime::{Adapter, DebugControl, RunSnapshot, Runtime, Stopper};
+use spellsheet_secrets::Vault;
 
 pub(crate) struct ActiveRun {
     pub cancel: Stopper,
@@ -47,21 +48,23 @@ pub(crate) struct AppState {
     /// For looking at the screen where a run paused.
     pub adapters: Vec<Arc<dyn Adapter>>,
     /// The test cases running now (`run_tests`), for 「中止」.
-    pub tests: Mutex<Option<shikigami_runtime::testing::Interrupt>>,
+    pub tests: Mutex<Option<spellsheet_runtime::testing::Interrupt>>,
 }
 
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,shikigami=debug".into()),
+                .unwrap_or_else(|_| "info,spellsheet=debug".into()),
         )
         .init();
     crash_log();
 
+    legacy::move_webview_data();
     updater::on_startup();
-    let adapters = shikigami_adapters::all();
-    let runtime = shikigami_adapters::runtime(&adapters);
+    legacy::spawn_after_start();
+    let adapters = spellsheet_adapters::all();
+    let runtime = spellsheet_adapters::runtime(&adapters);
     let root = FileStore::default_root();
     let store = match FileStore::open(&root) {
         Ok(store) => store,
@@ -99,7 +102,7 @@ pub fn run() {
             // Before any window shows: Writer's windows go under Writer's
             // taskbar button even when this copy was started from the
             // Runner shortcut (which has an ID of its own).
-            if let Err(e) = shikigami_desktop::taskbar::claim_process(&app.config().identifier) {
+            if let Err(e) = spellsheet_desktop::taskbar::claim_process(&app.config().identifier) {
                 tracing::warn!(error = %e, "cannot set the app's taskbar ID");
             }
             if let Some(path) = opened::spx_arg(std::env::args()) {
@@ -144,7 +147,7 @@ pub fn run() {
                 run_band::writer_focused(tauri::Manager::app_handle(window));
             }
             // Started for running flows, closing the run window leaves
-            // Shikigami in the tray (its menu has Quit).
+            // SpellSheet in the tray (its menu has Quit).
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
                 && window.label() == runner::RUNNER_WINDOW
                 && tray::stays_in_tray()
@@ -326,7 +329,7 @@ pub(crate) fn fit_to_screen(window: &tauri::WebviewWindow) {
 fn crash_log_path() -> Option<std::path::PathBuf> {
     dirs::data_local_dir()?;
     Some(
-        shikigami_core::paths::local_dir()
+        spellsheet_core::paths::local_dir()
             .join("logs")
             .join("studio-crash.log"),
     )

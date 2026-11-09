@@ -36,7 +36,7 @@ import type {
   VariableDef,
   VersionSummary,
   WorkspaceInfo,
-} from "@shikigami/schema";
+} from "@spellsheet/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   type Api,
@@ -759,8 +759,8 @@ export function touchedSteps(entry: HistoryEntry): string[] {
   return ids;
 }
 
-const REVIEWED_KEY = "shikigami.studio.reviewed";
-const BREAKPOINTS_KEY = "shikigami.studio.breakpoints";
+const REVIEWED_KEY = "spellsheet.studio.reviewed";
+const BREAKPOINTS_KEY = "spellsheet.studio.breakpoints";
 
 function loadBreakpoints(): Record<string, string[]> {
   try {
@@ -770,7 +770,7 @@ function loadBreakpoints(): Record<string, string[]> {
   }
 }
 
-const FOLDED_KEY = "shikigami.studio.folded";
+const FOLDED_KEY = "spellsheet.studio.folded";
 
 function loadFolded(): Record<string, string[]> {
   try {
@@ -834,8 +834,8 @@ export function trailOf(s: Pick<StudioState, "run" | "flow">): RunState | null {
   if (run.trailHidden) return null;
   return run.revision === s.flow.revision ? run : null;
 }
-const OUTLINE_KEY = "shikigami.studio.outline";
-const INSPECTOR_KEY = "shikigami.studio.inspector";
+const OUTLINE_KEY = "spellsheet.studio.outline";
+const INSPECTOR_KEY = "spellsheet.studio.inspector";
 
 function loadFlag(key: string, fallback: boolean): boolean {
   try {

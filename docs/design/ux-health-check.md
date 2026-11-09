@@ -6,7 +6,7 @@ More than 40 PRs landed separately over two days, and nobody had walked Studio f
 
 Checked against [ui-principles.md](ui-principles.md), [wording.md](wording.md), the contrast rules (darker greys, slate dark theme) and Japanese glyphs. Fixing is out of scope, except one crash fixed in the same PR (U1 below).
 
-Screenshots: the project files folder `shikigami/ux-health-check/` (`[12]` below is `12-palette.png`, and so on).
+Screenshots: the project files folder `spellsheet/ux-health-check/` (`[12]` below is `12-palette.png`, and so on).
 
 ## What was walked
 

@@ -8,13 +8,13 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 
 | 約束 | どこに定義があるか | 主な利用者 |
 |---|---|---|
-| フローのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | 保存済みのフロー、共有ワークスペース |
-| 名前付きの版・バンドル（`*.shikigami.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
+| フローのファイル形式（`schemaVersion`） | `crates/spellsheet-core/src/model.rs` → `schemas/flow.schema.json` | 保存済みのフロー、共有ワークスペース |
+| 名前付きの版・バンドル（`*.spellsheet.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
 | `.spx` ファイル（`manifest.json`、`format: spellsheet.package`、`formatVersion`） | `package.rs` → `schemas/api.schema.json` | フローを人や別の PC に渡す |
 | 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | フロー、AI が覚えた書き方 |
-| MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
+| MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/spellsheet-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
 | エラーコード（`code` と `retryable`） | `CoreError::code`、各ノードのエラー | AI の修正、`onError`・リトライの判断 |
-| CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/shikigami-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
+| CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/spellsheet-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
 | プラグインのマニフェストと JSON-RPC（`manifestVersion`） | [design/plugins.md](../design/plugins.md) | プラグインの作者 |
 
 約束ではないもの：Writer の画面、内部の Rust API（クレートは公開していません）、ログ・エラーの文章（`message` と `hint` は言い回しを変えます）、`list_step_types` などの説明文、ワークスペース内のローカル領域（取り消し履歴・実行記録の置き方）。
@@ -44,7 +44,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 ## 3. フローのファイル形式
 
 - `schemaVersion` はファイルの形の版です。**形が変わるたびに 1 上げます**。フローは知らない項目を拒否する（書き間違いに気づくため）ので、省略できる項目を足すだけでも上げます。古い SpellSheet は「新しい版で保存されたので更新してください」（`UNSUPPORTED_SCHEMA_VERSION`）と分かりやすく止まります
-- 上げたら `crates/shikigami-core/src/migrate.rs` の `MIGRATIONS` に「1 つ前の版 → 今の版」の関数を足します。読み込みは古い版から 1 段ずつ順に変換するので、各関数は直前の版だけを知っていればよい。途切れていればテストが落ちます
+- 上げたら `crates/spellsheet-core/src/migrate.rs` の `MIGRATIONS` に「1 つ前の版 → 今の版」の関数を足します。読み込みは古い版から 1 段ずつ順に変換するので、各関数は直前の版だけを知っていればよい。途切れていればテストが落ちます
 - 組込ノードの params の破壊的変更も、ここで移行します（`for_each_step` で全ノードを書き換える）。組込ノードは本体と一緒に配布されるので、ノードごとの版は持たせません。フローに版を書かせると、AI が書く量と間違える場所が増えるためです（[design/ai-authoring.md](../design/ai-authoring.md)）
 - ファイル・名前付きの版・バンドルの中のフロー・サブフローは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
 - 移行したフローは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません

@@ -2,7 +2,7 @@
 // flow by hand never has to invent one before the next node can use the
 // result. Variable names are identifiers (ASCII), so the names are short
 // English nouns for what the node returns.
-import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { knownVariables } from "./nodeRows";
 
 const NAMES: Record<string, string> = {

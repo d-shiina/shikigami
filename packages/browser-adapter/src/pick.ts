@@ -14,15 +14,15 @@ import type { ElementHandle, Frame as PageFrame, Locator, Page } from "playwrigh
 
 import { AdapterError, frameSelector, locate, type AriaRole, type Frame, type Target } from "./targets.ts";
 
-const HOST_ID = "__shikigami_pick";
-const HIGHLIGHT_HOST_ID = "__shikigami_highlight";
-const PICKED = "data-shikigami-picked";
-const CANDIDATE = "data-shikigami-candidate";
-const HIGHLIGHT = "data-shikigami-highlight";
+const HOST_ID = "__spellsheet_pick";
+const HIGHLIGHT_HOST_ID = "__spellsheet_highlight";
+const PICKED = "data-spellsheet-picked";
+const CANDIDATE = "data-spellsheet-candidate";
+const HIGHLIGHT = "data-spellsheet-highlight";
 /** On an iframe whose page has its own picker: the outer page stops covering it. */
-const ARMED = "data-shikigami-armed";
+const ARMED = "data-spellsheet-armed";
 /** Briefly on the iframe being described, to find its position among the others. */
-const THIS_FRAME = "data-shikigami-this-frame";
+const THIS_FRAME = "data-spellsheet-this-frame";
 
 export interface PickOptions {
   /** What to point at, shown in the banner (the AI's words). */
@@ -496,7 +496,7 @@ function overlay({ hostId, picked, candidate, armed, message, lang, banner }: Ov
   };
   raf = requestAnimationFrame(tick);
 
-  (host as HostWithStop).__shikigamiWait = new Promise((resolve) => {
+  (host as HostWithStop).__spellsheetWait = new Promise((resolve) => {
     const onBar = (e: Event) => banner && e.composedPath().includes(bar);
     const swallow = (e: Event) => {
       if (onBar(e)) return;
@@ -523,7 +523,7 @@ function overlay({ hostId, picked, candidate, armed, message, lang, banner }: Ov
     };
     const done = (outcome: "picked" | "cancelled") => {
       cancelAnimationFrame(raf);
-      delete (host as HostWithStop).__shikigamiStop;
+      delete (host as HostWithStop).__spellsheetStop;
       for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "dblclick", "auxclick", "contextmenu"]) {
         window.removeEventListener(t, swallow, true);
       }
@@ -559,23 +559,23 @@ function overlay({ hostId, picked, candidate, armed, message, lang, banner }: Ov
     window.addEventListener("keydown", key, true);
     unsure.addEventListener("click", () => done("cancelled"));
     // A timeout or a new pick ends this one from outside (removeOverlay).
-    (host as HostWithStop).__shikigamiStop = () => done("cancelled");
+    (host as HostWithStop).__spellsheetStop = () => done("cancelled");
   });
 }
 
-type HostWithStop = HTMLElement & { __shikigamiStop?: () => void; __shikigamiWait?: Promise<"picked" | "cancelled"> };
+type HostWithStop = HTMLElement & { __spellsheetStop?: () => void; __spellsheetWait?: Promise<"picked" | "cancelled"> };
 
 /** The answer of the picker `overlay` set up in this document. */
 function waitForOverlay(hostId: string): Promise<"picked" | "cancelled"> {
-  const wait = (document.getElementById(hostId) as HostWithStop | null)?.__shikigamiWait;
+  const wait = (document.getElementById(hostId) as HostWithStop | null)?.__spellsheetWait;
   if (!wait) throw new Error("the picker is gone");
   return wait;
 }
 
 function removeOverlay({ hostId, attrs }: { hostId: string; attrs: string[] }): void {
-  const host = document.getElementById(hostId) as (HTMLElement & { __shikigamiStop?: () => void }) | null;
+  const host = document.getElementById(hostId) as (HTMLElement & { __spellsheetStop?: () => void }) | null;
   // Stop a waiting picker first: its listeners live on window, not in the host.
-  host?.__shikigamiStop?.();
+  host?.__spellsheetStop?.();
   host?.remove();
   for (const a of attrs) for (const el of Array.from(document.querySelectorAll(`[${a}]`))) el.removeAttribute(a);
 }

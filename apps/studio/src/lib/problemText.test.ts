@@ -1,4 +1,4 @@
-import type { Flow, ValidationIssue } from "@shikigami/schema";
+import type { Flow, ValidationIssue } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { answerProblemText, shortJson, stepAt, valueAt, writtenAt } from "./problemText";
 import { returnText } from "./todos";

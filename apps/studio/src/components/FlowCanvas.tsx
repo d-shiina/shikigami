@@ -60,7 +60,7 @@ import { t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
 import { nodeForFile } from "../lib/fileDrop";
 import { useFileDropTarget } from "./FileDrag";
-import type { HistoryEntry, Flow, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Flow, StepTypeDef } from "@spellsheet/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";

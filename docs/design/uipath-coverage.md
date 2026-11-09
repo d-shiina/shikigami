@@ -1,10 +1,10 @@
 # UiPath の組込アクティビティとの対応表（ギャップ分析）
 
-目的：UiPath Studio の標準パッケージ（UiPath.System.Activities・UiPath.WebAPI.Activities・UiPath.Excel/Mail/PDF.Activities など）で日常的に使われるアクティビティを、Shikigami で同じことができるか洗い出し、足りないものを埋める。
+目的：UiPath Studio の標準パッケージ（UiPath.System.Activities・UiPath.WebAPI.Activities・UiPath.Excel/Mail/PDF.Activities など）で日常的に使われるアクティビティを、SpellSheet で同じことができるか洗い出し、足りないものを埋める。
 
 ## 方針：アクティビティの数ではなく「書けること」で負けない
 
-UiPath は 1 つの操作に 1 つのアクティビティを用意する（「文字列を置換」「左から n 文字」「変数を連結」…）。Shikigami は AI が組む前提の仕様（[ai-authoring.md](ai-authoring.md)）なので、同じことを 1 通りで書けるように次の 3 層に分ける。
+UiPath は 1 つの操作に 1 つのアクティビティを用意する（「文字列を置換」「左から n 文字」「変数を連結」…）。SpellSheet は AI が組む前提の仕様（[ai-authoring.md](ai-authoring.md)）なので、同じことを 1 通りで書けるように次の 3 層に分ける。
 
 | 層 | 何を置くか | 例 |
 |---|---|---|
@@ -24,7 +24,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 
 ### 制御・変数・ログ（UiPath.System.Activities）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Assign / Multiple Assign | `variable.set`（`expression`）。複数は並べる | ✅ |
 | If / Else If | `control.if`（else に `control.if`） | ✅ |
@@ -48,7 +48,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 
 ### 文字列（Text / String 系アクティビティと VB.NET の String メソッド）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | 変数の連結・固定値との連結（`a + b`、`String.Concat`、Combine Text） | `a + b`、`a + '様'`、テンプレート `"{{ a }}{{ b }}"` | ✅ |
 | Trim / TrimStart / TrimEnd | `trim` / `trimStart` / `trimEnd`（全角空白も対象） | ✅ / 🆕 |
@@ -65,7 +65,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 
 ### 数値
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | CInt / CDbl / Parse | `num`（カンマ・全角数字を許す） | ✅ / 🆕 |
 | Math.Round / Floor / Ceiling / Abs / Min / Max | `round` / `floor` / `ceil` / `abs` / `min` / `max` | ✅ / 🆕 |
@@ -74,7 +74,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 
 ### 日付・時刻
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Now / Today | `now()` / `today()` | 🆕 |
 | ToString("yyyy/MM/dd") / Format Date | `formatDate(d, 'yyyy/MM/dd')`、和暦 `gge年`、曜日 `ddd` | 🆕 |
@@ -85,9 +85,9 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 
 ### コレクション・データテーブル
 
-Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型はない（AI が型の違いを覚えなくてよい。JSON でそのまま見える）。
+SpellSheet の表は「オブジェクトの配列」1 種類で、DataTable 型はない（AI が型の違いを覚えなくてよい。JSON でそのまま見える）。
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Build Data Table / Add Data Row | `variable.set` に配列・オブジェクト、`items + [row]` | ✅ |
 | Add / Remove / Exists in Collection | `items + [x]`、`filter(items, x => x != y)`、`contains` | ✅ / 🆕 |
@@ -103,7 +103,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 ### ファイル・フォルダー（System > File）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Read Text File / Write Text File / Append Line | `file.readText` / `file.writeText`（`append`）。Shift_JIS 指定可 | ✅ |
 | Read CSV / Write CSV / Append To CSV | `file.readCsv` / `file.writeCsv`（Shift_JIS・BOM 付き UTF-8） | ✅ |
@@ -116,7 +116,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 ### Excel・Word・メール（Office スレッドが担当）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Read Range / Write Range / Read Cell / Write Cell / Append Range | `excel.readRows` / `readRange` / `readCell` / `writeCell` / `writeRange` / `appendRows` | 🔜（PR #25） |
 | Get Workbook Sheets / Add Sheet | `excel.listSheets` / `excel.addSheet` | 🔜（PR #25） |
@@ -128,7 +128,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 ### Web API・JSON（UiPath.WebAPI.Activities）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | HTTP Request | `http.request`（メソッド・ヘッダー・クエリ・JSON / フォーム本文、トークンはシークレット） | ✅ |
 | Deserialize JSON / Serialize JSON | `parseJson` / `toJson`。`http.request` は JSON を自動で値にする | 🆕 |
@@ -136,7 +136,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 ### システム・ユーザー対話
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Start Process / Kill Process | アプリは `desktop.launch` / `desktop.closeWindow`。コマンドは `process.run`（終了コード・標準出力を返す） | ✅ |
 | Get / Set From Clipboard | `clipboard.get` / `clipboard.set` | ✅ |
@@ -146,7 +146,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 ### PDF（UiPath.PDF.Activities）
 
-| UiPath | Shikigami | 状態 |
+| UiPath | SpellSheet | 状態 |
 |---|---|---|
 | Read PDF Text | `pdf.readText`（テキスト層のある PDF。パスワード付きも可） | ✅ |
 | Read PDF With OCR | OCR エンジンの選定が要る。プラグイン候補 | 🔜（未定） |

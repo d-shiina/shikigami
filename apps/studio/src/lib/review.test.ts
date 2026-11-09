@@ -1,4 +1,4 @@
-import type { HistoryEntry } from "@shikigami/schema";
+import type { HistoryEntry } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { headline, summarize } from "./review";
 

@@ -5,7 +5,7 @@
 // settings, with room. Right, what the node gave: 「ノードの単体実行」 runs
 // only this node with the values the last run left (lib/stepTest.ts);
 // 「ここまで実行」 runs the flow from the start through it and pauses.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { ChevronLeft, FileText, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";

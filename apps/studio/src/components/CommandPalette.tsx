@@ -1,4 +1,4 @@
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { MessageSquareText, Plus, Search, Sparkles } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";

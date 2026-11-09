@@ -38,9 +38,9 @@ import type {
   ValidationReport,
   VersionSummary,
   WorkspaceInfo,
-} from "@shikigami/schema";
-import { isErrorPayload } from "@shikigami/schema";
-import type { LogLevel, RunError, RunStatus } from "@shikigami/schema";
+} from "@spellsheet/schema";
+import { isErrorPayload } from "@spellsheet/schema";
+import type { LogLevel, RunError, RunStatus } from "@spellsheet/schema";
 
 /** A flow file to look at or import: a path on disk, or the contents of a chosen file (base64). */
 export type FlowFile = { path: string } | { data: string };
@@ -162,7 +162,7 @@ export type SecretInput = {
   totp?: string;
   sites?: string[];
   description?: string;
-  /** Read the user name and password from this Windows credential; "" keeps them in Shikigami again. */
+  /** Read the user name and password from this Windows credential; "" keeps them in SpellSheet again. */
   windowsCredential?: string;
 };
 
@@ -235,7 +235,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 /** A node of an extension, as its manifest declares it. */
 export type ExtensionStep = { type: string; label: string; risk: StepTypeDef["risk"]; external?: { service: string; data: string } | null };
 
-/** What an extension's manifest says (`shikigami_plugins::install::manifest_summary`). */
+/** What an extension's manifest says (`spellsheet_plugins::install::manifest_summary`). */
 export type ExtensionSummary = {
   name: string;
   version?: string;
@@ -255,7 +255,7 @@ export type ExtensionSummary = {
 export type InstalledExtension = ExtensionSummary & {
   dir: string;
   enabled: boolean;
-  /** Installed by Shikigami (else a developer's SPELLSHEET_PLUGINS folder: listed only). */
+  /** Installed by SpellSheet (else a developer's SPELLSHEET_PLUGINS folder: listed only). */
   managed: boolean;
   source?: { source: ExtensionSource; installedAt: string };
   /** Why it cannot be loaded. */
@@ -479,7 +479,7 @@ export const updates = {
 
 export type Api = typeof api;
 
-/** The person's own coding agent, run in the background with Shikigami's MCP server. */
+/** The person's own coding agent, run in the background with SpellSheet's MCP server. */
 export type AgentInfo = {
   /** Which agent is in use (config.json → agent.kind). */
   kind: AgentKind;

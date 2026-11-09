@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useStudio } from "../context";
 import { useProjectMaybe } from "../project";
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { unsetParams } from "./nodeRows";
 import { authorIssues, personTodos, type Todo } from "./todos";
 

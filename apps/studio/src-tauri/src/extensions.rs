@@ -1,6 +1,6 @@
 //! The 拡張機能 place: extensions (node plugins) installed on this PC, and
 //! installing, updating, turning off and removing them. A thin layer over
-//! `shikigami_plugins::install` (the same as `spellsheet plugin …`).
+//! `spellsheet_plugins::install` (the same as `spellsheet plugin …`).
 //!
 //! Installing is two steps, as the screen shows them: `stage_extension`
 //! downloads and checks it and returns what it is (its nodes, what they
@@ -14,8 +14,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
-use shikigami_core::ErrorPayload;
-use shikigami_plugins::install::{self, InstallError, Source, Staged};
+use spellsheet_core::ErrorPayload;
+use spellsheet_plugins::install::{self, InstallError, Source, Staged};
 use tauri::{AppHandle, State};
 
 type CmdResult<T> = Result<T, ErrorPayload>;
@@ -58,7 +58,7 @@ fn builtin_names() -> Vec<String> {
     static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     NAMES
         .get_or_init(|| {
-            shikigami_adapters::builtin()
+            spellsheet_adapters::builtin()
                 .iter()
                 .map(|a| a.name().to_owned())
                 .collect()
@@ -74,7 +74,7 @@ pub fn list_extensions(ext: State<'_, Extensions>) -> CmdResult<Value> {
     install::empty_trash(&root);
     let names = builtin_names();
     let taken: Vec<&str> = names.iter().map(String::as_str).collect();
-    let installed = install::list(&shikigami_plugins::default_dirs(), Some(&root), &taken);
+    let installed = install::list(&spellsheet_plugins::default_dirs(), Some(&root), &taken);
     Ok(json!({
         "root": root.display().to_string(),
         "installed": installed,

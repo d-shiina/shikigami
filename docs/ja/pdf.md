@@ -2,7 +2,7 @@
 
 [English](../pdf.md) | 日本語
 
-クレート `shikigami-pdf`。PDF の文字を読み、PDF を結合・分割する組込ノードです。読んだ文字から値を取り出すのは式の関数で書きます（[expressions.md](expressions.md)）。
+クレート `spellsheet-pdf`。PDF の文字を読み、PDF を結合・分割する組込ノードです。読んだ文字から値を取り出すのは式の関数で書きます（[expressions.md](expressions.md)）。
 
 | ノード | 内容 | 出力 | リスク |
 |---|---|---|---|

@@ -1,4 +1,4 @@
-import type { Flow } from "@shikigami/schema";
+import type { Flow } from "@spellsheet/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../lib/i18n";
 import { collect, fieldsOf, formatValue, initialValues, topOf } from "./form";

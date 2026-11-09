@@ -16,11 +16,11 @@ import type { Frame as PageFrame, Page } from "playwright-core";
 import { describeMarked, framePath, position } from "./pick.ts";
 import { AdapterError, type Target } from "./targets.ts";
 
-const HOST_ID = "__shikigami_record";
-const BINDING = "__shikigamiRecord";
-const MARK = "data-shikigami-recorded";
+const HOST_ID = "__spellsheet_record";
+const BINDING = "__spellsheetRecord";
+const MARK = "data-spellsheet-recorded";
 /** On the one element being described now. */
-const NAMING = "data-shikigami-naming";
+const NAMING = "data-spellsheet-naming";
 
 /** One thing the person did, as Studio turns it into a node. */
 export interface RecordedAction {
@@ -481,7 +481,7 @@ function uninstall(hostId: string): void {
   const host = document.getElementById(hostId) as (HTMLElement & { __stop?: () => void }) | null;
   host?.__stop?.();
   host?.remove();
-  for (const a of ["data-shikigami-recorded", "data-shikigami-naming"]) {
+  for (const a of ["data-spellsheet-recorded", "data-spellsheet-naming"]) {
     for (const el of Array.from(document.querySelectorAll(`[${a}]`))) el.removeAttribute(a);
   }
 }

@@ -3,11 +3,11 @@
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
-use shikigami_core::{
+use spellsheet_core::{
     Actor, ActorKind, ErrorPayload, FlowId, NewObservation, ObservationContent, ObservationSource,
     RunId, StepId,
 };
-use shikigami_runtime::{DebugCommand, RunError};
+use spellsheet_runtime::{DebugCommand, RunError};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::AppState;
@@ -137,7 +137,7 @@ pub(crate) fn capture_pause(
             }
         }
         let request = Value::Object(params.clone());
-        let shot = std::env::temp_dir().join(format!("shikigami-pause-{run_id}-{seq}.jpg"));
+        let shot = std::env::temp_dir().join(format!("spellsheet-pause-{run_id}-{seq}.jpg"));
         if prefix == "browser" {
             params.insert(
                 "screenshotPath".into(),

@@ -6,7 +6,7 @@
 // (double-click in Explorer, dropping it on the window, 「ファイルから読み込む」)
 // shows a sheet of paper with what it holds and what this PC still lacks,
 // each with the button that adds it, before anything is imported.
-import type { CheckKind, DiffKind, PackageFileChoice, PackageRequires1, RequirementCheck } from "@shikigami/schema";
+import type { CheckKind, DiffKind, PackageFileChoice, PackageRequires1, RequirementCheck } from "@spellsheet/schema";
 import { AppWindow, Check, CircleAlert, FileText, Globe, KeyRound, Puzzle, TextCursorInput, Workflow } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";

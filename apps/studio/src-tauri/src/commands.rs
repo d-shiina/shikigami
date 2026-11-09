@@ -1,11 +1,11 @@
 //! Tauri commands. Arguments arrive camelCased from the frontend; results
-//! and errors use the shared types generated into `@shikigami/schema`.
+//! and errors use the shared types generated into `@spellsheet/schema`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::distribution::{DistributionFolder, DistributionView};
-use shikigami_core::package::{PackageManifest, PackageOptions, PackagePlan, PackagePreview};
-use shikigami_core::{
+use spellsheet_core::distribution::{DistributionFolder, DistributionView};
+use spellsheet_core::package::{PackageManifest, PackageOptions, PackagePlan, PackagePreview};
+use spellsheet_core::{
     Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
     Evidence, ExtractOutcome, FileStore, Flow, FlowDiff, FlowId, FlowSummary, HistoryEntry,
     ImportConflict, ImportOutcome, NewFlow, NewReview, NewVersion, ObservationContent,
@@ -13,11 +13,11 @@ use shikigami_core::{
     PublishInput, PublishedState, ReviewTimeline, RunId, StepId, StepTypeDef, UserConfig,
     ValidationReport, VersionSummary, WorkspaceInfo, WorkspaceManifest,
 };
-use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{
+use spellsheet_runtime::record::RunRecorder;
+use spellsheet_runtime::{
     DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunOrigin, RunSnapshot, RunTrigger,
 };
-use shikigami_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
+use spellsheet_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{ActiveRun, AppState};
@@ -43,7 +43,7 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
 /// alarming in a desktop app, so Studio reads it from Windows itself.
 #[tauri::command]
 pub async fn read_clipboard_text() -> CmdResult<String> {
-    tauri::async_runtime::spawn_blocking(shikigami_system::clipboard_text)
+    tauri::async_runtime::spawn_blocking(spellsheet_system::clipboard_text)
         .await
         .map_err(|e| err("INTERNAL", e.to_string()))?
         .map_err(|e| err("CLIPBOARD_BUSY", e.message))
@@ -58,7 +58,7 @@ pub fn workspace_info(state: State<'_, AppState>) -> WorkspaceInfo {
 /// and restarts Studio on it. `shared` marks a new folder for several people.
 #[tauri::command]
 pub fn set_workspace(app: AppHandle, path: String, shared: bool) -> CmdResult<()> {
-    if let Some(name) = shikigami_core::paths::env_var_name("HOME") {
+    if let Some(name) = spellsheet_core::paths::env_var_name("HOME") {
         return Err(err(
             "WORKSPACE_OVERRIDDEN",
             format!("{name} が設定されているため、保存先はその値に固定されています"),
@@ -245,7 +245,7 @@ pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> 
 pub fn package_plan(
     state: State<'_, AppState>,
     id: FlowId,
-    content: Option<shikigami_core::package::PackageContent>,
+    content: Option<spellsheet_core::package::PackageContent>,
 ) -> CmdResult<PackagePlan> {
     Ok(state
         .service
@@ -278,7 +278,7 @@ fn write_package_file(
         options.exported_by = windows_user();
     }
     let (manifest, bytes) = state.service.export_package(id, &options)?;
-    let path = download_path(&shikigami_core::package::file_name(
+    let path = download_path(&spellsheet_core::package::file_name(
         &manifest.flow.name,
         manifest.flow.version.as_ref().map(|v| v.number),
     ))?;
@@ -322,7 +322,7 @@ pub async fn place_in_distribution(
     state: State<'_, AppState>,
     id: FlowId,
     folder: String,
-    only: Option<Vec<shikigami_core::package::FileRef>>,
+    only: Option<Vec<spellsheet_core::package::FileRef>>,
 ) -> CmdResult<String> {
     let service = state.service.clone();
     let path = tauri::async_runtime::spawn_blocking(move || {
@@ -401,7 +401,7 @@ pub fn import_package(
 // -- an AI without MCP (Copilot, a chat window) --------------------------
 
 /// Writes the guide for an AI without MCP (instructions and reference, see
-/// `shikigami_core::chat`) into `Downloads\SpellSheet AI 仕様書`, opens the
+/// `spellsheet_core::chat`) into `Downloads\SpellSheet AI 仕様書`, opens the
 /// folder and returns its path.
 #[tauri::command]
 pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
@@ -410,7 +410,7 @@ pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
         .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?
         .join("SpellSheet AI 仕様書");
     std::fs::create_dir_all(&dir).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
-    for file in shikigami_core::chat::guide(state.service.registry()) {
+    for file in spellsheet_core::chat::guide(state.service.registry()) {
         std::fs::write(dir.join(&file.name), file.text)
             .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
     }
@@ -431,7 +431,7 @@ pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
 pub struct PasteOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     outcome: Option<EditOutcome>,
-    problems: Vec<shikigami_core::chat::AnswerProblem>,
+    problems: Vec<spellsheet_core::chat::AnswerProblem>,
 }
 
 /// Takes in an answer pasted from an AI chat: a new flow, or with `into`
@@ -444,7 +444,7 @@ pub fn paste_ai_answer(
     into: Option<FlowId>,
     expected_revision: Option<u64>,
 ) -> CmdResult<PasteOutcome> {
-    let answer = match shikigami_core::chat::read_answer(&text) {
+    let answer = match spellsheet_core::chat::read_answer(&text) {
         Ok(answer) => answer,
         Err(problems) => {
             return Ok(PasteOutcome {
@@ -491,7 +491,7 @@ pub fn read_project_text(
     path: String,
 ) -> CmdResult<String> {
     let bytes = state.service.read_project_file(&id, &path)?;
-    if bytes.len() as u64 > shikigami_core::project::MAX_TEXT_READ {
+    if bytes.len() as u64 > spellsheet_core::project::MAX_TEXT_READ {
         return Err(err(
             "PROJECT_FILE_TOO_LARGE",
             "大きすぎるため Writer では開けません",
@@ -551,7 +551,7 @@ pub async fn table_columns(
     let folder = state.service.project_dir(&id)?;
     let adapters = state.adapters.clone();
     Ok(tokio::task::spawn_blocking(move || {
-        shikigami_adapters::table_columns(&adapters, &step_type, &params, &folder)
+        spellsheet_adapters::table_columns(&adapters, &step_type, &params, &folder)
             .unwrap_or_default()
     })
     .await
@@ -590,7 +590,7 @@ pub async fn preview_file(
         }
     };
     Ok(tokio::task::spawn_blocking(move || {
-        shikigami_adapters::preview::preview(&target, sheet.as_deref())
+        spellsheet_adapters::preview::preview(&target, sheet.as_deref())
     })
     .await
     .unwrap_or_else(|e| serde_json::json!({ "kind": "unreadable", "message": e.to_string() })))
@@ -836,7 +836,7 @@ pub fn list_step_types(state: State<'_, AppState>) -> Vec<StepTypeDef> {
 /// so this never touches files, the screen or the network.
 #[tauri::command]
 pub fn eval_expression(expression: String, values: Map<String, Value>) -> CmdResult<Value> {
-    use shikigami_core::expr::{self, ExprError};
+    use spellsheet_core::expr::{self, ExprError};
     expr::evaluate(&expression, &values).map_err(|e| {
         let details = match &e {
             ExprError::UndefinedVariable(name) => Some(serde_json::json!({ "variable": name })),
@@ -903,7 +903,7 @@ pub async fn step_times(
 ) -> CmdResult<std::collections::HashMap<StepId, u64>> {
     let root = state.service.store().local_root().to_path_buf();
     Ok(tokio::task::spawn_blocking(move || {
-        shikigami_runtime::record::step_times(&root, &id, STEP_TIMES_RUNS)
+        spellsheet_runtime::record::step_times(&root, &id, STEP_TIMES_RUNS)
     })
     .await
     .unwrap_or_default())
@@ -917,7 +917,7 @@ const MAX_RECORD_EVENTS: usize = 20_000;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRecord {
-    report: Option<shikigami_runtime::RunReport>,
+    report: Option<spellsheet_runtime::RunReport>,
     events: Vec<RunEventEnvelope>,
     /// Events were dropped after `MAX_RECORD_EVENTS`.
     truncated: bool,
@@ -930,8 +930,8 @@ pub fn run_record(state: State<'_, AppState>, run_id: RunId) -> CmdResult<RunRec
         std::io::ErrorKind::NotFound => err("RUN_NOT_FOUND", format!("no run {run_id}")),
         _ => err("STORAGE_ERROR", e.to_string()),
     };
-    let report = shikigami_runtime::record::read_report(root, &run_id).map_err(io)?;
-    let mut events = shikigami_runtime::record::read_events(root, &run_id).map_err(io)?;
+    let report = spellsheet_runtime::record::read_report(root, &run_id).map_err(io)?;
+    let mut events = spellsheet_runtime::record::read_events(root, &run_id).map_err(io)?;
     let truncated = events.len() > MAX_RECORD_EVENTS;
     events.truncate(MAX_RECORD_EVENTS);
     Ok(RunRecord {
@@ -941,18 +941,18 @@ pub fn run_record(state: State<'_, AppState>, run_id: RunId) -> CmdResult<RunRec
     })
 }
 
-/// How a Studio run pauses (see `shikigami_runtime::debug`).
+/// How a Studio run pauses (see `spellsheet_runtime::debug`).
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugSettings {
     #[serde(default)]
-    breakpoints: Vec<shikigami_core::StepId>,
+    breakpoints: Vec<spellsheet_core::StepId>,
     /// Pause before the first step.
     #[serde(default)]
     step: bool,
     /// 「ここから実行」: start at this step (the ones before do not run).
     #[serde(default)]
-    start_at: Option<shikigami_core::StepId>,
+    start_at: Option<spellsheet_core::StepId>,
     /// The variables' values there, from the last run.
     #[serde(default)]
     start_values: Map<String, Value>,
@@ -1042,14 +1042,14 @@ pub async fn run_flow(
 #[serde(rename_all = "camelCase")]
 pub struct NamedTestCase {
     name: String,
-    case: shikigami_core::testcase::TestCase,
+    case: spellsheet_core::testcase::TestCase,
 }
 
 /// The flow's test cases, in name order.
 #[tauri::command]
 pub fn list_test_cases(state: State<'_, AppState>, id: FlowId) -> CmdResult<Vec<NamedTestCase>> {
     let dir = state.service.project_dir(&id)?;
-    Ok(shikigami_core::testcase::load_all(&dir)?
+    Ok(spellsheet_core::testcase::load_all(&dir)?
         .into_iter()
         .map(|(name, case)| NamedTestCase { name, case })
         .collect())
@@ -1060,17 +1060,17 @@ pub fn save_test_case(
     state: State<'_, AppState>,
     id: FlowId,
     name: String,
-    case: shikigami_core::testcase::TestCase,
+    case: spellsheet_core::testcase::TestCase,
 ) -> CmdResult<()> {
     let dir = state.service.project_dir(&id)?;
-    shikigami_core::testcase::save(&dir, &name, &case)?;
+    spellsheet_core::testcase::save(&dir, &name, &case)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn delete_test_case(state: State<'_, AppState>, id: FlowId, name: String) -> CmdResult<()> {
     let dir = state.service.project_dir(&id)?;
-    shikigami_core::testcase::remove(&dir, &name)?;
+    spellsheet_core::testcase::remove(&dir, &name)?;
     Ok(())
 }
 
@@ -1080,7 +1080,7 @@ pub fn delete_test_case(state: State<'_, AppState>, id: FlowId, name: String) ->
 #[serde(rename_all = "camelCase")]
 pub struct CaseFromRun {
     name: String,
-    case: shikigami_core::testcase::TestCase,
+    case: spellsheet_core::testcase::TestCase,
     left_out: Vec<String>,
 }
 
@@ -1094,7 +1094,7 @@ pub fn test_case_from_run(
 ) -> CmdResult<CaseFromRun> {
     let root = state.service.store().local_root();
     let io = |e: std::io::Error| err("STORAGE_ERROR", e.to_string());
-    let report = shikigami_runtime::record::read_report(root, &run_id)
+    let report = spellsheet_runtime::record::read_report(root, &run_id)
         .map_err(io)?
         .ok_or_else(|| err("RUN_NOT_FINISHED", format!("run {run_id} has not ended")))?;
     if report.flow_id != id {
@@ -1103,11 +1103,11 @@ pub fn test_case_from_run(
             format!("run {run_id} is not a run of {id}"),
         ));
     }
-    let events = shikigami_runtime::record::read_events(root, &run_id).map_err(io)?;
+    let events = spellsheet_runtime::record::read_events(root, &run_id).map_err(io)?;
     let flow = state.service.get(&id)?;
-    let (case, left_out) = shikigami_runtime::testing::case_from_run(&flow, &events, &report);
+    let (case, left_out) = spellsheet_runtime::testing::case_from_run(&flow, &events, &report);
     let dir = state.service.project_dir(&id)?;
-    shikigami_core::testcase::save(&dir, &name, &case)?;
+    spellsheet_core::testcase::save(&dir, &name, &case)?;
     Ok(CaseFromRun {
         name,
         case,
@@ -1123,9 +1123,9 @@ pub async fn run_tests(
     state: State<'_, AppState>,
     id: FlowId,
     names: Option<Vec<String>>,
-) -> CmdResult<Vec<shikigami_runtime::testing::CaseResult>> {
-    use shikigami_core::testcase;
-    use shikigami_runtime::testing;
+) -> CmdResult<Vec<spellsheet_runtime::testing::CaseResult>> {
+    use spellsheet_core::testcase;
+    use spellsheet_runtime::testing;
     let flow = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&flow).ok().flatten();
     let subflows = state.service.subflows(&flow)?;
@@ -1211,20 +1211,20 @@ pub fn stop_tests(state: State<'_, AppState>) {
 }
 
 /// What 「ノードの単体実行」 gave: the node ran alone, with the values the
-/// last run left (see `shikigami_runtime::single`).
+/// last run left (see `spellsheet_runtime::single`).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StepTest {
-    status: shikigami_runtime::RunStatus,
+    status: spellsheet_runtime::RunStatus,
     output: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<shikigami_runtime::RunError>,
+    error: Option<spellsheet_runtime::RunError>,
     logs: Vec<StepTestLog>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct StepTestLog {
-    level: shikigami_runtime::LogLevel,
+    level: spellsheet_runtime::LogLevel,
     message: String,
 }
 
@@ -1250,18 +1250,18 @@ pub async fn test_step(
     let inputs = values.unwrap_or_default();
     // The screen it met is the node's picture in the 手順書 until a run
     // of the whole flow takes one.
-    let mut draft = shikigami_runtime::drafts::DraftCapture::new(
+    let mut draft = spellsheet_runtime::drafts::DraftCapture::new(
         state.service.store().local_root(),
         &id,
         &step,
         Some(&flow.parts),
-        shikigami_runtime::drafts::DraftSource::Studio,
+        spellsheet_runtime::drafts::DraftSource::Studio,
     );
-    let single = shikigami_runtime::single::flow_for(
+    let single = spellsheet_runtime::single::flow_for(
         step,
         state.runtime.registry(),
         &inputs,
-        shikigami_runtime::single::Context {
+        spellsheet_runtime::single::Context {
             flow_id: Some(id.clone()),
             parts: Some(&flow.parts),
         },
@@ -1336,14 +1336,14 @@ pub(crate) fn track_run(
     app: AppHandle,
     state: &AppState,
     id: FlowId,
-    handle: shikigami_runtime::RunHandle,
+    handle: spellsheet_runtime::RunHandle,
     event_name: &'static str,
     mut manual: Option<crate::manual::Collector>,
 ) -> CmdResult<RunId> {
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
         .map_err(|e| err("STORAGE_ERROR", e.to_string()))?
-        .prune_on_finish(&shikigami_core::Policy::path(state.service.store().root()));
+        .prune_on_finish(&spellsheet_core::Policy::path(state.service.store().root()));
 
     if let Ok(mut runs) = state.runs.lock() {
         runs.insert(
@@ -1373,7 +1373,7 @@ pub(crate) fn track_run(
                 }
                 crate::run_band::on_event(&emit_app, event);
                 if let RunEvent::Paused {
-                    reason: shikigami_runtime::PauseReason::Error,
+                    reason: spellsheet_runtime::PauseReason::Error,
                     step_id,
                     step_type,
                     ..
@@ -1441,7 +1441,7 @@ pub fn run_status(state: State<'_, AppState>, run_id: RunId) -> CmdResult<Option
 // Values go in (set_secret) but never come back out: the list has names,
 // user names and sites only.
 
-fn secret_err(e: shikigami_core::secret::SecretError) -> ErrorPayload {
+fn secret_err(e: spellsheet_core::secret::SecretError) -> ErrorPayload {
     ErrorPayload {
         details: e.details(),
         code: e.code,
@@ -1507,7 +1507,7 @@ pub fn set_secret(state: State<'_, AppState>, input: SecretInput) -> CmdResult<S
 #[tauri::command]
 pub fn list_windows_credentials(
     state: State<'_, AppState>,
-) -> CmdResult<Vec<shikigami_secrets::WindowsCredentialInfo>> {
+) -> CmdResult<Vec<spellsheet_secrets::WindowsCredentialInfo>> {
     state.vault.windows_credentials().map_err(secret_err)
 }
 

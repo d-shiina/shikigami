@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ShikigamiApi",
+  "title": "SpellSheetApi",
   "description": "Bundle of the IPC/API payload types used by Studio and MCP tools.",
   "type": "object",
   "properties": {
@@ -170,7 +170,7 @@
       "type": "object",
       "properties": {
         "$schema": {
-          "description": "Optional JSON Schema reference for editors. Ignored by Shikigami.",
+          "description": "Optional JSON Schema reference for editors. Ignored by SpellSheet.",
           "type": [
             "string",
             "null"
@@ -1974,7 +1974,7 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "Always `shikigami.flowBundle`.",
+          "description": "Always `spellsheet.flowBundle`.",
           "type": "string"
         },
         "formatVersion": {
@@ -4035,7 +4035,7 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "Always `shikigami.config`.",
+          "description": "Always `spellsheet.config`.",
           "type": "string"
         },
         "items": {
@@ -4169,5 +4169,5 @@
       ]
     }
   },
-  "$id": "https://shikigami.dev/schemas/api.schema.json"
+  "$id": "https://spellsheet.dev/schemas/api.schema.json"
 }

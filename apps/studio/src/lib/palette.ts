@@ -2,7 +2,7 @@
 // groups by what they work on, a "frequent" view to start from, and a search
 // that ranks by how well the name matches and forgives the ways Japanese can
 // be written (katakana / hiragana, full / half width).
-import type { FlowSummary, StepTypeDef } from "@shikigami/schema";
+import type { FlowSummary, StepTypeDef } from "@spellsheet/schema";
 import { stepLabel, t } from "./i18n";
 import { KEYWORD } from "./keywords";
 import { en } from "./locales/en";
@@ -449,7 +449,7 @@ export function frequent(items: readonly PaletteItem[], recent: readonly string[
   return { recent: used, common };
 }
 
-const RECENT_KEY = "shikigami.studio.recentNodes";
+const RECENT_KEY = "spellsheet.studio.recentNodes";
 
 export function loadRecent(): string[] {
   try {

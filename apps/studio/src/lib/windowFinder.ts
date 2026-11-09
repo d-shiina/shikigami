@@ -2,7 +2,7 @@
 // chosen in words: the picker ("画面から選ぶ") offers the ways it can be
 // found (`windowChoices`), the node's settings show them as choices, and
 // the other nodes on the same app can be set to the same way at once.
-import type { EditOp, Part, Step } from "@shikigami/schema";
+import type { EditOp, Part, Step } from "@spellsheet/schema";
 import { appOf, partRef, walk } from "./parts";
 
 export type WindowQuery = Record<string, unknown>;

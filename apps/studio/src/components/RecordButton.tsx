@@ -2,7 +2,7 @@
 // desktop app or on a page in the browser, then shows what was recorded. It becomes nodes as it is
 // (where a new node would go), or goes to the AI to be tidied up; either
 // way the raw recording stays in the flow's logs/recordings/.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { Circle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";

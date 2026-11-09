@@ -54,7 +54,7 @@ spellsheet plugin remove azureocr
 組織やコミュニティで使うカスタム ノードの一覧を、JSON の索引ファイル 1 つで配れます。サーバーは不要で、Git リポジトリに置いたファイルの raw URL などで構いません。
 
 ```powershell
-spellsheet plugin registry --set https://example.com/shikigami-extensions.json
+spellsheet plugin registry --set https://example.com/spellsheet-extensions.json
 spellsheet plugin registry          # 一覧を表示
 ```
 
@@ -98,7 +98,7 @@ API キーなどは Writer の「シークレット」に登録し、ノード�
 
 ```text
 azureocr/
-├─ shikigami-plugin.json   … マニフェスト（ノードの宣言）
+├─ spellsheet-plugin.json   … マニフェスト（ノードの宣言）
 ├─ main.mjs                … 本体（標準入出力で JSON-RPC を受ける）
 └─ README.md
 ```

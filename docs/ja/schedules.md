@@ -18,12 +18,12 @@ spellsheet worker run         # このウィンドウで動かす（Ctrl+C で�
 spellsheet worker uninstall
 ```
 
-`worker install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Worker`（ログオン時）を登録します（名前を変える前の `Shikigami\Agent` があれば置き換えます）。Worker はサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースの Worker は 2 つ目を起動できません。
+`worker install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Worker`（ログオン時）を登録します。Worker はサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースの Worker は 2 つ目を起動できません。
 
 - Worker が始める実行は**無人実行**です。`spellsheet run <id>` と同じく確定版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。確定していないフローは `NOT_PUBLISHED` で失敗します。
 - ほかの実行と同じく記録に残り、`origin.trigger` は `"schedule"`、`origin.requestedBy` はスケジュールの名前、`origin.jobId` はその ID です。
 - マウスとキーボードは Writer・CLI・MCP サーバーと共有し、使うノードはプロセスをまたいで順番に動きます。画面ロック中は `DESKTOP_UNAVAILABLE` で止まります（ブラウザやファイルの処理は動きます）。これらのノードがあるフローの実行中は、画面が消えたりスリープしたりしないようにします。ロックは止めません（パスワード付きのスクリーンセーバー、ポリシーで決まった時間でのロック、Win+L では止まります）。デスクトップのフローの予定の時刻には、PC をサインインしたまま・ロックしないで置いてください。Writer の「自動実行」では、マウス・キーボードを使うフローの予定に、この PC が操作のないまま何分でロックされるかを出します。
-- ほかのプロセスとは、自分のユーザーだけが書き込める名前付きパイプ（`\\.\pipe\shikigami-agent-…`）でやり取りします。
+- ほかのプロセスとは、自分のユーザーだけが書き込める名前付きパイプ（`\\.\pipe\spellsheet-agent-…`）でやり取りします。
 
 ### 画面のロックとリモートデスクトップ
 

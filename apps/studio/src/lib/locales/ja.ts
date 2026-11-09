@@ -1088,7 +1088,7 @@ export const ja = {
       yes: "TRUE",
       no: "FALSE",
       removeItem: "項目を削除",
-      notForm: "設定ファイルの形（format: shikigami.config）ではないため、フォームでは開けません",
+      notForm: "設定ファイルの形（format: spellsheet.config）ではないため、フォームでは開けません",
       howToRead: (path: string) => `フローでは「設定ファイル読み込み」（config.read）に ${path} を指定して使います`,
       duplicate: (name: string) => `「${name}」が 2 つあります`,
       log: "実行ログ",
@@ -1193,7 +1193,7 @@ export const ja = {
     lead: "Microsoft Copilot など、SpellSheet と直接つながらない AI のチャットにフローの作成を依頼し、その答えを取り込みます。",
     step1: "AI に仕様書を渡す",
     step1Lead:
-      "仕様書の 2 つのファイルを保存して AI に渡します。Copilot Studio のエージェントなら、指示に shikigami-ai-instructions.md の中身を貼り、ナレッジに shikigami-ai-reference.md を追加します。",
+      "仕様書の 2 つのファイルを保存して AI に渡します。Copilot Studio のエージェントなら、指示に spellsheet-ai-instructions.md の中身を貼り、ナレッジに spellsheet-ai-reference.md を追加します。",
     saveGuide: "仕様書を保存",
     savedGuide: (path: string) => `保存しました：${path}`,
     howTo: "使い方",
@@ -2276,7 +2276,7 @@ export const ja = {
     registry: {
       intro: "組織やコミュニティのカスタム ノードの一覧（JSON の索引ファイル）の URL を設定すると、ここから選んでインストールできます。",
       url: "一覧の URL",
-      urlPlaceholder: "https://…/shikigami-extensions.json",
+      urlPlaceholder: "https://…/spellsheet-extensions.json",
       save: "保存",
       loading: "読み込み中…",
       empty: "一覧にカスタム ノードがありません。",

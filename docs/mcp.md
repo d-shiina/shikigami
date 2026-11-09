@@ -8,22 +8,22 @@ English | [日本語](ja/mcp.md)
 
 ## Connecting
 
-The transport is **stdio**: the AI client starts `spellsheet mcp` as a child process. No network port is opened. The `shikigami` command must be on PATH (the installer puts it there; during development it is `target/debug/shikigami` from `cargo build -p shikigami-cli`).
+The transport is **stdio**: the AI client starts `spellsheet mcp` as a child process. No network port is opened. The `spellsheet` command must be on PATH (the installer puts it there; during development it is `target/debug/spellsheet` from `cargo build -p spellsheet-cli`).
 
 ### Claude Code
 
 The plugin is recommended: it bundles the MCP settings and a skill that teaches how to write flows.
 
 ```text
-/plugin install shikigami --marketplace d-shiina/shikigami
+/plugin install spellsheet --marketplace d-shiina/spellsheet
 ```
 
-(Before Claude Code 2.1.275: `/plugin marketplace add d-shiina/shikigami`, then `/plugin install shikigami@shikigami`.)
+(Before Claude Code 2.1.275: `/plugin marketplace add d-shiina/spellsheet`, then `/plugin install spellsheet@spellsheet`.)
 
 To register only the MCP server:
 
 ```sh
-claude mcp add shikigami -- spellsheet mcp
+claude mcp add spellsheet -- spellsheet mcp
 ```
 
 ### Codex
@@ -31,8 +31,8 @@ claude mcp add shikigami -- spellsheet mcp
 `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.shikigami]
-command = "shikigami"
+[mcp_servers.spellsheet]
+command = "spellsheet"
 args = ["mcp"]
 ```
 
@@ -45,7 +45,7 @@ In Writer, **Settings → AI → MCP server registration → Cursor → Add to C
 ```json
 {
   "mcpServers": {
-    "shikigami": { "command": "shikigami", "args": ["mcp"] }
+    "spellsheet": { "command": "spellsheet", "args": ["mcp"] }
   }
 }
 ```

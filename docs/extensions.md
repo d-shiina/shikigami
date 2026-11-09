@@ -54,7 +54,7 @@ A flow using a node of a turned-off extension fails validation with `PLUGIN_NOT_
 A list of extensions for your organisation or community is one JSON index file. No server is needed: the raw URL of a file in a Git repository is enough.
 
 ```powershell
-spellsheet plugin registry --set https://example.com/shikigami-extensions.json
+spellsheet plugin registry --set https://example.com/spellsheet-extensions.json
 spellsheet plugin registry          # show the list
 ```
 
@@ -98,7 +98,7 @@ Register API keys and the like in Writer (Secrets) and pick them by name in a no
 
 ```text
 azureocr/
-├─ shikigami-plugin.json   … manifest (declares the nodes)
+├─ spellsheet-plugin.json   … manifest (declares the nodes)
 ├─ main.mjs                … the program (JSON-RPC on stdin/stdout)
 └─ README.md
 ```

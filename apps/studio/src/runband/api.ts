@@ -1,5 +1,5 @@
 // The run band's bridge to the backend (src-tauri/src/run_band.rs).
-import type { DebugCommand, Flow, RunEventEnvelope, StepTypeDef } from "@shikigami/schema";
+import type { DebugCommand, Flow, RunEventEnvelope, StepTypeDef } from "@spellsheet/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { RunRecord } from "../lib/api";

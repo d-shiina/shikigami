@@ -2,7 +2,7 @@
 // with 「変数」 that lists the columns of the row being repeated (read from
 // the Excel/CSV file before any run) and the flow's other variables, and the
 // list a repeat walks over chosen from the results of the nodes above it.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { Braces } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useStudio } from "../context";

@@ -11,13 +11,13 @@ import { AdapterError } from "../src/targets.ts";
 
 // A browser the person started with a debugging port: browser.attach works
 // in it and leaves it open when the run ends.
-const executable = process.env.SHIKIGAMI_BROWSER_PATH || chromium.executablePath();
+const executable = process.env.SPELLSHEET_BROWSER_PATH || chromium.executablePath();
 let person: ChildProcess;
 let port: number;
 const page = (title: string) => `data:text/html;charset=utf-8,${encodeURIComponent(`<title>${title}</title><h1>${title}</h1>`)}`;
 
 beforeAll(async () => {
-  const profile = mkdtempSync(join(tmpdir(), "shikigami-person-"));
+  const profile = mkdtempSync(join(tmpdir(), "spellsheet-person-"));
   person = spawn(executable, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", ...(process.platform === "linux" ? ["--no-sandbox"] : []), page("社内ポータル")], {
     stdio: "ignore",
   });

@@ -2,7 +2,7 @@
 // one per behaviour it adds or changes (the case's description says it in
 // business words); the person judges whether each promise is right, and the
 // case's last run says whether the flow keeps it.
-import type { CaseResult, Evidence, Mismatch, TestCase } from "@shikigami/schema";
+import type { CaseResult, Evidence, Mismatch, TestCase } from "@spellsheet/schema";
 import { create } from "zustand";
 import { shortValue } from "./testCases";
 import { t } from "./i18n";

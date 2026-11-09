@@ -2,7 +2,7 @@
 // runs it did, and the screens it looked at. Also the note a person sends
 // back. All of it is read from Core (review_timeline); nothing is kept here.
 import { Check, Square, X } from "lucide-react";
-import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@shikigami/schema";
+import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@spellsheet/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { flowBusy, useAgent } from "../agent";

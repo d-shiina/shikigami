@@ -4725,389 +4725,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shikigami-adapters"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "csv",
- "encoding_rs",
- "serde_json",
- "shikigami-browser",
- "shikigami-db",
- "shikigami-desktop",
- "shikigami-excel",
- "shikigami-files",
- "shikigami-mail",
- "shikigami-pdf",
- "shikigami-plugins",
- "shikigami-runtime",
- "shikigami-system",
- "shikigami-word",
- "tempfile",
-]
-
-[[package]]
-name = "shikigami-agent"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "jiff",
- "reqwest",
- "ring",
- "rustls",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "shikigami-secrets",
- "tempfile",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "shikigami-browser"
-version = "0.1.20"
-dependencies = [
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "shikigami-secrets",
- "shikigami-system",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "shikigami-cli"
-version = "0.1.20"
-dependencies = [
- "anyhow",
- "clap",
- "rpassword",
- "serde_json",
- "shikigami-adapters",
- "shikigami-agent",
- "shikigami-core",
- "shikigami-desktop",
- "shikigami-manager",
- "shikigami-mcp",
- "shikigami-plugins",
- "shikigami-runtime",
- "shikigami-secrets",
- "tempfile",
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "shikigami-com"
-version = "0.1.20"
-dependencies = [
- "serde_json",
- "shikigami-runtime",
- "tokio-util",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "shikigami-core"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "dirs",
- "jiff",
- "jsonschema",
- "regex",
- "schemars 1.2.3",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
- "time",
- "tracing",
- "uuid",
- "zip 9.1.3",
-]
-
-[[package]]
-name = "shikigami-db"
-version = "0.1.20"
-dependencies = [
- "odbc-api",
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "shikigami-desktop"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "encoding_rs",
- "ort",
- "png",
- "regex",
- "serde",
- "serde_json",
- "shikigami-com",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "shikigami-excel"
-version = "0.1.20"
-dependencies = [
- "serde",
- "serde_json",
- "shikigami-com",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
- "umya-spreadsheet",
-]
-
-[[package]]
-name = "shikigami-files"
-version = "0.1.20"
-dependencies = [
- "csv",
- "encoding_rs",
- "glob",
- "jiff",
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
- "zip 9.1.3",
-]
-
-[[package]]
-name = "shikigami-mail"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "jiff",
- "lettre",
- "reqwest",
- "rustls",
- "serde_json",
- "shikigami-com",
- "shikigami-core",
- "shikigami-runtime",
- "shikigami-system",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "shikigami-manager"
-version = "0.1.20"
-dependencies = [
- "axum",
- "ring",
- "serde",
- "serde_json",
- "shikigami-agent",
- "shikigami-core",
- "shikigami-runtime",
- "shikigami-secrets",
- "tempfile",
- "time",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "shikigami-mcp"
-version = "0.1.20"
-dependencies = [
- "anyhow",
- "rmcp",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "shikigami-secrets",
- "tempfile",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "shikigami-pdf"
-version = "0.1.20"
-dependencies = [
- "pdf-extract",
- "serde_json",
- "shikigami-core",
- "shikigami-files",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "shikigami-plugins"
-version = "0.1.20"
-dependencies = [
- "dirs",
- "jsonschema",
- "reqwest",
- "rustls",
- "semver",
- "serde",
- "serde_json",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "zip 9.1.3",
-]
-
-[[package]]
-name = "shikigami-runtime"
-version = "0.1.20"
-dependencies = [
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "shikigami-core",
- "tempfile",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "shikigami-secrets"
-version = "0.1.20"
-dependencies = [
- "aes-gcm",
- "base64 0.22.1",
- "getrandom 0.3.4",
- "hmac 0.12.1",
- "keyring",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "sha1",
- "shikigami-core",
- "tempfile",
- "time",
- "tracing",
- "uuid",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "shikigami-studio"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "dirs",
- "notify",
- "semver",
- "serde",
- "serde_json",
- "shikigami-adapters",
- "shikigami-agent",
- "shikigami-core",
- "shikigami-desktop",
- "shikigami-plugins",
- "shikigami-runtime",
- "shikigami-secrets",
- "shikigami-system",
- "tauri",
- "tauri-build",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tempfile",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "shikigami-system"
-version = "0.1.20"
-dependencies = [
- "base64 0.22.1",
- "clipboard-win",
- "encoding_rs",
- "form_urlencoded",
- "getrandom 0.3.4",
- "jiff",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "shikigami-core",
- "shikigami-files",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
- "win32job",
-]
-
-[[package]]
-name = "shikigami-word"
-version = "0.1.20"
-dependencies = [
- "serde_json",
- "shikigami-com",
- "shikigami-core",
- "shikigami-runtime",
- "tempfile",
- "tokio",
- "tokio-util",
- "zip 9.1.3",
-]
-
-[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5219,6 +4836,389 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "spellsheet-adapters"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "csv",
+ "encoding_rs",
+ "serde_json",
+ "spellsheet-browser",
+ "spellsheet-db",
+ "spellsheet-desktop",
+ "spellsheet-excel",
+ "spellsheet-files",
+ "spellsheet-mail",
+ "spellsheet-pdf",
+ "spellsheet-plugins",
+ "spellsheet-runtime",
+ "spellsheet-system",
+ "spellsheet-word",
+ "tempfile",
+]
+
+[[package]]
+name = "spellsheet-agent"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "jiff",
+ "reqwest",
+ "ring",
+ "rustls",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "spellsheet-browser"
+version = "0.1.20"
+dependencies = [
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "spellsheet-system",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "spellsheet-cli"
+version = "0.1.20"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rpassword",
+ "serde_json",
+ "spellsheet-adapters",
+ "spellsheet-agent",
+ "spellsheet-core",
+ "spellsheet-desktop",
+ "spellsheet-manager",
+ "spellsheet-mcp",
+ "spellsheet-plugins",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "spellsheet-com"
+version = "0.1.20"
+dependencies = [
+ "serde_json",
+ "spellsheet-runtime",
+ "tokio-util",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "spellsheet-core"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "dirs",
+ "jiff",
+ "jsonschema",
+ "regex",
+ "schemars 1.2.3",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tracing",
+ "uuid",
+ "zip 9.1.3",
+]
+
+[[package]]
+name = "spellsheet-db"
+version = "0.1.20"
+dependencies = [
+ "odbc-api",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "spellsheet-desktop"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "encoding_rs",
+ "ort",
+ "png",
+ "regex",
+ "serde",
+ "serde_json",
+ "spellsheet-com",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "spellsheet-excel"
+version = "0.1.20"
+dependencies = [
+ "serde",
+ "serde_json",
+ "spellsheet-com",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "umya-spreadsheet",
+]
+
+[[package]]
+name = "spellsheet-files"
+version = "0.1.20"
+dependencies = [
+ "csv",
+ "encoding_rs",
+ "glob",
+ "jiff",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "zip 9.1.3",
+]
+
+[[package]]
+name = "spellsheet-mail"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "jiff",
+ "lettre",
+ "reqwest",
+ "rustls",
+ "serde_json",
+ "spellsheet-com",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "spellsheet-system",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "spellsheet-manager"
+version = "0.1.20"
+dependencies = [
+ "axum",
+ "ring",
+ "serde",
+ "serde_json",
+ "spellsheet-agent",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "spellsheet-mcp"
+version = "0.1.20"
+dependencies = [
+ "anyhow",
+ "rmcp",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "tempfile",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "spellsheet-pdf"
+version = "0.1.20"
+dependencies = [
+ "pdf-extract",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-files",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "spellsheet-plugins"
+version = "0.1.20"
+dependencies = [
+ "dirs",
+ "jsonschema",
+ "reqwest",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "zip 9.1.3",
+]
+
+[[package]]
+name = "spellsheet-runtime"
+version = "0.1.20"
+dependencies = [
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "spellsheet-core",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "spellsheet-secrets"
+version = "0.1.20"
+dependencies = [
+ "aes-gcm",
+ "base64 0.22.1",
+ "getrandom 0.3.4",
+ "hmac 0.12.1",
+ "keyring",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "sha1",
+ "spellsheet-core",
+ "tempfile",
+ "time",
+ "tracing",
+ "uuid",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "spellsheet-studio"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "dirs",
+ "notify",
+ "semver",
+ "serde",
+ "serde_json",
+ "spellsheet-adapters",
+ "spellsheet-agent",
+ "spellsheet-core",
+ "spellsheet-desktop",
+ "spellsheet-plugins",
+ "spellsheet-runtime",
+ "spellsheet-secrets",
+ "spellsheet-system",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tempfile",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "spellsheet-system"
+version = "0.1.20"
+dependencies = [
+ "base64 0.22.1",
+ "clipboard-win",
+ "encoding_rs",
+ "form_urlencoded",
+ "getrandom 0.3.4",
+ "jiff",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spellsheet-core",
+ "spellsheet-files",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "win32job",
+]
+
+[[package]]
+name = "spellsheet-word"
+version = "0.1.20"
+dependencies = [
+ "serde_json",
+ "spellsheet-com",
+ "spellsheet-core",
+ "spellsheet-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "zip 9.1.3",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-// Builds the runnable bundle examples/full-demo.shikigami.json from the
+// Builds the runnable bundle examples/full-demo.spellsheet.json from the
 // human-readable project folder examples/full-demo/.
 //
 //   node examples/build-full-demo.mjs
@@ -6,13 +6,13 @@
 // The folder (flow.json, subflows/shipping.json and the files under
 // input/ config/ templates/) and the demo site in examples/web are the source
 // of truth; the bundle is a single self-contained file that
-// `spellsheet run examples/full-demo.shikigami.json` unpacks and runs. Re-run
+// `spellsheet run examples/full-demo.spellsheet.json` unpacks and runs. Re-run
 // this after editing anything in the folder or the site.
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const out = fileURLToPath(new URL("./full-demo.shikigami.json", import.meta.url));
+const out = fileURLToPath(new URL("./full-demo.spellsheet.json", import.meta.url));
 
 // A fixed timestamp keeps the generated bundle stable across rebuilds.
 const EXPORTED_AT = "2026-10-30T00:00:00Z";
@@ -53,7 +53,7 @@ for (const name of readdirSync(new URL("./web/", import.meta.url)).sort()) {
 }
 
 const bundle = {
-  format: "shikigami.flowBundle",
+  format: "spellsheet.flowBundle",
   formatVersion: 2,
   exportedAt: EXPORTED_AT,
   flow: main,

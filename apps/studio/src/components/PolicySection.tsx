@@ -1,4 +1,4 @@
-import type { ByRisk, Decision, Policy, RiskLevel } from "@shikigami/schema";
+import type { ByRisk, Decision, Policy, RiskLevel } from "@spellsheet/schema";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";

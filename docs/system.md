@@ -2,7 +2,7 @@
 
 English | [日本語](ja/system.md)
 
-Crate `shikigami-system`. Built-in nodes for things outside app windows. Value processing is written with expression functions ([expressions.md](expressions.md)).
+Crate `spellsheet-system`. Built-in nodes for things outside app windows. Value processing is written with expression functions ([expressions.md](expressions.md)).
 
 | Node | What it does | Output | Risk |
 |---|---|---|---|

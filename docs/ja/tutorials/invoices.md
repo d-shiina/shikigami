@@ -5,7 +5,7 @@
 Excel の受注一覧を取引先ごとにまとめ、Word のひな形に差し込んで請求書を作ります。Word も Excel も入っていない PC で動きます（ファイルを直接読み書きします）。
 
 - できるもの：`output/請求書/請求書_<取引先>.docx`（取引先の数だけ）と `output/請求一覧.xlsx`
-- 見本：`examples/tutorials/invoices/`（完成形は `examples/tutorials/invoices.shikigami.json`）
+- 見本：`examples/tutorials/invoices/`（完成形は `examples/tutorials/invoices.spellsheet.json`）
 - かかる時間：約 15 分
 
 ![フロー図](../../assets/tutorials/invoices-flow.png)

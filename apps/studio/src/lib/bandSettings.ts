@@ -8,7 +8,7 @@ export type BandSettings = {
   restoreAtEnd: boolean;
 };
 
-const KEY = "shikigami.studio.runBand";
+const KEY = "spellsheet.studio.runBand";
 export const BAND_DEFAULTS: BandSettings = { shrink: true, restoreAtEnd: true };
 
 export function loadBandSettings(): BandSettings {

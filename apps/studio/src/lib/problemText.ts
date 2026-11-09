@@ -2,7 +2,7 @@
 // words a problem in English for the AI (a JSON Pointer, the schema's
 // message, a fix hint); the person reads where it is (the node and the
 // setting by their names), what is wrong, and what was written there.
-import type { Flow, Step, ValidationIssue } from "@shikigami/schema";
+import type { Flow, Step, ValidationIssue } from "@spellsheet/schema";
 import type { AnswerProblem } from "./api";
 import { t } from "./i18n";
 import { paramLabel } from "./nodeRows";

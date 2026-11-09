@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "runner",
-  "description": "The run window (Shikigami 実行): core events and the caption buttons of its own title bar. Runs go through Shikigami commands.",
+  "description": "The run window (SpellSheet 実行): core events and the caption buttons of its own title bar. Runs go through SpellSheet commands.",
   "windows": ["runner"],
   "permissions": [
     "core:default",

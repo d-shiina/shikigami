@@ -1,6 +1,6 @@
 // Words for the 「テスト」 panel: what a test case expects and where a run
 // differed from it, without codes or JSON paths on the screen.
-import type { Mismatch, RunStatus } from "@shikigami/schema";
+import type { Mismatch, RunStatus } from "@spellsheet/schema";
 import { explainError } from "./errorText";
 import { t } from "./i18n";
 

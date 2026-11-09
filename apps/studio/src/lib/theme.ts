@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 export type ThemeChoice = "system" | "light" | "dark";
 
-const KEY = "shikigami.studio.theme";
+const KEY = "spellsheet.studio.theme";
 const media = () => globalThis.matchMedia?.("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 

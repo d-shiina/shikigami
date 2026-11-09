@@ -1,4 +1,4 @@
-import type { Flow, StepTypeDef, ValidationReport } from "@shikigami/schema";
+import type { Flow, StepTypeDef, ValidationReport } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { authorIssues, flowForChat, handOffText, isUnset, personTodos, returnText, todosByStep } from "./todos";
 
@@ -77,7 +77,7 @@ describe("text for the AI", () => {
     expect(text).toContain("1. /flow/steps/1/params");
     expect(text).toContain("'value' is required");
     expect(text).toContain("Set value.");
-    expect(text).toContain('"format": "shikigami.answer"');
+    expect(text).toContain('"format": "spellsheet.answer"');
   });
 
   it("hands the flow over without what Writer owns", () => {

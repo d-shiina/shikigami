@@ -1,3 +1,5 @@
+// First: settings saved under the old name move before anything reads them.
+import "./lib/legacyStorage";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

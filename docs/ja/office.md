@@ -18,7 +18,7 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 
 ## Excel（`excel.*`、実装済み）
 
-クレート `crates/shikigami-excel`。`.xlsx` / `.xlsm` を直接読み書きします（`.xls` は `UNSUPPORTED_FORMAT`。`excel.saveAs` で `.xlsx` にしてから使う）。
+クレート `crates/spellsheet-excel`。`.xlsx` / `.xlsm` を直接読み書きします（`.xls` は `UNSUPPORTED_FORMAT`。`excel.saveAs` で `.xlsx` にしてから使う）。
 
 | type | 主な params | 出力 |
 |---|---|---|
@@ -124,7 +124,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## Word（`word.*`、実装済み）
 
-クレート `crates/shikigami-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。`word.exportPdf` だけ Word を使います。
+クレート `crates/spellsheet-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。`word.exportPdf` だけ Word を使います。
 
 | type | 主な params | 出力 |
 |---|---|---|
@@ -147,7 +147,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## メール（`mail.*`、実装済み）
 
-クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにしています。読む・仕分け・下書きはこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。Outlook なしで Microsoft 365 のメールボックスを直接扱うこともできます（`via: "microsoft365"`、下記）。`mail.send` は Microsoft 365 や SMTP サーバーからも送れます。
+クレート `crates/spellsheet-mail`。アプリで分けず `mail.*` の 1 セットにしています。読む・仕分け・下書きはこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。Outlook なしで Microsoft 365 のメールボックスを直接扱うこともできます（`via: "microsoft365"`、下記）。`mail.send` は Microsoft 365 や SMTP サーバーからも送れます。
 
 | type | 主な params | 出力 |
 |---|---|---|

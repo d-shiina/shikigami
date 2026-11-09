@@ -656,7 +656,7 @@ export function SecretsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const removeSecret = useStudio((s) => s.removeSecret);
   const columns = useColumns(usedBy);
-  const view = useTableView(columns, { storageKey: "shikigami.studio.secrets.sort", initialSort: { column: "name", descending: false } });
+  const view = useTableView(columns, { storageKey: "spellsheet.studio.secrets.sort", initialSort: { column: "name", descending: false } });
   const q = query.trim().toLowerCase();
   const usageOf = (s: SecretInfo): Usage => ((usedBy.get(s.name) ?? []).length ? "used" : "unused");
   // Each filter's counts are over the rows the other one keeps.

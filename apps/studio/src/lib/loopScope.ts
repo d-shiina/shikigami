@@ -1,7 +1,7 @@
 // What a node can use while a flow is built by hand: the repeats it sits in
 // (and the rows they walk over), and the results of other nodes a repeat can
 // walk over. Pure, so the inspector's pickers can be tested without a screen.
-import type { Step, VariableDef } from "@shikigami/schema";
+import type { Step, VariableDef } from "@spellsheet/schema";
 import { isPlainName } from "./expr";
 import { outputs } from "./nodeRows";
 

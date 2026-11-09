@@ -1,7 +1,7 @@
 // 「ノードの単体実行」: only the node runs. The variables it reads are given
 // the values the last run left (or their starting values); nothing before
 // it runs again. Pure, so what is sent can be tested without a screen.
-import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { enclosingLoops } from "./loopScope";
 import { callMap, referencedVariables } from "./nodeRows";
 import { BINDS, CALL, FOR_EACH } from "./stepTypes";

@@ -5,7 +5,7 @@
 //! adapter).
 
 use serde_json::Value;
-use shikigami_core::ErrorPayload;
+use spellsheet_core::ErrorPayload;
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppState;
@@ -30,7 +30,7 @@ pub async fn point_at(
     state: State<'_, AppState>,
     adapter: String,
     session: Option<String>,
-    flow_id: Option<shikigami_core::FlowId>,
+    flow_id: Option<spellsheet_core::FlowId>,
     mut params: Value,
 ) -> CmdResult<Value> {
     let Some(found) = state.adapters.iter().find(|a| a.name() == adapter).cloned() else {
@@ -41,7 +41,7 @@ pub async fn point_at(
     if let Some(id) = &flow_id
         && let Ok(dir) = state.service.project_dir(id)
     {
-        shikigami_core::project::resolve_params(
+        spellsheet_core::project::resolve_params(
             &mut params,
             &["target.image.path".to_owned()],
             &dir,

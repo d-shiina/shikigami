@@ -42,10 +42,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @shikigami/studio build
+      - run: pnpm --filter @spellsheet/studio build
       - name: Demo site serves pages (Windows paths)
         if: runner.os == 'Windows'
-        run: pnpm --filter @shikigami/browser-adapter exec vitest run test/demo-site.test.ts
+        run: pnpm --filter @spellsheet/browser-adapter exec vitest run test/demo-site.test.ts
       - uses: actions/cache@v4
         if: runner.os == 'Windows'
         with:
@@ -64,9 +64,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
         env:
-          SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
+          SPELLSHEET_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
           # The db.* tests run SQL through the SQLite ODBC driver installed above.
-          SHIKIGAMI_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
+          SPELLSHEET_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Example extensions work against a stand-in service
         run: node --test examples/plugins/azure-ocr/test.mjs
       - name: Tutorial examples run, and their bundles are current
@@ -74,8 +74,8 @@ jobs:
         run: |
           node examples/build-tutorials.mjs
           git diff --exit-code -- examples/tutorials
-          for t in examples/tutorials/*.shikigami.json; do
-            cargo run -q -p shikigami-cli -- run "$t"
+          for t in examples/tutorials/*.spellsheet.json; do
+            cargo run -q -p spellsheet-cli -- run "$t"
           done
       # An experiment, not a gate: does an Edge IE mode page show its
       # elements to UI Automation? The test reports what it saw as annotations.
@@ -92,7 +92,7 @@ jobs:
             if (Test-Path $esc) { Set-ItemProperty $esc IsInstalled 0 -Type DWord }
           }
           Get-Process iexplore, msedge -ErrorAction SilentlyContinue | Stop-Process -Force
-          $env:SHIKIGAMI_IE_SHOTS = Join-Path $env:RUNNER_TEMP 'ie-mode'
+          $env:SPELLSHEET_IE_SHOTS = Join-Path $env:RUNNER_TEMP 'ie-mode'
           $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
           New-Item -Path $key -Force | Out-Null
           $sites = Join-Path $env:RUNNER_TEMP 'ie-sites.xml'
@@ -101,9 +101,9 @@ jobs:
           Set-ItemProperty $key InternetExplorerIntegrationSiteList ('file:///' + $sites.Replace('\', '/'))
           Set-ItemProperty $key InternetExplorerIntegrationTestingAllowed 1 -Type DWord
           Set-ItemProperty $key HideFirstRunExperience 1 -Type DWord
-          cargo test -p shikigami-desktop --test ie_mode -- --ignored --nocapture
+          cargo test -p spellsheet-desktop --test ie_mode -- --ignored --nocapture
       # An experiment, not a gate: the OCR benchmark (Japanese business
-      # screens, crates/shikigami-desktop/src/ocr_bench.rs) with PaddleOCR
+      # screens, crates/spellsheet-desktop/src/ocr_bench.rs) with PaddleOCR
       # and with Windows OCR on the same machine. The results are notices on
       # the run. Installing Windows OCR's Japanese pack takes about 15 minutes,
       # so it runs only on pull requests whose title names OCR.
@@ -113,7 +113,7 @@ jobs:
         shell: pwsh
         run: |
           Add-WindowsCapability -Online -Name "Language.OCR~~~ja-JP~0.0.1.0" | Out-Null
-          cargo test -p shikigami-desktop --lib ocr_bench -- --ignored --nocapture
+          cargo test -p spellsheet-desktop --lib ocr_bench -- --ignored --nocapture
       # Pictures of the dialog.* dialogs, drawn by the Windows test.
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows' && always()
@@ -140,11 +140,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium for the browser adapter tests
-        run: pnpm --filter @shikigami/browser-adapter exec playwright-core install --with-deps chromium
+        run: pnpm --filter @spellsheet/browser-adapter exec playwright-core install --with-deps chromium
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - name: Generated TypeScript types are up to date
-        run: pnpm --filter @shikigami/schema exec node scripts/generate.mjs --check
+        run: pnpm --filter @spellsheet/schema exec node scripts/generate.mjs --check
 
   contract:
     name: Contract changes are in the changelog
