@@ -3,18 +3,29 @@
 // before each run, or sends what the run wrote to output/ after it, through
 // the storage's API (lib/cloudPlaces.ts), so it runs on PCs without the sync
 // app. It is a setting of the folder (config/cloud.json), not nodes. One
-// dialog does all of it: install the custom node that comes with Writer when
+// dialog does all of it: install the plugin that comes with Writer when
 // it is missing, choose or register the OAuth app to sign in with, and say
 // which folder. Picking a sync app's folder (the earlier way) stays at the
 // bottom, for a missing input file.
-import { Cloud, ExternalLink, Info } from "lucide-react";
+import { Blocks, Cloud, ExternalLink, Info } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { agent, extensionsApi } from "../lib/api";
-import { CLOUD_PATH, CLOUD_SERVICES, type CloudService, type CloudSide, cloudPlace, serviceOf, withCloudPlace } from "../lib/cloudPlaces";
+import {
+  CLOUD_PATH,
+  CLOUD_SERVICES,
+  type CloudService,
+  type CloudSide,
+  cloudPlace,
+  folderNameOf,
+  serviceOf,
+  signInParams,
+  withCloudPlace,
+} from "../lib/cloudPlaces";
 import { t } from "../lib/i18n";
 import { ProjectContext, projectApi, useProjectMaybe } from "../project";
+import { CloudBrowser, type Picked } from "./CloudBrowser";
 
 const NEW = "\u0000new";
 
@@ -23,7 +34,7 @@ const input =
 
 const message = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
 
-/** The secret already allowed to reach the service's custom node, or a new one. */
+/** The secret already allowed to reach the service's plugin, or a new one. */
 const secretFor = (oauth: { name: string; sites: string[] }[], service: CloudService) =>
   oauth.find((s) => s.sites.includes(`plugin:${service.plugin}`))?.name ?? NEW;
 
@@ -59,10 +70,14 @@ export function CloudPlaceDialog({
   const [clientSecret, setClientSecret] = useState("");
   const [redirect, setRedirect] = useState(() => (typeof current?.signIn?.redirectUrl === "string" ? current.signIn.redirectUrl : ""));
   const [target, setTarget] = useState(current?.folder ?? "");
+  // From 「参照…」: the folder's name for people, and the files picked in it (none: every file).
+  const [folderName, setFolderName] = useState(current ? folderNameOf(current) : "");
+  const [files, setFiles] = useState<string[]>(current?.files ?? []);
   const [pattern, setPattern] = useState(current?.pattern ?? "");
+  const [browsing, setBrowsing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Custom nodes installed from this dialog: they work after Writer restarts.
+  // Plugins installed from this dialog: they work after Writer restarts.
   const [installedNow, setInstalledNow] = useState<string[]>([]);
   const [installing, setInstalling] = useState(false);
   const restartNeeded = installedNow.includes(service.plugin);
@@ -115,22 +130,63 @@ export function CloudPlaceDialog({
     onClose();
   };
 
-  const submit = async () => {
+  /** The secret to sign in with, registered or allowed first when needed; null when a field is missing. */
+  const readySecret = async (): Promise<string | null> => {
     const isNew = secret === NEW;
     const name = isNew ? newName.trim() : secret;
+    if (!name || !redirect.trim() || (isNew && !clientId.trim())) {
+      setError(c.missing);
+      return null;
+    }
+    // The secret must allow the token URL, the API and the extension.
+    const saved = await saveSecretAdding(isNew ? { name, kind: "oauth", username: clientId.trim(), password: clientSecret } : { name }, service.sites);
+    if (!saved) return null;
+    if (isNew) setSecret(name);
+    return name;
+  };
+
+  const browse = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const name = await readySecret();
+      if (name) setBrowsing(name);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const picked = (p: Picked) => {
+    setBrowsing(null);
+    setTarget(p.folder);
+    setFolderName(p.folderName);
+    setFiles(p.files);
+  };
+
+  const submit = async () => {
     const folder = service.target(target);
-    if (!name || !folder || !redirect.trim() || (isNew && !clientId.trim())) {
+    if (!folder) {
       setError(c.missing);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      // The secret must allow the token URL, the API and the custom node.
-      const saved = await saveSecretAdding(isNew ? { name, kind: "oauth", username: clientId.trim(), password: clientSecret } : { name }, service.sites);
-      if (!saved) return;
-      const place = cloudPlace(service, { label: words.label, secret: name, redirectUrl: redirect.trim(), folder, pattern: reading ? pattern : "" });
-      await save(withCloudPlace(cloud, side, place), reading ? c.readDone(words.label, folder) : c.writeDone(words.label, folder));
+      const name = await readySecret();
+      if (!name) return;
+      const place = cloudPlace(service, {
+        label: words.label,
+        secret: name,
+        redirectUrl: redirect.trim(),
+        folder,
+        folderName: folder === target ? folderName : "",
+        pattern: reading ? pattern : "",
+        files: reading ? files : [],
+      });
+      const shown = folderNameOf(place);
+      await save(withCloudPlace(cloud, side, place), reading ? c.readDone(words.label, shown) : c.writeDone(words.label, shown));
     } catch (e) {
       setError(message(e));
     } finally {
@@ -217,78 +273,131 @@ export function CloudPlaceDialog({
               {c.restart}
             </button>
           </div>
-        ) : null}
-
-        <fieldset disabled={!ready} className="mt-4 space-y-3 disabled:opacity-50">
-          <label className="block">
-            <span className="text-[12px] font-medium text-slate-600">{c.secret}</span>
-            <select value={secret} onChange={(e) => setSecret(e.target.value)} className={`${input} mt-1`}>
-              {oauth.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-              <option value={NEW}>{c.newSecret}</option>
-            </select>
-          </label>
-          {secret === NEW && (
-            <div className="space-y-2 rounded-md border border-slate-200 p-3">
-              <p className="text-[12px] leading-relaxed text-slate-500">
-                {words.appHint} {c.shared}{" "}
-                <button
-                  type="button"
-                  onClick={() => void agent.openLink(service.console).catch(() => {})}
-                  className="inline-flex items-center gap-0.5 text-brand-500 hover:underline"
-                >
-                  {c.openConsole}
-                  <ExternalLink size={11} strokeWidth={1.75} aria-hidden="true" />
-                </button>
-              </p>
-              <Field label={c.secretName} value={newName} onChange={setNewName} />
-              <Field label={c.clientId} value={clientId} onChange={setClientId} />
-              <Field label={c.clientSecret} value={clientSecret} onChange={setClientSecret} password />
-            </div>
-          )}
-          <Field label={c.redirect} hint={c.redirectHint} value={redirect} onChange={setRedirect} placeholder="https://www.example.com/" />
-          <Field
-            label={reading ? c.readFolder : c.writeFolder}
-            hint={`${words.targetHint}${c.targetHint}`}
-            value={target}
-            onChange={setTarget}
-            placeholder={reading ? c.readPlaceholder : c.writePlaceholder}
-          />
-          {reading && <Field label={c.pattern} hint={c.patternHint} value={pattern} onChange={setPattern} placeholder="*.xlsx" />}
-          <p className="flex gap-1.5 text-[12px] leading-relaxed text-slate-500">
-            <Info size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
-            {c.signInNote(words.label)}
+        ) : (
+          <p className="mt-2 flex items-center gap-1.5 text-[12px] text-slate-500">
+            <Blocks size={13} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+            {c.usesPlugin(words.label)}
           </p>
-        </fieldset>
+        )}
 
-        {error && <p className="mt-3 text-[12.5px] text-shu-600">{error}</p>}
+        {browsing ? (
+          <CloudBrowser
+            service={service}
+            label={words.label}
+            secret={browsing}
+            signIn={signInParams(service, redirect.trim())}
+            side={side}
+            start={{ folder: service.target(target), folderName, files }}
+            onPick={picked}
+            onCancel={() => setBrowsing(null)}
+          />
+        ) : (
+          <>
+            <fieldset disabled={!ready} className="mt-4 space-y-3 disabled:opacity-50">
+              <label className="block">
+                <span className="text-[12px] font-medium text-slate-600">{c.secret}</span>
+                <select value={secret} onChange={(e) => setSecret(e.target.value)} className={`${input} mt-1`}>
+                  {oauth.map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                  <option value={NEW}>{c.newSecret}</option>
+                </select>
+              </label>
+              {secret === NEW && (
+                <div className="space-y-2 rounded-md border border-slate-200 p-3">
+                  <p className="text-[12px] leading-relaxed text-slate-500">
+                    {words.appHint} {c.shared}{" "}
+                    <button
+                      type="button"
+                      onClick={() => void agent.openLink(service.console).catch(() => {})}
+                      className="inline-flex items-center gap-0.5 text-brand-500 hover:underline"
+                    >
+                      {c.openConsole}
+                      <ExternalLink size={11} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  </p>
+                  <Field label={c.secretName} value={newName} onChange={setNewName} />
+                  <Field label={c.clientId} value={clientId} onChange={setClientId} />
+                  <Field label={c.clientSecret} value={clientSecret} onChange={setClientSecret} password />
+                </div>
+              )}
+              <Field label={c.redirect} hint={c.redirectHint} value={redirect} onChange={setRedirect} placeholder="https://www.example.com/" />
+              <label className="block">
+                <span className="text-[12px] font-medium text-slate-600">{reading ? c.readFolder : c.writeFolder}</span>
+                <span className="mt-1 flex gap-1.5">
+                  <input
+                    type="text"
+                    spellCheck={false}
+                    value={folderName && folderName !== target ? folderName : target}
+                    placeholder={reading ? c.readPlaceholder : c.writePlaceholder}
+                    onChange={(e) => {
+                      // Typed or pasted by hand: no longer the folder picked with 「参照…」.
+                      setTarget(e.target.value);
+                      setFolderName("");
+                      setFiles([]);
+                    }}
+                    className={input}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void browse()}
+                    className="h-8 shrink-0 rounded-md border border-slate-300 px-3 text-[12.5px] text-slate-700 hover:border-brand-500 hover:text-brand-500 disabled:opacity-60"
+                  >
+                    {c.browse.open}
+                  </button>
+                </span>
+                <span className="mt-0.5 block text-[11.5px] leading-snug text-slate-500">{`${words.targetHint}${c.targetHint}`}</span>
+              </label>
+              {reading &&
+                (files.length > 0 ? (
+                  <div className="rounded-md bg-slate-50 px-3 py-2 text-[12.5px] text-slate-700 dark:bg-white/5">
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 font-medium">{c.browse.picked(files.length)}</span>
+                      <button type="button" onClick={() => setFiles([])} className="text-brand-500 hover:underline">
+                        {c.browse.allInstead}
+                      </button>
+                    </div>
+                    <div className="mt-0.5 break-words text-slate-500">{files.join("、")}</div>
+                  </div>
+                ) : (
+                  <Field label={c.pattern} hint={c.patternHint} value={pattern} onChange={setPattern} placeholder="*.xlsx" />
+                ))}
+              <p className="flex gap-1.5 text-[12px] leading-relaxed text-slate-500">
+                <Info size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
+                {c.signInNote(words.label)}
+              </p>
+            </fieldset>
 
-        <div className="mt-5 flex items-center gap-2">
-          {current ? (
-            <button type="button" disabled={busy} onClick={() => void remove()} className="mr-auto text-[12.5px] text-shu-600 hover:underline">
-              {c.remove}
-            </button>
-          ) : onSynced ? (
-            <button type="button" title={c.syncedHint} onClick={onSynced} className="mr-auto text-[12.5px] text-brand-500 hover:underline">
-              {c.synced}
-            </button>
-          ) : (
-            <span className="mr-auto" />
-          )}
-          <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] text-slate-600 hover:bg-slate-100">
-            {t.cancel}
-          </button>
-          <button
-            type="submit"
-            disabled={busy || !ready}
-            className="h-8 rounded-lg bg-primary px-4 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
-          >
-            {reading ? c.readApply : c.writeApply}
-          </button>
-        </div>
+            {error && <p className="mt-3 text-[12.5px] text-shu-600">{error}</p>}
+
+            <div className="mt-5 flex items-center gap-2">
+              {current ? (
+                <button type="button" disabled={busy} onClick={() => void remove()} className="mr-auto text-[12.5px] text-shu-600 hover:underline">
+                  {c.remove}
+                </button>
+              ) : onSynced ? (
+                <button type="button" title={c.syncedHint} onClick={onSynced} className="mr-auto text-[12.5px] text-brand-500 hover:underline">
+                  {c.synced}
+                </button>
+              ) : (
+                <span className="mr-auto" />
+              )}
+              <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] text-slate-600 hover:bg-slate-100">
+                {t.cancel}
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !ready}
+                className="h-8 rounded-lg bg-primary px-4 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
+              >
+                {reading ? c.readApply : c.writeApply}
+              </button>
+            </div>
+          </>
+        )}
       </form>
     </div>,
     document.body,

@@ -2,7 +2,7 @@
 //! cloud storage reached through its API (Box, Google Drive, OneDrive /
 //! SharePoint): a setting of the flow's folder, not nodes in the flow.
 //!
-//! `config/cloud.json` names, for `input` and `output`, the custom node that
+//! `config/cloud.json` names, for `input` and `output`, the plugin that
 //! talks to the storage (`box`: its `box.downloadFolder` and `box.upload`),
 //! the OAuth secret it signs in with and the folder. Input and output may
 //! name different storages or accounts. A whole
@@ -43,14 +43,14 @@ pub struct CloudFile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudPlace {
-    /// The custom node that reaches the storage (`box`, `googledrive`,
+    /// The plugin that reaches the storage (`box`, `googledrive`,
     /// `onedrive`): its `<service>.downloadFolder` and `<service>.upload`
     /// do the work.
     pub service: String,
     /// The storage's name in the run's log (`Box`). Defaults to `service`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
-    /// The OAuth secret the custom node signs in with (its access token is
+    /// The OAuth secret the plugin signs in with (its access token is
     /// passed as `{ "secret": …, "field": "accessToken" }`).
     pub secret: String,
     /// `oauth.signIn` params besides `secret` (`authorizeUrl`, `tokenUrl`,
@@ -59,12 +59,20 @@ pub struct CloudPlace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sign_in: Option<Map<String, Value>>,
     /// The folder: a path from the storage's top (`経理/受注`), its ID or a
-    /// link to it, as the custom node takes them.
+    /// link to it, as the plugin takes them.
     pub folder: String,
+    /// The folder as people know it (`経理/受注`), for the log and Writer,
+    /// when `folder` is an ID or a link. Defaults to `folder`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub folder_name: String,
     /// Input only: fetch the files whose names match (`*.xlsx`). Empty:
     /// every file directly in the folder.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub pattern: String,
+    /// Input only: fetch just these files of the folder, by name; a missing
+    /// one fails the run. Empty: every file (that matches `pattern`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
 }
 
 impl CloudPlace {
@@ -77,12 +85,21 @@ impl CloudPlace {
         }
     }
 
-    /// The node type of one of the custom node's actions (`box.download`).
+    /// The folder for people (`経理/受注`).
+    pub fn folder_name(&self) -> &str {
+        if self.folder_name.trim().is_empty() {
+            &self.folder
+        } else {
+            &self.folder_name
+        }
+    }
+
+    /// The node type of one of the plugin's actions (`box.download`).
     pub fn step_type(&self, action: &str) -> String {
         format!("{}.{action}", self.service)
     }
 
-    /// The account param the custom node's nodes take.
+    /// The account param the plugin's nodes take.
     pub fn account(&self) -> Value {
         serde_json::json!({ "secret": self.secret, "field": "accessToken" })
     }

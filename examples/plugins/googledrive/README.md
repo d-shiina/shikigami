@@ -1,4 +1,4 @@
-# 見本のカスタム ノード `googledrive`（Google ドライブ）
+# 見本のプラグイン `googledrive`（Google ドライブ）
 
 パソコン版 Google ドライブを入れていない PC や、サーバーで無人実行する PC からでも、Drive API で Google ドライブのファイルを扱うノードを追加します。Node.js、依存なし。Writer に同梱しています。
 

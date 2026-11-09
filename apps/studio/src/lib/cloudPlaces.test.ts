@@ -49,6 +49,19 @@ describe("cloudPlace", () => {
     });
     expect(serviceOf(place)).toBe(GOOGLE_DRIVE);
     expect(cloudPlace(BOX, { label: "Box", secret: "Box", redirectUrl: "u", folder: "0", pattern: "" })).not.toHaveProperty("pattern");
+    // Files picked in the folder take the place of a name pattern; an ID keeps the folder's name for people.
+    const picked = cloudPlace(BOX, {
+      label: "Box",
+      secret: "Box",
+      redirectUrl: "u",
+      folder: "123",
+      folderName: "経理/受注",
+      pattern: "*.xlsx",
+      files: ["受注.xlsx"],
+    });
+    expect(picked).toMatchObject({ folder: "123", folderName: "経理/受注", files: ["受注.xlsx"] });
+    expect(picked).not.toHaveProperty("pattern");
+    expect(cloudPlace(BOX, { label: "Box", secret: "Box", redirectUrl: "u", folder: "経理", folderName: "経理" })).not.toHaveProperty("folderName");
   });
 });
 

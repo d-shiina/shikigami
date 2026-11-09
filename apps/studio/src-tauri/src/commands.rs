@@ -1405,6 +1405,66 @@ pub async fn test_step(
     })
 }
 
+/// 「参照…」 in the cloud storage dialog: signs in with `secret` (asking a
+/// person only when there is no sign-in to refresh yet) and lists `folder`
+/// of the storage with its plugin (`<service>.list`).
+#[tauri::command]
+pub async fn cloud_list(
+    state: State<'_, AppState>,
+    service: String,
+    secret: String,
+    sign_in: Option<Map<String, Value>>,
+    folder: String,
+) -> CmdResult<Value> {
+    if let Some(mut params) = sign_in {
+        params.insert("secret".into(), Value::String(secret.clone()));
+        let mut step = spellsheet_core::Step::new("oauth.signIn");
+        step.params = params;
+        run_alone(&state, step).await?;
+    }
+    let mut step = spellsheet_core::Step::new(format!("{service}.list"));
+    step.params.insert(
+        "account".into(),
+        serde_json::json!({ "secret": secret, "field": "accessToken" }),
+    );
+    step.params.insert("folder".into(), Value::String(folder));
+    run_alone(&state, step).await
+}
+
+/// Runs one step outside any flow and returns its result (or its error).
+async fn run_alone(state: &AppState, step: spellsheet_core::Step) -> CmdResult<Value> {
+    let single = spellsheet_runtime::single::flow_for(
+        step,
+        state.runtime.registry(),
+        &Map::new(),
+        spellsheet_runtime::single::Context::default(),
+    )
+    .map_err(|m| err("UNKNOWN_STEP_TYPE", m))?;
+    let to_payload = |e: spellsheet_runtime::RunError| ErrorPayload {
+        code: e.code,
+        message: e.message,
+        details: e.details,
+    };
+    let handle = state
+        .runtime
+        .start(
+            single.flow.clone(),
+            RunOptions {
+                origin: RunOrigin::new(RunTrigger::Studio),
+                ..RunOptions::default()
+            },
+        )
+        .map_err(to_payload)?;
+    let report = handle
+        .wait()
+        .await
+        .map_err(|e| err("INTERNAL", e.message))?;
+    match report.error {
+        Some(e) => Err(to_payload(e)),
+        None => Ok(single.result(&report.outputs)),
+    }
+}
+
 /// Records a started run, sends its events to the windows as `event`, and
 /// keeps it in the registry (for `stop_run`) until it ends.
 pub(crate) fn track_run(

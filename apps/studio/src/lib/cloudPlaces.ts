@@ -5,19 +5,19 @@
 //
 // It is a setting of the flow's folder (config/cloud.json), not nodes: the
 // nodes keep reading input/受注.xlsx and writing output/請求書.pdf, and a
-// whole run first has the custom node (box.downloadFolder,
+// whole run first has the plugin (box.downloadFolder,
 // googledrive.downloadFolder, onedrive.downloadFolder) fetch the folder's
 // files into input/, then after the last node has it upload each file the run
 // wrote to output/. Whoever receives the flow changes only this setting.
 // The run signs in first (oauth.signIn), asking a person only the first time.
 import type { CloudFile, CloudPlace } from "@spellsheet/schema";
 
-/** A cloud storage reached through its API, and the custom node that does it. */
+/** A cloud storage reached through its API, and the plugin that does it. */
 export interface CloudService {
   id: "box" | "googledrive" | "onedrive";
-  /** The custom node (extension) that reaches the storage. */
+  /** The plugin (code: extension) that reaches the storage. */
   plugin: string;
-  /** Its node that fetches a folder; Writer tells from it whether the custom node is installed. */
+  /** Its node that fetches a folder; Writer tells from it whether the plugin is installed. */
   download: string;
   /** For oauth.signIn. */
   authorizeUrl: string;
@@ -115,23 +115,35 @@ export const serviceOf = (place: CloudPlace | null | undefined): CloudService | 
   place ? CLOUD_SERVICES.find((s) => s.plugin === place.service) : undefined;
 
 /** A place in `service`, as config/cloud.json keeps it. */
-export function cloudPlace(service: CloudService, args: { label: string; secret: string; redirectUrl: string; folder: string; pattern?: string }): CloudPlace {
+export function cloudPlace(
+  service: CloudService,
+  args: { label: string; secret: string; redirectUrl: string; folder: string; folderName?: string; pattern?: string; files?: string[] },
+): CloudPlace {
   const pattern = args.pattern?.trim() ?? "";
+  const folderName = args.folderName?.trim() ?? "";
+  const files = args.files ?? [];
   return {
     service: service.plugin,
     label: args.label,
     secret: args.secret,
-    signIn: {
-      authorizeUrl: service.authorizeUrl,
-      tokenUrl: service.tokenUrl,
-      redirectUrl: args.redirectUrl,
-      ...(service.scope ? { scope: service.scope } : {}),
-      ...(service.authorizeParams ? { authorizeParams: service.authorizeParams } : {}),
-    },
+    signIn: signInParams(service, args.redirectUrl),
     folder: args.folder,
-    ...(pattern ? { pattern } : {}),
+    ...(folderName && folderName !== args.folder ? { folderName } : {}),
+    ...(files.length > 0 ? { files } : pattern ? { pattern } : {}),
   };
 }
+
+/** What the run passes to oauth.signIn besides the secret. */
+export const signInParams = (service: CloudService, redirectUrl: string): Record<string, unknown> => ({
+  authorizeUrl: service.authorizeUrl,
+  tokenUrl: service.tokenUrl,
+  redirectUrl,
+  ...(service.scope ? { scope: service.scope } : {}),
+  ...(service.authorizeParams ? { authorizeParams: service.authorizeParams } : {}),
+});
+
+/** The folder for people (経理/受注). */
+export const folderNameOf = (place: CloudPlace) => place.folderName || place.folder;
 
 /**
  * The text of config/cloud.json with `side` set to `place` (or removed, for

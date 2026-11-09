@@ -2895,7 +2895,7 @@ async fn a_started_step_says_how_long_it_waits_and_when_it_gives_up() {
     );
 }
 
-/// A stand-in for a cloud storage custom node: `downloadFolder` writes
+/// A stand-in for a cloud storage plugin: `downloadFolder` writes
 /// 受注.csv into `to`, `upload` records what it was sent.
 struct FakeStorage {
     calls: Arc<Mutex<Vec<(String, Value)>>>,

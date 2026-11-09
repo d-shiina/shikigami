@@ -102,7 +102,10 @@ const shareId = (link) => `u!${Buffer.from(link.trim(), "utf8").toString("base64
 /** The drive item a path or a link names; `drive` and `id` address it from then on. */
 async function item(token, text, want, signal) {
   let response;
-  if (isLink(text)) {
+  const ref = text.trim().match(/^drives\/([^/]+)\/items\/([^/]+)$/);
+  if (ref) {
+    response = await graph(token, `${GRAPH}/drives/${encodeURIComponent(ref[1])}/items/${encodeURIComponent(ref[2])}?$select=${SELECT}`, { signal });
+  } else if (isLink(text)) {
     response = await graph(token, `${GRAPH}/shares/${shareId(text)}/driveItem?$select=${SELECT}`, { signal });
   } else {
     const names = parts(text);
@@ -174,6 +177,21 @@ function placeIn(to, name) {
   return path;
 }
 
+/** With `names`, only those files of the folder (case ignored), and each must be there. */
+function pickNamed(files, names, nameOf, folder) {
+  if (!Array.isArray(names) || names.length === 0) return files;
+  const wanted = new Map(names.map((n) => [String(n).toLowerCase(), String(n)]));
+  const picked = files.filter((e) => wanted.has(nameOf(e).toLowerCase()) || wanted.has(e.name.toLowerCase()));
+  const found = new Set(picked.flatMap((e) => [nameOf(e).toLowerCase(), e.name.toLowerCase()]));
+  const missing = [...wanted].filter(([key]) => !found.has(key)).map(([, n]) => n);
+  if (missing.length > 0) {
+    throw new StepError("FILE_NOT_FOUND", `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in ${folder}`, {
+      hint: `Files there: ${files.map((e) => e.name).slice(0, 20).join(", ") || "(none)"}`,
+    });
+  }
+  return picked;
+}
+
 /** Refuses before anything is fetched when a file to be saved is already there. */
 async function refuseExisting(paths) {
   for (const path of paths) {
@@ -192,9 +210,14 @@ const actions = {
     const where = await item(token, folder ?? "", "folder", signal);
     const keep = matcher(pattern);
     const base = isLink(folder ?? "") ? undefined : parts(folder ?? "").join("/");
+    // Under a link there is no path to give: `ref` (drives/<drive>/items/<id>) names the item again.
     return (await children(token, where, signal))
       .filter((e) => keep(e.name))
-      .map((e) => shape(e, base === undefined ? undefined : base ? `${base}/${e.name}` : e.name));
+      .map((e) =>
+        base === undefined
+          ? { ...shape(e), ref: `drives/${e.parentReference?.driveId ?? where.drive}/items/${e.id}` }
+          : shape(e, base ? `${base}/${e.name}` : e.name),
+      );
   },
 
   async download({ account, file, to, overwrite = false, timeoutMs = 120000 }) {
@@ -216,12 +239,12 @@ const actions = {
     return { path: to, ...shape(meta), size: bytes.length };
   },
 
-  async downloadFolder({ account, folder, to, pattern, overwrite = false, timeoutMs = 600000 }) {
+  async downloadFolder({ account, folder, to, pattern, names, overwrite = false, timeoutMs = 600000 }) {
     const token = tokenOf(account);
     const signal = AbortSignal.timeout(timeoutMs);
     const keep = matcher(pattern);
     const where = await item(token, folder ?? "", "folder", signal);
-    const files = (await children(token, where, signal)).filter((e) => !e.folder && keep(e.name));
+    const files = pickNamed((await children(token, where, signal)).filter((e) => !e.folder && keep(e.name)), names, (e) => e.name, folder);
     const paths = files.map((e) => placeIn(to, e.name));
     if (!overwrite) await refuseExisting(paths);
     const saved = [];

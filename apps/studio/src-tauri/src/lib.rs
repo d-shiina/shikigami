@@ -253,6 +253,7 @@ pub fn run() {
             commands::step_times,
             commands::run_flow,
             commands::test_step,
+            commands::cloud_list,
             commands::list_test_cases,
             commands::save_test_case,
             commands::delete_test_case,

@@ -170,6 +170,21 @@ function placeIn(to, name) {
   return path;
 }
 
+/** With `names`, only those files of the folder (case ignored), and each must be there. */
+function pickNamed(files, names, nameOf, folder) {
+  if (!Array.isArray(names) || names.length === 0) return files;
+  const wanted = new Map(names.map((n) => [String(n).toLowerCase(), String(n)]));
+  const picked = files.filter((e) => wanted.has(nameOf(e).toLowerCase()) || wanted.has(e.name.toLowerCase()));
+  const found = new Set(picked.flatMap((e) => [nameOf(e).toLowerCase(), e.name.toLowerCase()]));
+  const missing = [...wanted].filter(([key]) => !found.has(key)).map(([, n]) => n);
+  if (missing.length > 0) {
+    throw new StepError("FILE_NOT_FOUND", `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in ${folder}`, {
+      hint: `Files there: ${files.map((e) => e.name).slice(0, 20).join(", ") || "(none)"}`,
+    });
+  }
+  return picked;
+}
+
 /** Refuses before anything is fetched when a file to be saved is already there. */
 async function refuseExisting(paths) {
   for (const path of paths) {
@@ -215,11 +230,11 @@ const actions = {
     return { path: to, ...shape(meta), size: bytes.length };
   },
 
-  async downloadFolder({ account, folder, to, pattern, overwrite = false, timeoutMs = 600000 }) {
+  async downloadFolder({ account, folder, to, pattern, names, overwrite = false, timeoutMs = 600000 }) {
     const token = tokenOf(account);
     const signal = AbortSignal.timeout(timeoutMs);
     const keep = matcher(pattern);
-    const files = (await items(token, await folderId(token, folder, signal), signal)).filter((e) => e.type === "file" && keep(e.name));
+    const files = pickNamed((await items(token, await folderId(token, folder, signal), signal)).filter((e) => e.type === "file" && keep(e.name)), names, (e) => e.name, folder);
     const paths = files.map((e) => placeIn(to, e.name));
     if (!overwrite) await refuseExisting(paths);
     const saved = [];

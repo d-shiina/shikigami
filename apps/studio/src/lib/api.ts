@@ -306,7 +306,7 @@ export const extensionsApi = {
   list: () => call<ExtensionList>("list_extensions"),
   /** Downloads and checks; installs nothing. */
   stage: (source: string) => call<ExtensionPreview>("stage_extension", { source }),
-  /** A custom node that comes with Writer (plugins\\<name>), staged like any other. */
+  /** A plugin that comes with Writer (plugins\\<name>), staged like any other. */
   stageShipped: (name: string) => call<ExtensionPreview>("stage_shipped_extension", { name }),
   stageFromRegistry: (name: string, registry: string) => call<ExtensionPreview>("stage_extension_from_registry", { name, registry }),
   stageUpdate: (name: string) => call<ExtensionPreview>("stage_extension_update", { name }),

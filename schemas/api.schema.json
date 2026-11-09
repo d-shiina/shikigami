@@ -4125,7 +4125,7 @@
       "type": "object",
       "properties": {
         "service": {
-          "description": "The custom node that reaches the storage (`box`, `googledrive`,\n`onedrive`): its `<service>.downloadFolder` and `<service>.upload`\ndo the work.",
+          "description": "The plugin that reaches the storage (`box`, `googledrive`,\n`onedrive`): its `<service>.downloadFolder` and `<service>.upload`\ndo the work.",
           "type": "string"
         },
         "label": {
@@ -4133,7 +4133,7 @@
           "type": "string"
         },
         "secret": {
-          "description": "The OAuth secret the custom node signs in with (its access token is\npassed as `{ \"secret\": …, \"field\": \"accessToken\" }`).",
+          "description": "The OAuth secret the plugin signs in with (its access token is\npassed as `{ \"secret\": …, \"field\": \"accessToken\" }`).",
           "type": "string"
         },
         "signIn": {
@@ -4145,12 +4145,23 @@
           "additionalProperties": true
         },
         "folder": {
-          "description": "The folder: a path from the storage's top (`経理/受注`), its ID or a\nlink to it, as the custom node takes them.",
+          "description": "The folder: a path from the storage's top (`経理/受注`), its ID or a\nlink to it, as the plugin takes them.",
+          "type": "string"
+        },
+        "folderName": {
+          "description": "The folder as people know it (`経理/受注`), for the log and Writer,\nwhen `folder` is an ID or a link. Defaults to `folder`.",
           "type": "string"
         },
         "pattern": {
           "description": "Input only: fetch the files whose names match (`*.xlsx`). Empty:\nevery file directly in the folder.",
           "type": "string"
+        },
+        "files": {
+          "description": "Input only: fetch just these files of the folder, by name; a missing\none fails the run. Empty: every file (that matches `pattern`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

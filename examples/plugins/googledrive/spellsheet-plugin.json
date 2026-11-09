@@ -147,7 +147,7 @@
       "action": "downloadFolder",
       "label": "Google ドライブのフォルダーをダウンロード",
       "summary": "Google ドライブのフォルダーにあるファイルをこの PC のフォルダーに保存します",
-      "description": "Downloads every file directly in a Google ドライブ folder (the ones whose names match `pattern`, e.g. \"*.xlsx\") into the folder `to` on this PC (relative paths are in the flow's folder, e.g. \"input\"). `folder` is a folder's address or ID, or a path from My Drive such as \"経理/受注\". Google Sheets, Docs and Slides are saved as .xlsx, .docx and .pptx. Files already there are replaced only with `overwrite: true` (checked before anything is downloaded). Output: { folder, files: [{ path, id, name, size, modifiedAt }] }. A flow folder whose input is set to cloud storage (config/cloud.json) runs this before the first node.",
+      "description": "Downloads every file directly in a Google ドライブ folder (the ones whose names match `pattern`, e.g. \"*.xlsx\") into the folder `to` on this PC (relative paths are in the flow's folder, e.g. \"input\"). `folder` is a folder's address or ID, or a path from My Drive such as \"経理/受注\". Google Sheets, Docs and Slides are saved as .xlsx, .docx and .pptx. `names` keeps only those files (case ignored; one that is not in the folder is an error). Files already there are replaced only with `overwrite: true` (checked before anything is downloaded). Output: { folder, files: [{ path, id, name, size, modifiedAt }] }. A flow folder whose input is set to cloud storage (config/cloud.json) runs this before the first node.",
       "params": {
         "type": "object",
         "properties": {
@@ -172,6 +172,14 @@
             "type": "string",
             "title": "名前の絞り込み",
             "description": "例：*.xlsx。空欄の場合はすべて"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "ファイル",
+            "description": "取得するファイルの名前。空の場合は（名前の絞り込みに合う）すべて。無いファイルがあるとエラー"
           },
           "overwrite": {
             "type": "boolean",

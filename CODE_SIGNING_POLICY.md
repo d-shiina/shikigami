@@ -30,7 +30,7 @@ This program will not transfer any information to other networked systems unless
 SpellSheet が自分から外部に送る情報はありません。通信するのは次の場合だけです。
 
 - **Update check**: at startup (and with "Check again" in Settings), Writer downloads `latest.json` from this repository's GitHub Releases. No user data, flows or files are sent. The request is an ordinary download from GitHub, and [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) applies
-- **Custom node list**: when you open the list of custom nodes, Writer downloads the public list from `spellsheet.github.io`. No user data is sent
+- **Plugin list**: when you open the list of plugins, Writer downloads the public list from `spellsheet.github.io`. No user data is sent
 - **What you set up yourself**: flows send data only to the sites, mail servers and cloud services written in them (for example Microsoft 365 or Box), and the AI chat in Writer uses the AI service you signed in to (for example Claude or ChatGPT). The privacy policies of those services apply
 
 Execution logs, flows, screenshots for run manuals and credentials stay on your PC. See [docs/design/personal-data.md](docs/design/personal-data.md) for how personal data in logs is handled.

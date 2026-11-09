@@ -56,6 +56,7 @@ before(async () => {
     if (req.headers.authorization !== "Bearer good-token") return json(401, { error: { code: "InvalidAuthenticationToken", message: "Access token is empty." } });
     let m;
     if (path === "/api/me/drive/root") return json(200, ROOT);
+    if ((m = path.match(/^\/api\/drives\/([^/]+)\/items\/([^/:]+)$/))) return ITEMS[m[2]] ? json(200, view(ITEMS[m[2]])) : json(404, { error: { code: "itemNotFound" } });
     if ((m = path.match(/^\/api\/me\/drive\/root:\/(.+):$/))) {
       const id = PATHS[m[1]];
       return id ? json(200, view(ITEMS[id])) : json(404, { error: { code: "itemNotFound", message: "The resource could not be found." } });
@@ -147,7 +148,7 @@ test("lists a folder named by its path or by a SharePoint link", async () => {
   assert.equal(answer.error, undefined, JSON.stringify(answer.error));
   assert.deepEqual(answer.result, [{ id: "x100", name: "受注.xlsx", type: "file", size: 5, modifiedAt: "2026-11-09T00:00:00Z", path: "経理/受注/受注.xlsx" }]);
   const shared = await p.call("list", { account: "good-token", folder: SHARED_FOLDER });
-  assert.deepEqual(shared.result, [{ id: "c200", name: "共有.csv", type: "file", size: 2 }]);
+  assert.deepEqual(shared.result, [{ id: "c200", name: "共有.csv", type: "file", size: 2, ref: "drives/sp/items/c200" }]);
   p.close();
 });
 
@@ -174,6 +175,11 @@ test("downloads the files of a OneDrive folder or a SharePoint one", async () =>
   assert.equal(mine.error, undefined, JSON.stringify(mine.error));
   assert.deepEqual(mine.result.files.map((f) => f.name), ["受注.xlsx"]);
   assert.equal(readFileSync(join(to, "受注.xlsx"), "utf8"), "BOOK!");
+  const picked = await p.call("downloadFolder", { account: "good-token", folder: "drives/me1/items/f11", to, names: ["メモ.TXT"] });
+  assert.equal(picked.error, undefined, JSON.stringify(picked.error));
+  assert.deepEqual(picked.result.files.map((f) => f.name), ["メモ.txt"]);
+  const missing = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, names: ["ない.xlsx"], overwrite: true });
+  assert.equal(missing.error.data.code, "FILE_NOT_FOUND");
   const shared = await p.call("downloadFolder", { account: "good-token", folder: SHARED_FOLDER, to });
   assert.equal(shared.error, undefined, JSON.stringify(shared.error));
   assert.equal(readFileSync(join(to, "共有.csv"), "utf8"), "a,");

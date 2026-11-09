@@ -156,6 +156,8 @@ test("downloads the files of a folder that match, checking for files already the
   const all = await p.call("downloadFolder", { account: "good-token", folder: "11", to });
   assert.equal(all.error.data.code, "FILE_EXISTS");
   assert.throws(() => readFileSync(join(to, "メモ.txt")));
+  const named = await p.call("downloadFolder", { account: "good-token", folder: "11", to, names: ["メモ.txt"], overwrite: true });
+  assert.deepEqual(named.result.files.map((f) => f.name), ["メモ.txt"]);
   const replaced = await p.call("downloadFolder", { account: "good-token", folder: "11", to, overwrite: true });
   assert.deepEqual(replaced.result.files.map((f) => f.name), ["受注.xlsx", "メモ.txt"]);
   p.close();

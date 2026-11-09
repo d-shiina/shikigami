@@ -1,20 +1,20 @@
-# Custom nodes
+# Plugins
 
 English | [日本語](ja/extensions.md)
 
-Custom nodes are nodes added to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
+Plugins add features and nodes to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
 
 - An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Writer and runs keep going; only its node fails.
 - Its nodes work like built-in ones: they are listed in the palette, their settings form is built from what the extension declares, and validation, retries, timeouts and secret masking apply as usual.
 - AI clients get them too: MCP `list_step_types` / `get_step_schema` and Writer's "save the spec" include extension nodes.
 
-Each installable package of custom nodes is called an *extension* on this page; Writer shows them as **Custom nodes**, and the code and the CLI call them plugins. The design is in [design/plugins.md](design/plugins.md) (Japanese).
+Writer shows them as **Plugins**; the code calls them plugins and extensions, and this page says extension for one installable package. The design is in [design/plugins.md](design/plugins.md) (Japanese).
 
 ## Using extensions
 
-### Writer's Custom nodes page
+### Writer's Plugins page
 
-Open it from Settings (Custom nodes → Manage) or from the node palette (Add custom nodes, bottom left). It lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the page offers a Restart button).
+Open it from **Plugins** in the sidebar or from the node palette (Add plugins, bottom left). It lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the page offers a Restart button).
 
 An extension's nodes are listed in the palette under the extension's name, with its tag (e.g. "AI-OCR") before node names; their settings form is built from the manifest's JSON Schema.
 
@@ -51,7 +51,7 @@ A flow using a node of a turned-off extension fails validation with `PLUGIN_NOT_
 
 ### Registry
 
-Writer's Catalog tab lists the custom nodes in the registries (JSON index files). By default that is the **official SpellSheet registry** (`https://spellsheet.github.io/plugins/index.json`, repository [spellsheet/plugins](https://github.com/spellsheet/plugins)). Add your organisation's or community's, or remove the official one; when several list the same name, the one higher up wins. No server is needed: a file in a Git repository or GitHub Pages is enough.
+Writer's Catalog tab lists the plugins in the registries (JSON index files). By default that is the **official SpellSheet registry** (`https://spellsheet.github.io/plugins/index.json`, repository [spellsheet/plugins](https://github.com/spellsheet/plugins)). Add your organisation's or community's, or remove the official one; when several list the same name, the one higher up wins. No server is needed: a file in a Git repository or GitHub Pages is enough.
 
 ```powershell
 spellsheet plugin registry                                   # the registries and what they list

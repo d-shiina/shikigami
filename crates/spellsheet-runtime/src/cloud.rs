@@ -2,7 +2,7 @@
 //! (`config/cloud.json`, see [`spellsheet_core::cloud`]): before the first
 //! node the input folder's files are fetched into `input/`, and after the
 //! last one the files the run wrote to `output/` are sent to the output
-//! folder. The custom node that reaches the storage does the work
+//! folder. The plugin that reaches the storage does the work
 //! (`box.downloadFolder`, `box.upload`), signed in with `oauth.signIn` first
 //! when the setting says how.
 
@@ -52,16 +52,23 @@ fn hidden(name: &str) -> bool {
 /// Fetches the input folder's files into `input/`, replacing files of the
 /// same name.
 pub(crate) async fn fetch(executor: &Executor, place: &CloudPlace) -> Result<(), Interrupt> {
-    let what = format!("{} の {} から input/ に取得", place.name(), place.folder);
+    let what = format!(
+        "{} の {} から input/ に取得",
+        place.name(),
+        place.folder_name()
+    );
     sign_in(executor, place, &what).await?;
     let mut params = json!({
         "account": place.account(),
-        "folder": place.folder,
+        "folder": place.folder_name(),
         "to": "input",
         "overwrite": true,
     });
     if !place.pattern.trim().is_empty() {
         params["pattern"] = Value::String(place.pattern.trim().to_owned());
+    }
+    if !place.files.is_empty() {
+        params["names"] = json!(place.files);
     }
     let result = call(executor, place, "downloadFolder", params, &what).await?;
     let names: Vec<String> = result
@@ -81,13 +88,13 @@ pub(crate) async fn fetch(executor: &Executor, place: &CloudPlace) -> Result<(),
             format!(
                 "{} の {} に取得するファイルがありませんでした",
                 place.name(),
-                place.folder
+                place.folder_name()
             )
         } else {
             format!(
                 "{} の {} から input/ に {} ファイルを取得しました（{}）",
                 place.name(),
-                place.folder,
+                place.folder_name(),
                 names.len(),
                 names.join("、")
             )
@@ -123,14 +130,14 @@ pub(crate) async fn send(
     let what = format!(
         "output/ のファイルを {} の {} に送信",
         place.name(),
-        place.folder
+        place.folder_name()
     );
     sign_in(executor, place, &what).await?;
     for name in &written {
         let params = json!({
             "account": place.account(),
             "path": format!("output/{name}"),
-            "folder": place.folder,
+            "folder": place.folder_name(),
             "overwrite": true,
         });
         call(executor, place, "upload", params, &what).await?;
@@ -142,7 +149,7 @@ pub(crate) async fn send(
             "output/ の {} ファイルを {} の {} に送りました（{}）",
             written.len(),
             place.name(),
-            place.folder,
+            place.folder_name(),
             written.join("、")
         ),
     );
@@ -177,14 +184,14 @@ async fn call(
             RunError {
                 details: Some(json!({
                     "hint": format!(
-                        "Install the {} custom node (Writer: 拡張機能), or remove the setting in {CLOUD_PATH}.",
+                        "Install the {} plugin (Writer: プラグイン), or remove the setting in {CLOUD_PATH}.",
                         place.service
                     ),
                 })),
                 ..RunError::new(
                     "CLOUD_NODE_MISSING",
                     format!(
-                        "{} のカスタム ノード（{}）が入っていないため、{what}できません",
+                        "{} のプラグイン（{}）が入っていないため、{what}できません",
                         place.name(),
                         place.service
                     ),

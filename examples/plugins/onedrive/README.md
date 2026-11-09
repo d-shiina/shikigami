@@ -1,4 +1,4 @@
-# 見本のカスタム ノード `onedrive`（OneDrive・SharePoint）
+# 見本のプラグイン `onedrive`（OneDrive・SharePoint）
 
 OneDrive アプリで同期していない PC や、サーバーで無人実行する PC からでも、Microsoft Graph で OneDrive と SharePoint のファイルを扱うノードを追加します。Node.js、依存なし。Writer に同梱しています。
 

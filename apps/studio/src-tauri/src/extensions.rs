@@ -128,7 +128,7 @@ pub async fn stage_shipped_extension(ext: State<'_, Extensions>, name: String) -
     let dir = shipped_extension(&name).ok_or_else(|| {
         err(
             "EXTENSION_NOT_SHIPPED",
-            format!("カスタム ノード「{name}」は Writer に入っていません"),
+            format!("プラグイン「{name}」は Writer に入っていません"),
         )
     })?;
     let names = builtin_names();

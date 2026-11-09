@@ -58,7 +58,7 @@ Writer's UI is available in English and Japanese (the language menu under "Spell
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
 | [docs/adapters.md](docs/adapters.md) | Where each node type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
-| [docs/extensions.md](docs/extensions.md) | Custom nodes: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
+| [docs/extensions.md](docs/extensions.md) | Plugins: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding SpellSheet (manifest + separate process) |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Writer's layout rules: where each button goes and how it looks, and why |
 | [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the flow format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
@@ -94,7 +94,7 @@ packages/schema         TypeScript types generated from the Rust types
 packages/browser-adapter  Browser automation process (Playwright)
 plugins/spellsheet      Claude Code plugin (MCP settings + skill)
 schemas/                Generated JSON Schema (public contract)
-examples/               Sample flows (CI runs them end to end) and example custom nodes
+examples/               Sample flows (CI runs them end to end) and example plugins
 ```
 
 `spellsheet-core` depends on no other crate in the workspace; every entry point (Writer, CLI, MCP server, Worker) edits flows through it. The crates that touch Windows APIs keep `unsafe` to the modules that call them; everywhere else it is forbidden by the workspace lints. See [docs/architecture.md](docs/architecture.md) for the full design.

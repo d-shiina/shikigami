@@ -152,6 +152,8 @@ test("downloads the files of a folder, saving Sheets as Excel", async () => {
   assert.equal(answer.error, undefined, JSON.stringify(answer.error));
   assert.deepEqual(answer.result.files.map((f) => f.name), ["受注.xlsx", "集計.xlsx", "メモ.txt"]);
   assert.equal(readFileSync(join(to, "集計.xlsx"), "utf8"), "EXPORT sheet");
+  const named = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, names: ["集計.xlsx"], overwrite: true });
+  assert.deepEqual(named.result.files.map((f) => f.name), ["集計.xlsx"]);
   const again = await p.call("downloadFolder", { account: "good-token", folder: "経理/受注", to, pattern: "*.txt" });
   assert.equal(again.error.data.code, "FILE_EXISTS");
   p.close();

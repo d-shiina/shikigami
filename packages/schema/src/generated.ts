@@ -2289,7 +2289,7 @@ export interface CloudFile {
  */
 export interface CloudPlace {
   /**
-   * The custom node that reaches the storage (`box`, `googledrive`,
+   * The plugin that reaches the storage (`box`, `googledrive`,
    * `onedrive`): its `<service>.downloadFolder` and `<service>.upload`
    * do the work.
    */
@@ -2299,7 +2299,7 @@ export interface CloudPlace {
    */
   label?: string;
   /**
-   * The OAuth secret the custom node signs in with (its access token is
+   * The OAuth secret the plugin signs in with (its access token is
    * passed as `{ "secret": …, "field": "accessToken" }`).
    */
   secret: string;
@@ -2313,14 +2313,24 @@ export interface CloudPlace {
   } | null;
   /**
    * The folder: a path from the storage's top (`経理/受注`), its ID or a
-   * link to it, as the custom node takes them.
+   * link to it, as the plugin takes them.
    */
   folder: string;
+  /**
+   * The folder as people know it (`経理/受注`), for the log and Writer,
+   * when `folder` is an ID or a link. Defaults to `folder`.
+   */
+  folderName?: string;
   /**
    * Input only: fetch the files whose names match (`*.xlsx`). Empty:
    * every file directly in the folder.
    */
   pattern?: string;
+  /**
+   * Input only: fetch just these files of the folder, by name; a missing
+   * one fails the run. Empty: every file (that matches `pattern`).
+   */
+  files?: string[];
 }
 /**
  * A settings file (`config/*.json`) kept out of the flow: values a
