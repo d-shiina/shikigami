@@ -306,6 +306,7 @@ export const extensionsApi = {
   list: () => call<ExtensionList>("list_extensions"),
   /** Downloads and checks; installs nothing. */
   stage: (source: string) => call<ExtensionPreview>("stage_extension", { source }),
+  stageFromRegistry: (name: string, registry: string) => call<ExtensionPreview>("stage_extension_from_registry", { name, registry }),
   stageUpdate: (name: string) => call<ExtensionPreview>("stage_extension_update", { name }),
   install: (id: string) => call<void>("install_extension", { id }),
   discard: (id: string) => call<void>("discard_extension", { id }),

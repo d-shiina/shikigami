@@ -99,6 +99,24 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
     Ok(keep(&ext, &root, staged))
 }
 
+/// Stages the extension `name` from the registry `registry` (the one the
+/// catalog row came from), as [`stage_extension`] does. Only that registry
+/// is read, so the row shown is the one installed.
+#[tauri::command]
+pub async fn stage_extension_from_registry(
+    ext: State<'_, Extensions>,
+    name: String,
+    registry: String,
+) -> CmdResult<Value> {
+    let root = root()?;
+    let names = builtin_names();
+    let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+    let staged = install::stage(&root, Source::Registry { name, registry }, &taken)
+        .await
+        .map_err(install_err)?;
+    Ok(keep(&ext, &root, staged))
+}
+
 /// Keeps `staged` for [`install_extension`] and returns what it is. Only
 /// the latest one waits: an earlier preview the person left is thrown away.
 fn keep(ext: &Extensions, root: &std::path::Path, staged: Staged) -> Value {

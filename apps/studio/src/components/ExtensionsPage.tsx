@@ -636,7 +636,8 @@ export function ExtensionsPage() {
     setError(null);
     try {
       setInstalling(null);
-      setPreview(await extensionsApi.stage(`registry:${x.name}`));
+      // From the registry the row came from, so the one shown is the one installed.
+      setPreview(await extensionsApi.stageFromRegistry(x.name, x.registry));
     } catch (err) {
       setError(message(err));
     }

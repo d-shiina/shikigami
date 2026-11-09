@@ -948,6 +948,11 @@ pub fn parse_registry(index: &Value) -> Result<Vec<RegistryEntry>> {
         if e.url.is_some() && e.version.is_none() {
             problems.push(format!("{at}: url needs the version it holds"));
         }
+        // A zip URL is always pinned: without its hash a replaced release
+        // would be taken. Unpinned entries name a `source` instead.
+        if e.url.is_some() && e.sha256.is_none() {
+            problems.push(format!("{at}: url needs the sha256 of the zip"));
+        }
         if entries[..i].iter().any(|o| o.name == e.name) {
             problems.push(format!("{at}: listed twice"));
         }
@@ -1370,6 +1375,10 @@ mod tests {
         assert!(
             bad(json!({ "name": "a", "label": "A", "url": "https://x/a.zip", "sha256": sha }))
                 .contains("needs the version")
+        );
+        assert!(
+            bad(json!({ "name": "a", "label": "A", "url": "https://x/a.zip", "version": "1.0.0" }))
+                .contains("needs the sha256")
         );
         assert!(
             bad(json!({ "name": "A b", "label": "A", "source": "https://github.com/x/a" }))
