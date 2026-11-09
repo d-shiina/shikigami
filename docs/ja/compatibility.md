@@ -16,7 +16,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 | CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/shikigami-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
 | プラグインのマニフェストと JSON-RPC（`manifestVersion`） | [design/plugins.md](../design/plugins.md) | プラグインの作者 |
 
-約束ではないもの：Studio の画面、内部の Rust API（クレートは公開していません）、ログ・エラーの文章（`message` と `hint` は言い回しを変えます）、`list_step_types` などの説明文、ワークスペース内のローカル領域（取り消し履歴・実行記録の置き方）。
+約束ではないもの：Writer の画面、内部の Rust API（クレートは公開していません）、ログ・エラーの文章（`message` と `hint` は言い回しを変えます）、`list_step_types` などの説明文、ワークスペース内のローカル領域（取り消し履歴・実行記録の置き方）。
 
 ## 2. 変えてよいこと・いけないこと
 
@@ -48,7 +48,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 - ファイル・名前付きの版・バンドルの中のフロー・サブフローは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
 - 移行したフローは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません
 - 未来の版は読み込みません（黙って項目を落とすと、保存したときに消えるため）
-- `metadata` の中の知らないキーは保持します（Studio や外部ツールのメモ用）
+- `metadata` の中の知らないキーは保持します（Writer や外部ツールのメモ用）
 
 テスト：`migrate.rs` に「前の版のファイルが今の版で読めること」のテストを、移行ごとに足してください。
 

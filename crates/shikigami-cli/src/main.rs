@@ -120,11 +120,12 @@ enum Command {
     /// Requests from AI clients waiting for a person's approval.
     #[command(subcommand)]
     Approval(ApprovalCmd),
-    /// The agent: runs flows unattended on this PC (schedules, file
-    /// triggers) so Task Scheduler is not needed.
-    #[command(subcommand)]
-    Agent(agent_cmd::AgentCmd),
-    /// When the agent starts flows by itself: daily, monthly, every few
+    /// The worker: runs flows unattended on this PC (schedules, file
+    /// triggers, jobs from a management server) so Task Scheduler is not
+    /// needed. `agent` (its name before) works too.
+    #[command(subcommand, alias = "agent")]
+    Worker(agent_cmd::AgentCmd),
+    /// When the worker starts flows by itself: daily, monthly, every few
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
@@ -133,7 +134,7 @@ enum Command {
     /// locking it.
     #[command(subcommand)]
     Session(SessionCmd),
-    /// A small reference management server for agents (protocol v1).
+    /// A small reference management server for workers (protocol v1).
     #[command(subcommand)]
     Manager(agent_cmd::ManagerCmd),
     /// This PC's audit trail: who changed, published and ran which flow,
@@ -476,7 +477,7 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
         }
         let dir = install::commit(&root, staged)?;
         eprintln!(
-            "installed into {} (restart Studio and AI clients to use it)",
+            "installed into {} (restart Writer and AI clients to use it)",
             dir.display()
         );
         Ok(ExitCode::SUCCESS)
@@ -568,7 +569,7 @@ fn real_main() -> Result<ExitCode> {
 
     match &cli.command {
         Command::Session(cmd) => return session_cmd(cmd),
-        Command::Agent(cmd) => {
+        Command::Worker(cmd) => {
             return agent_cmd::agent_cmd(open_service()?, &runtime, &workspace(), cmd);
         }
         Command::Schedule(cmd) => {
@@ -1302,7 +1303,7 @@ fn runnable(
             code: "UNATTENDED_NOT_ALLOWED",
             message: format!("the workspace policy keeps {id} from running unattended"),
             hint: Some(
-                "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+                "Run it from Writer, or change \"unattended\" for it in policy.json.".into(),
             ),
         }))
     };

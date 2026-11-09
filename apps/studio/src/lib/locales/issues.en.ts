@@ -22,7 +22,7 @@ export const issuesEn: Record<string, IssueText> = {
   FOREACH_COLLECT_WITHOUT_SAVE_AS: 'To use "Collect results into", also enter "Save result to"',
   INVALID_SECRET_REF: "The secret is not set correctly. Choose it again",
   SECRET_DEFAULT: "Secret variables cannot have an initial value. Register it as a secret instead",
-  UNKNOWN_STEP_TYPE: "This kind of node is not available in this Studio",
+  UNKNOWN_STEP_TYPE: "This kind of node is not available in this Writer",
   DEPRECATED_STEP_TYPE: "This node is an old kind. Replace it with the new one",
   PLUGIN_NOT_INSTALLED: "The plugin this node needs is not installed",
   INVALID_RETRY: "Set the retry count to 1 or more",

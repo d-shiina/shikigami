@@ -409,7 +409,7 @@ impl Cx<'_> {
                         format!("{path}/target"),
                         None,
                     );
-                    self.hint("Pick it on the screen in Studio, or remove the part.".to_owned());
+                    self.hint("Pick it on the screen in Writer, or remove the part.".to_owned());
                 }
             } else if !part.target.is_object() {
                 self.error(
@@ -450,7 +450,7 @@ impl Cx<'_> {
                     format!("{path}/default"),
                     None,
                 );
-                self.hint("Remove `default`. For passwords, register a secret (Studio → シークレット) and type it with { \"secret\": \"<name>\", \"field\": \"password\" } as the value of browser.fill.");
+                self.hint("Remove `default`. For passwords, register a secret (Writer → シークレット) and type it with { \"secret\": \"<name>\", \"field\": \"password\" } as the value of browser.fill.");
             }
             if let Some(default) = &var.default
                 && !var.var_type.accepts(default)
@@ -543,7 +543,7 @@ impl Cx<'_> {
             );
             self.error("PLUGIN_NOT_INSTALLED", message, format!("{path}/type"), id);
             self.hint(format!(
-                "Ask the user to install (or turn on) the '{namespace}' extension ({range}) in Studio (拡張機能), or run `spellsheet plugin install <zip | URL | GitHub repository>`, then restart; `spellsheet plugin list` shows what is installed and turned off. The step is kept as it is until then."
+                "Ask the user to install (or turn on) the '{namespace}' extension ({range}) in Writer (拡張機能), or run `spellsheet plugin install <zip | URL | GitHub repository>`, then restart; `spellsheet plugin list` shows what is installed and turned off. The step is kept as it is until then."
             ));
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);
@@ -940,7 +940,7 @@ impl Cx<'_> {
                     id,
                 );
                 self.hint(format!(
-                    "A person picks it in Studio (select the part '{name}' and press 画面から選ぶ, or 画面から切り取る for a picture). Leave the node as it is."
+                    "A person picks it in Writer (select the part '{name}' and press 画面から選ぶ, or 画面から切り取る for a picture). Leave the node as it is."
                 ));
                 continue;
             }

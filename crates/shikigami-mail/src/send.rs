@@ -188,7 +188,7 @@ pub async fn send(input: &ActionInput, via: Via, draft: Draft) -> Result<Value, 
                     "secret": secret.name,
                     "sites": secret.sites,
                     "url": site,
-                    "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
+                    "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Writer."),
                 })))
             };
             let user = match input.params.get("user").filter(|v| !v.is_null()) {

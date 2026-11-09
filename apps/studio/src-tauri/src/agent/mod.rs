@@ -37,12 +37,12 @@ const STDERR_TAIL: usize = 2000;
 pub(crate) const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
-You are an AI called from inside SpellSheet Studio (RPA for Windows). You are talking with the person using Studio.
+You are an AI called from inside SpellSheet Writer (RPA for Windows). You are talking with the person using Writer.
 - Read, edit and test-run flows only with the shikigami MCP tools. Files and commands are not available.
-- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Studio shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Studio's review, where a person checks what they do.
-- The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Studio has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
+- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Writer shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Writer's review, where a person checks what they do.
+- The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Writer has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
 - When asked to fix something that was sent back, read the feedback in get_flow (details in get_review), fix it as noted, and briefly report what you fixed.
-- Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Studio.
+- Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Writer.
 - Reply briefly, in the language the person writes in (Japanese or English): what you did, and what the person should do next.";
 
 type CmdResult<T> = Result<T, ErrorPayload>;
@@ -322,7 +322,7 @@ pub fn agent_info() -> AgentInfo {
         )),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
         (Some(_), None) => Some(
-            "shikigami コマンド（MCP サーバー）が見つかりません。Studio と同じフォルダに置いてください。"
+            "shikigami コマンド（MCP サーバー）が見つかりません。Writer と同じフォルダに置いてください。"
                 .to_owned(),
         ),
         _ => None,
@@ -1094,7 +1094,7 @@ fn with_context(message: &str, flow: Option<&FlowRef>) -> String {
                 .unwrap_or_default();
             let empty = if s.empty { ", no steps yet" } else { "" };
             format!(
-                "(Open in Studio: flow \"{}\" id={}{empty}{step})\n\n{message}",
+                "(Open in Writer: flow \"{}\" id={}{empty}{step})\n\n{message}",
                 s.name, s.id
             )
         }
@@ -1596,7 +1596,7 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s))
-                .starts_with("(Open in Studio: flow \"受注\" id=scn_1)")
+                .starts_with("(Open in Writer: flow \"受注\" id=scn_1)")
         );
         let s = FlowRef {
             step_id: Some("stp_9".into()),
@@ -1604,7 +1604,7 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s)).starts_with(
-                "(Open in Studio: flow \"受注\" id=scn_1, selected step stepId=stp_9)"
+                "(Open in Writer: flow \"受注\" id=scn_1, selected step stepId=stp_9)"
             )
         );
         let s = FlowRef {
@@ -1614,7 +1614,7 @@ mod tests {
         };
         assert!(
             with_context("作って", Some(&s))
-                .starts_with("(Open in Studio: flow \"受注\" id=scn_1, no steps yet)")
+                .starts_with("(Open in Writer: flow \"受注\" id=scn_1, no steps yet)")
         );
         assert_eq!(with_context("直して", None), "直して");
     }

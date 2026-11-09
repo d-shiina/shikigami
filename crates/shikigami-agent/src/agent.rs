@@ -70,7 +70,7 @@ pub struct ScheduleStatus {
     pub problem: Option<String>,
 }
 
-/// What `spellsheet agent status` shows.
+/// What `spellsheet worker status` shows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStatus {

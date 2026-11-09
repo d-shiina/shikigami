@@ -25,14 +25,14 @@ SpellSheet flows drive web pages. The Rust Runtime starts the Node.js + Playwrig
 pnpm demo:browser
 ```
 
-This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the flow contains no password (it also shows under 🔑 Secrets in Studio).
+This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the flow contains no password (it also shows under 🔑 Secrets in Writer).
 
 1. An order clerk and a stock clerk work **at the same time**: the order clerk logs in and reads the order list while the stock clerk reads the stock list in another window (`control.parallel` with separate `context`s)
 2. For each open order, press "Ship" and wait for the confirmation (`control.forEach` + `control.if`)
 3. Output the shipped order numbers, the total amount and the out-of-stock items
 4. The login is kept with `session`, so **the second run skips the login page**
 
-The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same flow.
+The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Writer can load and run the same flow.
 
 ## Nodes
 
@@ -149,7 +149,7 @@ For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that n
 
 ### Recording
 
-**Record** in the dock under the flow diagram asks where to record. Choose **Browser** and a URL (filled from the flow's first `browser.open`): a browser opens with a red bar at the top, and Studio writes down what you do until you press the bar. While a run's browser is open, recording happens in that browser instead.
+**Record** in the dock under the flow diagram asks where to record. Choose **Browser** and a URL (filled from the flow's first `browser.open`): a browser opens with a red bar at the top, and Writer writes down what you do until you press the bar. While a run's browser is open, recording happens in that browser instead.
 
 - Clicks (right and double clicks too) become `browser.click`, text you type becomes one `browser.fill` per field, choices become `browser.select`, checkboxes `browser.check`, Enter/Tab/Escape `browser.press`, and a URL typed in the address bar `browser.open`.
 - The `target` is made the same way as **Pick on screen** (role and name first). A password field's text is never recorded: the node asks you to choose a secret.
@@ -169,7 +169,7 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
-In Studio, a browser node's target has **Pick on screen** and **Highlight** while the flow runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). With no run going, Studio opens the page of the nearest **Open page** node above (its `url` must be written out, not an expression) in a browser of its own and picks there; that browser stays open for the next pick, on whatever page the person has moved to. Without an Open page node above, the buttons are off and say so. Elements inside iframes can be picked and highlighted too (iframes from other sites and frames inside frames as well).
+In Writer, a browser node's target has **Pick on screen** and **Highlight** while the flow runs (or is paused at a node): Writer steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). With no run going, Writer opens the page of the nearest **Open page** node above (its `url` must be written out, not an expression) in a browser of its own and picks there; that browser stays open for the next pick, on whatever page the person has moved to. Without an Open page node above, the buttons are off and say so. Elements inside iframes can be picked and highlighted too (iframes from other sites and frames inside frames as well).
 
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
@@ -201,7 +201,7 @@ The MCP server has three tools for this (class `run`):
 
 - `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is. `image: true` also hands the screenshot to the AI, for pages whose tree does not tell elements apart (icons without names)
 - `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the flow. Before a browser node runs, its target is outlined in the browser for a moment (「ここを押します」), so the person watching sees what the AI is about to touch
-- `ask_user_to_pick`: when the AI cannot tell which element is meant (two 「編集」 buttons, an icon without a name), it asks the person instead of guessing. The browser window comes to the front with the AI's `message` in a banner, the `candidates` it is torn between are outlined with numbers, and the person's click is caught before the page sees it (nothing is pressed). The element comes back as a `target` (with `nth` and the text of its table row `row` when it repeats, and `frame` when it is inside an iframe). Studio shows 「AI がブラウザの画面で指してほしいと言っています」 at the same time and can decline it; 「わからない」 or Esc in the browser declines too (`status: "cancelled"`). It needs a visible browser
+- `ask_user_to_pick`: when the AI cannot tell which element is meant (two 「編集」 buttons, an icon without a name), it asks the person instead of guessing. The browser window comes to the front with the AI's `message` in a banner, the `candidates` it is torn between are outlined with numbers, and the person's click is caught before the page sees it (nothing is pressed). The element comes back as a `target` (with `nth` and the text of its table row `row` when it repeats, and `frame` when it is inside an iframe). Writer shows 「AI がブラウザの画面で指してほしいと言っています」 at the same time and can decline it; 「わからない」 or Esc in the browser declines too (`status: "cancelled"`). It needs a visible browser
 
 With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_flow` → `run_flow`.
 

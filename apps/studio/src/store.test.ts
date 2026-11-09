@@ -772,7 +772,7 @@ describe("studio store", () => {
     };
     const ownEdit: HistoryEntry = { ...aiEdit, revision: 3, actor: { kind: "studio" } };
 
-    it("lists only unreviewed non-Studio edits", async () => {
+    it("lists only unreviewed non-Writer edits", async () => {
       const store = createStudioStore(fakeApi({ history: vi.fn(async () => [aiEdit, ownEdit]) }));
       await store.getState().open("scn_a");
       expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);

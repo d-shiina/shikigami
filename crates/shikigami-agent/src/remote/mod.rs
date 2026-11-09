@@ -1,7 +1,7 @@
 //! The agent's link to a management server (docs/remote.md).
 //!
 //! Off unless `policy.json` turns it on (`remote.enabled`, `remote.manager`)
-//! and this PC was enrolled with a one-time code (`spellsheet agent enroll`).
+//! and this PC was enrolled with a one-time code (`spellsheet worker enroll`).
 //! The agent only ever connects out: when it has nothing running it asks the
 //! server for a job it may run, runs it like any unattended run (published
 //! version, `policy.json` checks), and sends its events and report back.
@@ -227,7 +227,7 @@ fn connect(agent: &Agent) -> Result<Option<Link>, RemoteError> {
     check_manager(manager)?;
     let Some(enrollment) = Enrollment::load(agent.local_root()) else {
         return Err(RemoteError(format!(
-            "this PC is not enrolled with {manager} (spellsheet agent enroll)"
+            "this PC is not enrolled with {manager} (spellsheet worker enroll)"
         )));
     };
     if enrollment.manager != base(manager) {

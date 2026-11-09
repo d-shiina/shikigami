@@ -53,7 +53,7 @@ flows/<フローの ID>/
 
 `tests/` はフローと一緒にファイルへの書き出し（バンドル）に入ります。
 
-## Studio で作る・流す
+## Writer で作る・流す
 
 フロー図の下のパネルの「テスト」タブで扱います。
 
@@ -66,7 +66,7 @@ flows/<フローの ID>/
 
 MCP の `save_test_case` でケースを書き、`run_tests` で流せます（[mcp.md](mcp.md)）。AI にフローを直してもらうときは「テストケースを足して、run_tests が全部通るまで直して」と頼むと、直すたびに前の結果が崩れていないかを AI 自身が確かめます。シークレットの入力はケースに書けません。
 
-AI が保存したケースは、その変更の**約束**として扱います。Studio の確認パネルは先頭に、ケースの `description`（何が起きればよいかを業務の言葉で書く）、入力と期待する結果、守れているかを並べ、人は約束が業務として正しいかを答えます。`description` はプログラムではなく、確認する人に向けて書いてください（[design/review-evidence.md](design/review-evidence.md)）。
+AI が保存したケースは、その変更の**約束**として扱います。Writer の確認パネルは先頭に、ケースの `description`（何が起きればよいかを業務の言葉で書く）、入力と期待する結果、守れているかを並べ、人は約束が業務として正しいかを答えます。`description` はプログラムではなく、確認する人に向けて書いてください（[design/review-evidence.md](design/review-evidence.md)）。
 
 ## コマンドで流す
 
@@ -86,7 +86,7 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # ファイルのフロ
 2 passed, 1 failed
 ```
 
-- 1 ケースごとに 1 回ふつうに実行し、実行の記録にも残ります（`origin.requestedBy` が `test:<ケース名>`）。違ったケースの記録は、表示された run ID で Studio の実行の記録から開けます
+- 1 ケースごとに 1 回ふつうに実行し、実行の記録にも残ります（`origin.requestedBy` が `test:<ケース名>`）。違ったケースの記録は、表示された run ID で Writer の実行の記録から開けます
 - 外のアプリや Web を操作するフローは、テストでも本当に操作します。テスト用の入力（テスト用のフォルダー・テスト環境の URL など）を `inputs` で渡してください
 - 1 つでも違うと終了コードは 1 です。バッチや CI の判定にそのまま使えます
 - `--json` は結果を 1 つの JSON（`passed`・`failed`・`cases[]`、各ケースに `passed`・`runId`・`status`・`error`・`mismatches[]`）で出します。`mismatches[]` は `at`（`outputs.total` など）・`expected`・`actual` です

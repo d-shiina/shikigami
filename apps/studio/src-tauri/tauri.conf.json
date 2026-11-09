@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SpellSheet Studio",
+  "productName": "SpellSheet Writer",
   "identifier": "dev.shikigami.studio",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "SpellSheet Studio",
+        "title": "SpellSheet Writer",
         "width": 1400,
         "height": 900,
         "minWidth": 960,

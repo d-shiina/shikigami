@@ -30,7 +30,7 @@ pnpm demo:full
 開始ダイアログ → Excel/Word/CSV 作成 → ブラウザで出荷 → メモ帳を操作して OCR →
 出力フォルダーをエクスプローラーで開く → 結果ダイアログ、の順に画面で見られます。
 
-Studio で動かす（ワークスペースに取り込むとプロジェクトフォルダーとして展開されます）:
+Writer で動かす（ワークスペースに取り込むとプロジェクトフォルダーとして展開されます）:
 
 ```bash
 spellsheet flow import examples/full-demo.shikigami.json

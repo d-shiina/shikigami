@@ -3,7 +3,6 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
-import { AgentButton } from "./components/AgentButton";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { PickRequestCard } from "./components/PickRequestCard";
@@ -33,7 +32,7 @@ import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
-import { AiActivity, StatusBar } from "./components/StatusBar";
+import { AiButton, Brand, SearchBar } from "./components/ShellBar";
 import { ManualView } from "./components/ManualView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
@@ -43,7 +42,7 @@ import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
-import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { lastAdded, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
@@ -396,81 +395,57 @@ function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-  return (
-    <div className="flex h-full flex-col bg-frame">
-      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
-        {showSidebar && (
-          <div className="relative flex">
-            <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
-            {grip("sidebar")}
-          </div>
-        )}
-        {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
-        {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
-        {!showSidebar && peek && (
-          <Peek onClose={() => setPeek(false)}>
-            <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
-          </Peek>
-        )}
-        {/* The window buttons keep to a thin strip of the window's ground, in its corner as on any
-            Windows window; the work under it floats, framed and rounded, title bar and all, as in Linear,
-            and the AI's chat floats beside it as a panel of its own. */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div data-tauri-drag-region className="flex h-8 shrink-0 justify-end select-none">
-            {/* What the AI is doing, by the button that opens it, seen from every place. */}
-            <span className="flex min-w-0 items-center text-[11px] text-slate-500">
-              <AiActivity />
-            </span>
-            <AgentButton />
-            <WindowControls />
-          </div>
-          <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5">
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-            <TitleBar view={view} onView={setView} />
-            <HumanBanner />
-            <Banner />
-            <div className="flex min-h-0 flex-1">
-              {/* With nothing open, the editor has nothing to show: the library does. */}
-              {(place === "library" || (place === "flows" && !hasFlow)) && (
-                <div className="min-w-0 flex-1">
-                  <FlowsPage />
-                </div>
-              )}
-              {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-              {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-              {place === "runs" && (
-                <div className="min-w-0 flex-1">
-                  <RunsPage />
-                </div>
-              )}
-              {place === "secrets" && (
-                <div className="min-w-0 flex-1">
-                  <SecretsPage />
-                </div>
-              )}
-              {place === "extensions" && (
-                <div className="min-w-0 flex-1">
-                  <ExtensionsPage />
-                </div>
-              )}
-              {place === "settings" && (
-                <div className="min-w-0 flex-1">
-                  <SettingsPage />
-                </div>
-              )}
-            </div>
-          </div>
-          {/* The AI's chat floats on the window's ground beside the work, under the button that
-              opens it: it is not part of any place (it makes new flows too), so it is not in the
-              work's frame. Kept mounted while closed, so an unsent draft survives (it draws nothing then). */}
-          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
-            <AgentPane width={fit.agent} />
-            {fit.agent > 0 && grip("agent")}
-          </div>
-          </div>
+  const work = (
+    <div className="flex min-h-0 flex-1">
+      {/* With nothing open, the editor has nothing to show: the library does. */}
+      {(place === "library" || (place === "flows" && !hasFlow)) && (
+        <div className="min-w-0 flex-1">
+          <FlowsPage />
         </div>
-      </div>
-      <StatusBar />
+      )}
+      {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+      {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+      {place === "runs" && (
+        <div className="min-w-0 flex-1">
+          <RunsPage />
+        </div>
+      )}
+      {place === "secrets" && (
+        <div className="min-w-0 flex-1">
+          <SecretsPage />
+        </div>
+      )}
+      {place === "extensions" && (
+        <div className="min-w-0 flex-1">
+          <ExtensionsPage />
+        </div>
+      )}
+      {place === "settings" && (
+        <div className="min-w-0 flex-1">
+          <SettingsPage />
+        </div>
+      )}
+    </div>
+  );
+  const sidebarColumn = (
+    <>
+      {showSidebar && (
+        <div className="relative flex">
+          <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
+          {grip("sidebar")}
+        </div>
+      )}
+      {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
+      {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
+      {!showSidebar && peek && (
+        <Peek onClose={() => setPeek(false)}>
+          <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
+        </Peek>
+      )}
+    </>
+  );
+  const dialogs = (
+    <>
       <CommandPalette />
       <HistoryDialog />
       <AiPasteDialog />
@@ -480,6 +455,44 @@ function Shell() {
       <PickRequestCard />
       <ContextMenu />
       <FileDragLayer />
+    </>
+  );
+  // The window's own bar along the top, as Windows apps and VS Code: the
+  // app's name at the left, the search over everything in the middle with the
+  // AI beside it (VS Code keeps Copilot by its command center), and the
+  // window buttons in the corner. The work floats under it, framed, as in Linear.
+  return (
+    <div className="flex h-full flex-col bg-frame">
+      <div data-tauri-drag-region className="relative flex h-10 shrink-0 items-center select-none">
+        <div data-tauri-drag-region style={{ width: showSidebar ? sizes.sidebar : SIDEBAR_MINI }} className={`flex shrink-0 items-center ${showSidebar ? "pl-2" : "justify-center"}`}>
+          <Brand compact={!showSidebar} />
+        </div>
+        <span data-tauri-drag-region className="flex-1 self-stretch" />
+        <div className="absolute top-1/2 left-1/2 flex w-[clamp(320px,44vw,620px)] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5">
+          <SearchBar onToggleSidebar={toggleSidebar} />
+          <AiButton />
+        </div>
+        <WindowControls />
+      </div>
+      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
+        {sidebarColumn}
+        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 pr-1.5 pb-1.5">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+            <TitleBar view={view} onView={setView} />
+            <HumanBanner />
+            <Banner />
+            {work}
+          </div>
+          {/* The AI's chat floats on the window's ground beside the work: it is not part of any
+              place (it makes new flows too), so it is not in the work's frame. Kept mounted while
+              closed, so an unsent draft survives (it draws nothing then). */}
+          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
+            <AgentPane width={fit.agent} />
+            {fit.agent > 0 && grip("agent")}
+          </div>
+        </div>
+      </div>
+      {dialogs}
     </div>
   );
 }
@@ -633,6 +646,11 @@ export function App() {
         // Run and step like a debugger, instead of reloading the window.
         e.preventDefault();
         debugKey(e, store.getState());
+        return;
+      }
+      if (mod && e.key === ",") {
+        e.preventDefault();
+        store.getState().setPlace("settings");
         return;
       }
       if (mod && e.key.toLowerCase() === "j") {

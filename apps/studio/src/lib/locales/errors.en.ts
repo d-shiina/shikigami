@@ -196,7 +196,7 @@ export const errorsEn: Record<string, ErrorText> = {
   SECRET_APP_MISMATCH: { what: (c) => `This app is not an allowed app of the secret ${c.q(c.secret)}`, todo: "Check the app, and add it to the secret if it is right" },
   SECRET_KEY_MISSING: { what: "The secrets were registered on another PC or by another user and cannot be read here", todo: "Reset them on the Secrets page and register again" },
   SECRET_DECRYPT_FAILED: { what: (c) => `Could not read the secret ${c.q(c.secret)}`, todo: "Register this secret again on the Secrets page" },
-  SECRETS_UNAVAILABLE: { what: "Secrets cannot be used in this run", todo: "Run from Studio or the command line" },
+  SECRETS_UNAVAILABLE: { what: "Secrets cannot be used in this run", todo: "Run from Writer or the command line" },
   SECRET_NOT_ALLOWED: { what: "A secret cannot go in this field", todo: "Use it in a node that types into an input field" },
   SECRET_PLUGIN_NOT_ALLOWED: { what: "This plugin may not use the secret", todo: "Add plugin:name to the secret" },
   OAUTH_SIGN_IN_REQUIRED: { what: "Not signed in yet", todo: "Put a Sign in node before this one" },

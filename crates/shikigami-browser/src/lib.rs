@@ -288,7 +288,7 @@ fn resolve_fill_secret(
         )
         .with_details(json!({
             "secret": secret.name,
-            "hint": "Call request_secret with this name and the site's address (e.g. https://example.com): Studio then asks the user to add it to this secret."
+            "hint": "Call request_secret with this name and the site's address (e.g. https://example.com): Writer then asks the user to add it to this secret."
         })));
     }
     params.insert("value".into(), Value::String(secret.value));
