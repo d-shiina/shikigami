@@ -15,10 +15,10 @@
 プラグイン（MCP 設定と、フロー作成の作法を教えるスキルを同梱）を入れるのがおすすめです。
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/spellsheet` のあと `/plugin install spellsheet@spellsheet`。）
+（Claude Code 2.1.275 より前は `/plugin marketplace add spellsheet/spellsheet` のあと `/plugin install spellsheet@spellsheet`。）
 
 MCP サーバーだけを登録する場合：
 

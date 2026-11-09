@@ -5,8 +5,8 @@
 # SpellSheet
 
 <p align="center">
-  <a href="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/d-shiina/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/d-shiina/spellsheet" alt="Release"></a>
+  <a href="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/spellsheet/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/spellsheet/spellsheet" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4" alt="Platform: Windows 10 | 11">
 </p>
@@ -23,7 +23,7 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 
 ## Getting started
 
-1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
+1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
 2. Start **SpellSheet Writer** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
 3. To have AI build flows, open the AI pane with "AI chat" at the top right of Writer (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
@@ -161,7 +161,7 @@ Edits made with the CLI while Writer is open show up in Writer immediately.
 In Claude Code, install the plugin (the `spellsheet` command must be on PATH):
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
 If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from the version menu at the bottom right of Writer; see [docs/release.md](docs/release.md)).

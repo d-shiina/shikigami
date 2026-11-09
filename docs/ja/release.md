@@ -5,7 +5,8 @@
 インストール版の Writer は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Writer が開き直す）か、Writer を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
-- 確認先：`https://github.com/d-shiina/spellsheet/releases/latest/download/latest.json`
+- 確認先：`https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`
+- 0.1.20 までの版は以前の場所 `https://github.com/d-shiina/spellsheet/...` を確認し、GitHub の移管後の転送で新しい場所に届きます。`d-shiina` の下に `spellsheet` という名前のリポジトリを作らないでください。転送が止まり、それらの版が更新できなくなります
 - 改ざん防止：インストーラーは専用の署名鍵で署名し、Writer はリリース時に埋め込んだ公開鍵で検証してから入れ替える
 - インストーラー：NSIS（ユーザー単位、管理者権限不要）
 - 開発版（`pnpm studio:dev`）は確認しない

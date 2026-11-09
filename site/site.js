@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  var FALLBACK = { owner: "d-shiina", repo: "spellsheet" };
+  var FALLBACK = { owner: "spellsheet", repo: "spellsheet" };
   var INSTALLER = /_x64-setup\.exe$/;
 
   function repository() {

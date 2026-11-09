@@ -5,7 +5,7 @@
   "label": "Azure AI-OCR",
   "description": "Azure AI Document Intelligence（クラウド型 AI-OCR）で、画像や PDF の文字・表・請求書や領収書の項目を読み取ります。",
   "publisher": "SpellSheet 見本",
-  "homepage": "https://github.com/d-shiina/spellsheet/tree/main/examples/plugins/azure-ocr",
+  "homepage": "https://github.com/spellsheet/spellsheet/tree/main/examples/plugins/azure-ocr",
   "tag": "AI-OCR",
   "icon": "scan-text",
   "command": { "program": "node", "args": ["main.mjs"] },

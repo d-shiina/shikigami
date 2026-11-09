@@ -5,7 +5,8 @@ English | [日本語](ja/release.md)
 The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
-- Checked at: `https://github.com/d-shiina/spellsheet/releases/latest/download/latest.json`
+- Checked at: `https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`
+- Versions up to 0.1.20 check the old address `https://github.com/d-shiina/spellsheet/...` and reach the new one through GitHub's redirect for moved repositories. Never create a repository named `spellsheet` under `d-shiina`: the redirect would stop and those versions could no longer update
 - Tamper protection: installers are signed with a dedicated signing key, and Writer verifies them with the public key embedded at release time before replacing itself
 - Installer: NSIS (per user, no administrator rights).
 - Development builds (`pnpm studio:dev`) do not check
