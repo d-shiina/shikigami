@@ -1889,7 +1889,6 @@ export const ja = {
   confirmRestoreAgain: "戻す（もう一度押して確定）",
   versionField: { name: "フロー名", description: "説明", tags: "タグ", settings: "フロー設定" },
   timelineAll: (n: number) => `（${n}件まとめて）`,
-  personMark: "人",
   flowCreated: "フローを作成",
   flowDeleted: "フローを削除",
   manual: {

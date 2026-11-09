@@ -17,9 +17,10 @@ const files = (dir: string): string[] =>
 /**
  * Emoji (U+1F000–), the dingbats and miscellaneous symbols (✓ ✕ ✋ ✦ ⚠ ❚),
  * the geometric shapes used as marks (■ ▶ ● ○ ▾ ▸), the arrows that stand in
- * for an icon (↶ ↷ ↗ ⇥), and the emoji variation selector.
+ * for an icon (↶ ↷ ↗ ⇥), the guillemets used as a fold button, and the emoji
+ * variation selector.
  */
-const PICTURE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{25A0}-\u{25FF}\u{2190}-\u{21FF}\u{FE0F}]/u;
+const PICTURE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{25A0}-\u{25FF}\u{2190}-\u{21FF}\u{FE0F}\u{AB}\u{BB}]/u;
 const TEXT_ARROWS = /[←↑→↓⇧]/gu;
 
 describe("icons", () => {
