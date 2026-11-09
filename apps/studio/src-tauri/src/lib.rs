@@ -15,6 +15,7 @@ mod picker;
 mod run_band;
 mod runner;
 mod schedules;
+mod splash;
 mod tray;
 mod updater;
 mod watcher;
@@ -92,8 +93,8 @@ pub fn run() {
         .manage(agent::AgentLogin::default())
         .manage(agent::AgentInstall::default())
         .manage(extensions::Extensions::default())
+        .manage(splash::Splash::default())
         .setup(move |app| {
-            fit_to_screen(app);
             if let Some(path) = opened::spx_arg(std::env::args()) {
                 opened::remember(None, path);
             }
@@ -109,6 +110,9 @@ pub fn run() {
                 if let Some(main) = app.get_webview_window("main") {
                     main.close()?;
                 }
+            } else if let Err(e) = splash::show(app) {
+                // Only a picture: Writer still comes up when its screen is ready.
+                tracing::warn!(error = %e, "cannot show the start-up screen");
             }
             watcher::spawn(app.handle().clone(), service.store().flows_dir());
             watcher::spawn_secret_requests(
@@ -145,6 +149,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            splash::startup_ready,
             run_band::run_band_current,
             run_band::run_band_writer,
             run_band::run_band_close,
@@ -295,18 +300,15 @@ pub fn run() {
 /// The default window (1400x900) is taller than many laptop screens, which
 /// puts the bottom of the panels under the taskbar until the window is
 /// maximized. On a screen whose work area cannot hold it, start maximized.
-fn fit_to_screen(app: &tauri::App) {
-    use tauri::Manager;
-    for window in app.webview_windows().values() {
-        let (Ok(Some(monitor)), Ok(size)) = (window.current_monitor(), window.outer_size()) else {
-            continue;
-        };
-        let area = monitor.work_area().size;
-        if (size.width > area.width || size.height > area.height)
-            && let Err(e) = window.maximize()
-        {
-            tracing::warn!(error = %e, "cannot maximize the window");
-        }
+pub(crate) fn fit_to_screen(window: &tauri::WebviewWindow) {
+    let (Ok(Some(monitor)), Ok(size)) = (window.current_monitor(), window.outer_size()) else {
+        return;
+    };
+    let area = monitor.work_area().size;
+    if (size.width > area.width || size.height > area.height)
+        && let Err(e) = window.maximize()
+    {
+        tracing::warn!(error = %e, "cannot maximize the window");
     }
 }
 

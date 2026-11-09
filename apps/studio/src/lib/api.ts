@@ -350,6 +350,8 @@ export const api = {
   revealFile: (path: string) => call<void>("reveal_file", { path }),
   /** The `.spx` file opened from Explorer that is waiting to be shown, once. */
   takeOpenedFile: () => call<string | null>("take_opened_file"),
+  /** Writer's screen has drawn: shows the (hidden) window and closes the start-up screen (splash.rs). */
+  startupReady: () => call<void>("startup_ready"),
   /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
   saveAiGuide: () => call<string>("save_ai_guide"),
   /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
