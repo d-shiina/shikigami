@@ -72,7 +72,7 @@ and write `{{ settings.ordersFolder }}/orders.xlsx` in the node.
 
 In Writer:
 
-- When the flow reads a file from `input/` that is not there, a card over the chart says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** and **Read from Box or OneDrive** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`). Folders inside the user's profile are kept as `%USERPROFILE%\…`
+- When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** and **Read from Box or OneDrive** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`). Folders inside the user's profile are kept as `%USERPROFILE%\…`
 - **Change where files are written** in the output part of the files panel points every node writing into `output/` at the folder you pick
 - **Browse…** in a node's settings asks, for a file outside the flow's folder, whether to read it where it is or copy it in
 - A `.spx` lists the full paths and the settings' folders under what the receiving PC needs; on import, Writer checks whether this PC opens them
