@@ -61,8 +61,19 @@ export function fieldRegions(max: number): Region[] {
     const name = text(label);
     if (!name || name.length > LABEL_MAX || name.includes("\n")) continue;
     if (label.querySelector("input, select, textarea, button, a[href]") || label.matches("button, a[href], [role=button]")) continue;
+    // Side by side, not stacked: a column of cards (a short heading over its
+    // text) is flex or grid too, but its text is not a value.
+    const at = label.getBoundingClientRect();
+    const beside = (v: Element) => {
+      const r = v.getBoundingClientRect();
+      return r.left >= at.right - 2 && r.top < at.bottom && r.bottom > at.top;
+    };
     const values = rest.filter(
-      (v) => text(v) !== "" && !v.matches("button, [role=button], input[type=submit], input[type=button]") && !/^h[1-6]$/i.test(v.tagName),
+      (v) =>
+        text(v) !== "" &&
+        beside(v) &&
+        !v.matches("button, [role=button], input[type=submit], input[type=button]") &&
+        !/^h[1-6]$/i.test(v.tagName),
     );
     if (values.length === 0) continue;
     const kind = `${row.tagName}|${typeof row.className === "string" ? row.className : ""}|${boxes.length}`;

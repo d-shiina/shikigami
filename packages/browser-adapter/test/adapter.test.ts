@@ -77,6 +77,8 @@ describe("browser adapter", () => {
         "担当者",
         '<span>見本 太郎</span> <span>taro@example.com</span> <span>00-0000-0000</span>',
       )}</div>
+      <div class="card" style="display:flex;flex-direction:column"><h3>手順</h3><div class="note">申込ボタンを押します</div></div>
+      <div class="card" style="display:flex;flex-direction:column"><h3>注意</h3><div class="note">内容を確かめます</div></div>
       <dl class="grid"><dt>電話</dt><dd id="dd">00-1111-2222</dd><dt>メール</dt><dd>hanako@example.com</dd></dl>
       <iframe style="width:400px;height:120px;border:0" srcdoc="${`<meta charset=utf-8><style>${css}</style>${row("氏名", "見本 花子")}${row("生年月日", "2000年1月1日")}`.replace(/"/g, "&quot;")}"></iframe>`;
     const r = { runId: "run_manual_regions" };
@@ -100,7 +102,7 @@ describe("browser adapter", () => {
     const values = [...(await rectOf(".rows .value")), ...(await rectOf("dd")), ...(await rectOf(".value", true))];
     expect(values).toHaveLength(8);
     for (const v of values) expect(covered(v)).toBe(true);
-    const labels = [...(await rectOf(".rows .label")), ...(await rectOf("dt")), ...(await rectOf("#heading")), ...(await rectOf("header > *"))];
+    const labels = [...(await rectOf(".rows .label")), ...(await rectOf("dt")), ...(await rectOf("#heading")), ...(await rectOf("header > *")), ...(await rectOf(".card > *"))];
     expect(labels.length).toBeGreaterThan(8);
     for (const l of labels) expect(covered(l)).toBe(false);
     await adapter.call("close", r);
