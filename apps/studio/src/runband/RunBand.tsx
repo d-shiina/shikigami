@@ -68,8 +68,11 @@ export function RunBand() {
         if (!live) return;
         for (const env of [...(record?.events ?? []), ...queue].sort((a, b) => a.seq - b.seq)) apply(env);
       } finally {
-        ready = true;
-        for (const env of queue) apply(env);
+        // A run the band no longer shows leaves its events alone.
+        if (live) {
+          ready = true;
+          for (const env of queue) apply(env);
+        }
       }
     })();
     void bandApi.stepTimes(run.flowId).then((times) => live && setUsual(times), () => undefined);

@@ -101,6 +101,11 @@ describe("the run band", () => {
     expect(state.human).toBeNull();
   });
 
+  it("shows a node that failed and then went through on a retry as passed", () => {
+    const state = play([started("open"), finished("open", "failed"), started("open"), finished("open")]);
+    expect(bandItems(steps, state, defs)[0]).toMatchObject({ kind: "node", state: "done" });
+  });
+
   it("does not count an event twice when the replay and the live ones overlap", () => {
     const once = started("open");
     const state = bandStep(bandStep(emptyBand(), once, steps), finished("open"), steps);

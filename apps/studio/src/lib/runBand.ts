@@ -110,6 +110,12 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
       const done = new Set(state.done);
       done.delete(env.stepId);
       next.done = done;
+      // Tried again (a retry, or 「再試行」 after a pause): no longer failed.
+      if (state.failed.has(env.stepId)) {
+        const failed = new Set(state.failed);
+        failed.delete(env.stepId);
+        next.failed = failed;
+      }
       // The lane it runs in, for each step around it.
       const up = parents(steps);
       const lanes = { ...state.lanes };
