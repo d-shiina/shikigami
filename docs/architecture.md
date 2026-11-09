@@ -338,7 +338,7 @@ Workspace layout:
 In a shared workspace, `history/` and `runs/` are kept on each PC ([design/sharing-versioning.md](design/sharing-versioning.md), Japanese).
 
 ```text
-<workspace>/            default: SPELLSHEET_HOME > workspace in config.json > %APPDATA%\SpellSheet\workspace
+<workspace>/            default: SPELLSHEET_HOME > workspace in config.json > %LOCALAPPDATA%\SpellSheet\workspace
   workspace.json        optional. {"shared": true} makes it a shared workspace
   flows/<id>.json   flows (source of truth)
   versions/<id>/<n>.json  named versions (immutable snapshots)

@@ -139,7 +139,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\SpellSheet\workspace`. Change it with the `SPELLSHEET_HOME` environment variable or the CLI's `--workspace`.
+The workspace (where flows, history and run records are stored) defaults to `%LOCALAPPDATA%\SpellSheet\workspace` (builds up to 0.1.20 kept it in `%APPDATA%`; it moves on the first start). Change it with the `SPELLSHEET_HOME` environment variable or the CLI's `--workspace`.
 
 ### CLI examples
 

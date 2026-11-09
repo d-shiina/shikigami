@@ -54,7 +54,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 
 | オプション | 既定 | 説明 |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace`（`SPELLSHEET_HOME` で変更可） | 対象ワークスペース。Writer と同じ場所を指定すると相互に反映される |
+| `--workspace <DIR>` | `%LOCALAPPDATA%\SpellSheet\workspace`（`SPELLSHEET_HOME` で変更可） | 対象ワークスペース。Writer と同じ場所を指定すると相互に反映される |
 | `--allow read,write,run` | 3 つすべて | 公開するツールの権限区分。例：閲覧だけ許すなら `--allow read` |
 
 ## ツール

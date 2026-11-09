@@ -8,6 +8,12 @@
 //! cannot be moved (a file in it is open, e.g. by an old build still
 //! running), this process keeps using it and the next start tries again.
 //!
+//! The default workspace moved too: builds before kept it in the roaming
+//! profile (`%APPDATA%\SpellSheet\workspace`), which a company's roaming
+//! profile copies at every sign-in and sign-out, output files, run records
+//! and screenshots included. It now lives in `%LOCALAPPDATA%\SpellSheet\workspace`
+//! and is moved there the same way (see [`default_workspace`]).
+//!
 //! Environment variables are read the same way: `SPELLSHEET_<NAME>` first,
 //! then the old name's ([`LEGACY_ENV_PREFIX`]).
 
@@ -59,6 +65,7 @@ pub fn migrate() {
     config_dir();
     data_dir();
     local_dir();
+    default_workspace();
 }
 
 /// Roaming settings: `%APPDATA%\SpellSheet` (config.json).
@@ -66,15 +73,74 @@ pub fn config_dir() -> PathBuf {
     app_dir(dirs::config_dir())
 }
 
-/// Roaming data: `%APPDATA%\SpellSheet` (the default workspace).
+/// Roaming data: `%APPDATA%\SpellSheet` (where the default workspace was
+/// before it moved to [`local_dir`]).
 pub fn data_dir() -> PathBuf {
     app_dir(dirs::data_dir())
 }
 
-/// Per-PC data: `%LOCALAPPDATA%\SpellSheet` (extensions, logs, the
-/// local part of shared workspaces).
+/// Per-PC data: `%LOCALAPPDATA%\SpellSheet` (the default workspace,
+/// extensions, logs, the local part of shared workspaces).
 pub fn local_dir() -> PathBuf {
     app_dir(dirs::data_local_dir())
+}
+
+/// The default workspace: `%LOCALAPPDATA%\SpellSheet\workspace`, after moving
+/// the one an older build kept in the roaming profile there (once per
+/// process). Keeps using the roaming one when it cannot be moved (a file in
+/// it is open, or the roaming profile is on another drive), and the next
+/// start tries again.
+pub fn default_workspace() -> PathBuf {
+    static CHOSEN: OnceLock<PathBuf> = OnceLock::new();
+    CHOSEN
+        .get_or_init(|| move_workspace(&roaming_workspace(), &local_workspace()))
+        .clone()
+}
+
+/// Where the default workspace was before it moved to [`local_dir`].
+pub fn roaming_workspace() -> PathBuf {
+    data_dir().join("workspace")
+}
+
+fn local_workspace() -> PathBuf {
+    local_dir().join("workspace")
+}
+
+/// `new`, after moving `old` there when only `old` exists. Keeps `old` when
+/// it cannot be moved.
+pub fn move_workspace(old: &Path, new: &Path) -> PathBuf {
+    if same_path(old, new) || new.exists() || !old.is_dir() {
+        return new.to_path_buf();
+    }
+    if let Some(parent) = new.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        tracing::warn!(error = %e, folder = %parent.display(), "cannot create the folder for the workspace");
+        return old.to_path_buf();
+    }
+    match std::fs::rename(old, new) {
+        Ok(()) => {
+            tracing::info!(from = %old.display(), to = %new.display(), "moved the workspace out of the roaming profile");
+            new.to_path_buf()
+        }
+        // Another process starting at the same time moved it first.
+        Err(_) if new.is_dir() => new.to_path_buf(),
+        Err(e) => {
+            tracing::warn!(error = %e, folder = %old.display(), "cannot move the workspace out of the roaming profile yet; using it as it is");
+            old.to_path_buf()
+        }
+    }
+}
+
+/// The default workspace's place in the roaming profile, for a path saved
+/// while it was there (`workspace` in config.json, `--workspace` in a
+/// scheduled task or an AI client's MCP setup).
+pub fn is_roaming_workspace(path: &Path) -> bool {
+    same_path(path, &roaming_workspace())
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    strip_prefix_ignore_case(a, b).is_some_and(|rest| rest.as_os_str().is_empty())
 }
 
 fn app_dir(base: Option<PathBuf>) -> PathBuf {
@@ -123,13 +189,41 @@ pub fn upgrade_legacy(path: &Path) -> PathBuf {
     if path.exists() {
         return path.to_path_buf();
     }
+    let mut path = path.to_path_buf();
     let bases = [dirs::config_dir(), dirs::data_dir(), dirs::data_local_dir()];
     for base in bases.into_iter().flatten() {
-        if let Some(moved) = moved_under(path, &base) {
-            return moved;
+        if let Some(moved) = moved_under(&path, &base) {
+            path = moved;
+            break;
         }
     }
-    path.to_path_buf()
+    if !path.exists()
+        && let Some(moved) = moved_into(&path, &roaming_workspace(), &default_workspace())
+    {
+        return moved;
+    }
+    path
+}
+
+/// `path` with `old` swapped for `new`, when it was under `old` and `new`
+/// exists.
+fn moved_into(path: &Path, old: &Path, new: &Path) -> Option<PathBuf> {
+    if same_path(old, new) {
+        return None;
+    }
+    let rest = strip_prefix_ignore_case(path, old)?;
+    new.is_dir().then(|| new.join(rest))
+}
+
+/// Where the default workspace was kept before it moved out of the roaming
+/// profile, for `path` (to find what an older build kept for it).
+pub fn roaming_of(path: &Path) -> Option<PathBuf> {
+    let local = local_workspace();
+    let roaming = roaming_workspace();
+    if same_path(&local, &roaming) {
+        return None;
+    }
+    strip_prefix_ignore_case(path, &local).map(|rest| roaming.join(rest))
 }
 
 /// `path` with the old folder under `base` swapped for `base\SpellSheet`, when it was
@@ -215,6 +309,60 @@ mod tests {
             moved_under(&base.path().join("elsewhere"), base.path()),
             None
         );
+    }
+
+    #[test]
+    fn moves_the_roaming_workspace_to_local() {
+        let base = tempfile::tempdir().unwrap();
+        let old = base.path().join("Roaming/SpellSheet/workspace");
+        let new = base.path().join("Local/SpellSheet/workspace");
+        std::fs::create_dir_all(old.join("flows/scn_a")).unwrap();
+        std::fs::write(old.join("flows/scn_a/flow.json"), "{}").unwrap();
+
+        assert_eq!(move_workspace(&old, &new), new);
+        assert!(new.join("flows/scn_a/flow.json").is_file());
+        assert!(!old.exists());
+        // Again: nothing left to move.
+        assert_eq!(move_workspace(&old, &new), new);
+    }
+
+    #[test]
+    fn keeps_the_local_workspace_when_both_exist() {
+        let base = tempfile::tempdir().unwrap();
+        let old = base.path().join("Roaming/workspace");
+        let new = base.path().join("Local/workspace");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::create_dir_all(&new).unwrap();
+        assert_eq!(move_workspace(&old, &new), new);
+        assert!(old.exists());
+    }
+
+    #[test]
+    fn local_workspace_when_nothing_exists() {
+        let base = tempfile::tempdir().unwrap();
+        let new = base.path().join("Local/workspace");
+        assert_eq!(
+            move_workspace(&base.path().join("Roaming/workspace"), &new),
+            new
+        );
+        assert!(!new.exists());
+    }
+
+    #[test]
+    fn paths_into_the_roaming_workspace_follow_it() {
+        let base = tempfile::tempdir().unwrap();
+        let old = base.path().join("Roaming/workspace");
+        let new = base.path().join("Local/workspace");
+        std::fs::create_dir_all(&new).unwrap();
+        assert_eq!(moved_into(&old, &old, &new), Some(new.clone()));
+        assert_eq!(
+            moved_into(&old.join("flows"), &old, &new),
+            Some(new.join("flows"))
+        );
+        assert_eq!(moved_into(&base.path().join("elsewhere"), &old, &new), None);
+        // Not moved yet: the path stays.
+        let gone = base.path().join("Local/missing");
+        assert_eq!(moved_into(&old, &old, &gone), None);
     }
 
     #[test]

@@ -307,17 +307,23 @@ impl FileStore {
     }
 
     /// Default workspace: `$SPELLSHEET_HOME` (or its old name's),
-    /// else `workspace` in the user config, else the platform data dir
-    /// (e.g. `%APPDATA%\SpellSheet\workspace`).
+    /// else `workspace` in the user config, else the per-PC data dir
+    /// (`%LOCALAPPDATA%\SpellSheet\workspace`, moved there from the roaming
+    /// profile where older builds kept it).
     pub fn default_root() -> PathBuf {
         crate::paths::migrate();
         if let Some(home) = crate::paths::env_var("HOME") {
             return crate::paths::upgrade_legacy(Path::new(&home));
         }
-        if let Some(workspace) = UserConfig::load().workspace {
+        if let Some(workspace) = UserConfig::load().workspace
+            // The old default written out (e.g. by choosing it again in
+            // Writer) moves with it rather than keeping it in the roaming
+            // profile.
+            && !crate::paths::is_roaming_workspace(&workspace)
+        {
             return crate::paths::upgrade_legacy(&workspace);
         }
-        crate::paths::data_dir().join("workspace")
+        crate::paths::default_workspace()
     }
 
     pub fn root(&self) -> &Path {
@@ -796,9 +802,16 @@ fn local_root_for(root: &Path) -> PathBuf {
     let local = local_root_named(root);
     // A workspace that moved with the folders' new name keeps its undo
     // history, run records and audit logs from before.
-    if !local.exists()
-        && let Some(old_root) = crate::paths::legacy_of(root)
-    {
+    // So does the default workspace that moved out of the roaming profile.
+    let earlier = [
+        crate::paths::legacy_of(root),
+        crate::paths::roaming_of(root),
+        crate::paths::roaming_of(root).and_then(|r| crate::paths::legacy_of(&r)),
+    ];
+    for old_root in earlier.into_iter().flatten() {
+        if local.exists() {
+            break;
+        }
         let old = local_root_named(&old_root);
         if old.is_dir()
             && let Err(e) = fs::rename(&old, &local)

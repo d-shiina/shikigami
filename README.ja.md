@@ -127,7 +127,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%APPDATA%\SpellSheet\workspace` です。環境変数 `SPELLSHEET_HOME`または CLI の `--workspace` で変更できます。
+ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%LOCALAPPDATA%\SpellSheet\workspace` です（0.1.20 までは `%APPDATA%` にあり、最初の起動で移ります）。環境変数 `SPELLSHEET_HOME`または CLI の `--workspace` で変更できます。
 
 ### CLI の例
 

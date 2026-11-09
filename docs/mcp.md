@@ -54,7 +54,7 @@ In Writer, **Settings → AI → MCP server registration → Cursor → Add to C
 
 | Option | Default | Description |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace` (change with `SPELLSHEET_HOME`) | The workspace. Point it at the same place as Writer and changes show up in both |
+| `--workspace <DIR>` | `%LOCALAPPDATA%\SpellSheet\workspace` (change with `SPELLSHEET_HOME`) | The workspace. Point it at the same place as Writer and changes show up in both |
 | `--allow read,write,run` | All three | Which tool classes to expose. For read-only access: `--allow read` |
 
 ## Tools
