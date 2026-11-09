@@ -231,7 +231,7 @@ pub fn manifest_summary(m: &Manifest) -> Value {
 }
 
 fn read_manifest(dir: &Path) -> std::result::Result<Manifest, Vec<String>> {
-    let path = dir.join(MANIFEST_FILE);
+    let path = crate::manifest::file_in(dir, MANIFEST_FILE);
     let text =
         std::fs::read_to_string(&path).map_err(|e| vec![format!("{}: {e}", path.display())])?;
     Manifest::parse(&text)
@@ -363,7 +363,7 @@ fn check(manifest: &Manifest, taken: &[&str]) -> Result<()> {
 /// folder (GitHub source zips and most hand-made zips have one).
 fn find_plugin_dir(content: &Path) -> Result<PathBuf> {
     crate::manifest::upgrade_legacy_files(content);
-    if content.join(MANIFEST_FILE).is_file() {
+    if crate::manifest::file_in(content, MANIFEST_FILE).is_file() {
         return Ok(content.to_path_buf());
     }
     let entries: Vec<PathBuf> = std::fs::read_dir(content)
@@ -374,7 +374,7 @@ fn find_plugin_dir(content: &Path) -> Result<PathBuf> {
         && only.is_dir()
         && {
             crate::manifest::upgrade_legacy_files(only);
-            only.join(MANIFEST_FILE).is_file()
+            crate::manifest::file_in(only, MANIFEST_FILE).is_file()
         }
     {
         return Ok(only.clone());
@@ -650,7 +650,9 @@ pub fn empty_trash(root: &Path) {
 fn installed_dir(root: &Path, name: &str) -> Result<PathBuf> {
     let dir = root.join(name);
     crate::manifest::upgrade_legacy_files(&dir);
-    if crate::manifest::is_plugin_name(name) && dir.join(MANIFEST_FILE).is_file() {
+    if crate::manifest::is_plugin_name(name)
+        && crate::manifest::file_in(&dir, MANIFEST_FILE).is_file()
+    {
         Ok(dir)
     } else {
         Err(InstallError::new(
@@ -688,7 +690,8 @@ pub fn set_enabled(root: &Path, name: &str, enabled: bool) -> Result<()> {
 /// Where an installed plugin came from, when SpellSheet installed it.
 pub fn source_of(root: &Path, name: &str) -> Option<SourceRecord> {
     crate::manifest::upgrade_legacy_files(&root.join(name));
-    let text = std::fs::read_to_string(root.join(name).join(SOURCE_FILE)).ok()?;
+    let text =
+        std::fs::read_to_string(crate::manifest::file_in(&root.join(name), SOURCE_FILE)).ok()?;
     serde_json::from_str(&text).ok()
 }
 

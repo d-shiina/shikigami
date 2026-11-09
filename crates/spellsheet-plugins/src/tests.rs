@@ -511,3 +511,22 @@ fn plugins_from_before_the_rename_are_found_and_renamed() {
     assert!(dir.join(install::SOURCE_FILE).is_file());
     assert!(!dir.join(legacy(MANIFEST_FILE)).exists());
 }
+
+#[test]
+#[cfg(unix)]
+fn plugins_from_before_the_rename_load_from_a_read_only_folder() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("old");
+    std::fs::create_dir(&dir).unwrap();
+    let legacy = spellsheet_core::paths::legacy_spelling;
+    std::fs::write(
+        dir.join(legacy(MANIFEST_FILE)),
+        manifest("t", json!([echo_step(json!({}))])).to_string(),
+    )
+    .unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let found = discover(&[root.path().to_path_buf()], &[]);
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(found.plugins.len(), 1, "{:?}", found.problems);
+}

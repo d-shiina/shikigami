@@ -30,6 +30,18 @@ pub(crate) fn upgrade_legacy_files(dir: &std::path::Path) {
     }
 }
 
+/// `dir`'s file `current`, or the same file under the old name when it could
+/// not be renamed (a read-only folder): the plugin still loads.
+pub(crate) fn file_in(dir: &std::path::Path, current: &str) -> std::path::PathBuf {
+    let new = dir.join(current);
+    let old = dir.join(spellsheet_core::paths::legacy_spelling(current));
+    if !new.exists() && old.is_file() {
+        old
+    } else {
+        new
+    }
+}
+
 /// The manifest format this build reads.
 pub const MANIFEST_VERSION: u32 = 1;
 

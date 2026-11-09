@@ -86,7 +86,7 @@ impl Plugin {
             problems,
         };
         manifest::upgrade_legacy_files(dir);
-        let path = dir.join(MANIFEST_FILE);
+        let path = manifest::file_in(dir, MANIFEST_FILE);
         let text = std::fs::read_to_string(&path)
             .map_err(|e| problem(vec![format!("{}: {e}", path.display())]))?;
         let manifest = Manifest::parse(&text).map_err(problem)?;
@@ -189,7 +189,7 @@ pub fn discover(roots: &[PathBuf], taken: &[&str]) -> Discovery {
 pub(crate) fn plugin_dirs(root: &Path, with_disabled: bool) -> Vec<PathBuf> {
     let on = |p: &Path| with_disabled || !p.join(install::DISABLED_FILE).exists();
     manifest::upgrade_legacy_files(root);
-    if root.join(MANIFEST_FILE).is_file() {
+    if manifest::file_in(root, MANIFEST_FILE).is_file() {
         return if on(root) {
             vec![root.to_path_buf()]
         } else {
@@ -207,7 +207,7 @@ pub(crate) fn plugin_dirs(root: &Path, with_disabled: bool) -> Vec<PathBuf> {
                 .is_some_and(|n| n.to_string_lossy().starts_with('.'))
                 && {
                     manifest::upgrade_legacy_files(p);
-                    p.join(MANIFEST_FILE).is_file()
+                    manifest::file_in(p, MANIFEST_FILE).is_file()
                 }
                 && on(p)
         })

@@ -201,6 +201,12 @@ fn migrate_mcp_setups(files: &[PathBuf]) -> bool {
             tracing::warn!(file = %file.display(), "cannot read the MCP setup as JSON to move it");
             continue;
         }
+        if toml && toml_still_starts_old(&migrate_toml(&text), &old) {
+            // Written another way (an inline table, say): left as written,
+            // so the old command stays for it.
+            all = false;
+            tracing::warn!(file = %file.display(), "cannot move the MCP setup in this TOML to the new name");
+        }
         let updated = if toml {
             Some(migrate_toml(&text)).filter(|t| *t != text)
         } else {
@@ -375,6 +381,24 @@ fn migrate_toml(text: &str) -> String {
         out.push_str(replaced.as_deref().unwrap_or(line));
     }
     out
+}
+
+/// A `command` in `text` that still starts the old command.
+fn toml_still_starts_old(text: &str, old: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.to_ascii_lowercase();
+        line.contains("command")
+            && [
+                format!("\"{old}"),
+                format!("'{old}"),
+                format!("\\{old}."),
+                format!("/{old}."),
+                format!("\\{old}\""),
+                format!("/{old}\""),
+            ]
+            .iter()
+            .any(|p| line.contains(p.as_str()))
+    })
 }
 
 /// A TOML table header (`[a.b]`, `[[a.b]]`, `[ a . "b" ]  # note`): its
@@ -653,6 +677,22 @@ mod tests {
         )
         .unwrap();
         assert!(!migrate_mcp_setups(std::slice::from_ref(&file)));
+    }
+
+    #[test]
+    fn a_toml_inline_table_keeps_the_old_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("config.toml");
+        let old = old();
+        std::fs::write(
+            &file,
+            format!("[mcp_servers]\n{old} = {{ command = \"{old}\", args = [\"mcp\"] }}\n"),
+        )
+        .unwrap();
+        assert!(!migrate_mcp_setups(std::slice::from_ref(&file)));
+        let done = dir.path().join("done.toml");
+        std::fs::write(&done, format!("[mcp_servers.{old}]\ncommand = \"{old}\"\n")).unwrap();
+        assert!(migrate_mcp_setups(std::slice::from_ref(&done)));
     }
 
     #[test]

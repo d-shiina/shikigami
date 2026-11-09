@@ -46,6 +46,41 @@ pub struct SidecarConfig {
     pub setup_hint: String,
 }
 
+/// The environment variables set under the old product name whose new name
+/// is not set, under their new name.
+fn renamed_env(
+    vars: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(String, std::ffi::OsString)> {
+    let vars: Vec<_> = vars
+        .filter_map(|(k, v)| k.into_string().ok().map(|k| (k, v)))
+        .collect();
+    let set: std::collections::HashSet<&str> = vars.iter().map(|(k, _)| k.as_str()).collect();
+    vars.iter()
+        .filter_map(|(k, v)| {
+            let rest = k.strip_prefix(spellsheet_core::paths::LEGACY_ENV_PREFIX)?;
+            let new = format!("SPELLSHEET_{rest}");
+            (!set.contains(new.as_str())).then(|| (new, v.clone()))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+#[test]
+fn old_environment_names_reach_adapters_under_the_new_ones() {
+    use spellsheet_core::paths::LEGACY_ENV_PREFIX;
+    let vars = [
+        (format!("{LEGACY_ENV_PREFIX}BROWSER_PATH"), "a"),
+        (format!("{LEGACY_ENV_PREFIX}BROWSER_CHANNEL"), "chrome"),
+        ("SPELLSHEET_BROWSER_CHANNEL".to_owned(), "msedge"),
+        ("PATH".to_owned(), "x"),
+    ]
+    .map(|(k, v)| (k.into(), v.into()));
+    assert_eq!(
+        renamed_env(vars.into_iter()),
+        [("SPELLSHEET_BROWSER_PATH".to_owned(), "a".into())]
+    );
+}
+
 type Reply = Result<Value, StepError>;
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Reply>>>>;
 
@@ -171,6 +206,9 @@ impl SidecarClient {
         if let Some(cwd) = &self.config.cwd {
             command.current_dir(cwd);
         }
+        // Settings made before the product's rename (`<old>_BROWSER_PATH`…)
+        // still apply to adapters, which read only the new names.
+        command.envs(renamed_env(std::env::vars_os()));
         #[cfg(windows)]
         {
             // No console window when started from Studio.
