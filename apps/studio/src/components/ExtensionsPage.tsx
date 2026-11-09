@@ -5,13 +5,15 @@
 // extension is first (its nodes, what they send outside, the secrets and the
 // program) and installs only when the person confirms. Studio loads
 // extensions when it starts, so a change offers a restart.
-import { CloudUpload, Puzzle, RefreshCw, TriangleAlert } from "lucide-react";
+import { CirclePause, CirclePlay, CloudUpload, Puzzle, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useStudioApi } from "../context";
 import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry } from "../lib/api";
 import { confirmAsk } from "../lib/ask";
+import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { EXTENSION_ICONS } from "../lib/nodeIcons";
+import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, RowMenuButton, SearchBox, SelectionBar, StatusBadge, Switch, type Tone, toneDot, useTableView, ViewMenu } from "./DataTable";
 
 const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-primary focus:outline-none";
 
@@ -25,11 +27,11 @@ function problemsOf(e: unknown): string[] {
   return Array.isArray(details?.problems) ? details.problems.map(String) : [];
 }
 
-function ExtIcon({ ext, size = 18 }: { ext: Pick<ExtensionSummary, "icon">; size?: number }) {
+function ExtIcon({ ext, small }: { ext: Pick<ExtensionSummary, "icon">; small?: boolean }) {
   const Icon = (ext.icon && EXTENSION_ICONS[ext.icon]) || Puzzle;
   return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-sheet text-slate-600">
-      <Icon size={size} strokeWidth={1.75} aria-hidden="true" />
+    <span className={`grid shrink-0 place-items-center rounded-lg border border-slate-200 bg-sheet text-slate-600 ${small ? "h-7 w-7" : "h-9 w-9"}`}>
+      <Icon size={small ? 15 : 18} strokeWidth={1.75} aria-hidden="true" />
     </span>
   );
 }
@@ -54,7 +56,7 @@ function Preview({ preview, busy, onConfirm, onCancel }: { preview: ExtensionPre
   const sends = steps.filter((s) => s.external);
   const isUpdate = preview.installedVersion !== null && preview.installedVersion !== undefined;
   return (
-    <div className="rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet">
+    <div className="rounded-lg border border-slate-200 bg-sheet p-4">
       <div className="flex items-start gap-3">
         <ExtIcon ext={preview} />
         <div className="min-w-0 flex-1">
@@ -152,7 +154,7 @@ function SourceForm({ initial, onPreview, onCancel }: { initial: string; onPrevi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet">
+    <div className="rounded-lg border border-slate-200 bg-sheet p-4">
       <h3 className="mb-2 text-[15px] font-semibold">{t.extensions.installTitle}</h3>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600">{t.extensions.sourceLabel}</span>
@@ -210,143 +212,288 @@ function SourceForm({ initial, onPreview, onCancel }: { initial: string; onPrevi
   );
 }
 
-function InstalledRow({
-  ext,
-  onToggle,
-  onUpdate,
-  onUninstall,
-}: {
-  ext: InstalledExtension;
-  onToggle: (on: boolean) => void;
-  onUpdate: () => void;
-  onUninstall: () => void;
-}) {
+type InstalledState = "on" | "off" | "dev" | "error";
+const INSTALLED_STATES: InstalledState[] = ["on", "off", "dev", "error"];
+const INSTALLED_TONE: Record<InstalledState, Tone> = { on: "green", off: "slate", dev: "blue", error: "red" };
+const stateOf = (ext: InstalledExtension): InstalledState => (ext.problems.length > 0 ? "error" : !ext.managed ? "dev" : ext.enabled ? "on" : "off");
+const installedLabel = (s: InstalledState) => {
   const e = t.extensions;
-  const broken = ext.problems.length > 0;
-  const sends = (ext.steps ?? []).filter((s) => s.external);
+  return s === "on" ? e.enabled : s === "off" ? e.disabled : s === "dev" ? e.dev : e.loadError;
+};
+
+/** The name cell: the icon, the name and what it does, as in the flow and secret tables. */
+function NameCell({ ext, problems }: { ext: Pick<ExtensionSummary, "icon" | "label" | "description">; problems?: string[] }) {
   return (
-    <li className={`flex gap-3 border-b border-slate-200 py-3 ${ext.enabled ? "" : "opacity-70"}`}>
-      <ExtIcon ext={ext} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium">{ext.label}</span>
-          {ext.version && <span className="text-[12px] text-slate-500">{e.version(ext.version)}</span>}
-          {!ext.enabled && <Tag tone="off">{e.disabled}</Tag>}
-          {!ext.managed && <Tag title={e.devTitle}>{e.dev}</Tag>}
-          {broken && <Tag tone="warn">{e.loadError}</Tag>}
-        </div>
-        {ext.description && <p className="mt-0.5 text-[12.5px] text-slate-700">{ext.description}</p>}
-        <p className="mt-0.5 text-[11.5px] text-slate-500">
-          {[ext.publisher && e.by(ext.publisher), ext.steps && e.nodes(ext.steps.length), ext.name].filter(Boolean).join(" · ")}
-        </p>
-        {sends.map((s) => (
-          <p key={s.type} className="mt-0.5 flex items-center gap-1 text-[11.5px] text-amber-700">
-            <CloudUpload size={12} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-            {e.preview.sentTo(s.external!.service, s.external!.data)}
-          </p>
-        ))}
-        {broken && (
-          <ul className="mt-1 list-disc pl-4 font-mono text-[11px] text-shu-600">
-            {ext.problems.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+    <span className="flex min-w-0 items-center gap-2.5">
+      <ExtIcon ext={ext} small />
+      <span className="min-w-0">
+        <span className="block truncate font-medium">{ext.label}</span>
+        {problems && problems.length > 0 ? (
+          <span className="block truncate font-mono text-[11px] text-shu-600" title={problems.join("\n")}>
+            {problems[0]}
+          </span>
+        ) : (
+          ext.description && (
+            <span className="block truncate text-[12px] text-slate-500" title={ext.description}>
+              {ext.description}
+            </span>
+          )
         )}
-      </div>
-      {ext.managed && (
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
-            <input type="checkbox" checked={ext.enabled} onChange={(ev) => onToggle(ev.target.checked)} />
-            {e.enabled}
-          </label>
-          <div className="flex gap-2 text-[12px]">
-            {ext.source && (
-              <button type="button" className="flex items-center gap-1 text-brand-600 hover:underline" onClick={onUpdate}>
-                <RefreshCw size={12} strokeWidth={1.75} aria-hidden="true" />
-                {e.checkUpdate}
-              </button>
-            )}
-            <button type="button" className="text-slate-500 hover:text-shu-600" onClick={onUninstall}>
-              {e.uninstall}
-            </button>
-          </div>
-        </div>
-      )}
-    </li>
+      </span>
+    </span>
   );
 }
 
+const muted = (text: string) => <span className="block truncate text-[12.5px] text-slate-600">{text}</span>;
+
+function installedColumns(onEnabled: (ext: InstalledExtension, on: boolean) => void): Column<InstalledExtension>[] {
+  const e = t.extensions;
+  return [
+    { id: "name", header: t.runs.name, sortValue: (ext) => ext.label, cell: (ext) => <NameCell ext={ext} problems={ext.problems} /> },
+    {
+      id: "publisher",
+      header: e.publisherColumn,
+      width: "w-[180px]",
+      hideBelow: 860,
+      sortValue: (ext) => ext.publisher ?? "",
+      group: (ext) => ({ key: ext.publisher ?? "", label: ext.publisher || "—" }),
+      cell: (ext) => muted(ext.publisher || "—"),
+    },
+    {
+      id: "nodes",
+      header: e.nodesColumn,
+      width: "w-[92px]",
+      align: "right",
+      sortValue: (ext) => ext.steps?.length ?? 0,
+      cell: (ext) => (
+        <span className="text-[12.5px] text-slate-600 tabular-nums" title={(ext.steps ?? []).map((s) => s.label).join("\n")}>
+          {ext.steps?.length ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "sends",
+      header: e.sendsColumn,
+      width: "w-[170px]",
+      hideBelow: 1000,
+      sortValue: (ext) => (ext.steps ?? []).filter((s) => s.external).length,
+      cell: (ext) => {
+        const sends = (ext.steps ?? []).filter((s) => s.external);
+        if (sends.length === 0) return <span className="text-[12.5px] text-slate-500">{e.sendsNone}</span>;
+        const services = [...new Set(sends.map((s) => s.external!.service))];
+        return (
+          <span
+            className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-amber-700"
+            title={sends.map((s) => e.preview.sentTo(s.external!.service, s.external!.data)).join("\n")}
+          >
+            <CloudUpload size={13} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+            <span className="truncate">{services.join("・")}</span>
+          </span>
+        );
+      },
+    },
+    {
+      id: "version",
+      header: e.versionColumn,
+      width: "w-[120px]",
+      hideBelow: 720,
+      sortValue: (ext) => ext.version ?? "",
+      cell: (ext) => <span className="text-[12.5px] text-slate-600 tabular-nums">{ext.version ? e.version(ext.version) : "—"}</span>,
+    },
+    {
+      id: "state",
+      header: e.stateColumn,
+      width: "w-[150px]",
+      sortValue: (ext) => INSTALLED_STATES.indexOf(stateOf(ext)),
+      group: (ext) => {
+        const s = stateOf(ext);
+        return { key: s, order: INSTALLED_STATES.indexOf(s), label: <StatusBadge tone={INSTALLED_TONE[s]} label={installedLabel(s)} /> };
+      },
+      cell: (ext) => {
+        const s = stateOf(ext);
+        return <StatusBadge tone={INSTALLED_TONE[s]} label={installedLabel(s)} title={s === "dev" ? e.devTitle : s === "error" ? ext.problems.join("\n") : undefined} />;
+      },
+    },
+    {
+      id: "enabled",
+      header: e.enabled,
+      width: "w-[88px]",
+      hideable: false,
+      sortValue: (ext) => (ext.enabled ? 0 : 1),
+      cell: (ext) =>
+        ext.managed ? (
+          <Switch checked={ext.enabled} label={ext.enabled ? e.disable : e.enable} onChange={(on) => onEnabled(ext, on)} />
+        ) : (
+          <span className="text-[12px] text-slate-500" title={e.devTitle}>
+            —
+          </span>
+        ),
+    },
+  ];
+}
+
+type Offered = RegistryEntry & { have?: InstalledExtension };
+
+function registryColumns(onInstall: (source: string) => void): Column<Offered>[] {
+  const e = t.extensions;
+  return [
+    { id: "name", header: t.runs.name, sortValue: (x) => x.label, cell: (x) => <NameCell ext={{ ...x, icon: x.have?.icon }} /> },
+    {
+      id: "publisher",
+      header: e.publisherColumn,
+      width: "w-[180px]",
+      hideBelow: 860,
+      sortValue: (x) => x.publisher ?? "",
+      group: (x) => ({ key: x.publisher ?? "", label: x.publisher || "—" }),
+      cell: (x) => muted(x.publisher || "—"),
+    },
+    {
+      id: "version",
+      header: e.versionColumn,
+      width: "w-[120px]",
+      hideBelow: 720,
+      sortValue: (x) => x.version ?? "",
+      cell: (x) => <span className="text-[12.5px] text-slate-600 tabular-nums">{x.version ? e.version(x.version) : "—"}</span>,
+    },
+    {
+      id: "state",
+      header: e.stateColumn,
+      width: "w-[168px]",
+      sortValue: (x) => (x.have ? 0 : 1),
+      group: (x) => ({ key: x.have ? "have" : "new", order: x.have ? 0 : 1, label: x.have ? e.installedState : e.notInstalled }),
+      cell: (x) =>
+        x.have ? (
+          <StatusBadge tone="green" label={e.installedState} title={x.have.version ? e.version(x.have.version) : undefined} />
+        ) : (
+          <span className="text-[12.5px] text-slate-500">{e.notInstalled}</span>
+        ),
+    },
+    {
+      // What the catalog is for, so always in view (not a hover action).
+      id: "install",
+      header: "",
+      width: "w-[132px]",
+      align: "right",
+      hideable: false,
+      cell: (x) => (
+        <button
+          type="button"
+          className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12.5px] whitespace-nowrap text-slate-700 hover:bg-slate-100"
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onInstall(x.source);
+          }}
+        >
+          {x.have ? e.checkUpdate : e.install}
+        </button>
+      ),
+    },
+  ];
+}
+
 /** The catalog: a JSON index set by URL, nothing hosted by Shikigami. */
-function Registry({ list, installed, onInstall, onSaved }: { list: ExtensionList; installed: InstalledExtension[]; onInstall: (source: string) => void; onSaved: () => void }) {
+function Registry({
+  list,
+  installed,
+  query,
+  onInstall,
+  onSaved,
+}: {
+  list: ExtensionList;
+  installed: InstalledExtension[];
+  query: string;
+  onInstall: (source: string) => void;
+  onSaved: () => void;
+}) {
   const r = t.extensions.registry;
+  const e = t.extensions;
   const [url, setUrl] = useState(list.registry ?? "");
   const [entries, setEntries] = useState<RegistryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [states, setStates] = useState<Set<"have" | "new">>(new Set());
+  const columns = registryColumns(onInstall);
+  const view = useTableView(columns, { storageKey: "shikigami.studio.extensions.registry.sort", initialSort: { column: "name", descending: false } });
   const load = useCallback(async () => {
     if (!list.registry) return setEntries(null);
     setEntries(null);
     setError(null);
     try {
       setEntries(await extensionsApi.registry());
-    } catch (e) {
-      setError(message(e));
+    } catch (err) {
+      setError(message(err));
     }
   }, [list.registry]);
   useEffect(() => void load(), [load]);
+  const offered: Offered[] = (entries ?? []).map((entry) => ({ ...entry, have: installed.find((i) => i.name === entry.name) }));
+  const q = query.trim().toLowerCase();
+  const matches = (x: Offered) => !q || [x.label, x.name, x.description ?? "", x.publisher ?? ""].join(" ").toLowerCase().includes(q);
+  const rows = offered.filter((x) => matches(x) && (!states.size || states.has(x.have ? "have" : "new")));
   return (
     <div>
-      <p className="mb-3 text-xs text-slate-600">{r.intro}</p>
-      <label className="mb-4 block space-y-1">
-        <span className="text-xs font-medium text-slate-600">{r.url}</span>
-        <div className="flex gap-2">
-          <input className={inputClass} value={url} placeholder={r.urlPlaceholder} onChange={(e) => setUrl(e.target.value)} />
-          <button
-            type="button"
-            className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-700 hover:bg-slate-100"
-            onClick={async () => {
-              try {
-                await extensionsApi.setRegistry(url);
-                onSaved();
-              } catch (e) {
-                setError(message(e));
-              }
-            }}
-          >
-            {r.save}
-          </button>
-        </div>
-      </label>
+      {/* Where the catalog comes from: a setting of this tab, kept on one line above it. */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="shrink-0 text-[12px] font-medium text-slate-600">{r.url}</span>
+        <input className={`${inputClass} h-7 max-w-[520px]`} value={url} placeholder={r.urlPlaceholder} onChange={(ev) => setUrl(ev.target.value)} />
+        <button
+          type="button"
+          disabled={url === (list.registry ?? "")}
+          className="h-7 shrink-0 rounded-lg border border-slate-300 px-2.5 text-[13px] text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          onClick={async () => {
+            try {
+              await extensionsApi.setRegistry(url);
+              onSaved();
+            } catch (err) {
+              setError(message(err));
+            }
+          }}
+        >
+          {r.save}
+        </button>
+        {entries && entries.length > 0 && (
+          <>
+            <span className="flex-1" />
+            <FacetFilter
+              label={e.stateColumn}
+              value={states}
+              onChange={setStates}
+              options={(["have", "new"] as const).map((value) => ({
+                value,
+                label: value === "have" ? e.installedState : e.notInstalled,
+                count: offered.filter((x) => matches(x) && (value === "have") === !!x.have).length,
+              }))}
+            />
+            <ViewMenu view={view} />
+          </>
+        )}
+      </div>
       {error && <p className="mb-2 text-xs text-shu-600">{error}</p>}
       {!list.registry ? (
-        <p className="text-sm text-slate-500">{r.notSet}</p>
+        <Empty>{r.notSet}</Empty>
       ) : entries === null ? (
         !error && <p className="text-sm text-slate-500">{r.loading}</p>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-slate-500">{r.empty}</p>
+        <Empty>{r.empty}</Empty>
       ) : (
-        <ul>
-          {entries.map((entry) => {
-            const have = installed.find((i) => i.name === entry.name);
-            return (
-              <li key={entry.name} className="flex items-start gap-3 border-b border-slate-200 py-3">
-                <ExtIcon ext={{ icon: have?.icon }} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium">{entry.label}</span>
-                    {entry.version && <span className="text-[12px] text-slate-500">{t.extensions.version(entry.version)}</span>}
-                    {have && <Tag tone="off">{r.installed}</Tag>}
-                  </div>
-                  {entry.description && <p className="mt-0.5 text-[12.5px] text-slate-700">{entry.description}</p>}
-                  <p className="mt-0.5 text-[11.5px] text-slate-500">{[entry.publisher && t.extensions.by(entry.publisher), entry.name].filter(Boolean).join(" · ")}</p>
-                </div>
-                <button type="button" className="shrink-0 rounded-lg border border-slate-300 px-2 py-0.5 text-[12px] text-slate-700 hover:bg-slate-100" onClick={() => onInstall(entry.source)}>
-                  {have ? t.extensions.checkUpdate : t.extensions.install}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <DataTable
+          columns={columns}
+          view={view}
+          rows={rows}
+          total={offered.length}
+          rowKey={(x) => x.name}
+          empty={e.notFound}
+        />
       )}
+      <p className="mt-3 text-[12px] leading-relaxed text-slate-500">{r.intro}</p>
+    </div>
+  );
+}
+
+function Empty({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center text-[13px] text-slate-600">
+      <Puzzle size={22} strokeWidth={1.5} className="mb-1 text-slate-400" aria-hidden="true" />
+      <p>{children}</p>
+      {hint && <p className="max-w-[520px] text-[12px] text-slate-500">{hint}</p>}
     </div>
   );
 }
@@ -362,6 +509,9 @@ export function ExtensionsPage() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [preview, setPreview] = useState<ExtensionPreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [states, setStates] = useState<Set<InstalledState>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const load = useCallback(async () => {
     try {
       setList(await extensionsApi.list());
@@ -375,10 +525,11 @@ export function ExtensionsPage() {
     setNotice(null);
     try {
       await what();
-      await load();
     } catch (err) {
       setError(message(err));
     }
+    // Also after a failure part-way through a bulk action: show what really changed.
+    await load();
   };
   const close = () => {
     if (preview) void extensionsApi.discard(preview.id).catch(() => {});
@@ -413,34 +564,85 @@ export function ExtensionsPage() {
     }
   };
   const installed = list?.installed ?? [];
+  const setEnabled = (exts: InstalledExtension[], on: boolean) =>
+    act(async () => {
+      for (const ext of exts) if (ext.managed && ext.enabled !== on) await extensionsApi.setEnabled(ext.name, on);
+    });
+  const uninstall = async (exts: InstalledExtension[]) => {
+    const one = exts.length === 1 ? exts[0] : undefined;
+    // Flows using them stop validating, so ask in the app's dialog first, saying so.
+    const yes = await confirmAsk({ title: one ? e.uninstallAsk.title(one.label) : e.uninstallMany(exts.length), body: e.uninstallAsk.body, confirm: e.uninstall, danger: true });
+    if (!yes) return;
+    await act(async () => {
+      for (const ext of exts) if (ext.managed) await extensionsApi.uninstall(ext.name);
+      setSelected(new Set());
+    });
+  };
+  const columns = installedColumns((ext, on) => void setEnabled([ext], on));
+  const view = useTableView(columns, { storageKey: "shikigami.studio.extensions.sort", initialSort: { column: "name", descending: false } });
+  const q = query.trim().toLowerCase();
+  const keep = (ext: InstalledExtension, skip?: "state") =>
+    (skip === "state" || !states.size || states.has(stateOf(ext))) &&
+    (!q || [ext.label, ext.name, ext.description ?? "", ext.publisher ?? "", ...(ext.steps ?? []).map((s) => s.label)].join(" ").toLowerCase().includes(q));
+  const rows = installed.filter((ext) => keep(ext));
+  const stateOptions = INSTALLED_STATES.map((value) => ({
+    value,
+    label: installedLabel(value),
+    dot: toneDot(INSTALLED_TONE[value]),
+    count: installed.filter((x) => keep(x, "state") && stateOf(x) === value).length,
+  })).filter((o) => o.count > 0 || states.has(o.value));
+  // Only rows on screen that can be changed are picked: a developer's folder is listed, not managed.
+  const picked = rows.filter((ext) => selected.has(ext.dir) && ext.managed);
+  const menu = (ext: InstalledExtension): MenuSpec[] => [
+    ext.source && { label: e.checkUpdate, icon: RefreshCw, run: () => void checkUpdate(ext) },
+    ext.managed && { label: ext.enabled ? e.disable : e.enable, icon: ext.enabled ? CirclePause : CirclePlay, run: () => void setEnabled([ext], !ext.enabled) },
+    ext.managed && "-",
+    ext.managed && { label: e.uninstall, icon: Trash2, danger: true, run: () => void uninstall([ext]) },
+  ];
+  const formOpen = installing !== null || !!preview;
   return (
-    <div className="h-full overflow-y-auto bg-paper">
-      <div className="mx-auto max-w-[680px] px-6 py-6">
-        <div className="mb-3 flex items-end gap-4 border-b border-slate-200">
-          <h2 className="pb-2 text-lg font-bold">{e.place}</h2>
-          <div role="tablist" className="flex">
-            {(["installed", "registry"] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => setTab(id)}
-                className={`-mb-px border-b-2 px-2 pb-2 text-sm ${tab === id ? "border-ink font-semibold" : "border-transparent text-slate-500 hover:text-ink"}`}
-              >
-                {e.tabs[id]}
-              </button>
-            ))}
+    <div className="@container h-full overflow-y-auto bg-paper">
+      <div className="mx-auto max-w-[1280px] px-6 pt-5 pb-3">
+        {/* The two lists, then finding and narrowing, then installing, the filled button, at the end. */}
+        <div className="mb-3 flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div role="tablist" className="flex h-7 shrink-0 items-center rounded-lg bg-slate-100 p-0.5">
+              {(["installed", "registry"] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className={`flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[13px] whitespace-nowrap ${
+                    tab === id ? "bg-sheet font-medium text-ink shadow-sm" : "text-slate-600 hover:text-ink"
+                  }`}
+                >
+                  {e.tabs[id]}
+                  {id === "installed" && list && <span className="text-[11.5px] text-slate-500 tabular-nums">{installed.length}</span>}
+                </button>
+              ))}
+            </div>
+            {(tab === "registry" || installed.length > 0) && <SearchBox value={query} onChange={setQuery} placeholder={e.search} hits={tab === "installed" ? rows.length : undefined} />}
+            {tab === "installed" && installed.length > 0 && (
+              <>
+                <FacetFilter label={e.stateColumn} value={states} onChange={setStates} options={stateOptions} />
+                {states.size > 0 && <ClearFilters onClear={() => setStates(new Set())} />}
+              </>
+            )}
           </div>
-          {installing === null && !preview && (
-            <button type="button" className="mb-2 ml-auto rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover" onClick={() => setInstalling("")}>
-              {e.install}
-            </button>
-          )}
+          {tab === "installed" && installed.length > 0 && <ViewMenu view={view} />}
+          <button
+            type="button"
+            hidden={formOpen}
+            onClick={() => setInstalling("")}
+            className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
+          >
+            ＋ {e.install}
+          </button>
         </div>
-        <p className="mb-4 text-xs text-slate-600">{e.intro}</p>
         {list?.restartNeeded && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-sheet px-3 py-2 text-[13px]">
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-sheet px-3 py-2 text-[13px]">
             <span className="flex-1">
               {e.restartNeeded}
               <span className="ml-1 text-[11.5px] text-slate-500">{e.restartHint}</span>
@@ -456,44 +658,50 @@ export function ExtensionsPage() {
         )}
         {error && <p className="mb-3 text-xs text-shu-600">{error}</p>}
         {notice && <p className="mb-3 text-xs text-slate-600">{notice}</p>}
-        {preview ? (
-          <div className="mb-4">
-            <Preview preview={preview} busy={busy} onConfirm={() => void confirm()} onCancel={close} />
+        {formOpen && (
+          <div className="mb-4 max-w-[680px]">
+            {preview ? (
+              <Preview preview={preview} busy={busy} onConfirm={() => void confirm()} onCancel={close} />
+            ) : (
+              <SourceForm key={installing ?? ""} initial={installing ?? ""} onPreview={setPreview} onCancel={close} />
+            )}
           </div>
-        ) : (
-          installing !== null && (
-            <div className="mb-4">
-              <SourceForm key={installing} initial={installing} onPreview={setPreview} onCancel={close} />
-            </div>
-          )
         )}
         {list &&
           (tab === "installed" ? (
-            installed.length === 0 ? (
-              <div className="text-sm text-slate-500">
-                <p>{e.none}</p>
-                <p className="mt-1 text-xs">{e.noneHint}</p>
-              </div>
-            ) : (
-              <ul className="border-t border-slate-200">
-                {installed.map((ext) => (
-                  <InstalledRow
-                    key={ext.dir}
-                    ext={ext}
-                    onToggle={(on) => void act(() => extensionsApi.setEnabled(ext.name, on))}
-                    onUpdate={() => void checkUpdate(ext)}
-                    onUninstall={async () => {
-                      const yes = await confirmAsk({ title: e.uninstallAsk.title(ext.label), body: e.uninstallAsk.body, confirm: e.uninstall, danger: true });
-                      if (yes) void act(() => extensionsApi.uninstall(ext.name));
-                    }}
+            <>
+              {installed.length === 0 ? (
+                <Empty hint={e.noneHint}>{e.none}</Empty>
+              ) : (
+                <>
+                  <DataTable
+                    columns={columns}
+                    view={view}
+                    rows={rows}
+                    total={installed.length}
+                    rowKey={(ext) => ext.dir}
+                    selected={new Set(picked.map((ext) => ext.dir))}
+                    onSelect={setSelected}
+                    canPick={(ext) => ext.managed}
+                    empty={e.notFound}
+                    actionsWidth={44}
+                    rowActions={(ext) => (ext.managed || ext.source ? <RowMenuButton items={() => menu(ext)} /> : null)}
+                    rowProps={(ext) => ({ onContextMenu: menuFor(() => menu(ext)) })}
                   />
-                ))}
-              </ul>
-            )
+                  <SelectionBar count={picked.length} onClear={() => setSelected(new Set())}>
+                    <BulkButton icon={CirclePlay} label={e.enable} onClick={() => setEnabled(picked, true)} />
+                    <BulkButton icon={CirclePause} label={e.disable} onClick={() => setEnabled(picked, false)} />
+                    <BulkButton icon={Trash2} label={e.uninstall} onClick={() => uninstall(picked)} />
+                  </SelectionBar>
+                </>
+              )}
+              <p className="mt-3 text-[12px] leading-relaxed text-slate-500">{e.intro}</p>
+            </>
           ) : (
             <Registry
               list={list}
               installed={installed}
+              query={query}
               onInstall={(source) => {
                 setPreview(null);
                 setInstalling(source);
