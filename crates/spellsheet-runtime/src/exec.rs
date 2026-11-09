@@ -436,6 +436,11 @@ impl ResourceLocks {
                 && let Some(dir) = &self.pc_lock_dir
             {
                 guards.push(ResourceGuard::Pc(pc_lock(dir, name).await?));
+                // A worker or MCP process from before the rename may still
+                // run until the next sign-in, locking under the old folder.
+                if let Some(legacy) = legacy_lock_dir(dir) {
+                    guards.push(ResourceGuard::Pc(pc_lock(&legacy, name).await?));
+                }
                 // The screen may have locked while waiting.
                 self.wait_desktop(unlock, waiting, &mut said).await?;
             }
@@ -487,6 +492,14 @@ impl ResourceLocks {
 
 /// How often a node waiting for the screen to be unlocked looks again.
 const UNLOCK_POLL: Duration = Duration::from_secs(2);
+
+/// The lock folder of `dir` as named before the rename, when processes of
+/// that version made it on this PC.
+fn legacy_lock_dir(dir: &Path) -> Option<std::path::PathBuf> {
+    let name = dir.file_name()?.to_str()?;
+    let legacy = dir.with_file_name(spellsheet_core::paths::legacy_spelling(name));
+    (legacy != dir && legacy.is_dir()).then_some(legacy)
+}
 
 /// Waits for the PC-wide lock file of `name` (polling, so the caller's
 /// cancellation still applies while it waits).

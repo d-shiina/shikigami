@@ -276,35 +276,34 @@ fn new_command(command: &str, old: &str) -> Option<String> {
 
 /// Codex's `config.toml`: `[mcp_servers.<old>]` (and its sub-tables) and
 /// `command = "…<old>.exe"`, line by line so the rest stays as written.
+/// When the new table is already there, the old one keeps its name (two
+/// tables of one name would make the whole file unreadable to Codex).
 fn migrate_toml(text: &str) -> String {
     let old = legacy_name();
     let has_new = text.lines().any(|l| {
-        let l = l.trim();
-        l == format!("[mcp_servers.{NAME}]") || l == format!("[mcp_servers.\"{NAME}\"]")
+        toml_table(l)
+            .is_some_and(|(path, _)| path.len() >= 2 && path[0] == "mcp_servers" && path[1] == NAME)
     });
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim();
         let mut replaced = None;
-        if !has_new && trimmed.starts_with('[') {
-            for (from, to) in [
-                (
-                    format!("[mcp_servers.{old}"),
-                    format!("[mcp_servers.{NAME}"),
-                ),
-                (
-                    format!("[mcp_servers.\"{old}\""),
-                    format!("[mcp_servers.\"{NAME}\""),
-                ),
-            ] {
-                let rest = trimmed
-                    .strip_prefix(&from)
-                    .filter(|r| r.starts_with(']') || r.starts_with('.'));
-                if let Some(rest) = rest {
-                    let indent = &line[..line.len() - line.trim_start().len()];
-                    let end = &line[line.trim_end().len()..];
-                    replaced = Some(format!("{indent}{to}{rest}{end}"));
-                }
+        if trimmed.starts_with('[') {
+            if !has_new
+                && let Some((mut path, after)) = toml_table(line)
+                && path.len() >= 2
+                && path[0] == "mcp_servers"
+                && path[1] == old
+            {
+                path[1] = NAME.to_owned();
+                let indent = &line[..line.len() - line.trim_start().len()];
+                let (open, close) = if trimmed.starts_with("[[") {
+                    ("[[", "]]")
+                } else {
+                    ("[", "]")
+                };
+                let keys: Vec<String> = path.iter().map(|k| toml_key(k)).collect();
+                replaced = Some(format!("{indent}{open}{}{close}{after}", keys.join(".")));
             }
         } else if let Some(value) = trimmed.strip_prefix("command").map(str::trim_start)
             && let Some(value) = value.strip_prefix('=').map(str::trim)
@@ -317,6 +316,58 @@ fn migrate_toml(text: &str) -> String {
         out.push_str(replaced.as_deref().unwrap_or(line));
     }
     out
+}
+
+/// A TOML table header (`[a.b]`, `[[a.b]]`, `[ a . "b" ]  # note`): its
+/// keys, and what follows the closing bracket (spaces, a comment, the line
+/// end) as written.
+fn toml_table(line: &str) -> Option<(Vec<String>, &str)> {
+    let trimmed = line.trim_start();
+    let array = trimmed.starts_with("[[");
+    let mut rest = trimmed.strip_prefix(if array { "[[" } else { "[" })?;
+    let mut keys = Vec::new();
+    loop {
+        rest = rest.trim_start_matches([' ', '\t']);
+        let quote = rest.chars().next()?;
+        if quote == '"' || quote == '\'' {
+            let inner = toml_string(&rest[1..], quote)?;
+            keys.push(inner.to_owned());
+            rest = &rest[1 + inner.len() + 1..];
+        } else {
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            if end == 0 {
+                return None;
+            }
+            keys.push(rest[..end].to_owned());
+            rest = &rest[end..];
+        }
+        rest = rest.trim_start_matches([' ', '\t']);
+        if let Some(r) = rest.strip_prefix('.') {
+            rest = r;
+        } else {
+            let after = rest.strip_prefix(if array { "]]" } else { "]" })?;
+            let comment = after.trim_start_matches([' ', '\t']);
+            if comment.is_empty() || comment.starts_with('#') || comment.starts_with(['\r', '\n']) {
+                return Some((keys, after));
+            }
+            return None;
+        }
+    }
+}
+
+/// `key` as a TOML key: bare when it can be, quoted otherwise.
+fn toml_key(key: &str) -> String {
+    if !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        key.to_owned()
+    } else {
+        format!("\"{}\"", key.replace('\\', "\\\\").replace('"', "\\\""))
+    }
 }
 
 /// The text of a TOML string up to its closing `quote` (`rest` starts just
@@ -462,6 +513,27 @@ mod tests {
         assert_eq!(
             migrate_toml(&text),
             "[mcp_servers.spellsheet]\ncommand = \"C:\\\\x\\\\spellsheet.exe\" # MCP server\n"
+        );
+    }
+
+    #[test]
+    fn toml_headers_are_read_with_spaces_quotes_and_comments() {
+        let old = old();
+        let text = format!("[ mcp_servers . \"{old}\" ] # mine\ncommand = \"{old}\"\n");
+        assert_eq!(
+            migrate_toml(&text),
+            "[mcp_servers.spellsheet] # mine\ncommand = \"spellsheet\"\n"
+        );
+        // The new table is already there (written with a comment): the old
+        // one keeps its name, so the file has no table twice.
+        let text = format!(
+            "[mcp_servers.spellsheet] # existing\ncommand = \"spellsheet\"\n\n[mcp_servers.{old}]\ncommand = \"{old}\"\n"
+        );
+        assert_eq!(
+            migrate_toml(&text),
+            format!(
+                "[mcp_servers.spellsheet] # existing\ncommand = \"spellsheet\"\n\n[mcp_servers.{old}]\ncommand = \"spellsheet\"\n"
+            )
         );
     }
 

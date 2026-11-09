@@ -2291,6 +2291,43 @@ async fn desktop_input_is_exclusive_across_processes() {
 }
 
 #[tokio::test]
+async fn desktop_input_also_waits_for_processes_from_before_the_rename() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("spellsheet-locks");
+    let legacy = root
+        .path()
+        .join(spellsheet_core::paths::legacy_spelling("spellsheet-locks"));
+    std::fs::create_dir_all(&legacy).unwrap();
+    // An older worker holds the mouse and keyboard under the old folder.
+    let held = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(legacy.join(format!("{}.lock", crate::DESKTOP_INPUT)))
+        .unwrap();
+    held.lock().unwrap();
+    let runtime = Runtime::builder()
+        .register(
+            click_def(),
+            FakeMouse {
+                active: AtomicU32::new(0),
+                peak: AtomicU32::new(0),
+            },
+        )
+        .build()
+        .with_pc_locks(dir);
+    let blocked = tokio::time::timeout(
+        Duration::from_millis(500),
+        run(&runtime, flow(vec![Step::new("test.click")]), json!({})),
+    )
+    .await;
+    assert!(blocked.is_err(), "ran while the old process held the lock");
+    held.unlock().unwrap();
+    let (report, _) = run(&runtime, flow(vec![Step::new("test.click")]), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+}
+
+#[tokio::test]
 async fn desktop_steps_stop_while_the_screen_is_locked() {
     let runtime = Runtime::builder()
         .register(
