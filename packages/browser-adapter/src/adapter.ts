@@ -1043,15 +1043,35 @@ export class Adapter {
     for (const frame of page.frames()) {
       if (frame === page.mainFrame() || out.length >= MAX) continue;
       try {
-        const box = await (await frame.frameElement()).boundingBox();
+        const element = await frame.frameElement();
+        const box = await element.boundingBox();
         if (!box || box.width < 2 || box.height < 2) continue;
+        // Where the frame's page starts inside its element (border and
+        // padding) and how much the element is scaled on the screen.
+        const inset = await element.evaluate((el) => {
+          const e = el as HTMLElement;
+          const style = getComputedStyle(e);
+          const padLeft = parseFloat(style.paddingLeft) || 0;
+          const padTop = parseFloat(style.paddingTop) || 0;
+          return {
+            left: e.clientLeft + padLeft,
+            top: e.clientTop + padTop,
+            width: e.clientWidth - padLeft - (parseFloat(style.paddingRight) || 0),
+            height: e.clientHeight - padTop - (parseFloat(style.paddingBottom) || 0),
+            outerWidth: e.offsetWidth,
+            outerHeight: e.offsetHeight,
+          };
+        });
+        const sx = inset.outerWidth > 0 ? box.width / inset.outerWidth : 1;
+        const sy = inset.outerHeight > 0 ? box.height / inset.outerHeight : 1;
+        const view = { x: box.x + inset.left * sx, y: box.y + inset.top * sy, width: inset.width * sx, height: inset.height * sy };
         const inner = await frame.evaluate(fieldRegions, MAX - out.length);
         for (const r of inner) {
           // Cut to the frame: what scrolls out of it is not on the picture.
-          const x0 = Math.max(box.x, box.x + r.x);
-          const y0 = Math.max(box.y, box.y + r.y);
-          const x1 = Math.min(box.x + box.width, box.x + r.x + r.width);
-          const y1 = Math.min(box.y + box.height, box.y + r.y + r.height);
+          const x0 = Math.max(view.x, view.x + r.x * sx);
+          const y0 = Math.max(view.y, view.y + r.y * sy);
+          const x1 = Math.min(view.x + view.width, view.x + (r.x + r.width) * sx);
+          const y1 = Math.min(view.y + view.height, view.y + (r.y + r.height) * sy);
           if (x1 - x0 >= 2 && y1 - y0 >= 2) out.push({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
         }
       } catch {

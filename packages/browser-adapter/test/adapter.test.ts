@@ -80,7 +80,7 @@ describe("browser adapter", () => {
       <div class="card" style="display:flex;flex-direction:column"><h3>手順</h3><div class="note">申込ボタンを押します</div></div>
       <div class="card" style="display:flex;flex-direction:column"><h3>注意</h3><div class="note">内容を確かめます</div></div>
       <dl class="grid"><dt>電話</dt><dd id="dd">00-1111-2222</dd><dt>メール</dt><dd>hanako@example.com</dd></dl>
-      <iframe style="width:400px;height:120px;border:0" srcdoc="${`<meta charset=utf-8><style>${css}</style>${row("氏名", "見本 花子")}${row("生年月日", "2000年1月1日")}`.replace(/"/g, "&quot;")}"></iframe>`;
+      <iframe style="width:400px;height:120px;border:12px solid #ccc;padding:6px;transform:scale(0.8);transform-origin:0 0" srcdoc="${`<meta charset=utf-8><style>${css}</style>${row("氏名", "見本 花子")}${row("生年月日", "2000年1月1日")}`.replace(/"/g, "&quot;")}"></iframe>`;
     const r = { runId: "run_manual_regions" };
     await adapter.call("open", { ...r, url: `data:text/html;charset=utf-8,${encodeURIComponent(html)}` });
     const page = adapter["session"]({ runId: r.runId }).page;
@@ -102,6 +102,17 @@ describe("browser adapter", () => {
     const values = [...(await rectOf(".rows .value")), ...(await rectOf("dd")), ...(await rectOf(".value", true))];
     expect(values).toHaveLength(8);
     for (const v of values) expect(covered(v)).toBe(true);
+    // Inside the bordered, scaled frame the blur sits on the value itself.
+    const fit = (b: { x: number; y: number; width: number; height: number }) =>
+      Math.max(
+        ...shot.regions.map((g) => {
+          const w = Math.min(b.x + b.width, g.x + g.width) - Math.max(b.x, g.x);
+          const h = Math.min(b.y + b.height, g.y + g.height) - Math.max(b.y, g.y);
+          const both = Math.max(0, w) * Math.max(0, h);
+          return both / (b.width * b.height + g.width * g.height - both);
+        }),
+      );
+    for (const v of await rectOf(".value", true)) expect(fit(v)).toBeGreaterThan(0.8);
     const labels = [...(await rectOf(".rows .label")), ...(await rectOf("dt")), ...(await rectOf("#heading")), ...(await rectOf("header > *")), ...(await rectOf(".card > *"))];
     expect(labels.length).toBeGreaterThan(8);
     for (const l of labels) expect(covered(l)).toBe(false);
