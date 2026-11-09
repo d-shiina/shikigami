@@ -418,3 +418,5 @@ footer a { color: var(--fg-muted); }
 .cmp-src ol { margin: 0; padding-left: 1.6em; }
 .cmp-src li { margin: 4px 0; overflow-wrap: anywhere; }
 .cmp-src li.nonum { list-style: none; margin-left: -1.6em; margin-top: 10px; }
+.cmp tbody th, .cmp thead th:first-child { position: sticky; left: 0; background: var(--bg); z-index: 1; }
+@media (max-width: 560px) { .cmp tbody th { width: 88px; white-space: normal; } }
