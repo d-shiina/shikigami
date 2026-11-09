@@ -17,10 +17,7 @@
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
-<picture>
-  <source srcset="docs/assets/writer-ja-dark.webp" media="(prefers-color-scheme: dark)">
-  <img src="docs/assets/writer-ja.webp" alt="SpellSheet Writer の画面。中央にフロー図、右の AI チャットで AI にノードの追加を頼んでいる">
-</picture>
+<img src="docs/assets/demo-ja.gif" alt="SpellSheet Writer の AI チャットで Claude Code に取引先ごとの請求書づくりを頼むと、中央のフロー図にノードが 1 つずつ増え、そのあと「実行」を押すと AI なしで各ノードが順に光りながら動く">
 
 ## 使い始める
 
@@ -28,6 +25,10 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 2. スタートメニューから **SpellSheet Writer** を起動します。
 3. AI にフローの作成を依頼するには、Writer 上部の「AI チャット」（Ctrl+J）を開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「Claude Code をインストールする」のようなボタンを押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「変更を承諾」を押します。確定したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
+
+インストーラーと `spellsheet.exe` はまだコード署名がないため（[Code signing policy](CODE_SIGNING_POLICY.md)）、初回に Windows SmartScreen の警告が出ることがあります。「詳細情報」→「実行」で進めてください。
+
+**MCP クライアントだけで使う場合**：各リリースには、同じ MCP サーバーを MCP Bundle にした `spellsheet.mcpb` も付いています（Windows 10/11 x64 専用）。Bundle や [MCP Registry](https://registry.modelcontextprotocol.io/) からサーバーを入れるクライアントで使えます。AI が組んだものを見て確認するのは Writer です。[docs/ja/mcp.md](docs/ja/mcp.md) を参照してください。
 
 以下は開発者向けの情報です。
 

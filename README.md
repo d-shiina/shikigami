@@ -19,10 +19,7 @@ MCP-native desktop RPA where AI and humans build, edit, and run the same automat
 
 SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-<picture>
-  <source srcset="docs/assets/writer-en-dark.webp" media="(prefers-color-scheme: dark)">
-  <img src="docs/assets/writer-en.webp" alt="SpellSheet Writer with a flow open in the middle and the AI chat on the right, where the AI is asked to add a node">
-</picture>
+<img src="docs/assets/demo-en.gif" alt="In SpellSheet Writer, Claude Code is asked in the AI chat to make invoices per customer; the flow grows node by node in the middle, and pressing Run then runs it without AI, lighting up each node in turn">
 
 ## Getting started
 
@@ -30,6 +27,10 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 2. Start **SpellSheet Writer** from the Start menu.
 3. To have AI build flows, open "AI chat" at the top of Writer (Ctrl+J), pick the AI you use (Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot) and press its button, such as "Install Claude Code": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
+
+The installer and `spellsheet.exe` are not code-signed yet ([Code signing policy](CODE_SIGNING_POLICY.md)), so Windows SmartScreen may warn on the first run; choose "More info", then "Run anyway".
+
+**Using only an MCP client?** Each release also has `spellsheet.mcpb`, an MCP Bundle with the same MCP server (Windows 10/11 x64 only), for clients that install servers from a bundle or from the [MCP Registry](https://registry.modelcontextprotocol.io/). Writer is still the place to see and review what the AI builds. See [docs/mcp.md](docs/mcp.md).
 
 The rest of this page is for developers.
 
