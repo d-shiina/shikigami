@@ -37,6 +37,19 @@ describe("several accounts of one site", () => {
     expect(nameVariable("{{ a.b }}")).toBeNull();
   });
 
+  it("repoints the OAuth sign-in too, so the access token comes from the picked app", () => {
+    const flow = {
+      variables: [],
+      steps: [
+        { id: "in", type: "oauth.signIn", params: { secret: "Box（経理）", authorizeUrl: "https://example.com/a" } },
+        { id: "req", type: "http.request", params: { url: "https://api.example.com", auth: { secret: "Box（経理）", field: "accessToken" } } },
+      ],
+    } as unknown as Flow;
+    const { ops } = pickEachRun(flow, "Box（経理）", ["Box（申請）"], "アカウント", "アカウント");
+    expect(ops[1]).toMatchObject({ stepId: "in", patch: { replaceParams: { secret: "{{ アカウント }}" } } });
+    expect(ops[2]).toMatchObject({ stepId: "req", patch: { replaceParams: { auth: { secret: "{{ アカウント }}", field: "accessToken" } } } });
+  });
+
   it("「実行のたびに選ぶ」 makes an input and repoints every step that logs in with the account", () => {
     const flow = {
       variables: [{ name: "アカウント", type: "string", direction: "local" }],

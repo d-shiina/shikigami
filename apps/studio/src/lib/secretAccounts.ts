@@ -59,7 +59,8 @@ function repoint(value: unknown, from: string, to: string): unknown {
 /**
  * 「実行のたびに選ぶ」: an input listing `names` (the first is the one the
  * flow used), and every step that logs in with `from` (its user name,
- * password and one-time code, and the saved login of the same name) takes
+ * password and one-time code, the saved login of the same name, and the
+ * OAuth sign-in) takes
  * the account from it. One undo step.
  */
 export function pickEachRun(
@@ -80,7 +81,9 @@ export function pickEachRun(
   for (const step of walk(flow.steps)) {
     const params = (step.params ?? {}) as Record<string, unknown>;
     let next = repoint(params, from, to) as Record<string, unknown>;
+    // Steps that name the secret as plain text: the saved login, and the OAuth sign-in its access token comes from.
     if (step.type === "browser.open" && params.session === from) next = { ...next, session: to };
+    if (step.type === "oauth.signIn" && params.secret === from) next = { ...next, secret: to };
     if (JSON.stringify(next) !== JSON.stringify(params) && step.id) {
       ops.push({ op: "updateStep", stepId: step.id, patch: { replaceParams: next } } as EditOp);
     }
