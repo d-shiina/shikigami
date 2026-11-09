@@ -950,6 +950,11 @@ pub fn agent_open_url(url: String) -> CmdResult<()> {
 
 /// Hands an address already checked by the caller to the default browser.
 fn agent_open_any(url: &str) -> CmdResult<()> {
+    open_external(url)
+}
+
+/// Hands an address built by Studio itself to Windows (browser or protocol handler).
+pub(crate) fn open_external(url: &str) -> CmdResult<()> {
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("explorer");
         c.arg(url);
