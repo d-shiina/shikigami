@@ -55,7 +55,7 @@ claude mcp add --scope user spellsheet -- "<SpellSheet の場所>\spellsheet.exe
 コマンドには、この PC に入っている SpellSheet の場所が入った状態で表示されます。
 
 :::tip[Claude Code のプラグイン]
-Claude Code では、MCP の設定とフローの作り方を教えるスキルをまとめたプラグインも使えます。Claude Code で `/plugin install spellsheet --marketplace spellsheet/spellsheet` を実行します。
+Claude Code では、MCP の設定とフローの作り方を教えるスキルをまとめた Claude Code のプラグインも使えます（Writer のプラグインとは別のものです）。Claude Code で `/plugin install spellsheet --marketplace spellsheet/spellsheet` を実行します。
 :::
 
 AI ツールがあなたの PC で SpellSheet を操作するとき、何をしたかは監査の記録に残ります。

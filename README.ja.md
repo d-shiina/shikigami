@@ -153,7 +153,7 @@ Writer を開いたまま CLI でフローを編集すると、変更が Writer 
 
 ## AI から使う（MCP）
 
-Claude Code ならプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
+Claude Code なら Claude Code のプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
 
 ```text
 /plugin install spellsheet --marketplace spellsheet/spellsheet
