@@ -1,0 +1,206 @@
+// The run band (src-tauri/src/run_band.rs): what it shows of a run while
+// Writer is minimised. The flow's nodes in a row, left to right in the
+// order they run: the ones passed are checked, the one running is lit, a
+// loop is a frame over its body with the round it is on. A step with
+// branches (if, try, …) shows only the branch it took, once it has taken one.
+//
+// Pure: the band feeds it the run's events and draws what comes back.
+import type { RunEventEnvelope, RunStatus, Step, StepTypeDef } from "@shikigami/schema";
+import { LOOP_TYPES } from "./stepTypes";
+import type { StepClock } from "../store";
+
+export type BandState = {
+  /** Events seen (by seq), so a replay and the live ones do not count twice. */
+  seen: Set<number>;
+  /** Steps finished in the current round of every loop they are in. */
+  done: Set<string>;
+  failed: Set<string>;
+  /** Steps started and not finished, innermost last. */
+  running: string[];
+  clocks: Record<string, StepClock>;
+  /** Loop step → the round it is on. */
+  rounds: Record<string, { round: number; total: number | null }>;
+  /** The block each step with blocks last ran (block name). */
+  lanes: Record<string, string>;
+  /** A step waiting for a person, with what to do. */
+  human: string | null;
+  status: RunStatus;
+  startedAt: number | null;
+  finishedAt: number | null;
+};
+
+export const emptyBand = (): BandState => ({
+  seen: new Set(),
+  done: new Set(),
+  failed: new Set(),
+  running: [],
+  clocks: {},
+  rounds: {},
+  lanes: {},
+  human: null,
+  status: "running",
+  startedAt: null,
+  finishedAt: null,
+});
+
+/** Parent step and block of every step, to find the lane a step runs in. */
+export function parents(steps: Step[]): Map<string, { parent: string; block: string }> {
+  const map = new Map<string, { parent: string; block: string }>();
+  const walk = (list: Step[]) => {
+    for (const step of list) {
+      for (const [block, inner] of Object.entries(step.blocks ?? {})) {
+        for (const child of inner) if (child.id) map.set(child.id, { parent: step.id ?? "", block });
+        walk(inner);
+      }
+    }
+  };
+  walk(steps);
+  return map;
+}
+
+function descendants(step: Step | undefined, out: Set<string> = new Set()): Set<string> {
+  for (const inner of Object.values(step?.blocks ?? {})) {
+    for (const child of inner) {
+      if (child.id) out.add(child.id);
+      descendants(child, out);
+    }
+  }
+  return out;
+}
+
+function find(steps: Step[], id: string): Step | undefined {
+  for (const step of steps) {
+    if (step.id === id) return step;
+    for (const inner of Object.values(step.blocks ?? {})) {
+      const found = find(inner, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The state after `env`. Events inside a called flow (`callPath`) count for
+ * the `flow.call` node only, which is what the band shows of it; the one
+ * thing taken from them is a request to a person.
+ */
+export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[], now = Date.now()): BandState {
+  if (state.seen.has(env.seq)) return state;
+  const next: BandState = { ...state, seen: new Set(state.seen).add(env.seq) };
+  const at = Date.parse(env.at);
+  const when = Number.isNaN(at) ? now : at;
+  const inner = (env.callPath ?? []).length > 0;
+  switch (env.type) {
+    case "runStarted":
+      next.startedAt = when;
+      break;
+    case "stepStarted": {
+      if (inner) break;
+      next.running = [...state.running.filter((id) => id !== env.stepId), env.stepId];
+      next.clocks = { ...state.clocks, [env.stepId]: { since: when, waitMs: env.waitMs ?? null, limitMs: env.limitMs ?? null } };
+      const done = new Set(state.done);
+      done.delete(env.stepId);
+      next.done = done;
+      // The lane it runs in, for each step around it.
+      const up = parents(steps);
+      const lanes = { ...state.lanes };
+      for (let id: string | undefined = env.stepId; id; ) {
+        const around: { parent: string; block: string } | undefined = up.get(id);
+        if (!around) break;
+        lanes[around.parent] = around.block;
+        id = around.parent;
+      }
+      next.lanes = lanes;
+      break;
+    }
+    case "stepFinished": {
+      if (inner) break;
+      next.running = state.running.filter((id) => id !== env.stepId);
+      if (env.outcome === "failed" && !env.willRetry) next.failed = new Set(state.failed).add(env.stepId);
+      else if (env.outcome !== "failed") next.done = new Set(state.done).add(env.stepId);
+      if (state.human && !next.running.length) next.human = null;
+      break;
+    }
+    case "loopRound": {
+      if (inner) break;
+      next.rounds = { ...state.rounds, [env.stepId]: { round: env.round, total: env.total ?? null } };
+      // A new round: its body has not run yet.
+      const body = descendants(find(steps, env.stepId));
+      next.done = new Set([...state.done].filter((id) => !body.has(id)));
+      next.failed = new Set([...state.failed].filter((id) => !body.has(id)));
+      break;
+    }
+    case "humanActionRequired":
+      next.human = env.message;
+      break;
+    case "paused":
+      next.status = "paused";
+      break;
+    case "resumed":
+      next.status = "running";
+      next.human = null;
+      break;
+    case "runFinished":
+      next.status = env.status;
+      next.running = [];
+      next.human = null;
+      next.finishedAt = when;
+      break;
+    default:
+      break;
+  }
+  return next;
+}
+
+export type BandItem =
+  | { kind: "node"; step: Step; state: "done" | "now" | "failed" | "ahead" }
+  | {
+      kind: "frame";
+      step: Step;
+      state: "done" | "now" | "failed" | "ahead";
+      /** The round of a loop, when it has begun one. */
+      round: { round: number; total: number | null } | null;
+      /** The block shown inside (a branch: the one taken). */
+      block: string;
+      items: BandItem[];
+    };
+
+/**
+ * The row the band draws. `defs` names a step type's blocks in order;
+ * a loop shows its body even before it starts, a step with branches only
+ * once it has taken one (before that it is a single node).
+ */
+export function bandItems(steps: Step[], state: BandState, defs: Map<string, StepTypeDef>): BandItem[] {
+  const stateOf = (id: string): "done" | "now" | "failed" | "ahead" =>
+    state.running.includes(id) ? "now" : state.failed.has(id) ? "failed" : state.done.has(id) ? "done" : "ahead";
+  const build = (list: Step[]): BandItem[] =>
+    list.flatMap((step): BandItem[] => {
+      if (!step.id) return [];
+      const id = step.id;
+      const blocks = Object.keys(step.blocks ?? {});
+      if (blocks.length === 0) return [{ kind: "node", step, state: stateOf(id) }];
+      const loop = LOOP_TYPES.has(step.type);
+      const declared = (defs.get(step.type)?.blocks ?? []).map((b) => b.name).filter((b) => blocks.includes(b));
+      const first = declared[0] ?? blocks[0];
+      const block = state.lanes[id] ?? (loop || blocks.length === 1 ? first : undefined);
+      // Not entered yet (and the way it goes not known), or a branch it
+      // took that is empty: one node.
+      if (!block || (step.blocks?.[block] ?? []).length === 0) return [{ kind: "node", step, state: stateOf(id) }];
+      return [
+        {
+          kind: "frame",
+          step,
+          state: stateOf(id),
+          round: loop ? (state.rounds[id] ?? null) : null,
+          block,
+          items: build(step.blocks?.[block] ?? []),
+        },
+      ];
+    });
+  return build(steps);
+}
+
+/** The step the band keeps in view: the innermost running one, else the last one passed. */
+export function focusStep(state: BandState): string | null {
+  return state.running.at(-1) ?? null;
+}

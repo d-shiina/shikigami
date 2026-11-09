@@ -1,0 +1,100 @@
+import type { RunEventEnvelope, Step, StepTypeDef } from "@shikigami/schema";
+import { describe, expect, it } from "vitest";
+import { bandItems, bandStep, type BandState, emptyBand, focusStep } from "./runBand";
+
+const steps: Step[] = [
+  { id: "open", type: "excel.open", params: {} },
+  {
+    id: "rows",
+    type: "control.forEach",
+    params: {},
+    blocks: {
+      body: [
+        { id: "type", type: "desktop.type", params: {} },
+        { id: "click", type: "desktop.click", params: {} },
+      ],
+    },
+  },
+  {
+    id: "check",
+    type: "control.if",
+    params: {},
+    blocks: { then: [{ id: "mail", type: "mail.send", params: {} }], else: [{ id: "log", type: "flow.log", params: {} }] },
+  },
+] as Step[];
+
+const defs = new Map<string, StepTypeDef>([
+  ["control.forEach", { type: "control.forEach", blocks: [{ name: "body" }] } as unknown as StepTypeDef],
+  ["control.if", { type: "control.if", blocks: [{ name: "then" }, { name: "else" }] } as unknown as StepTypeDef],
+]);
+
+let seq = 0;
+const ev = (event: Record<string, unknown>, callPath: string[] = []): RunEventEnvelope =>
+  ({ runId: "run_1", seq: seq++, at: "2026-11-09T05:00:00Z", callPath, ...event }) as unknown as RunEventEnvelope;
+
+function play(events: RunEventEnvelope[]): BandState {
+  return events.reduce((s, e) => bandStep(s, e, steps), emptyBand());
+}
+
+const started = (id: string, type = "desktop.click") => ev({ type: "stepStarted", stepId: id, stepType: type, attempt: 1 });
+const finished = (id: string, outcome = "succeeded") =>
+  ev({ type: "stepFinished", stepId: id, stepType: "x", outcome, durationMs: 10 });
+
+describe("the run band", () => {
+  it("checks the nodes passed and lights the one running", () => {
+    const state = play([started("open"), finished("open"), started("rows"), ev({ type: "loopRound", stepId: "rows", round: 3, total: 12 }), started("type")]);
+    const items = bandItems(steps, state, defs);
+    expect(items[0]).toMatchObject({ kind: "node", state: "done" });
+    expect(items[1]).toMatchObject({ kind: "frame", state: "now", round: { round: 3, total: 12 } });
+    const body = items[1]?.kind === "frame" ? items[1].items : [];
+    expect(body.map((i) => i.state)).toEqual(["now", "ahead"]);
+    expect(focusStep(state)).toBe("type");
+  });
+
+  it("starts a loop's body over each round", () => {
+    const state = play([
+      started("rows"),
+      ev({ type: "loopRound", stepId: "rows", round: 1, total: 2 }),
+      started("type"),
+      finished("type"),
+      started("click"),
+      finished("click"),
+      ev({ type: "loopRound", stepId: "rows", round: 2, total: 2 }),
+    ]);
+    const frame = bandItems(steps, state, defs)[1];
+    expect(frame?.kind === "frame" && frame.items.map((i) => i.state)).toEqual(["ahead", "ahead"]);
+  });
+
+  it("shows a branch only once the run took it", () => {
+    expect(bandItems(steps, emptyBand(), defs)[2]).toMatchObject({ kind: "node", state: "ahead" });
+    const state = play([started("check", "control.if"), started("log", "flow.log")]);
+    const frame = bandItems(steps, state, defs)[2];
+    expect(frame).toMatchObject({ kind: "frame", block: "else" });
+    expect(frame?.kind === "frame" && frame.items.map((i) => i.step.id)).toEqual(["log"]);
+  });
+
+  it("counts a called flow's nodes for its call node only", () => {
+    const state = play([started("open", "flow.call"), ev({ type: "stepStarted", stepId: "inner", stepType: "desktop.click", attempt: 1 }, ["open"])]);
+    expect(state.running).toEqual(["open"]);
+  });
+
+  it("shows what a person is asked to do until the step goes on", () => {
+    let state = play([started("type"), ev({ type: "humanActionRequired", stepId: "type", message: "スマートフォンで承認してください" })]);
+    expect(state.human).toBe("スマートフォンで承認してください");
+    state = bandStep(state, finished("type"), steps);
+    expect(state.human).toBeNull();
+  });
+
+  it("does not count an event twice when the replay and the live ones overlap", () => {
+    const once = started("open");
+    const state = bandStep(bandStep(emptyBand(), once, steps), finished("open"), steps);
+    expect(bandStep(state, once, steps)).toBe(state);
+  });
+
+  it("keeps the result when the run ends", () => {
+    const state = play([started("open"), ev({ type: "runFinished", status: "succeeded", durationMs: 5 })]);
+    expect(state.status).toBe("succeeded");
+    expect(state.running).toEqual([]);
+    expect(state.finishedAt).not.toBeNull();
+  });
+});

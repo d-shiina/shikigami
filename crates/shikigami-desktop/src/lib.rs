@@ -46,6 +46,7 @@ pub mod hover;
 #[cfg(windows)]
 mod jab;
 pub mod jabmap;
+pub mod keep_out;
 pub mod keys;
 pub mod menu;
 pub mod ocr_fit;

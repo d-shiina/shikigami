@@ -12,6 +12,7 @@ mod instance;
 mod manual;
 mod opened;
 mod picker;
+mod run_band;
 mod runner;
 mod schedules;
 mod tray;
@@ -125,6 +126,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Writer brought back by the person during a run: the band goes.
+            if let tauri::WindowEvent::Focused(true) = event
+                && window.label() == "main"
+            {
+                run_band::writer_focused(tauri::Manager::app_handle(window));
+            }
             // Started for running flows, closing the run window leaves
             // Shikigami in the tray (its menu has Quit).
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
@@ -138,6 +145,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            run_band::run_band_current,
+            run_band::run_band_writer,
+            run_band::run_band_close,
             commands::workspace_info,
             extensions::list_extensions,
             extensions::stage_extension,
