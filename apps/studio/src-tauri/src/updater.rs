@@ -183,10 +183,7 @@ fn cursor_install_url(cli: &str) -> String {
 #[tauri::command]
 pub fn open_cursor_mcp_install() -> CmdResult<()> {
     let Some(cli) = installed_cli() else {
-        return Err(err(
-            "NOT_FOUND",
-            "SpellSheet のコマンドが見つかりません",
-        ));
+        return Err(err("NOT_FOUND", "SpellSheet のコマンドが見つかりません"));
     };
     crate::agent::open_external(&cursor_install_url(&cli))
 }
