@@ -152,11 +152,14 @@ fn clean_downloads(dir: &Path, current_version: &str) {
     }
 }
 
-/// The CLI installed with Studio, which MCP clients run; none in development.
+/// The CLI that MCP clients run: the one installed with Studio, else the
+/// one the AI pane uses (next to Studio, as `target/debug` in development,
+/// or on PATH), so the settings always show how to register it.
 fn installed_cli() -> Option<String> {
     install_dir()
         .map(|dir| dir.join(CLI_EXE))
         .filter(|p| !cfg!(debug_assertions) && p.is_file())
+        .or_else(crate::agent::cli_path)
         .map(|p| p.display().to_string())
 }
 
@@ -180,10 +183,7 @@ fn cursor_install_url(cli: &str) -> String {
 #[tauri::command]
 pub fn open_cursor_mcp_install() -> CmdResult<()> {
     let Some(cli) = installed_cli() else {
-        return Err(err(
-            "NOT_FOUND",
-            "インストールされた SpellSheet が見つかりません",
-        ));
+        return Err(err("NOT_FOUND", "SpellSheet のコマンドが見つかりません"));
     };
     crate::agent::open_external(&cursor_install_url(&cli))
 }

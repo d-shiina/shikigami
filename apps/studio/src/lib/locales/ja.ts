@@ -618,6 +618,7 @@ export const ja = {
   updatesDisabled: "開発版のため自動更新は行いません。",
   mcpSetup: "MCP サーバーの登録",
   mcpSetupHint: "Cursor や Claude Code など、使っている AI から SpellSheet でフローを組むための登録です。AI ごとに一度だけ行います。更新しても登録し直す必要はありません",
+  mcpNoCli: "SpellSheet のコマンド（spellsheet.exe）が見つかりません。SpellSheet をインストールし直してください",
   mcpClient: "登録する AI",
   mcpRunOnce: "ターミナル（PowerShell）に貼り付けて一度だけ実行します",
   mcpAddToCursor: "Cursor に追加",

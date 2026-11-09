@@ -618,6 +618,7 @@ export const en: Dict = {
   updatesDisabled: "Development build: no automatic updates.",
   mcpSetup: "MCP server registration",
   mcpSetupHint: "Lets the AI you use, such as Cursor or Claude Code, build flows with SpellSheet. Once per AI; updates keep it working",
+  mcpNoCli: "The SpellSheet command (spellsheet.exe) was not found. Reinstall SpellSheet.",
   mcpClient: "AI to register",
   mcpRunOnce: "Paste into a terminal (PowerShell) and run it once",
   mcpAddToCursor: "Add to Cursor",
