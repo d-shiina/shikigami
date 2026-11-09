@@ -122,6 +122,10 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
       // The lane it runs in, for each step around it.
       const up = parents(steps);
       const lanes = { ...state.lanes };
+      // Starting again (the next round of a loop around it): the way it and
+      // the steps inside it go is not known until they take it again.
+      delete lanes[env.stepId];
+      for (const id of descendants(find(steps, env.stepId))) delete lanes[id];
       for (let id: string | undefined = env.stepId; id; ) {
         const around: { parent: string; block: string } | undefined = up.get(id);
         if (!around) break;
@@ -145,6 +149,7 @@ export function bandStep(state: BandState, env: RunEventEnvelope, steps: Step[],
       const body = descendants(find(steps, env.stepId));
       next.done = new Set([...state.done].filter((id) => !body.has(id)));
       next.failed = new Set([...state.failed].filter((id) => !body.has(id)));
+      next.lanes = Object.fromEntries(Object.entries(state.lanes).filter(([id]) => !body.has(id)));
       break;
     }
     case "humanActionRequired":

@@ -73,6 +73,31 @@ describe("the run band", () => {
     expect(frame?.kind === "frame" && frame.items.map((i) => i.step.id)).toEqual(["log"]);
   });
 
+  it("forgets the branch taken when a loop starts its next round", () => {
+    const looped: Step[] = [
+      {
+        id: "rows",
+        type: "control.forEach",
+        params: {},
+        blocks: { body: [{ id: "ok", type: "control.if", params: {}, blocks: { then: [{ id: "a", type: "flow.log", params: {} }], else: [] } }] },
+      },
+    ] as Step[];
+    const run = (events: RunEventEnvelope[]) => events.reduce((s, e) => bandStep(s, e, looped), emptyBand());
+    const state = run([
+      started("rows", "control.forEach"),
+      ev({ type: "loopRound", stepId: "rows", round: 1, total: 2 }),
+      started("ok", "control.if"),
+      started("a", "flow.log"),
+      finished("a"),
+      finished("ok"),
+      ev({ type: "loopRound", stepId: "rows", round: 2, total: 2 }),
+      started("ok", "control.if"),
+      finished("ok"),
+    ]);
+    const frame = bandItems(looped, state, defs)[0];
+    expect(frame?.kind === "frame" && frame.items[0]).toMatchObject({ kind: "node", state: "done" });
+  });
+
   it("counts a called flow's nodes for its call node only", () => {
     const state = play([started("open", "flow.call"), ev({ type: "stepStarted", stepId: "inner", stepType: "desktop.click", attempt: 1 }, ["open"])]);
     expect(state.running).toEqual(["open"]);
