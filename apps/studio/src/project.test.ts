@@ -1,4 +1,4 @@
-import type { ConfigItem, Flow } from "@shikigami/schema";
+import type { ConfigItem, Flow } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import type { AskAnswer } from "./lib/ask";
 import { CONFIG_FORMAT, formatConfig, itemUsers, latestLog, logStatus, parseConfig, roleOf, shelfFor, usersOf } from "./project";
@@ -35,7 +35,7 @@ describe("project files", () => {
   });
 
   it("reads settings files and leaves other JSON as text", () => {
-    const text = formatConfig({ format: "shikigami.config", items: [{ name: "threshold", type: "number", value: 1 as never }] });
+    const text = formatConfig({ format: "spellsheet.config", items: [{ name: "threshold", type: "number", value: 1 as never }] });
     expect(parseConfig(text)?.items?.[0]?.name).toBe("threshold");
     expect(parseConfig('{"a":1}')).toBeNull();
     expect(parseConfig("not json")).toBeNull();

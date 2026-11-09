@@ -1,5 +1,5 @@
 // The AI pane's conversations. Each message starts one background turn of
-// the person's own agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP
+// the person's own agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with SpellSheet's MCP
 // server; its edits arrive through the flow watcher and the review queue
 // like any other AI edit, so this store only keeps the conversations.
 //
@@ -154,9 +154,9 @@ export const flowBusy = (s: Pick<AgentState, "chats">, flowId: string | null | u
 export const INTERRUPT_NOTE =
   "[The person stopped your previous turn midway to send this correction. Edits you made before that are already in the flow; check with get_flow before redoing anything. Follow this message over the earlier request where they differ.]";
 
-const CHATS_KEY = "shikigami.studio.agentChats";
+const CHATS_KEY = "spellsheet.studio.agentChats";
 /** Before conversations per flow: one conversation for everything. */
-const OLD_SESSION_KEY = "shikigami.studio.agentSession";
+const OLD_SESSION_KEY = "spellsheet.studio.agentSession";
 const KEEP = 30;
 
 type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt">;

@@ -1,7 +1,7 @@
 // Searching the open flow (Ctrl+F): nodes by their name, kind, what they
 // do, their memo, the variable they keep their result in and the values of
 // their settings, so a variable's name finds every node that uses it.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { t } from "./i18n";
 import { paramLabel } from "./nodeRows";
 import { outline } from "./outline";

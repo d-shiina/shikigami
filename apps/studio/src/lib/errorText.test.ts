@@ -1,4 +1,4 @@
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { errorLine, explainError } from "./errorText";
 import { setLocale } from "./i18n";

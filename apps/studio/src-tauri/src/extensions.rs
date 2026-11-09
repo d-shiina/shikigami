@@ -1,6 +1,6 @@
 //! The 拡張機能 place: extensions (node plugins) installed on this PC, and
 //! installing, updating, turning off and removing them. A thin layer over
-//! `shikigami_plugins::install` (the same as `spellsheet plugin …`).
+//! `spellsheet_plugins::install` (the same as `spellsheet plugin …`).
 //!
 //! Installing is two steps, as the screen shows them: `stage_extension`
 //! downloads and checks it and returns what it is (its nodes, what they
@@ -14,8 +14,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
-use shikigami_core::ErrorPayload;
-use shikigami_plugins::install::{self, InstallError, Source, Staged};
+use spellsheet_core::ErrorPayload;
+use spellsheet_plugins::install::{self, InstallError, Source, Staged};
 use tauri::{AppHandle, State};
 
 type CmdResult<T> = Result<T, ErrorPayload>;
@@ -58,7 +58,7 @@ fn builtin_names() -> Vec<String> {
     static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     NAMES
         .get_or_init(|| {
-            shikigami_adapters::builtin()
+            spellsheet_adapters::builtin()
                 .iter()
                 .map(|a| a.name().to_owned())
                 .collect()
@@ -74,11 +74,12 @@ pub fn list_extensions(ext: State<'_, Extensions>) -> CmdResult<Value> {
     install::empty_trash(&root);
     let names = builtin_names();
     let taken: Vec<&str> = names.iter().map(String::as_str).collect();
-    let installed = install::list(&shikigami_plugins::default_dirs(), Some(&root), &taken);
+    let installed = install::list(&spellsheet_plugins::default_dirs(), Some(&root), &taken);
     Ok(json!({
         "root": root.display().to_string(),
         "installed": installed,
-        "registry": install::registry_url(),
+        "registries": install::registry_urls(),
+        "officialRegistry": install::OFFICIAL_REGISTRY,
         "restartNeeded": ext.changed.load(Ordering::Relaxed),
     }))
 }
@@ -93,6 +94,24 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
     let names = builtin_names();
     let taken: Vec<&str> = names.iter().map(String::as_str).collect();
     let staged = install::stage(&root, source, &taken)
+        .await
+        .map_err(install_err)?;
+    Ok(keep(&ext, &root, staged))
+}
+
+/// Stages the extension `name` from the registry `registry` (the one the
+/// catalog row came from), as [`stage_extension`] does. Only that registry
+/// is read, so the row shown is the one installed.
+#[tauri::command]
+pub async fn stage_extension_from_registry(
+    ext: State<'_, Extensions>,
+    name: String,
+    registry: String,
+) -> CmdResult<Value> {
+    let root = root()?;
+    let names = builtin_names();
+    let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+    let staged = install::stage(&root, Source::Registry { name, registry }, &taken)
         .await
         .map_err(install_err)?;
     Ok(keep(&ext, &root, staged))
@@ -173,20 +192,18 @@ pub fn uninstall_extension(ext: State<'_, Extensions>, name: String) -> CmdResul
     Ok(())
 }
 
-/// Sets (or clears, with an empty text) the registry index URL.
+/// Sets the registry index URLs, in order (earlier ones win a name).
 #[tauri::command]
-pub fn set_extension_registry(url: String) -> CmdResult<()> {
-    install::set_registry_url(&url).map_err(|e| err("REGISTRY_INVALID", e))
+pub fn set_extension_registries(urls: Vec<String>) -> CmdResult<()> {
+    install::set_registry_urls(&urls).map_err(|e| err("REGISTRY_INVALID", e))
 }
 
-/// The extensions the registry offers.
+/// The extensions the registries offer, and the registries that could not
+/// be read.
 #[tauri::command]
 pub async fn fetch_extension_registry() -> CmdResult<Value> {
-    let Some(url) = install::registry_url() else {
-        return Ok(json!([]));
-    };
-    let list = install::fetch_registry(&url).await.map_err(install_err)?;
-    Ok(json!(list))
+    let urls = install::registry_urls();
+    Ok(json!(install::fetch_registries(&urls).await))
 }
 
 /// Restarts Studio so installed, updated or turned-off extensions take effect.

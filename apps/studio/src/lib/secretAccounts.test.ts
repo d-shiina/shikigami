@@ -1,4 +1,4 @@
-import type { Flow } from "@shikigami/schema";
+import type { Flow } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import type { SecretInfo } from "./api";
 import { accountInputs, accountLabel, nameVariable, pickEachRun, sameSite } from "./secretAccounts";

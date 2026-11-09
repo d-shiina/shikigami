@@ -1,25 +1,17 @@
 // Fills in the links to the repository and the latest installer.
 //
-// The repository is read from the page's own address (<owner>.github.io/<repo>/),
-// so the site keeps working when the repository is renamed. The latest release
-// comes from release.json, written when the site is deployed (pages.yml), and
-// is then checked against the GitHub API; either may fail (for example the
-// API's limit of 60 requests an hour per address), and the links then still
-// lead to the release page.
+// The site is published at https://spellsheet.github.io/ by the
+// spellsheet/spellsheet.github.io repository. The latest release comes from
+// release.json, written when the site is published, and is then checked
+// against the GitHub API; either may fail (for example the API's limit of 60
+// requests an hour per address), and the links then still lead to the
+// release page.
 (function () {
   "use strict";
 
-  var FALLBACK = { owner: "d-shiina", repo: "spellsheet" };
   var INSTALLER = /_x64-setup\.exe$/;
 
-  function repository() {
-    var host = location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i);
-    var first = location.pathname.split("/").filter(Boolean)[0];
-    if (host && first && !/\.html$/.test(first)) return { owner: host[1], repo: first };
-    return FALLBACK;
-  }
-
-  var repo = repository();
+  var repo = { owner: "spellsheet", repo: "spellsheet" };
   var base = "https://github.com/" + repo.owner + "/" + repo.repo;
 
   function all(selector) {

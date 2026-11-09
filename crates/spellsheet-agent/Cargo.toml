@@ -1,0 +1,33 @@
+[package]
+name = "spellsheet-agent"
+description = "SpellSheet agent: one process per PC that runs flows unattended (schedules, file triggers, a management server)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+spellsheet-core.workspace = true
+spellsheet-runtime.workspace = true
+spellsheet-secrets.workspace = true
+base64.workspace = true
+ring = "0.17.14"
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-util.workspace = true
+tracing.workspace = true
+time.workspace = true
+jiff.workspace = true
+uuid.workspace = true
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "system-proxy", "json"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

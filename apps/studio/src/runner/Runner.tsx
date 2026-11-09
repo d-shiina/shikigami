@@ -1,7 +1,7 @@
 // The run window (competitive-gaps.md #17): pick a published flow, fill
 // in the form made from its inputs, run it, and see what came out. Nothing
 // here edits a flow; that stays in Studio.
-import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@shikigami/schema";
+import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@spellsheet/schema";
 import { Check, Circle, FileText, FolderOpen, Hand, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HoverPreview } from "../components/HoverPreview";

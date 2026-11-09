@@ -10,7 +10,7 @@ export type { Dict };
 export type Locale = "ja" | "en";
 export type LocaleChoice = "system" | Locale;
 
-const KEY = "shikigami.studio.locale";
+const KEY = "spellsheet.studio.locale";
 const DICTS: Record<Locale, Dict> = { ja, en };
 const listeners = new Set<() => void>();
 

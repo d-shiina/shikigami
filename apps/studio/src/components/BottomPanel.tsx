@@ -16,7 +16,7 @@ import { TestsPanel } from "./TestsPanel";
  * flow (issues) and its test cases (tests). Both are lists over time or over the whole flow, read
  * side by side with the chart, so they sit below it rather than beside it.
  */
-const HEIGHT_KEY = "shikigami.studio.bottom";
+const HEIGHT_KEY = "spellsheet.studio.bottom";
 const HEIGHT = 192;
 const MIN_HEIGHT = 96;
 

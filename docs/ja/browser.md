@@ -8,16 +8,16 @@ SpellSheet のフローから Web ページを操作します。Rust の Runtime
 
 - **インストーラーで入れた場合は追加のものは不要です。** Node.js とアダプターが同梱されています（[release.md](release.md#nodejs-とブラウザアダプターの同梱)）
 - ソースから動かす場合：Node.js 22.18 以降（TypeScript をそのまま実行します）と、リポジトリでの `pnpm install`（`playwright-core` が入ります）
-- ブラウザ：Windows では **Microsoft Edge をそのまま使う** ので追加のダウンロードは不要です。Chrome を使うときは `SHIKIGAMI_BROWSER_CHANNEL=chrome`、任意の実行ファイルは `SHIKIGAMI_BROWSER_PATH`
+- ブラウザ：Windows では **Microsoft Edge をそのまま使う** ので追加のダウンロードは不要です。Chrome を使うときは `SPELLSHEET_BROWSER_CHANNEL=chrome`、任意の実行ファイルは `SPELLSHEET_BROWSER_PATH`
 
 | 環境変数 | 意味 |
 |---|---|
-| `SHIKIGAMI_BROWSER_CHANNEL` | `msedge`（Windows の既定）/ `chrome` など |
-| `SHIKIGAMI_BROWSER_PATH` | ブラウザの実行ファイル |
-| `SHIKIGAMI_BROWSER_HEADLESS` | `1` で常に画面なし（無人実行・CI 向け） |
-| `SHIKIGAMI_BROWSER_SLOWMO` | 操作ごとの待ち（ミリ秒）。デモで動きを見せるとき |
-| `SHIKIGAMI_BROWSER_ADAPTER` | アダプター `main.ts` の場所（通常は自動で見つける） |
-| `SHIKIGAMI_NODE` | Node.js の実行ファイル（既定は同梱の `node\node.exe`、なければ PATH 上の `node`） |
+| `SPELLSHEET_BROWSER_CHANNEL` | `msedge`（Windows の既定）/ `chrome` など |
+| `SPELLSHEET_BROWSER_PATH` | ブラウザの実行ファイル |
+| `SPELLSHEET_BROWSER_HEADLESS` | `1` で常に画面なし（無人実行・CI 向け） |
+| `SPELLSHEET_BROWSER_SLOWMO` | 操作ごとの待ち（ミリ秒）。デモで動きを見せるとき |
+| `SPELLSHEET_BROWSER_ADAPTER` | アダプター `main.ts` の場所（通常は自動で見つける） |
+| `SPELLSHEET_NODE` | Node.js の実行ファイル（既定は同梱の `node\node.exe`、なければ PATH 上の `node`） |
 
 ## デモ
 
@@ -32,7 +32,7 @@ pnpm demo:browser
 3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
 4. ログイン状態を `session` で保存するので、**2 回目の実行ではログイン画面を飛ばす**
 
-CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Writer からも同じフローを読み込んで実行できます。
+CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\spellsheet.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Writer からも同じフローを読み込んで実行できます。
 
 ## ノード
 
@@ -99,7 +99,7 @@ PC のサインインでの SSO、クライアント証明書、必須の拡張�
 
 ### Edge の IE モード
 
-Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、入力欄への `desktop.setValue` とボタンの `desktop.click` も効きました（`crates/shikigami-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
+Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、入力欄への `desktop.setValue` とボタンの `desktop.click` も効きました（`crates/spellsheet-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
 
 ### ダウンロードとアップロード
 
@@ -238,4 +238,4 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
 
 - ブラウザ対応は「アダプター」の 1 つです。ほかのアプリを足す方法は [adapters.md](adapters.md)。
 - アダプターは最初のブラウザノードで起動し、全実行で共有します。異常終了すると実行中のノードは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
-- アダプターの stderr は Rust の tracing（`shikigami_browser::adapter`）に流れます。
+- アダプターの stderr は Rust の tracing（`spellsheet_browser::adapter`）に流れます。

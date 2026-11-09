@@ -1,7 +1,7 @@
 // A run error in the person's language. The Runtime's `message` is English
 // for the AI (and `code` is fixed by contract), so Studio words the error
 // itself from `code`, `details` and the node's params (competitive-gaps.md #7).
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { FAIL } from "./stepTypes";
 import { locale, t } from "./i18n";
 import { targetText } from "./sentence";

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { Flow, StepTypeDef } from "@shikigami/schema";
+import type { Flow, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { operated } from "./manualExport";
 import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";

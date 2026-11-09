@@ -57,6 +57,6 @@ AI の修正は通常どおり確認待ちに入る。未確認の AI の変更�
 | Studio の実行ログ | ノード名（サブフローの中は「サブフロー名 › ノード名」）。押すとそのノードへ（`goToPlace`、サブフローには入って見せる） |
 | 失敗・一時停止のパネル | 同じ。サブフローの中で失敗して終わったときは `details.subFlow` から中のノードを探す（`errorPlace`） |
 | 通知（Teams・Slack） | 「ノード: 「出荷」→ サブフロー「出荷の入力」の「送信ボタン」」。JSON 形式は `stepId` と `stepLabel` の両方 |
-| `shikigami run`・`shikigami test` | `請求書の保存 [stp_013_save]`。人は名前で、AI と開発者は ID で探す |
+| `spellsheet run`・`spellsheet test` | `請求書の保存 [stp_013_save]`。人は名前で、AI と開発者は ID で探す |
 | `logs/` の読むためのログ | 以前から `名前 [種類 ID]` |
 | 実行の記録（`runs/`）・MCP | `stepId`。終わりのエラーには `stepLabel` も入る。AI は ID でノードを特定する（ai-authoring.md） |

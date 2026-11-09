@@ -1,7 +1,7 @@
 // A check of the flow (validation issue) in the person's language. Core's
 // `message` is English for the AI; Studio words it from `code`, the issue's
 // JSON Pointer and the node, naming settings the way the panel does.
-import type { Flow, Step, ValidationIssue } from "@shikigami/schema";
+import type { Flow, Step, ValidationIssue } from "@spellsheet/schema";
 import { locale } from "./i18n";
 import { issuesEn } from "./locales/issues.en";
 import { issuesJa } from "./locales/issues.ja";

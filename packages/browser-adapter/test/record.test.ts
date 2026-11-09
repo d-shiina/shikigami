@@ -36,7 +36,7 @@ beforeAll(async () => {
   });
   await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  browser = await chromium.launch({ executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+  browser = await chromium.launch({ executablePath: process.env.SPELLSHEET_BROWSER_PATH });
   page = await browser.newPage();
   await page.goto(`${base}/`);
   await page.frameLocator("iframe").getByRole("button").waitFor();
@@ -50,12 +50,12 @@ afterAll(async () => {
 async function bannerUp(p: Page, text: RegExp) {
   for (let i = 0; i < 100; i++) {
     const shown = await p
-      .evaluate(() => document.getElementById("__shikigami_record")?.shadowRoot?.querySelector(".bar b")?.textContent ?? "")
+      .evaluate(() => document.getElementById("__spellsheet_record")?.shadowRoot?.querySelector(".bar b")?.textContent ?? "")
       .catch(() => "");
     if (text.test(shown)) return;
     await p.waitForTimeout(30);
   }
-  const shown = await p.evaluate(() => document.getElementById("__shikigami_record")?.shadowRoot?.querySelector(".bar b")?.textContent ?? "").catch(() => "?");
+  const shown = await p.evaluate(() => document.getElementById("__spellsheet_record")?.shadowRoot?.querySelector(".bar b")?.textContent ?? "").catch(() => "?");
   throw new Error(`banner never showed ${text}: ${shown}`);
 }
 
@@ -99,7 +99,7 @@ describe("recording", () => {
     ]);
     // The password never left the page, and nothing is left behind.
     expect(JSON.stringify(actions)).not.toContain("secret-123");
-    expect(await page.evaluate(() => Boolean(document.getElementById("__shikigami_record")))).toBe(false);
+    expect(await page.evaluate(() => Boolean(document.getElementById("__spellsheet_record")))).toBe(false);
   });
 
   it("keeps recording in a frame that went to another page", async () => {

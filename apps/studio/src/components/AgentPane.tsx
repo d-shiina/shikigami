@@ -1,5 +1,5 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
-// agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP server; whatever it
+// agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
 import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

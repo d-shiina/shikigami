@@ -1,5 +1,5 @@
 import { ArrowRight, Undo2 } from "lucide-react";
-import type { DiffKind, FlowDiff, StepTypeDef, VersionSummary } from "@shikigami/schema";
+import type { DiffKind, FlowDiff, StepTypeDef, VersionSummary } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";

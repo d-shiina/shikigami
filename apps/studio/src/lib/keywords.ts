@@ -2,7 +2,7 @@
 // never shows it (people read 繰り返し・条件分岐), but the palette finds a
 // node by it, since the AI and the docs use those words. Block labels spell
 // out the condition in plain words, so a loop says what it walks over.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { blockName, locale } from "./i18n";
 
 export const KEYWORD: Record<string, string> = {

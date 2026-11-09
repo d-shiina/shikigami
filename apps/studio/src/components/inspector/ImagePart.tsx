@@ -1,7 +1,7 @@
 // Image parts in Studio: "画面から切り取る" (the screen dims, the user drags
 // a rectangle), the picture kept in templates/, and its settings (一致率,
 // クリック位置, 探す範囲). See lib/imageParts.ts for what is stored.
-import type { Part, Step } from "@shikigami/schema";
+import type { Part, Step } from "@spellsheet/schema";
 import { Crosshair, RotateCcw, Scissors } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../../context";

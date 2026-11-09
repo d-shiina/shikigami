@@ -8,24 +8,24 @@
 /**
  * Identifier of a flow. Also used as its file name in the store.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowId".
  */
 export type FlowId = string;
 /**
  * What a text variable holds ([`VariableDef::format`]).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VarFormat".
  */
 export type VarFormat = "file" | "folder" | "date" | "month";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "OnError".
  */
 export type OnError = "fail" | "continue";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "EditOp".
  */
 export type EditOp =
@@ -80,17 +80,17 @@ export type EditOp =
 /**
  * Identifier of a step. Unique within a flow and stable across edits.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepId".
  */
 export type StepId = string;
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Severity".
  */
 export type Severity = "error" | "warning";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepCategory".
  */
 export type StepCategory =
@@ -101,14 +101,14 @@ export type StepCategory =
 /**
  * Risk level used by the permission layer (MCP approval, allow-lists).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RiskLevel".
  */
 export type RiskLevel = "safe" | "interactive" | "dangerous";
 /**
  * What kind of target a step param names.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "TargetKind".
  */
 export type TargetKind = "site" | "app";
@@ -118,74 +118,74 @@ export type TargetKind = "site" | "app";
  * "field" }`), site-checked and masked the same way: the kind only changes
  * how the fields are called and which ones a person fills in.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "SecretKind".
  */
 export type SecretKind = "login" | "apiKey" | "oauth";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ChangeKind".
  */
 export type ChangeKind = "create" | "edit" | "undo" | "redo" | "delete";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ActorKind".
  */
 export type ActorKind = ("studio" | "mcp" | "cli" | "system") | "chat";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DiffKind".
  */
 export type DiffKind = "added" | "removed" | "changed" | "moved";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ImportMode".
  */
 export type ImportMode = "created" | "updated" | "copied";
 /**
  * What importing a bundle did with one of its sub-flows.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "SubflowImport".
  */
 export type SubflowImport = "created" | "updated" | "kept";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "CheckKind".
  */
 export type CheckKind = "plugin" | "secret" | "site" | "app";
 /**
  * State of one requirement on this PC.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "CheckStatus".
  */
 export type CheckStatus = "ok" | "missing" | "mismatch" | "notAllowed";
 /**
  * How a flow in the folder stands against this PC.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DistributedState".
  */
 export type DistributedState = "new" | "update" | "latest" | "older";
 /**
  * What to do when an imported flow's ID already exists.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ImportConflict".
  */
 export type ImportConflict = "update" | "copy";
 /**
  * Identifier of a screen an AI looked at (review evidence).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ObservationId".
  */
 export type ObservationId = string;
 /**
  * One line of `history/<flow-id>/evidence.jsonl`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Evidence".
  */
 export type Evidence = {
@@ -253,100 +253,100 @@ export type Evidence1 =
 /**
  * Identifier of a single flow execution.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RunId".
  */
 export type RunId = string;
 /**
  * What produced an observation.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ObservationSource".
  */
 export type ObservationSource = ("inspectPage" | "inspectUi" | "testStep") | "runPause";
 /**
  * A human's verdict on a revision.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ReviewVerdict".
  */
 export type ReviewVerdict = "approved" | "rejected";
 /**
  * What happens when an AI asks for an action.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Decision".
  */
 export type Decision = ("allow" | "deny") | "ask";
 /**
  * How an unattended run ended, for [`NotifyRule::on`], or that it waits.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RunOutcome".
  */
 export type RunOutcome = ("succeeded" | "failed" | "cancelled") | "waiting";
 /**
  * Identifier of a request for a person's approval of an AI action.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ApprovalId".
  */
 export type ApprovalId = string;
 /**
  * AI actions the policy can hold for approval.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "AiAction".
  */
 export type AiAction = "runFlow" | "testStep" | "deleteFlow";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ApprovalStatus".
  */
 export type ApprovalStatus = ("pending" | "approved" | "denied") | "used";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VarType".
  */
 export type VarType = "string" | "number" | "boolean" | "object" | "array" | "any";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VarDirection".
  */
 export type VarDirection = "local" | "input" | "output" | "inOut";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PartApp".
  */
 export type PartApp = "browser" | "desktop";
 /**
  * Which content of the flow goes into a package.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageContent".
  */
 export type PackageContent = "auto" | "published" | "current";
 /**
  * Which versions come along.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageVersions".
  */
 export type PackageVersions = "none" | "content" | "all";
 /**
  * The shape of the message posted to a webhook.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "NotifyFormat".
  */
 export type NotifyFormat = "teams" | "slack" | "json";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ConfigType".
  */
 export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExpectedStatus".
  */
 export type ExpectedStatus = "succeeded" | "failed" | "cancelled";
@@ -354,7 +354,7 @@ export type ExpectedStatus = "succeeded" | "failed" | "cancelled";
 /**
  * Bundle of the IPC/API payload types used by Studio and MCP tools.
  */
-export interface ShikigamiApi {
+export interface SpellSheetApi {
   flow: Flow;
   flow_summary: FlowSummary;
   new_flow: NewFlow;
@@ -398,12 +398,12 @@ export interface ShikigamiApi {
 /**
  * A flow: the unit that AI clients, Studio and the Runtime share.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Flow".
  */
 export interface Flow {
   /**
-   * Optional JSON Schema reference for editors. Ignored by Shikigami.
+   * Optional JSON Schema reference for editors. Ignored by SpellSheet.
    */
   $schema?: string | null;
   /**
@@ -446,7 +446,7 @@ export interface Flow {
   metadata?: Metadata;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VariableDef".
  */
 export interface VariableDef {
@@ -484,7 +484,7 @@ export interface VariableDef {
 /**
  * A named screen part: what a node finds on screen, kept in one place.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Part".
  */
 export interface Part {
@@ -509,7 +509,7 @@ export interface Part {
 /**
  * A single step. Control-flow and action steps share this shape.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Step".
  */
 export interface Step {
@@ -565,7 +565,7 @@ export interface Step {
   };
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RetryPolicy".
  */
 export interface RetryPolicy {
@@ -607,7 +607,7 @@ export interface Metadata {
 /**
  * Listing entry returned by `list_flows`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowSummary".
  */
 export interface FlowSummary {
@@ -636,7 +636,7 @@ export interface FlowSummary {
 /**
  * Input for creating a flow.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "NewFlow".
  */
 export interface NewFlow {
@@ -667,7 +667,7 @@ export interface Position {
  * Partial update of a step. Absent fields are left unchanged; for optional
  * fields, an explicit `null` clears the value.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepPatch".
  */
 export interface StepPatch {
@@ -700,7 +700,7 @@ export interface StepPatch {
 /**
  * Where a step lives (or should be inserted).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Position".
  */
 export interface Position1 {
@@ -720,7 +720,7 @@ export interface Position1 {
 /**
  * Partial update of flow-level fields.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowPatch".
  */
 export interface FlowPatch {
@@ -737,7 +737,7 @@ export interface FlowPatch {
   } | null;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowSettings".
  */
 export interface FlowSettings1 {
@@ -756,7 +756,7 @@ export interface FlowSettings1 {
 /**
  * Result of a committed change.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "EditOutcome".
  */
 export interface EditOutcome {
@@ -774,7 +774,7 @@ export interface ValidationReport {
   issues: ValidationIssue[];
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ValidationIssue".
  */
 export interface ValidationIssue {
@@ -795,7 +795,7 @@ export interface ValidationIssue {
   hint?: string | null;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ValidationReport".
  */
 export interface ValidationReport1 {
@@ -803,7 +803,7 @@ export interface ValidationReport1 {
   issues: ValidationIssue[];
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepTypeDef".
  */
 export interface StepTypeDef {
@@ -884,7 +884,7 @@ export interface StepTypeDef {
 /**
  * Named child block of a control-flow step.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "BlockDef".
  */
 export interface BlockDef {
@@ -895,7 +895,7 @@ export interface BlockDef {
  * A step param that names something outside the run, checked against the
  * policy before the step executes.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "TargetDef".
  */
 export interface TargetDef {
@@ -905,7 +905,7 @@ export interface TargetDef {
 /**
  * Why a step type is deprecated and what to use instead.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Deprecation".
  */
 export interface Deprecation {
@@ -922,7 +922,7 @@ export interface Deprecation {
  * A plugin (an extension, in Studio) that provides step types, as
  * installed on this PC, with what Studio shows about it.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PluginInfo".
  */
 export interface PluginInfo {
@@ -970,7 +970,7 @@ export interface PluginInfo {
 /**
  * A secret a plugin's steps take: of which kind, and in which params.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PluginCredential".
  */
 export interface PluginCredential {
@@ -988,7 +988,7 @@ export interface PluginCredential {
 /**
  * Data a step sends to a service outside the PC.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExternalUse".
  */
 export interface ExternalUse {
@@ -1008,7 +1008,7 @@ export interface ExternalUse {
 /**
  * One committed change.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "HistoryEntry".
  */
 export interface HistoryEntry {
@@ -1044,7 +1044,7 @@ export interface HistoryEntry {
 /**
  * Who made a change. Recorded in history and the audit journal.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Actor".
  */
 export interface Actor {
@@ -1057,7 +1057,7 @@ export interface Actor {
 /**
  * Notification sent to in-process listeners after every committed change.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ChangeEvent".
  */
 export interface ChangeEvent {
@@ -1069,7 +1069,7 @@ export interface ChangeEvent {
 /**
  * Serializable error shape returned over IPC / MCP.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ErrorPayload".
  */
 export interface ErrorPayload {
@@ -1080,7 +1080,7 @@ export interface ErrorPayload {
 /**
  * Input for creating a version.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "NewVersion".
  */
 export interface NewVersion {
@@ -1096,7 +1096,7 @@ export interface NewVersion {
 /**
  * One named snapshot of a flow.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowVersion".
  */
 export interface FlowVersion {
@@ -1121,7 +1121,7 @@ export interface FlowVersion {
 /**
  * Listing entry for versions (no flow body).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VersionSummary".
  */
 export interface VersionSummary {
@@ -1136,7 +1136,7 @@ export interface VersionSummary {
 /**
  * Differences from `from` to `to`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowDiff".
  */
 export interface FlowDiff {
@@ -1158,7 +1158,7 @@ export interface FlowDiff {
 /**
  * Which side of a comparison: a version number, or the current content.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DiffSide".
  */
 export interface DiffSide {
@@ -1172,7 +1172,7 @@ export interface DiffSide {
 /**
  * One changed field: `name`, `params.url`, `settings`, …
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FieldChange".
  */
 export interface FieldChange {
@@ -1181,7 +1181,7 @@ export interface FieldChange {
   after?: unknown;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VariableChange".
  */
 export interface VariableChange {
@@ -1193,7 +1193,7 @@ export interface VariableChange {
  * One step-level difference. Added and removed subtrees are reported once,
  * at their top step (`stepCount` includes the children).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepChange".
  */
 export interface StepChange {
@@ -1221,7 +1221,7 @@ export interface StepChange {
 /**
  * Where a step sits: top level (`parentId` absent) or a parent's block.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepLocation".
  */
 export interface StepLocation {
@@ -1232,12 +1232,12 @@ export interface StepLocation {
 /**
  * File format for moving a flow (and its versions) between workspaces.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowBundle".
  */
 export interface FlowBundle {
   /**
-   * Always `shikigami.flowBundle`.
+   * Always `spellsheet.flowBundle`.
    */
   format: string;
   formatVersion: number;
@@ -1258,7 +1258,7 @@ export interface FlowBundle {
 /**
  * A file carried in a bundle.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "BundledFile".
  */
 export interface BundledFile {
@@ -1278,7 +1278,7 @@ export interface BundledFile {
 /**
  * Result of importing a bundle or flow file.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ImportOutcome".
  */
 export interface ImportOutcome {
@@ -1299,7 +1299,7 @@ export interface ImportOutcome {
 /**
  * One sub-flow of an imported bundle.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ImportedSubflow".
  */
 export interface ImportedSubflow {
@@ -1318,7 +1318,7 @@ export interface ValidationReport2 {
 /**
  * What a package holds and what the receiving PC needs.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageManifest".
  */
 export interface PackageManifest {
@@ -1345,7 +1345,7 @@ export interface PackageManifest {
   contents: PackageEntry[];
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackagedFlow".
  */
 export interface PackagedFlow {
@@ -1366,7 +1366,7 @@ export interface PackagedFlow {
   stepCount?: number;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackagedVersion".
  */
 export interface PackagedVersion {
@@ -1376,7 +1376,7 @@ export interface PackagedVersion {
   note?: string;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackagedSubflow".
  */
 export interface PackagedSubflow {
@@ -1411,7 +1411,7 @@ export interface PackageRequires {
   inputs?: PackageInput[];
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageInput".
  */
 export interface PackageInput {
@@ -1421,7 +1421,7 @@ export interface PackageInput {
 /**
  * One entry of the zip.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageEntry".
  */
 export interface PackageEntry {
@@ -1432,7 +1432,7 @@ export interface PackageEntry {
 /**
  * What exporting would put in, for the export dialog.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackagePlan".
  */
 export interface PackagePlan {
@@ -1461,7 +1461,7 @@ export interface PackagePlan {
 /**
  * A file that may go into a package, for choosing before exporting.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageFileChoice".
  */
 export interface PackageFileChoice {
@@ -1480,7 +1480,7 @@ export interface PackageFileChoice {
 /**
  * What the flow (and the flows it calls) needs on the PC that runs it.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageRequires".
  */
 export interface PackageRequires1 {
@@ -1510,7 +1510,7 @@ export interface PackageRequires1 {
 /**
  * Options of [`crate::FlowService::export_package`].
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackageOptions".
  */
 export interface PackageOptions {
@@ -1545,7 +1545,7 @@ export interface PackageOptions {
 /**
  * A file of a flow's folder, by flow and path.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FileRef".
  */
 export interface FileRef {
@@ -1555,7 +1555,7 @@ export interface FileRef {
 /**
  * What importing a package would do, shown before importing.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PackagePreview".
  */
 export interface PackagePreview {
@@ -1566,7 +1566,7 @@ export interface PackagePreview {
 /**
  * The flow with the same ID that is already in the workspace.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExistingFlow".
  */
 export interface ExistingFlow {
@@ -1612,7 +1612,7 @@ export interface FlowDiff1 {
 /**
  * One thing the package needs, checked against this PC.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RequirementCheck".
  */
 export interface RequirementCheck {
@@ -1634,7 +1634,7 @@ export interface RequirementCheck {
 /**
  * One registered folder.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DistributionFolder".
  */
 export interface DistributionFolder {
@@ -1650,7 +1650,7 @@ export interface DistributionFolder {
 /**
  * What one folder holds now.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DistributionView".
  */
 export interface DistributionView {
@@ -1665,7 +1665,7 @@ export interface DistributionView {
 /**
  * The newest version of one flow in a folder.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DistributedFlow".
  */
 export interface DistributedFlow {
@@ -1688,7 +1688,7 @@ export interface DistributedFlow {
 /**
  * Result of moving steps into a new sub-flow.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExtractOutcome".
  */
 export interface ExtractOutcome {
@@ -1720,7 +1720,7 @@ export interface EditOutcome2 {
 /**
  * Where a workspace keeps its data, for display and diagnostics.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "WorkspaceInfo".
  */
 export interface WorkspaceInfo {
@@ -1734,7 +1734,7 @@ export interface WorkspaceInfo {
 /**
  * What the author of a change says about it (MCP edit tools).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ChangeNote".
  */
 export interface ChangeNote {
@@ -1756,7 +1756,7 @@ export interface ChangeNote {
 /**
  * What to review: the changes since the last approval and their evidence.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ReviewTimeline".
  */
 export interface ReviewTimeline {
@@ -1788,7 +1788,7 @@ export interface ReviewTimeline {
 /**
  * A note on one step in a review.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "StepNote".
  */
 export interface StepNote {
@@ -1798,7 +1798,7 @@ export interface StepNote {
 /**
  * How one test case went in a `testCases` record.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "CaseOutcome".
  */
 export interface CaseOutcome {
@@ -1815,7 +1815,7 @@ export interface CaseOutcome {
  * One difference between what the case expects and what the run did.
  * `actual` is `null` when the run had no such value.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Mismatch".
  */
 export interface Mismatch {
@@ -1829,7 +1829,7 @@ export interface Mismatch {
 /**
  * One change in a review timeline (a journal entry without its ops).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ChangeRecord".
  */
 export interface ChangeRecord {
@@ -1845,7 +1845,7 @@ export interface ChangeRecord {
 /**
  * Input for a review (Studio).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "NewReview".
  */
 export interface NewReview {
@@ -1863,7 +1863,7 @@ export interface NewReview {
 /**
  * An observation with the contents of its files, for Studio.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ObservationContent".
  */
 export interface ObservationContent {
@@ -1898,7 +1898,7 @@ export interface ObservationContent {
   screenshotDataUrl?: string | null;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ObservationLink".
  */
 export interface ObservationLink {
@@ -1909,7 +1909,7 @@ export interface ObservationLink {
  * The published version of a flow (what `spellsheet run <id>` and
  * other unattended runs execute).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PublishedState".
  */
 export interface PublishedState {
@@ -1931,7 +1931,7 @@ export interface PublishedState {
 /**
  * Input for publishing.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PublishInput".
  */
 export interface PublishInput {
@@ -1957,7 +1957,7 @@ export interface PublishInput {
  * last line is in force; earlier lines are the record of who published
  * what, kept in the shared part of the workspace.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "PublishRecord".
  */
 export interface PublishRecord {
@@ -1973,7 +1973,7 @@ export interface PublishRecord {
 /**
  * `policy.json`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Policy".
  */
 export interface Policy {
@@ -2056,7 +2056,7 @@ export interface ByRisk1 {
 /**
  * Settings for one flow.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "FlowPolicy".
  */
 export interface FlowPolicy {
@@ -2122,7 +2122,7 @@ export interface RemotePolicy {
 /**
  * One place unattended runs are reported to.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "NotifyRule".
  */
 export interface NotifyRule {
@@ -2158,7 +2158,7 @@ export interface DesktopPolicy {
 /**
  * One request, `approvals/<id>.json`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ApprovalRequest".
  */
 export interface ApprovalRequest {
@@ -2179,7 +2179,7 @@ export interface ApprovalRequest {
 /**
  * What a flow's project folder holds.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ProjectFiles".
  */
 export interface ProjectFiles {
@@ -2201,7 +2201,7 @@ export interface ProjectFiles {
 /**
  * One file in a project folder.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ProjectFile".
  */
 export interface ProjectFile {
@@ -2224,12 +2224,12 @@ export interface ProjectFile {
  * folder). Studio edits it as a form; `config.read` turns it into
  * `{ "締め日": 25, … }`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ConfigFile".
  */
 export interface ConfigFile {
   /**
-   * Always `shikigami.config`.
+   * Always `spellsheet.config`.
    */
   format: string;
   items?: ConfigItem[];
@@ -2237,7 +2237,7 @@ export interface ConfigFile {
 /**
  * One setting of a [`ConfigFile`].
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ConfigItem".
  */
 export interface ConfigItem {
@@ -2257,7 +2257,7 @@ export interface ConfigItem {
 /**
  * One test case, `tests/<name>.json`.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "TestCase".
  */
 export interface TestCase {
@@ -2301,7 +2301,7 @@ export interface Expect {
   errorStep?: string | null;
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Metadata".
  */
 export interface Metadata1 {
@@ -2314,7 +2314,7 @@ export interface Metadata1 {
  * What an AI client (MCP) may do. Studio and the CLI are people and are not
  * asked.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "AiPolicy".
  */
 export interface AiPolicy1 {
@@ -2328,7 +2328,7 @@ export interface AiPolicy1 {
 /**
  * A decision for each step risk level.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ByRisk".
  */
 export interface ByRisk2 {
@@ -2346,7 +2346,7 @@ export interface ByRisk2 {
   dangerous?: ("allow" | "deny") | "ask";
 }
 /**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RecordsPolicy".
  */
 export interface RecordsPolicy1 {
@@ -2375,7 +2375,7 @@ export interface RecordsPolicy1 {
  * Runs a management server may ask this PC for. Everything is closed by
  * default; `flows.<id>.unattended: false` still refuses a flow.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "RemotePolicy".
  */
 export interface RemotePolicy1 {
@@ -2401,7 +2401,7 @@ export interface RemotePolicy1 {
  * What nodes that use the mouse and keyboard do while the screen is
  * locked (docs/design/locked-runs.md).
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "DesktopPolicy".
  */
 export interface DesktopPolicy1 {
@@ -2415,7 +2415,7 @@ export interface DesktopPolicy1 {
 /**
  * What should come out of the run.
  *
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "Expect".
  */
 export interface Expect1 {
@@ -2442,7 +2442,7 @@ export interface Expect1 {
 /**
  * A run event with ordering and timing metadata.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunEventEnvelope".
  */
 export type RunEventEnvelope = {
@@ -2581,44 +2581,44 @@ export type RunEventEnvelope1 =
 /**
  * How a run was started.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunTrigger".
  */
 export type RunTrigger = "studio" | "mcp" | "cli" | "schedule" | "remote";
 /**
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "StepOutcome".
  */
 export type StepOutcome = "succeeded" | "failed" | "skipped";
 /**
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "LogLevel".
  */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 /**
  * Why a run paused.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "PauseReason".
  */
 export type PauseReason = "breakpoint" | "step" | "requested" | "error";
 /**
  * What a resumed run does next (reported as `resumed`).
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "ResumeAction".
  */
 export type ResumeAction =
   "continue" | "stepOver" | "stepInto" | "stepOut" | "retry" | "skip" | "abort";
 /**
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunStatus".
  */
 export type RunStatus = ("pending" | "running" | "succeeded" | "failed" | "cancelled") | "paused";
 /**
  * What a person does with a run (see [`DebugControl::send`]).
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "DebugCommand".
  */
 export type DebugCommand =
@@ -2656,7 +2656,7 @@ export type DebugCommand =
       value: unknown;
     };
 
-export interface ShikigamiRunApi {
+export interface SpellSheetRunApi {
   run_event_envelope: RunEventEnvelope;
   run_report: RunReport;
   run_snapshot: RunSnapshot;
@@ -2686,7 +2686,7 @@ export interface RunOrigin {
 /**
  * Structured failure information, kept for AI-assisted diagnosis.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunError".
  */
 export interface RunError {
@@ -2714,7 +2714,7 @@ export interface RunError {
 /**
  * A rectangle in a picture's pixels, from its top-left corner.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "ScreenRect".
  */
 export interface ScreenRect {
@@ -2726,7 +2726,7 @@ export interface ScreenRect {
 /**
  * Final result of a run.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunReport".
  */
 export interface RunReport {
@@ -2763,7 +2763,7 @@ export interface RunReport {
 /**
  * A called flow's content as used by a run.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "SubflowRef".
  */
 export interface SubflowRef {
@@ -2798,7 +2798,7 @@ export interface RunOrigin1 {
 /**
  * Live state of a run, for `get_run_status` while it is executing.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunSnapshot".
  */
 export interface RunSnapshot {
@@ -2811,7 +2811,7 @@ export interface RunSnapshot {
 /**
  * One test case's run, compared with what it expects.
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "CaseResult".
  */
 export interface CaseResult {
@@ -2829,7 +2829,7 @@ export interface CaseResult {
  * `runStarted` and the report so that runs can be told apart later (and
  * collected from many PCs).
  *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
  * via the `definition` "RunOrigin".
  */
 export interface RunOrigin2 {

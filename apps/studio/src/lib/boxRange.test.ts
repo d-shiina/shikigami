@@ -1,4 +1,4 @@
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { boxRange } from "./stepClipboard";
 

@@ -1,6 +1,6 @@
 // Steps in reading order (the order they run, blocks in registry order), for
 // the outline and for moving between steps with the keyboard.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { blockLabel } from "./keywords";
 
 export type OutlineItem = {

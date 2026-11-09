@@ -9,7 +9,7 @@ import type {
   ReviewTimeline,
   RunEventEnvelope,
   Flow,
-} from "@shikigami/schema";
+} from "@spellsheet/schema";
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";

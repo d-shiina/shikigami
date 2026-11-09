@@ -2,7 +2,7 @@
 // `{ "part": "<name>" }`, so a button used by ten nodes is fixed in one
 // place. What uses a part, how to name a new one, and the edits that turn
 // a node's own target into a part.
-import type { EditOp, Part, Step } from "@shikigami/schema";
+import type { EditOp, Part, Step } from "@spellsheet/schema";
 
 /** The apps whose nodes take a `target` that can be a part. */
 export const PART_APPS = ["browser", "desktop"] as const;

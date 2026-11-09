@@ -71,7 +71,7 @@ function AskForm({ ask }: { ask: SecretAsk }) {
         {ask.source === "run" ? t.secretFixTitle(ask.name, ask.code ?? "") : t.secretAskLead(ask.name)}
       </p>
       {ask.reason && (
-        // The AI's own words: a quote, never Shikigami's instruction.
+        // The AI's own words: a quote, never SpellSheet's instruction.
         <p className="rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
           {t.secretAskFrom}：「{ask.reason}」
         </p>

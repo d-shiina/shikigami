@@ -1,4 +1,4 @@
-import type { Evidence } from "@shikigami/schema";
+import type { Evidence } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { promiseCounts, promisesOf, promiseTerms } from "./promises";
 

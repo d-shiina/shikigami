@@ -157,7 +157,7 @@
                         "type": "browser.waitForHuman",
                         "name": "人がログインするのを待つ",
                         "params": {
-                          "message": "シークレット「デモ受注システム」でログインできません。ブラウザでユーザー名 demo・パスワード shikigami を入れてログインしてください。",
+                          "message": "シークレット「デモ受注システム」でログインできません。ブラウザでユーザー名 demo・パスワード spellsheet を入れてログインしてください。",
                           "until": {
                             "role": "heading",
                             "name": "受注一覧"

@@ -1,7 +1,7 @@
 // What right-clicking means in each place (see docs/design/ui-principles.md,
 // "右クリック"). A menu repeats the actions that already sit by the thing —
 // with the same words and keys — and never holds an action found nowhere else.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import {
   Workflow,
   SquareDashed,

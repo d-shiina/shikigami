@@ -3,7 +3,7 @@
 // flow's run (its title bar) and the selected node's place (the inspector).
 // The window has no status bar: the app's menu at its top left holds the
 // theme, language and version (ShellBar).
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { type ReactNode, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { outline } from "../lib/outline";

@@ -1,16 +1,16 @@
 {
-  "name": "shikigami",
+  "name": "spellsheet",
   "owner": {
-    "name": "Shikigami"
+    "name": "SpellSheet"
   },
   "metadata": {
-    "description": "ShikigamiRPA の Claude Code プラグイン"
+    "description": "SpellSheet の Claude Code プラグイン"
   },
   "plugins": [
     {
-      "name": "shikigami",
-      "source": "./plugins/shikigami",
-      "description": "Shikigami RPA の MCP サーバー設定と、フロー作成の作法を教えるスキル"
+      "name": "spellsheet",
+      "source": "./plugins/spellsheet",
+      "description": "SpellSheet の MCP サーバー設定と、フロー作成の作法を教えるスキル"
     }
   ]
 }

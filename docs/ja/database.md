@@ -2,7 +2,7 @@
 
 [English](../database.md) | 日本語
 
-クレート `shikigami-db`。SQL を ODBC 経由で実行する組込ノードです。同じ 2 つのノードで SQL Server・Oracle・Access・PostgreSQL・MySQL など、PC に ODBC ドライバーがあるデータベースを扱えます。ODBC のドライバーマネージャーは Windows に入っています。データベースごとのドライバーは通常どおり入れます（SQL Server なら「ODBC Driver 18 for SQL Server」）。
+クレート `spellsheet-db`。SQL を ODBC 経由で実行する組込ノードです。同じ 2 つのノードで SQL Server・Oracle・Access・PostgreSQL・MySQL など、PC に ODBC ドライバーがあるデータベースを扱えます。ODBC のドライバーマネージャーは Windows に入っています。データベースごとのドライバーは通常どおり入れます（SQL Server なら「ODBC Driver 18 for SQL Server」）。
 
 | ノード | 内容 | 出力 | リスク |
 |---|---|---|---|

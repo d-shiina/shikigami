@@ -1,4 +1,4 @@
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, FOOT_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TAIL_W, TERMINAL_H } from "./layout";
 

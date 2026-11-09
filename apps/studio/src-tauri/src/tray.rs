@@ -1,6 +1,6 @@
 //! The task tray icon (competitive-gaps.md #17): opens the run window or
 //! Studio without looking for them on the taskbar. Started with `--runner`
-//! or `--tray`, Shikigami stays in the tray when the run window is closed,
+//! or `--tray`, SpellSheet stays in the tray when the run window is closed,
 //! so the people who only run flows keep it at hand all day.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +12,7 @@ use tauri::{AppHandle, Manager, WebviewWindowBuilder, Wry};
 
 use crate::runner::show_runner_later;
 
-const TRAY_ID: &str = "shikigami";
+const TRAY_ID: &str = "spellsheet";
 const OPEN_RUNNER: &str = "open-runner";
 const OPEN_STUDIO: &str = "open-studio";
 const QUIT: &str = "quit";
@@ -43,7 +43,7 @@ impl Default for TrayLabels {
 /// see instance.rs) was for running flows.
 static STAYS_IN_TRAY: AtomicBool = AtomicBool::new(false);
 
-/// Whether closing the run window keeps Shikigami in the tray: when it
+/// Whether closing the run window keeps SpellSheet in the tray: when it
 /// was started for running flows (`--runner`, or `--tray` with no window),
 /// now or by a later start that came to this Studio.
 pub(crate) fn stays_in_tray() -> bool {

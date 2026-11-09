@@ -1,14 +1,15 @@
 // A file of the flow's folder, opened in a sheet over the right of the
-// chart. A settings file (format shikigami.config) is a form: one card per
+// chart. A settings file (format spellsheet.config) is a form: one card per
 // setting with its type, value, description and the nodes that use it, so
 // people change values without touching JSON or the flow. Other text files
 // (CSV, notes, run logs) are plain text.
-import type { ConfigFile, ConfigItem, ConfigType, Flow, Step } from "@shikigami/schema";
+import type { ConfigFile, ConfigItem, ConfigType, Flow, Step } from "@spellsheet/schema";
 import { Calendar, FileCog, FileText, Hash, List, type LucideIcon, Plus, ScrollText, ToggleLeft, Type, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { itemUsers, roleOf, useProject } from "../project";
+import { CONFIG_FORMAT, itemUsers, roleOf, useProject } from "../project";
+import { isFormat } from "../lib/legacyStorage";
 import { stepName } from "./ProjectPanel";
 
 const TYPES: { type: ConfigType; icon: LucideIcon }[] = [
@@ -397,7 +398,7 @@ export function FileSheet() {
 function parseConfigSafe(text: string): unknown {
   try {
     const v = JSON.parse(text) as { format?: unknown };
-    return v && v.format === "shikigami.config" ? v : null;
+    return v && isFormat(v.format, CONFIG_FORMAT) ? v : null;
   } catch {
     return null;
   }

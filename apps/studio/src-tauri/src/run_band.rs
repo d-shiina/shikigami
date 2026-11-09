@@ -6,7 +6,7 @@
 //! As UiPath Studio and Power Automate Desktop do, and WinActor's small
 //! window during a run.
 //!
-//! The band never gets in the flow's way (`shikigami_desktop::keep_out`):
+//! The band never gets in the flow's way (`spellsheet_desktop::keep_out`):
 //! it is not in screen captures (image search, OCR, the 手順書), clicking it
 //! does not take the focus, and it moves to the top edge before a mouse
 //! action lands on it.
@@ -20,8 +20,8 @@
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use shikigami_core::{ErrorPayload, Flow, FlowId, RunId, Subflow};
-use shikigami_runtime::{ResumeAction, RunEvent, RunEventEnvelope, RunStatus};
+use spellsheet_core::{ErrorPayload, Flow, FlowId, RunId, Subflow};
+use spellsheet_runtime::{ResumeAction, RunEvent, RunEventEnvelope, RunStatus};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// The band's label (capabilities/runband.json names it too).
@@ -339,8 +339,8 @@ fn show_band(app: &AppHandle) -> tauri::Result<()> {
             .build()?;
             #[cfg(windows)]
             if let Ok(hwnd) = band.hwnd() {
-                shikigami_desktop::keep_out::shield(hwnd.0 as isize);
-                shikigami_desktop::keep_out::set(Some(hwnd.0 as isize));
+                spellsheet_desktop::keep_out::shield(hwnd.0 as isize);
+                spellsheet_desktop::keep_out::set(Some(hwnd.0 as isize));
             }
             band
         }
@@ -352,7 +352,7 @@ fn show_band(app: &AppHandle) -> tauri::Result<()> {
     if let Some(monitor) = monitor {
         let work = monitor.work_area();
         let scale = monitor.scale_factor();
-        let gap = (f64::from(shikigami_desktop::keep_out::EDGE_GAP) * scale) as i32;
+        let gap = (f64::from(spellsheet_desktop::keep_out::EDGE_GAP) * scale) as i32;
         let w = band_width(work.size.width as f64 / scale) * scale;
         let (w, h) = (w as i32, (HEIGHT * scale) as i32);
         band.set_size(tauri::PhysicalSize::new(w as u32, h as u32))?;
@@ -368,13 +368,13 @@ fn show_band(app: &AppHandle) -> tauri::Result<()> {
 fn band_width(screen: f64) -> f64 {
     (screen * WIDTH_SHARE)
         .max(MIN_WIDTH)
-        .min(screen - 2.0 * f64::from(shikigami_desktop::keep_out::EDGE_GAP))
+        .min(screen - 2.0 * f64::from(spellsheet_desktop::keep_out::EDGE_GAP))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shikigami_core::Step;
+    use spellsheet_core::Step;
 
     fn flow(types: &[&str]) -> Flow {
         let mut flow = Flow::new("f");
@@ -406,9 +406,9 @@ mod tests {
 
     fn paused() -> RunEvent {
         RunEvent::Paused {
-            step_id: shikigami_core::StepId::new("s1"),
+            step_id: spellsheet_core::StepId::new("s1"),
             step_type: "desktop.click".into(),
-            reason: shikigami_runtime::PauseReason::Error,
+            reason: spellsheet_runtime::PauseReason::Error,
             error: None,
             variables: Default::default(),
             revision: 1,

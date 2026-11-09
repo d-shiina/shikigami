@@ -1,6 +1,6 @@
 // What the run window shows while a run goes: the flow's top-level
 // steps, ticked off as the run passes them, and the step it is on now.
-import type { RunError, RunEventEnvelope, RunStatus, Flow, Step } from "@shikigami/schema";
+import type { RunError, RunEventEnvelope, RunStatus, Flow, Step } from "@spellsheet/schema";
 import { topOf, topSteps } from "./form";
 
 export type TopState = "waiting" | "running" | "done" | "failed";

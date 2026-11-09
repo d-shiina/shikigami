@@ -1,7 +1,7 @@
 // What Studio tells the AI when a run paused on an error: enough to fix the
 // step without seeing the screen (the AI's MCP server runs in another
 // process, so the paused browser is not open there).
-import type { Flow, StepTypeDef } from "@shikigami/schema";
+import type { Flow, StepTypeDef } from "@spellsheet/schema";
 import type { RunEvidence } from "./api";
 import type { Pause } from "../store";
 import { findStep } from "../store";

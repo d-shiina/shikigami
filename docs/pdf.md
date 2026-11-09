@@ -2,7 +2,7 @@
 
 English | [日本語](ja/pdf.md)
 
-Crate `shikigami-pdf`. Built-in nodes that read the text of PDFs and join or split PDFs. Pulling values out of the text is done with expression functions ([expressions.md](expressions.md)).
+Crate `spellsheet-pdf`. Built-in nodes that read the text of PDFs and join or split PDFs. Pulling values out of the text is done with expression functions ([expressions.md](expressions.md)).
 
 | Node | What it does | Output | Risk |
 |---|---|---|---|

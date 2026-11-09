@@ -1,8 +1,8 @@
 # Contributing / 貢献のしかた
 
-Shikigami は [Apache License 2.0](LICENSE) で公開している OSS です。Issue・Pull Request を歓迎します。
+SpellSheet は [Apache License 2.0](LICENSE) で公開している OSS です。Issue・Pull Request を歓迎します。
 
-*English summary: Shikigami is licensed under Apache-2.0. Contributions are accepted under the same license, and every commit must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`). Read [docs/compatibility.md](docs/compatibility.md) before changing a public contract, and add an entry to [CHANGELOG.md](CHANGELOG.md) for user-visible changes.*
+*English summary: SpellSheet is licensed under Apache-2.0. Contributions are accepted under the same license, and every commit must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`). Read [docs/compatibility.md](docs/compatibility.md) before changing a public contract, and add an entry to [CHANGELOG.md](CHANGELOG.md) for user-visible changes.*
 
 ## ライセンスと DCO
 

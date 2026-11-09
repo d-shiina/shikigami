@@ -1,0 +1,25 @@
+[package]
+name = "spellsheet-excel"
+description = "Excel workbook steps for SpellSheet (excel.*): read and write .xlsx files directly, without Excel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+spellsheet-core.workspace = true
+spellsheet-runtime.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+umya-spreadsheet = { version = "3.1.1", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+spellsheet-com.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

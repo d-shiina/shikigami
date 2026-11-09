@@ -1,5 +1,5 @@
 //! The AI pane: runs the person's own coding agent (Claude Code, Codex,
-//! Gemini CLI or GitHub Copilot) in the background with Shikigami's MCP
+//! Gemini CLI or GitHub Copilot) in the background with SpellSheet's MCP
 //! server, one process per message. What differs between them is in
 //! `providers`.
 //!
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use shikigami_core::{ErrorPayload, UserConfig};
+use spellsheet_core::{ErrorPayload, UserConfig};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -31,14 +31,14 @@ use providers::{CodexStream, CopilotStream, GeminiStream, KNOWN, Turn, child_pat
 pub(crate) const AGENT_EVENT: &str = "agent-event";
 
 /// Name the MCP server is given in the agent; tool names start with
-/// `mcp__shikigami__` in Claude Code.
-pub(crate) const SERVER: &str = "shikigami";
+/// `mcp__spellsheet__` in Claude Code.
+pub(crate) const SERVER: &str = "spellsheet";
 const STDERR_TAIL: usize = 2000;
 pub(crate) const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
 You are an AI called from inside SpellSheet Writer (RPA for Windows, a desktop app). You are talking with the person using Writer in its AI chat (「AI チャット」), a pane at the right of Writer's window: your replies and cards appear there, not in a web browser. A web browser is only the window a flow or ask_user_to_pick opens.
-- Read, edit and test-run flows only with the shikigami MCP tools. Files and commands are not available.
+- Read, edit and test-run flows only with the spellsheet MCP tools. Files and commands are not available.
 - When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Writer shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Writer's review, where a person checks what they do.
 - The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Writer has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
 - When asked to fix something that was sent back, read the feedback in get_flow (details in get_review), fix it as noted, and briefly report what you fixed.
@@ -66,7 +66,7 @@ struct AgentConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     command: Option<PathBuf>,
     /// For `command`: its arguments. `{mcpConfig}` becomes the path of an MCP
-    /// config file for Shikigami and `{workspace}` the workspace folder. The
+    /// config file for SpellSheet and `{workspace}` the workspace folder. The
     /// message is written to stdin; each stdout line is shown as the reply.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     args: Vec<String>,
@@ -223,12 +223,12 @@ pub enum AgentEvent {
     Text {
         text: String,
     },
-    /// The agent has begun writing a Shikigami tool call (its input is still
+    /// The agent has begun writing a SpellSheet tool call (its input is still
     /// being written, which takes a while for a large edit).
     Preparing {
         name: String,
     },
-    /// A Shikigami tool call; `detail` is the edit's summary when it has one.
+    /// A SpellSheet tool call; `detail` is the edit's summary when it has one.
     Tool {
         name: String,
         detail: Option<String>,
@@ -269,7 +269,7 @@ pub struct ChoiceOption {
 }
 
 impl AgentEvent {
-    /// The event for a Shikigami tool call with its arguments: a card for
+    /// The event for a SpellSheet tool call with its arguments: a card for
     /// ask_user_to_choose, otherwise the call with its summary.
     pub(crate) fn tool(name: String, input: Option<&Value>) -> Self {
         // Some agents give the arguments as JSON text.
@@ -409,7 +409,7 @@ pub fn agent_info() -> AgentInfo {
         )),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
         (Some(_), None) => Some(
-            "shikigami コマンド（MCP サーバー）が見つかりません。Writer と同じフォルダに置いてください。"
+            "spellsheet コマンド（MCP サーバー）が見つかりません。Writer と同じフォルダに置いてください。"
                 .to_owned(),
         ),
         _ => None,
@@ -1025,7 +1025,7 @@ pub fn agent_login_cancel(login: State<'_, AgentLogin>) {
     }
 }
 
-/// Opens the sign-in page, or one of Shikigami's own docs pages (the
+/// Opens the sign-in page, or one of SpellSheet's own docs pages (the
 /// tutorials), in the default browser. Nothing else.
 #[tauri::command]
 pub fn agent_open_url(url: String) -> CmdResult<()> {
@@ -1122,11 +1122,12 @@ fn open_gemini(program: &Path) -> CmdResult<()> {
     ))
 }
 
-/// Shikigami's own pages on GitHub (the tutorials Studio links to).
+/// The docs folder of the repository in Cargo.toml (`repository`).
+const DOCS_URL: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/");
+
+/// SpellSheet's own pages on GitHub (the tutorials Studio links to).
 fn is_docs_url(url: &str) -> bool {
-    url.starts_with("https://github.com/d-shiina/shikigami/blob/main/docs/")
-        && !url.contains(char::is_whitespace)
-        && !url.contains("..")
+    url.starts_with(DOCS_URL) && !url.contains(char::is_whitespace) && !url.contains("..")
 }
 
 fn login_url(kind: AgentKind, line: &str) -> Option<String> {
@@ -1268,7 +1269,7 @@ impl ClaudeStream {
                     _ => None,
                 })
                 .collect(),
-            // Of the partial messages, only the start of a Shikigami tool call.
+            // Of the partial messages, only the start of a SpellSheet tool call.
             Some("stream_event") => v
                 .get("event")
                 .filter(|e| e.get("type").and_then(Value::as_str) == Some("content_block_start"))
@@ -1343,7 +1344,7 @@ fn tail(s: &str, max: usize) -> String {
 
 /// Per-PC working folder for the agent, outside the (maybe shared) workspace.
 fn agent_dir() -> PathBuf {
-    shikigami_core::paths::local_dir().join("agent")
+    spellsheet_core::paths::local_dir().join("agent")
 }
 
 fn exe(name: &str) -> String {
@@ -1354,21 +1355,14 @@ fn exe(name: &str) -> String {
     }
 }
 
-/// The CLI next to Studio (`spellsheet.exe` installed, `shikigami.exe` in
-/// `target/<profile>` in development and in builds before the rename),
-/// else on PATH.
+/// The CLI next to Studio (installed, or `target/<profile>` in
+/// development), else on PATH.
 pub(crate) fn cli_path() -> Option<PathBuf> {
-    let dir = std::env::current_exe()
+    std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf));
-    ["spellsheet", "shikigami"]
-        .into_iter()
-        .find_map(|name| {
-            dir.as_ref()
-                .map(|d| d.join(exe(name)))
-                .filter(|p| p.is_file())
-        })
-        .or_else(|| find_on_path(&[&exe("spellsheet"), &exe("shikigami")]))
+        .and_then(|p| p.parent().map(|d| d.join(exe("spellsheet"))))
+        .filter(|p| p.is_file())
+        .or_else(|| find_on_path(&[&exe("spellsheet")]))
 }
 
 /// In development `tauri dev` rebuilds only Studio, so after a pull the
@@ -1398,7 +1392,7 @@ async fn refresh_dev_cli() -> CmdResult<()> {
                 Ok(out) => Err(err(
                     "AGENT_FAILED",
                     format!(
-                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。\n{}",
+                        "spellsheet コマンド（MCP サーバー）を最新のソースでビルドできませんでした。\n{}",
                         tail(String::from_utf8_lossy(&out.stderr).trim(), 1500)
                     ),
                 )),
@@ -1414,7 +1408,7 @@ async fn refresh_dev_cli() -> CmdResult<()> {
 async fn build_cli(root: &Path) -> std::io::Result<std::process::Output> {
     let mut command = Command::new("cargo");
     command
-        .args(["build", "--quiet", "--package", "shikigami-cli"])
+        .args(["build", "--quiet", "--package", "spellsheet-cli"])
         .current_dir(root)
         // Only the errors, not a progress bar per crate.
         .env("CARGO_TERM_PROGRESS_WHEN", "never")
@@ -1425,12 +1419,12 @@ async fn build_cli(root: &Path) -> std::io::Result<std::process::Output> {
     command.output().await
 }
 
-/// Renames `shikigami(.exe)` in `dir` to a `.old-*` name a running process
+/// Renames `spellsheet(.exe)` in `dir` to a `.old-*` name a running process
 /// can keep, and removes earlier ones nothing uses any more. Whether there
 /// was one to move.
 #[cfg(debug_assertions)]
 fn set_aside_cli(dir: &Path) -> bool {
-    let name = exe("shikigami");
+    let name = exe("spellsheet");
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             if entry
@@ -1491,8 +1485,8 @@ mod tests {
         );
         let assistant = r#"{"type":"assistant","message":{"content":[
             {"type":"text","text":"直します"},
-            {"type":"tool_use","name":"mcp__shikigami__update_step","input":{"summary":"待ち時間を延ばした"}},
-            {"type":"tool_use","name":"mcp__shikigami__get_flow","input":{}}]}}"#
+            {"type":"tool_use","name":"mcp__spellsheet__update_step","input":{"summary":"待ち時間を延ばした"}},
+            {"type":"tool_use","name":"mcp__spellsheet__get_flow","input":{}}]}}"#
             .replace('\n', "");
         assert_eq!(
             parse_claude_line(&assistant),
@@ -1538,7 +1532,7 @@ mod tests {
     #[test]
     fn tells_which_flow_a_conversation_created() {
         let mut stream = ClaudeStream::default();
-        stream.line(r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu_1","name":"mcp__shikigami__create_flow","input":{"name":"請求書"}},{"type":"tool_use","id":"tu_2","name":"mcp__shikigami__get_flow","input":{}}]}}"#);
+        stream.line(r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu_1","name":"mcp__spellsheet__create_flow","input":{"name":"請求書"}},{"type":"tool_use","id":"tu_2","name":"mcp__spellsheet__get_flow","input":{}}]}}"#);
         let result = json!({ "type": "user", "message": { "content": [
             { "type": "tool_result", "tool_use_id": "tu_2", "content": [{ "type": "text", "text": json!({ "flow": { "id": "scn_other", "name": "参考" } }).to_string() }] },
             { "type": "tool_result", "tool_use_id": "tu_1", "content": [{ "type": "text", "text": json!({ "flow": { "id": "scn_new", "name": "請求書", "revision": 1 } }).to_string() }] },
@@ -1573,7 +1567,7 @@ mod tests {
     fn says_when_a_tool_call_begins() {
         assert_eq!(
             parse_claude_line(
-                r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__shikigami__create_flow","input":{}}}}"#
+                r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__spellsheet__create_flow","input":{}}}}"#
             ),
             vec![AgentEvent::Preparing {
                 name: "create_flow".into()
@@ -1584,7 +1578,7 @@ mod tests {
     #[test]
     fn shows_a_choice_as_a_card() {
         let events = parse_claude_line(
-            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__shikigami__ask_user_to_choose","input":{"question":" 在庫切れの注文はどうしますか？ ","options":[{"label":"飛ばす","description":"出荷できた分だけ進めます。"},{"label":"止める","description":""}],"recommended":0,"reason":"止まらないので"}}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__spellsheet__ask_user_to_choose","input":{"question":" 在庫切れの注文はどうしますか？ ","options":[{"label":"飛ばす","description":"出荷できた分だけ進めます。"},{"label":"止める","description":""}],"recommended":0,"reason":"止まらないので"}}]}}"#,
         );
         assert_eq!(
             events,
@@ -1687,20 +1681,15 @@ mod tests {
         assert!(is_sign_in_url(
             "https://github.com/login/oauth/authorize?c=1"
         ));
-        assert!(!is_sign_in_url("https://github.com/d-shiina/shikigami"));
+        assert!(DOCS_URL.starts_with("https://github.com/"), "{DOCS_URL}");
+        assert!(!is_sign_in_url(env!("CARGO_PKG_REPOSITORY")));
         assert!(!is_sign_in_url("https://claude.com/ x"));
-        assert!(is_docs_url(
-            "https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/README.md"
-        ));
-        assert!(!is_docs_url(
-            "https://github.com/d-shiina/shikigami/blob/main/docs/../../x"
-        ));
+        assert!(is_docs_url(&format!("{DOCS_URL}ja/tutorials/README.md")));
+        assert!(!is_docs_url(&format!("{DOCS_URL}../../x")));
         assert!(!is_docs_url(
             "https://github.com/someone/else/blob/main/docs/a.md"
         ));
-        assert!(!is_sign_in_url(
-            "https://github.com/d-shiina/shikigami/blob/main/docs/a.md"
-        ));
+        assert!(!is_sign_in_url(&format!("{DOCS_URL}a.md")));
 
         assert!(is_web_link("https://example.com/a?b=1&c=2#d"));
         assert!(is_web_link("HTTP://example.com"));
@@ -1732,11 +1721,11 @@ mod tests {
     }
 
     #[test]
-    fn claude_only_gets_shikigami_and_resumes() {
+    fn claude_only_gets_spellsheet_and_resumes() {
         let args = providers::claude_args(Path::new("m.json"), Path::new("s.md"), Some("sess"));
         let joined = args.join(" ");
         assert!(joined.contains("--strict-mcp-config --mcp-config m.json"));
-        assert!(joined.contains("--allowedTools mcp__shikigami"));
+        assert!(joined.contains("--allowedTools mcp__spellsheet"));
         assert!(joined.ends_with("--resume sess"));
         let i = args.iter().position(|a| a == "--tools").unwrap();
         assert_eq!(args[i + 1], "");

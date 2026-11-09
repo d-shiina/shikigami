@@ -1,8 +1,8 @@
 # WinActor・UiPath・Power Automate Desktop などと比べて劣る点（2026-11-07 再点検）
 
-目的：既存の RPA 製品と並べたときに Shikigami が**まだ劣っている点だけ**を、ノード・操作の単位まで掘って並べる。各項目に、相手の製品での名前・Shikigami での対応案・優先度を書く。上から順に PR で潰していき、済んだものは「済んだもの」に移す。
+目的：既存の RPA 製品と並べたときに SpellSheet が**まだ劣っている点だけ**を、ノード・操作の単位まで掘って並べる。各項目に、相手の製品での名前・SpellSheet での対応案・優先度を書く。上から順に PR で潰していき、済んだものは「済んだもの」に移す。
 
-比べた相手：WinActor・UiPath（Studio / Robot / Orchestrator）・Power Automate Desktop（以下 PAD）・Automation Anywhere（以下 AA）・BizRobo!。相手の機能名は各社の公開資料で一般に知られている範囲で書いた（細かい版・価格は確かめていない）。Shikigami 側は `schemas/contract/step-types.json`（組込ノード 105 種）と docs・Studio のコードを根拠にした。
+比べた相手：WinActor・UiPath（Studio / Robot / Orchestrator）・Power Automate Desktop（以下 PAD）・Automation Anywhere（以下 AA）・BizRobo!。相手の機能名は各社の公開資料で一般に知られている範囲で書いた（細かい版・価格は確かめていない）。SpellSheet 側は `schemas/contract/step-types.json`（組込ノード 105 種）と docs・Studio のコードを根拠にした。
 
 前提にする方針（変えない）：
 
@@ -73,7 +73,7 @@
 
 ### G5 失敗したときの画面を残す
 
-- **今**：Studio の一時停止のときだけ、アダプターの `inspect` で画面を撮って観察として残す。`shikigami run`・自動実行・管理サーバーからの実行では、どんな画面で止まったか後から分からない
+- **今**：Studio の一時停止のときだけ、アダプターの `inspect` で画面を撮って観察として残す。`spellsheet run`・自動実行・管理サーバーからの実行では、どんな画面で止まったか後から分からない
 - **対応案**：実行が失敗で終わるとき、失敗したノードがブラウザ・デスクトップのノードなら、その画面のスクリーンショットを実行記録のフォルダーに保存し、実行記録と通知・`get_run_logs` から辿れるようにする。秘密の値は画面に出ていることがあるので、`policy.json` で切れるようにする（既定は撮る）
 
 ### G6・G7・G20・G21 ブラウザ・デスクトップの細かい操作
@@ -140,11 +140,11 @@
 
 **方針**：[locked-runs.md](locked-runs.md)。段階 1（資格情報を持たない手当て：実行中はロックさせない、リモートデスクトップをロックしないで切断、ロック解除を待つ、前もって知らせる）を先に作り、段階 2（Windows サービスがロボット用アカウントでサインインする、UiPath・PAD と同じ形）はコード署名のあとに決める。
 
-**対応**：段階 1 は済み。実行中は画面オフ・スリープさせない（#187）、予定に何分でロックされるかを出す（#188）、リモートデスクトップをロックしないで切断する「画面を残して切断」・`shikigami session`、`policy.json` の `desktop.waitUnlockedMinutes`（#192）。実機の Windows ではまだ試していない。
+**対応**：段階 1 は済み。実行中は画面オフ・スリープさせない（#187）、予定に何分でロックされるかを出す（#188）、リモートデスクトップをロックしないで切断する「画面を残して切断」・`spellsheet session`、`policy.json` の `desktop.waitUnlockedMinutes`（#192）。実機の Windows ではまだ試していない。
 
 ### G26 Windows の資格情報マネージャー
 
-- シークレットの値の保存先に「Windows の資格情報マネージャー」を足す。名前・サイト・MFA キーは Shikigami 側に残し、ユーザー名とパスワードだけを使うたびに汎用資格情報から読む（UiPath の Get Secure Credential と同じく、変更はそちらだけで済む）。参照の書き方・サイト照合・伏せ字は変えない
+- シークレットの値の保存先に「Windows の資格情報マネージャー」を足す。名前・サイト・MFA キーは SpellSheet 側に残し、ユーザー名とパスワードだけを使うたびに汎用資格情報から読む（UiPath の Get Secure Credential と同じく、変更はそちらだけで済む）。参照の書き方・サイト照合・伏せ字は変えない
 
 **対応**：済み。読めるのは汎用資格情報だけ（ドメインの資格情報のパスワードは Windows が渡さない）。実機の Windows ではまだ試していない。
 
@@ -156,7 +156,7 @@
 
 ### G28 テストの仕組み
 
-- フローのフォルダーの `tests/<名前>.json` に `inputs` と `expect`（`status`・`outputs` は書いたものだけ比べる・`errorCode`・`errorStep`）。`shikigami test <フロー> [--case] [--draft] [--json]` で 1 ケース 1 回ふつうに実行し、違いを `at`・`expected`・`actual` で出す。終了コード 1 で CI やバッチに使える。`tests/` はバンドルに入る（docs/testing.md）
+- フローのフォルダーの `tests/<名前>.json` に `inputs` と `expect`（`status`・`outputs` は書いたものだけ比べる・`errorCode`・`errorStep`）。`spellsheet test <フロー> [--case] [--draft] [--json]` で 1 ケース 1 回ふつうに実行し、違いを `at`・`expected`・`actual` で出す。終了コード 1 で CI やバッチに使える。`tests/` はバンドルに入る（docs/testing.md）
 - Studio：下のパネルの「テスト」タブ。「この実行をテストケースとして保存」（入力・終わり方・出力をそのまま期待に。シークレットと切り詰めた値は除く）、一覧・すべて実行・1 件実行・中止、違いを「出力『total』 期待 3 実際 4」の言葉で
 - AI：MCP の `save_test_case`（入力変数でない名前・シークレットの入力は断る）と `run_tests`（承認は run_flow と同じ）
 
@@ -188,13 +188,13 @@
 
 | 前の # | 項目 | 対応 |
 |---|---|---|
-| 1 | スケジュール・トリガー | `shikigami agent` と Studio の「自動実行」、日時・毎月・間隔・ファイル到着（[schedules.md](../schedules.md)） |
+| 1 | スケジュール・トリガー | `spellsheet agent` と Studio の「自動実行」、日時・毎月・間隔・ファイル到着（[schedules.md](../schedules.md)） |
 | 2 | 無人実行の土台 | PC をまたいだ入力の排他、キャンセル時の `finally`、ロックの検知（ロック中に動かすのは G18） |
 | 3・13 | 画面から選ぶ・光らせる・名前付きの部品 | 「画面から選ぶ」「光らせる」、`parts`（[desktop.md](../desktop.md)） |
 | 4 | IE モード・人が開いたブラウザ | `desktop.*` で IE モード、`browser.attach`（実機確認は G1） |
 | 5 | SAP / Java の経路 | SAP GUI Scripting・Java Access Bridge、`sap.runTransaction`（実機確認は G1） |
 | 7 | エラーが英語 | `errorText.ts`・検証の問題の日本語化 |
-| 8・25 | 管理サーバー・監査 | 管理サーバー、`shikigami audit`、`records.keepDays` |
+| 8・25 | 管理サーバー・監査 | 管理サーバー、`spellsheet audit`、`records.keepDays` |
 | 9 | 失敗の通知 | `policy.json` の `notify`（Teams・メール） |
 | 10 | 操作の記録 | デスクトップ・ブラウザの記録 → AI が整える |
 | 11 | ブラウザ操作の欠け | タブ・iframe・JS ダイアログ・ホバー・スクロール・属性・ダウンロード・アップロード |
@@ -202,7 +202,7 @@
 | 14 | Excel | 開いているブック・再計算・並べ替え・書式・フィルター・ピボット・PDF（行・シートの操作は G10・G11） |
 | 15 | メールの送信 | `mail.send`（Outlook・Microsoft 365・SMTP。受信側は G14） |
 | 16 | データベース | `db.query` / `db.execute`（ODBC） |
-| 17 | 軽い実行画面 | 「Shikigami 実行」（入力変数から作るフォーム。途中のフォームは G12） |
+| 17 | 軽い実行画面 | 「SpellSheet 実行」（入力変数から作るフォーム。途中のフォームは G12） |
 | 18 | 学習資料 | `docs/ja/tutorials/`、Studio の「見本」 |
 | 19 | PDF の結合・分割 | `pdf.merge` / `pdf.extractPages` / `pdf.split`（帳票 OCR は G27） |
 

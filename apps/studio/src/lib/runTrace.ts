@@ -3,7 +3,7 @@
 // took and how it ended. A control node (a loop, a branch, a frame) and a
 // sub-flow call hold the rows of the nodes run inside them, and a loop
 // splits them into its rounds. Log lines hang under the node that wrote them.
-import type { RunEventEnvelope, Step, StepOutcome } from "@shikigami/schema";
+import type { RunEventEnvelope, Step, StepOutcome } from "@spellsheet/schema";
 
 /** One run of one node (a retry continues the same run). */
 export type TraceNode = {

@@ -13,7 +13,7 @@ SAP GUI や Java アプリは `desktop.*` のバックエンドとして組込�
 
 ## 2. 方式：別プロセス + JSON-RPC
 
-プラグインは子プロセスとして動き、改行区切りの JSON-RPC 2.0 で本体と話す。ブラウザ操作（`packages/browser-adapter`）と同じ仕組み（`shikigami_runtime::sidecar`）をそのまま使う。
+プラグインは子プロセスとして動き、改行区切りの JSON-RPC 2.0 で本体と話す。ブラウザ操作（`packages/browser-adapter`）と同じ仕組み（`spellsheet_runtime::sidecar`）をそのまま使う。
 
 - **言語は自由**：Node.js、Python、.NET、PowerShell、Go など、標準入出力が使えれば何でもよい
 - **壊れても本体は落ちない**：プラグインが異常終了しても、そのノードが `ADAPTER_CRASHED`（再試行可）で失敗するだけ。次の呼び出しで自動的に起動し直す
@@ -22,11 +22,11 @@ SAP GUI や Java アプリは `desktop.*` のバックエンドとして組込�
 
 ## 3. プラグインの形
 
-1 つのフォルダに `shikigami-plugin.json`（マニフェスト）と実行するプログラムを置く。
+1 つのフォルダに `spellsheet-plugin.json`（マニフェスト）と実行するプログラムを置く。
 
 ```text
 hello/
-├─ shikigami-plugin.json
+├─ spellsheet-plugin.json
 └─ main.mjs
 ```
 
@@ -141,30 +141,30 @@ hello/
 
 起動時（CLI・MCP サーバー・Studio）に次の場所を探す。
 
-1. 環境変数 `SHIKIGAMI_PLUGINS`（`;` 区切り）：プラグインのフォルダ、またはプラグインのフォルダを並べたフォルダ
-2. `%LOCALAPPDATA%\Shikigami\plugins\<名前>\`
+1. 環境変数 `SPELLSHEET_PLUGINS`（`;` 区切り）：プラグインのフォルダ、またはプラグインのフォルダを並べたフォルダ
+2. `%LOCALAPPDATA%\SpellSheet\plugins\<名前>\`
 
 ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、フローは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../ja/compatibility.md) §4）。
 
-読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`shikigami plugin list` で読み込んだものと問題を、`shikigami plugin check <フォルダ>` で作成中のプラグインの検査ができる。
+読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`spellsheet plugin list` で読み込んだものと問題を、`spellsheet plugin check <フォルダ>` で作成中のプラグインの検査ができる。
 
-予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `flow` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `shikigami`、および組込アダプターの名前。
+予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `flow` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `spellsheet`、および組込アダプターの名前。
 
 ## 8. まだやらないこと（順に検討）
 
 2 の導入と一覧、4 の Studio の画面は [extensions.md](../ja/extensions.md) で対応済み。
 
 1. 足りないプラグインを Studio の画面で案内する（記録と検証のヒントは `requires` で対応済み）
-2. `shikigami plugin install <zip / Git URL>` と一覧（カタログ）
+2. ~~`spellsheet plugin install <zip / Git URL>` と一覧（カタログ）~~ 対応済み。サードパーティの置き場所は公式の一覧リポジトリ spellsheet/plugins（作者は自分のリポジトリでリリースし、一覧に 1 行の PR）、各行は版と zip の SHA-256 で固定（2026-11-09 決定、[extensions.md](../ja/extensions.md)）
 3. 署名・発行元の確認、`dangerous` なプラグインを初回に人が許可する仕組み
 4. Studio でのプラグイン一覧画面
 5. 各言語向けの小さな SDK（Node.js / Python / .NET）
 
 ## 9. 最初の実装（このPR）
 
-- `crates/shikigami-plugins`：マニフェストの読込と検査、`Adapter` としての登録、シークレットの受け渡し
-- `shikigami_adapters::all()` が組込に加えて見つかったプラグインを返す（CLI・MCP・Studio すべてに出る）
+- `crates/spellsheet-plugins`：マニフェストの読込と検査、`Adapter` としての登録、シークレットの受け渡し
+- `spellsheet_adapters::all()` が組込に加えて見つかったプラグインを返す（CLI・MCP・Studio すべてに出る）
 - `Adapter::name()` を `&'static str` から `&str` に（プラグインの名前は実行時に決まるため）
 - シークレットの「使ってよい先」に `plugin:<name>` を追加
-- CLI：`shikigami plugin list` / `shikigami plugin check <dir>`
+- CLI：`spellsheet plugin list` / `spellsheet plugin check <dir>`
 - サンプル：`examples/plugins/hello`（Node.js、依存なし）

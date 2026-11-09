@@ -16,7 +16,7 @@ importers:
       '@fontsource-variable/noto-sans-jp':
         specifier: 5.3.1
         version: 5.3.1
-      '@shikigami/schema':
+      '@spellsheet/schema':
         specifier: workspace:*
         version: link:../../packages/schema
       '@tauri-apps/api':

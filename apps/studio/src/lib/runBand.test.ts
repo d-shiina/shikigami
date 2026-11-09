@@ -1,4 +1,4 @@
-import type { RunEventEnvelope, RunReport, Step, StepTypeDef } from "@shikigami/schema";
+import type { RunEventEnvelope, RunReport, Step, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { bandEnded, bandItems, bandStep, type BandState, emptyBand, focusStep } from "./runBand";
 

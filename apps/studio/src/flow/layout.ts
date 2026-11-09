@@ -5,7 +5,7 @@
 // Steps run top to bottom; a step's blocks sit side by side below it, framed
 // together with it (the step is the frame's head), and a loop draws a line
 // from the end of its body back to where its body starts, inside its frame.
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";

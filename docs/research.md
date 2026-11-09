@@ -51,7 +51,7 @@
 
 ## 2. ライセンス上の注意点
 
-- **evalexpr（式評価クレート）は 13.x で AGPL-3.0-only に変更されている。** 商用製品に組み込むとソース開示義務が生じ得るため採用しない。代わりに自前の小さな式言語（`shikigami-core::expr`）を実装した。
+- **evalexpr（式評価クレート）は 13.x で AGPL-3.0-only に変更されている。** 商用製品に組み込むとソース開示義務が生じ得るため採用しない。代わりに自前の小さな式言語（`spellsheet-core::expr`）を実装した。
 - React Flow（@xyflow/react）は MIT。キャンバス右下の「React Flow」表記は法的義務ではないが、開発元は Pro 契約なしでの非表示を推奨していないため、Phase 1 では表示したままにしている。商用リリース前に方針を決める。
 - notify は CC0-1.0（パブリックドメイン相当）で問題なし。
 - 依存ライセンスの自動監査（cargo-deny / license-checker）は Phase 2 で CI に追加する。
@@ -93,5 +93,5 @@ Windows SDK は C++ Build Tools の「Desktop development with C++」ワーク�
 
 ## 5. 名前の衝突確認
 
-- crates.io / npm の素の `shikigami` は小規模な個人プロジェクトが使用中（crates.io: Jujutsu 用 TUI、npm: AI エージェントツール）。著名プロジェクトとの衝突は見つからなかった。
-- 本プロジェクトのクレートは `shikigami-*`、npm パッケージは `@shikigami/*`（private）とする。
+- crates.io / npm の素の `spellsheet` は小規模な個人プロジェクトが使用中（crates.io: Jujutsu 用 TUI、npm: AI エージェントツール）。著名プロジェクトとの衝突は見つからなかった。
+- 本プロジェクトのクレートは `spellsheet-*`、npm パッケージは `@spellsheet/*`（private）とする。

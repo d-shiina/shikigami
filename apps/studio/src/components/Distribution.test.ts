@@ -1,4 +1,4 @@
-import type { DistributedFlow, DistributionView } from "@shikigami/schema";
+import type { DistributedFlow, DistributionView } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { fresh } from "./Distribution";
 

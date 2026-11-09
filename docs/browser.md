@@ -8,16 +8,16 @@ SpellSheet flows drive web pages. The Rust Runtime starts the Node.js + Playwrig
 
 - **Nothing extra when installed with the installer.** Node.js and the adapter are bundled ([release.md](release.md#bundling-nodejs-and-the-browser-adapter))
 - When running from source: Node.js 22.18 or later (runs the TypeScript directly) and `pnpm install` in the repository (installs `playwright-core`)
-- A browser: on Windows **the installed Microsoft Edge is used**, so nothing else is downloaded. For Chrome set `SHIKIGAMI_BROWSER_CHANNEL=chrome`; for any other executable, `SHIKIGAMI_BROWSER_PATH`
+- A browser: on Windows **the installed Microsoft Edge is used**, so nothing else is downloaded. For Chrome set `SPELLSHEET_BROWSER_CHANNEL=chrome`; for any other executable, `SPELLSHEET_BROWSER_PATH`
 
 | Environment variable | Meaning |
 |---|---|
-| `SHIKIGAMI_BROWSER_CHANNEL` | `msedge` (default on Windows) / `chrome` and so on |
-| `SHIKIGAMI_BROWSER_PATH` | The browser executable |
-| `SHIKIGAMI_BROWSER_HEADLESS` | `1` to always run without a window (unattended runs, CI) |
-| `SHIKIGAMI_BROWSER_SLOWMO` | Delay per action (ms), to show the moves in a demo |
-| `SHIKIGAMI_BROWSER_ADAPTER` | Location of the adapter's `main.ts` (normally found automatically) |
-| `SHIKIGAMI_NODE` | The Node.js executable (default: the bundled `node\node.exe`, otherwise `node` on PATH) |
+| `SPELLSHEET_BROWSER_CHANNEL` | `msedge` (default on Windows) / `chrome` and so on |
+| `SPELLSHEET_BROWSER_PATH` | The browser executable |
+| `SPELLSHEET_BROWSER_HEADLESS` | `1` to always run without a window (unattended runs, CI) |
+| `SPELLSHEET_BROWSER_SLOWMO` | Delay per action (ms), to show the moves in a demo |
+| `SPELLSHEET_BROWSER_ADAPTER` | Location of the adapter's `main.ts` (normally found automatically) |
+| `SPELLSHEET_NODE` | The Node.js executable (default: the bundled `node\node.exe`, otherwise `node` on PATH) |
 
 ## Demo
 
@@ -32,7 +32,7 @@ This starts a demo business site, an order management system for a sample tradin
 3. Output the shipped order numbers, the total amount and the out-of-stock items
 4. The login is kept with `session`, so **the second run skips the login page**
 
-The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Writer can load and run the same flow.
+The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\spellsheet.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Writer can load and run the same flow.
 
 ## Nodes
 
@@ -99,7 +99,7 @@ Notes:
 
 ### Edge IE mode
 
-Pages that Edge shows in IE mode run on the old Internet Explorer engine, which Playwright (and so `browser.*`) cannot reach. Use the desktop nodes there: the IE mode page is part of the Edge window, so target it with `{ "window": { "process": "msedge.exe", "title": "<part of the page title>" }, "element": { … } }` and look at it with `inspect_ui`. On the Windows CI runner (Windows Server, IE Enhanced Security Configuration turned off) UI Automation lists the page's headings, labels, text boxes and buttons with their HTML `id`, and `desktop.setValue` into a text box and `desktop.click` on a button both work (`crates/shikigami-desktop/tests/ie_mode.rs`). Name the element with its `role` too: a label and its text box share the name. **Not yet tried on a real PC's Edge** ([desktop.md](desktop.md)). On Windows Server, IE Enhanced Security Configuration keeps the page blank; a desktop PC has it off.
+Pages that Edge shows in IE mode run on the old Internet Explorer engine, which Playwright (and so `browser.*`) cannot reach. Use the desktop nodes there: the IE mode page is part of the Edge window, so target it with `{ "window": { "process": "msedge.exe", "title": "<part of the page title>" }, "element": { … } }` and look at it with `inspect_ui`. On the Windows CI runner (Windows Server, IE Enhanced Security Configuration turned off) UI Automation lists the page's headings, labels, text boxes and buttons with their HTML `id`, and `desktop.setValue` into a text box and `desktop.click` on a button both work (`crates/spellsheet-desktop/tests/ie_mode.rs`). Name the element with its `role` too: a label and its text box share the name. **Not yet tried on a real PC's Edge** ([desktop.md](desktop.md)). On Windows Server, IE Enhanced Security Configuration keeps the page blank; a desktop PC has it off.
 
 ### Downloads and uploads
 
@@ -238,4 +238,4 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
 
 - Browser support is one "adapter". To add other apps, see [adapters.md](adapters.md).
 - The adapter starts with the first browser node and is shared by every run. If it dies, the running node fails with `ADAPTER_CRASHED` and the adapter restarts on the next request.
-- The adapter's stderr goes to Rust's tracing (`shikigami_browser::adapter`).
+- The adapter's stderr goes to Rust's tracing (`spellsheet_browser::adapter`).

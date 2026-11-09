@@ -10,9 +10,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { REPO } from "./repo.mjs";
 
-const REPO = "d-shiina/shikigami";
-const keyFile = join(homedir(), ".tauri", "shikigami.key");
+const keyFile = join(homedir(), ".tauri", "spellsheet.key");
 const pubFile = `${keyFile}.pub`;
 const windows = process.platform === "win32";
 
@@ -22,7 +22,7 @@ if (existsSync(keyFile)) {
   // No password: the key lives only in your user folder and in GitHub Secrets.
   execFileSync(
     "pnpm",
-    ["--filter", "@shikigami/studio", "exec", "tauri", "signer", "generate", "--ci", "-w", keyFile],
+    ["--filter", "@spellsheet/studio", "exec", "tauri", "signer", "generate", "--ci", "-w", keyFile],
     { stdio: "inherit", shell: windows },
   );
 }

@@ -2,7 +2,7 @@
 // 「受注システム（申請）」). A flow names the one it logs in with, or lets the
 // person pick each run: an input whose choices are those names, written
 // `{ "secret": "{{ アカウント }}" }` in the steps (validation checks it).
-import type { EditOp, Flow, Step, VariableDef } from "@shikigami/schema";
+import type { EditOp, Flow, Step, VariableDef } from "@spellsheet/schema";
 import type { SecretInfo } from "./api";
 
 /** `{{ name }}` → `name`, as the Runtime reads a secret name taken from a variable. */

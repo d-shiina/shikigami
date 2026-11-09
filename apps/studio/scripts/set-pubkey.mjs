@@ -1,12 +1,12 @@
 // Writes tauri.release.gen.json (tauri.release.conf.json plus the updater
 // public key) for a release build. CI passes it in TAURI_UPDATER_PUBKEY (a repository variable); a
-// local build falls back to ~/.tauri/shikigami.key.pub.
+// local build falls back to ~/.tauri/spellsheet.key.pub.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const pubFile = join(homedir(), ".tauri", "shikigami.key.pub");
+const pubFile = join(homedir(), ".tauri", "spellsheet.key.pub");
 const pubkey =
   process.env.TAURI_UPDATER_PUBKEY?.trim() ||
   (existsSync(pubFile) ? readFileSync(pubFile, "utf8").trim() : "");

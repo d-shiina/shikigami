@@ -1,4 +1,4 @@
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { CALL_BAR_H, knownVariables, NODE_HEAD_H, NODE_PAD_B, nodeHeight, nodeRows, ROW_H, splitRefs, unsetParams } from "./nodeRows";
 

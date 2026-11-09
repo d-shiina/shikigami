@@ -2,7 +2,7 @@
 // finds that window next time ("Excel ならどれでも", "タイトルに「請求書」を
 // 含む", "「…」だけ"), chosen with one click instead of filling in title
 // and 照合方法. The raw fields stay under 「詳しく…」.
-import type { Step } from "@shikigami/schema";
+import type { Step } from "@spellsheet/schema";
 import { useState } from "react";
 import { useStudio } from "../../context";
 import { stepLabel, t } from "../../lib/i18n";

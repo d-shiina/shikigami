@@ -35,7 +35,7 @@ spellsheet worker unenroll
 ## 参考実装のサーバー
 
 ```powershell
-spellsheet manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
+spellsheet manager serve --listen 127.0.0.1:8740 --data C:\spellsheet-manager
 ```
 
 `--data` に `state.json`（ワーカー・ジョブ・ログ）と、最初の起動で作る `admin-token` を置きます。待ち受けは HTTP なので、その PC の外から使うときは HTTPS のリバースプロキシを前に置いてください（Worker は `localhost` 以外の `http://` を断ります）。
@@ -53,7 +53,7 @@ spellsheet manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
 | `POST /admin/jobs/{id}/cancel` | 取り消し：待ちのものはすぐ、実行中のものは PC の次の連絡で |
 
 ```powershell
-$h = @{ Authorization = "Bearer $(Get-Content C:\shikigami-manager\admin-token)" }
+$h = @{ Authorization = "Bearer $(Get-Content C:\spellsheet-manager\admin-token)" }
 Invoke-RestMethod -Method Post -Headers $h http://127.0.0.1:8740/admin/enrollment-codes
 Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
   -Body '{"flowId":"scn_01a1…","inputs":{"month":"2026-11"},"requestedBy":"dana"}' `
@@ -68,9 +68,9 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
 
 | ヘッダー | 値 |
 |---|---|
-| `X-Shikigami-Worker` | 登録でもらったワーカー ID |
-| `X-Shikigami-Time` | Unix 時刻（秒）。サーバーの時計と 5 分以上ずれたら断る |
-| `X-Shikigami-Signature` | `shikigami-v1\n{METHOD}\n{パス}\n{時刻}\n{本文の SHA-256 の16進}` の Ed25519 署名（Base64） |
+| `X-SpellSheet-Worker` | 登録でもらったワーカー ID |
+| `X-SpellSheet-Time` | Unix 時刻（秒）。サーバーの時計と 5 分以上ずれたら断る |
+| `X-SpellSheet-Signature` | `spellsheet-v1\n{METHOD}\n{パス}\n{時刻}\n{本文の SHA-256 の16進}` の Ed25519 署名（Base64） |
 
 | パス | 本文 → 答え |
 |---|---|

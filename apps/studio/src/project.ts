@@ -3,15 +3,16 @@
 // sheet beside the chart (a settings form, a text file, a run log). Files
 // change underneath (a run writes output/, the AI adds input/, Excel saves),
 // so the list is re-read whenever the watcher says the folder changed.
-import type { ConfigFile, ConfigItem, ProjectFile, ProjectFiles, Flow, Step } from "@shikigami/schema";
+import type { ConfigFile, ConfigItem, ProjectFile, ProjectFiles, Flow, Step } from "@spellsheet/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { ApiError } from "./lib/api";
+import { isFormat } from "./lib/legacyStorage";
 import type { AskAnswer } from "./lib/ask";
-import { isErrorPayload } from "@shikigami/schema";
+import { isErrorPayload } from "@spellsheet/schema";
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -70,13 +71,13 @@ export function shelfFor(name: string): Role {
   return "input";
 }
 
-export const CONFIG_FORMAT = "shikigami.config";
+export const CONFIG_FORMAT = "spellsheet.config";
 
 /** A settings file Studio can show as a form, or null for any other text. */
 export function parseConfig(text: string): ConfigFile | null {
   try {
     const value = JSON.parse(text) as unknown;
-    if (value && typeof value === "object" && (value as { format?: unknown }).format === CONFIG_FORMAT) {
+    if (value && typeof value === "object" && isFormat((value as { format?: unknown }).format, CONFIG_FORMAT)) {
       const file = value as ConfigFile;
       return { ...file, items: Array.isArray(file.items) ? file.items : [] };
     }
@@ -191,7 +192,7 @@ export type ProjectState = {
   dismiss(): void;
 };
 
-const PANEL_KEY = "shikigami.studio.project";
+const PANEL_KEY = "spellsheet.studio.project";
 const AUTOSAVE_MS = 400;
 
 function message(e: unknown): string {

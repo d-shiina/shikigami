@@ -1,5 +1,5 @@
 import { ArrowRight, Check, Undo2 } from "lucide-react";
-import type { HistoryEntry } from "@shikigami/schema";
+import type { HistoryEntry } from "@spellsheet/schema";
 import { useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime, verbLabel } from "../lib/changes";

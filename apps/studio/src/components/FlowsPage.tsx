@@ -1,7 +1,7 @@
 // The flow library: a page of its own (the "フロー" place), not a list
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
-import type { FlowSummary } from "@shikigami/schema";
+import type { FlowSummary } from "@spellsheet/schema";
 import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +18,7 @@ import { projectApi } from "../project";
 import { fileToFlowFile } from "./HandOff";
 import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
-const SORT_KEY = "shikigami.studio.flows.sort";
+const SORT_KEY = "spellsheet.studio.flows.sort";
 
 /** A small square with the name's first letter, so flows are told apart at a glance. */
 export function Monogram({ name, active }: { name: string; active: boolean }) {

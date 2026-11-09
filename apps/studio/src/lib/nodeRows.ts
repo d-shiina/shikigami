@@ -2,7 +2,7 @@
 // plus output rows for the variables the step writes. Display only; the
 // layout uses the same rows to size nodes, so both always agree.
 import { extensionChoiceLabel, extensionParamTitle } from "./extensions";
-import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { BINDS, CALL, FOR_EACH, REPEAT, TRY, VARIABLE_SET } from "./stepTypes";
 import { formatValue } from "./changes";
 import { listToText } from "./listText";

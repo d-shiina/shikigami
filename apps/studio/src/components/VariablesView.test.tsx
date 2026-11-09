@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { VariableDef } from "@shikigami/schema";
+import type { VariableDef } from "@spellsheet/schema";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InitialCell } from "./VariablesView";

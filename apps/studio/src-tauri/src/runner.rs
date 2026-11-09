@@ -1,4 +1,4 @@
-//! The run window ("Shikigami 実行", competitive-gaps.md #17): a small
+//! The run window ("SpellSheet 実行", competitive-gaps.md #17): a small
 //! window for the people who use flows rather than build them. It lists
 //! published flows only, asks for their inputs with a form made from the
 //! input variables, and runs the published version. A person starts the run
@@ -7,9 +7,9 @@
 
 use serde::Serialize;
 use serde_json::{Map, Value};
-use shikigami_core::{ErrorPayload, Flow, FlowId, FlowService, RunId};
-use shikigami_runtime::record::{list_runs, read_report};
-use shikigami_runtime::{RunOptions, RunOrigin, RunStatus, RunTrigger};
+use spellsheet_core::{ErrorPayload, Flow, FlowId, FlowService, RunId};
+use spellsheet_runtime::record::{list_runs, read_report};
+use spellsheet_runtime::{RunOptions, RunOrigin, RunStatus, RunTrigger};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use time::OffsetDateTime;
 
@@ -184,7 +184,7 @@ pub async fn runner_pick(kind: String, start: Option<String>) -> CmdResult<Optio
         })
         .map(|p| p.to_string_lossy().into_owned());
     let params = serde_json::json!({ "kind": kind, "folder": folder.unwrap_or_default() });
-    let picked = shikigami_system::select_file(&params)
+    let picked = spellsheet_system::select_file(&params)
         .await
         .map_err(|e| ErrorPayload {
             code: e.code,
@@ -270,7 +270,7 @@ fn own_taskbar_button(window: &tauri::WebviewWindow, identifier: &str) {
     // The window's property store belongs to the thread of its window.
     let _ = window.run_on_main_thread(move || {
         if let Err(e) =
-            shikigami_desktop::taskbar::own_button(hwnd, &app_id, &relaunch, "SpellSheet Runner")
+            spellsheet_desktop::taskbar::own_button(hwnd, &app_id, &relaunch, "SpellSheet Runner")
         {
             tracing::warn!(error = %e, "cannot give Runner its own taskbar button");
         }
@@ -291,8 +291,8 @@ mod tests {
     fn runner_has_an_app_id_of_its_own() {
         // Must match RUNNER_APPID in windows/installer-hooks.nsh.
         assert_eq!(
-            runner_app_id("dev.shikigami.studio"),
-            "dev.shikigami.studio.runner"
+            runner_app_id("dev.spellsheet.studio"),
+            "dev.spellsheet.studio.runner"
         );
         let hooks = include_str!("../windows/installer-hooks.nsh");
         assert!(hooks.contains(r#"!define RUNNER_APPID "${BUNDLEID}.runner""#));

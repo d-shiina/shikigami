@@ -5,7 +5,7 @@
 //
 // The window never takes the focus, so the buttons act on a press without
 // leaving the app the flow types into.
-import type { Flow, RunEventEnvelope, StepTypeDef } from "@shikigami/schema";
+import type { Flow, RunEventEnvelope, StepTypeDef } from "@spellsheet/schema";
 import { Check, ChevronRight, Maximize2, Pause, Repeat, Square, TriangleAlert, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";

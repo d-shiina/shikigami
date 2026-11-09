@@ -1,4 +1,4 @@
-import type { Flow, Part, ProjectFiles, StepTypeDef } from "@shikigami/schema";
+import type { Flow, Part, ProjectFiles, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import {
   cleanUp,

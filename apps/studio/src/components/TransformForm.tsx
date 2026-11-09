@@ -2,7 +2,7 @@
 // form ("表の列を集計" · 表 · 列) when the expression has one of the shapes in
 // lib/transforms.ts, or an expression field otherwise. The form only writes
 // the expression; the flow keeps `{ name, expression }` as before.
-import type { Step, StepPatch } from "@shikigami/schema";
+import type { Step, StepPatch } from "@spellsheet/schema";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../lib/i18n";
