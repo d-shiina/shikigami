@@ -19,10 +19,7 @@ MCP-native desktop RPA where AI and humans build, edit, and run the same automat
 
 SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-<picture>
-  <source srcset="docs/assets/writer-en-dark.webp" media="(prefers-color-scheme: dark)">
-  <img src="docs/assets/writer-en.webp" alt="SpellSheet Writer with a flow open in the middle and the AI chat on the right, where the AI is asked to add a node">
-</picture>
+<img src="docs/assets/demo-en.gif" alt="In SpellSheet Writer, Claude Code is asked in the AI chat to make invoices per customer; the flow grows node by node in the middle, and pressing Run then runs it without AI, lighting up each node in turn">
 
 ## Getting started
 
