@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
 const site = join(here, "..", "..", "..", "site");
-const base = (process.env.MANUAL_BASE ?? "/spellsheet/manual").replace(/\/$/, "");
+const base = (process.env.MANUAL_BASE ?? "/manual").replace(/\/$/, "");
 
 function pages(dir) {
   return readdirSync(dir).flatMap((name) => {

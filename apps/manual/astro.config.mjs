@@ -1,12 +1,12 @@
 // The product manual for the people who use SpellSheet at work. Built with
-// Starlight and published under the product site as manual/ (pages.yml).
-// The base path follows the repository name, so MANUAL_BASE is set by the
-// workflow; the default fits https://<owner>.github.io/spellsheet/manual/.
+// Starlight and published under the product site as manual/: the Deploy
+// workflow of spellsheet/spellsheet.github.io builds it with MANUAL_SITE and
+// MANUAL_BASE and serves it at https://spellsheet.github.io/manual/.
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
 const site = process.env.MANUAL_SITE ?? "https://spellsheet.github.io";
-const base = process.env.MANUAL_BASE ?? "/spellsheet/manual";
+const base = process.env.MANUAL_BASE ?? "/manual";
 
 export default defineConfig({
   site,
