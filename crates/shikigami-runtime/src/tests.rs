@@ -617,6 +617,39 @@ async fn secrets_are_masked_in_logs_errors_and_outputs() {
 }
 
 #[tokio::test]
+async fn personal_data_is_masked_like_secrets() {
+    let mut s = flow(vec![
+        set("first", "customers[0]"),
+        log("calling {{ first.name }} at {{ first.phone }}"),
+        Step::new("control.fail").with_param("message", "no answer from {{ first.name }}"),
+    ]);
+    let mut customers = var("customers", VarType::Array, VarDirection::Input, None);
+    customers.personal = true;
+    s.variables = vec![customers];
+    let (report, events) = run(
+        &Runtime::new(),
+        s,
+        json!({ "customers": [{ "name": "山田花子さん", "phone": "090-1234-5678" }] }),
+    )
+    .await;
+    assert_eq!(logs(&events), ["calling *** at ***"]);
+    assert_eq!(report.error.expect("error").message, "no answer from ***");
+    assert_eq!(
+        changes(&events)[..2],
+        [
+            change("customers", json!("***"), None),
+            change(
+                "first",
+                json!({ "name": "***", "phone": "***" }),
+                Some("s1")
+            ),
+        ]
+    );
+    let all = serde_json::to_string(&events).expect("json");
+    assert!(!all.contains("山田") && !all.contains("1234"), "{all}");
+}
+
+#[tokio::test]
 async fn disabled_steps_are_skipped() {
     let mut skipped = log("skipped");
     skipped.disabled = true;

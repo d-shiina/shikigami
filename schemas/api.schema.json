@@ -270,6 +270,10 @@
           "description": "Secret values are masked in logs, events and run records.",
           "type": "boolean"
         },
+        "personal": {
+          "description": "Personal data (names, addresses, mail, rows of customers…): masked\nlike a secret in logs, events, run records, errors and notifications,\nand left out of exported bundles and saved test cases. Unlike a\nsecret it may have a default and be passed in as plain text.",
+          "type": "boolean"
+        },
         "format": {
           "description": "What a `string` input holds, so the run window can offer the right\nfield (a file picker, a calendar). Runs do not check it.",
           "anyOf": [
@@ -3692,11 +3696,10 @@
       "additionalProperties": false
     },
     "RecordsPolicy": {
-      "description": "How long run records are kept. Each PC applies it to its own records;\nwithout a limit they are kept until deleted by hand.",
       "type": "object",
       "properties": {
         "keepDays": {
-          "description": "Delete run records older than this many days.",
+          "description": "Delete run records older than this many days ([`DEFAULT_KEEP_DAYS`]\nwhen left out, `0` keeps them for good).",
           "type": [
             "integer",
             "null"

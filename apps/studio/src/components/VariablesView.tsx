@@ -6,7 +6,7 @@
 import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
 import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@shikigami/schema";
-import { Lock, Trash2 } from "lucide-react";
+import { Lock, Trash2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { varFocus, focus } from "../lib/focus";
@@ -228,6 +228,11 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                 {u.name}
               </span>
               {u.def?.secret && <Lock size={11} strokeWidth={2} className="shrink-0 text-slate-400" aria-label={t.secret} />}
+              {u.def?.personal && !u.def.secret && (
+                <span className="shrink-0" title={t.personalHint}>
+                  <UserRound size={11} strokeWidth={2} className="text-slate-400" aria-label={t.personal} />
+                </span>
+              )}
             </div>
             {u.def?.description && (
               <div className="mt-0.5 line-clamp-2 pl-[30px] text-[11px] text-slate-500" title={u.def.description}>
@@ -395,6 +400,16 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
               onClick={async () => {
                 // One after another: each edit is made on the revision the one before it left.
                 for (const v of pickedDefs) if (!v.secret) await setVariable({ ...v, secret: true, default: undefined });
+                clear();
+              }}
+            />
+          )}
+          {pickedDefs.some((v) => !v.secret && !v.personal) && (
+            <BulkButton
+              icon={UserRound}
+              label={t.vars.table.makePersonal}
+              onClick={async () => {
+                for (const v of pickedDefs) if (!v.secret && !v.personal) await setVariable({ ...v, personal: true });
                 clear();
               }}
             />

@@ -418,7 +418,7 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 |---|---|---|
 | Arbitrary code execution | Flows have no general script execution. The expression language allows only side-effect-free functions (`len`, `contains`…). Nesting depth limits prevent DoS too | **P1 done** |
 | Path traversal | Flow/run IDs accept only `[A-Za-z0-9_-]{1,128}`, checked before use as file names | **P1 done** |
-| Secrets in logs | Values of `secret` variables and secrets are masked as `***` in logs, errors, events and output records. Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
+| Secrets in logs | Values of `secret` and `personal` variables and secrets are masked as `***` in logs, errors, events and output records ([secrets.md](secrets.md#personal-data)). Run records and logs are kept 90 days by default (`records.keepDays`). Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
 | Irreversible mistakes | Deleting a flow moves it to the trash. Every change is journaled and can be undone | **P1 done** |
 | Studio permissions | Tauri capabilities are `core:default` only. No file or shell plugins. CSP set | **P1 done** |
 | MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |
