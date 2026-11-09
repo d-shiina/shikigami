@@ -34,6 +34,7 @@ import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { DraftingFlow } from "./components/DraftingFlow";
 import { FlowsPage } from "./components/FlowsPage";
 import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
 import { Sidebar } from "./components/Sidebar";
@@ -48,7 +49,7 @@ import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
-import { lastAdded, shouldFollow, stepIds } from "./lib/followAi";
+import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
@@ -370,6 +371,7 @@ function Shell() {
   }, [focusAgent, openId, openName]);
   const [width, measure] = useWidth();
   const hasFlow = useStudio((s) => s.flow !== null);
+  const drafting = useStudio((s) => s.drafting !== null);
   const editing = place === "flows" || place === "review";
   // The right pane takes room only while it has something to say: the node or part picked on the
   // chart, or the flow's settings kept open by hand. The 変数 table edits in place, so it never has
@@ -423,7 +425,8 @@ function Shell() {
   const work = (
     <div className="flex min-h-0 flex-1">
       {/* With nothing open, the editor has nothing to show: the library does. */}
-      {(place === "library" || (place === "flows" && !hasFlow)) && (
+      {place === "flows" && !hasFlow && drafting && <DraftingFlow />}
+      {(place === "library" || (place === "flows" && !hasFlow && !drafting)) && (
         <div className="min-w-0 flex-1">
           <FlowsPage />
         </div>
@@ -640,10 +643,26 @@ export function App() {
       agent.onInstall((e) => agentStore.getState().onInstallEvent(e)),
     ];
     void agentStore.getState().init();
+    // Asked for a new flow, the editor shows it being made at once, so the person
+    // watches it from the request on; following then opens the flow in its place.
+    const stopDrafting = agentStore.subscribe((a, prev) => {
+      const s = store.getState();
+      const asked = askedForFlow(prev.chats, a.chats);
+      if (asked) {
+        if (mayDraft(s.place, isActive(s.run))) s.showDrafting(asked);
+        return;
+      }
+      const drafting = s.drafting;
+      if (!drafting) return;
+      const chat = a.chats.find((c) => c.id === drafting.chatId);
+      if (draftingOver(chat)) s.showDrafting(null);
+    });
     // The files follow the open flow, and the watcher's word that its folder changed.
     void projectStore.getState().load(store.getState().flow?.id ?? null);
     const stopProject = store.subscribe((s, prev) => {
       if (s.flow?.id !== prev.flow?.id) void projectStore.getState().load(s.flow?.id ?? null);
+      // Any flow opened (the one made, or another) takes the place of the one being made.
+      if (s.flow && s.drafting) store.setState({ drafting: null });
     });
     unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
@@ -735,6 +754,7 @@ export function App() {
       window.removeEventListener("focus", onFocus);
       stopAttention();
       stopProject();
+      stopDrafting();
       for (const p of unlisten) void p.then((off) => off());
     };
   }, [store, agentStore, projectStore]);

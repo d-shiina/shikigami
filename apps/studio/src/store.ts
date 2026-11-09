@@ -85,6 +85,9 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  */
 export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "extensions" | "settings";
 
+/** A new flow the AI is making: the conversation that asked for it, and what was asked. */
+export type Drafting = { chatId: string; title: string; request: string };
+
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues" | "tests";
 
@@ -396,6 +399,11 @@ export type StudioState = {
   paletteAt: InsertAt | null;
   paletteAnchor: PaletteAnchor | null;
   place: Place;
+  /**
+   * A new flow asked of the AI and not made yet: the editor shows it being
+   * made (DraftingFlow) until the flow appears and opens in its place.
+   */
+  drafting: Drafting | null;
   /** The panel under the chart (run log, issues); null when closed. */
   bottom: BottomTab | null;
   /** The flow's record and versions, opened from its revision. */
@@ -474,6 +482,8 @@ export type StudioState = {
   showFlowProps(): void;
   /** Also keeps `reviewing` and `secretsOpen` in step. */
   setPlace(place: Place): void;
+  /** Shows a new flow the AI is making in the editor (null: stops showing it). */
+  showDrafting(drafting: Drafting | null): void;
   setBottom(tab: BottomTab | null): void;
   setHistoryOpen(open: boolean, tab?: "timeline" | "versions"): void;
   /** Name, description and run settings of the open flow. */
@@ -1090,6 +1100,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       paletteAt: null,
       paletteAnchor: null,
       place: "library",
+      drafting: null,
       bottom: null,
       historyOpen: false,
       historyTab: "timeline",
@@ -1248,6 +1259,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({
             // Opened from the library (or by the AI while it shows): show it in the editor.
             ...(get().place === "library" ? { place: "flows" as const } : {}),
+            drafting: null,
             flow,
             validation,
             canUndo: undo.canUndo,
@@ -1377,9 +1389,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setPlace(place) {
-        set({ place, reviewing: place === "review", secretsOpen: place === "secrets", historyOpen: false });
+        set({ place, drafting: null, reviewing: place === "review", secretsOpen: place === "secrets", historyOpen: false });
         if (place === "secrets") void get().loadSecrets();
         else set({ secretPrefill: null });
+      },
+
+      showDrafting(drafting) {
+        if (!drafting) {
+          if (get().drafting) set({ drafting: null, ...(get().place === "flows" && !get().flow ? { place: "library" as const } : {}) });
+          return;
+        }
+        // The flow open before is saved as it is edited, so nothing is lost by putting it down.
+        set({ drafting, place: "flows", flow: null, validation: null, selection: null, range: null, editing: null, reviewing: false, secretsOpen: false, historyOpen: false, dive: [] });
       },
 
       setBottom(tab) {

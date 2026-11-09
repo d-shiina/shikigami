@@ -343,6 +343,18 @@ export const en: Dict = {
   revisionCount: (n: number) => `change ${n}`,
   reloadedByConflict: "Another client (such as the AI) changed this flow; loaded the latest version.",
   externalChange: "Applied a change made outside Writer (by the AI or another tool).",
+  drafting: {
+    tag: "AI is making it",
+    making: "The AI is putting the flow together",
+    starting: "Starting the AI",
+    thinking: "Thinking",
+    doing: (what: string) => what,
+    question: "The AI has a question",
+    questionHint: "Answer in the chat on the right and it carries on",
+    openChat: "Open chat",
+    grows: "Nodes appear here as they are made",
+    asked: "Request",
+  },
   openedAiFlow: (name: string) => `Opened “${name}”, which the AI made`,
   runStarted: "Run started",
   status: {
