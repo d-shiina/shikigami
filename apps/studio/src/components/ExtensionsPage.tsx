@@ -620,13 +620,13 @@ export function ExtensionsPage() {
   const registriesKey = list?.registries.join("\n");
   useEffect(() => {
     if (registriesKey === undefined) return;
-    if (!registriesKey) return setOffer({ extensions: [], failed: [] });
+    if (!registriesKey) return setOffer({ extensions: [], withdrawn: [], failed: [] });
     let live = true;
     setOffer(null);
     extensionsApi
       .registry()
       .then((o) => live && setOffer(o))
-      .catch((err: unknown) => live && setOffer({ extensions: [], failed: [{ registry: "", code: "", message: message(err), problems: [] }] }));
+      .catch((err: unknown) => live && setOffer({ extensions: [], withdrawn: [], failed: [{ registry: "", code: "", message: message(err), problems: [] }] }));
     return () => {
       live = false;
     };
@@ -685,8 +685,12 @@ export function ExtensionsPage() {
     }
   };
   const installed = list?.installed ?? [];
+  // Checked against the registry each one came from (or the zip it was pinned to), not the merged catalog.
   const withdrawn = installed.flatMap((ext) => {
-    const entry = offer?.extensions.find((x) => x.name === ext.name && x.withdrawn);
+    const from = ext.source?.source;
+    const entry = offer?.withdrawn.find(
+      (x) => x.name === ext.name && ((from?.kind === "registry" && from.registry === x.registry) || (from?.kind === "url" && !!x.url && from.url === x.url)),
+    );
     return entry ? [{ ext, reason: entry.withdrawn! }] : [];
   });
   const setEnabled = (exts: InstalledExtension[], on: boolean) =>

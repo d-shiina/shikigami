@@ -1001,13 +1001,29 @@ pub struct RegistryFailure {
 pub struct Offered {
     /// One entry per name: an earlier registry wins over a later one.
     pub extensions: Vec<RegistryEntry>,
+    /// Every withdrawn entry of every registry, not merged by name: an
+    /// installed extension is checked against the registry it came from.
+    pub withdrawn: Vec<RegistryEntry>,
     pub failed: Vec<RegistryFailure>,
 }
+
+/// How long one registry may take to answer before it counts as failed,
+/// so a stalled one does not hold up the others.
+const REGISTRY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Reads every registry in `urls` (in parallel) and merges them in order.
 pub async fn fetch_registries(urls: &[String]) -> Offered {
     let results = futures_join_all(urls.iter().cloned().map(|url| async move {
-        let result = fetch_registry(&url).await;
+        let result = match tokio::time::timeout(REGISTRY_TIMEOUT, fetch_registry(&url)).await {
+            Ok(result) => result,
+            Err(_) => Err(InstallError::new(
+                "DOWNLOAD_FAILED",
+                format!(
+                    "{url} did not answer within {} seconds",
+                    REGISTRY_TIMEOUT.as_secs()
+                ),
+            )),
+        };
         (url, result)
     }))
     .await;
@@ -1016,6 +1032,9 @@ pub async fn fetch_registries(urls: &[String]) -> Offered {
         match result {
             Ok(entries) => {
                 for e in entries {
+                    if e.withdrawn.is_some() {
+                        offered.withdrawn.push(e.clone());
+                    }
                     if !offered.extensions.iter().any(|o| o.name == e.name) {
                         offered.extensions.push(e);
                     }

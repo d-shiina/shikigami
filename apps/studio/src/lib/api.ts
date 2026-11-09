@@ -300,7 +300,7 @@ export type RegistryEntry = {
 };
 
 /** What the registries offer, and the ones that could not be read. */
-export type RegistryOffer = { extensions: RegistryEntry[]; failed: { registry: string; code: string; message: string; problems: string[] }[] };
+export type RegistryOffer = { extensions: RegistryEntry[]; withdrawn: RegistryEntry[]; failed: { registry: string; code: string; message: string; problems: string[] }[] };
 
 export const extensionsApi = {
   list: () => call<ExtensionList>("list_extensions"),
