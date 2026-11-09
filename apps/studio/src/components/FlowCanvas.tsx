@@ -1,6 +1,7 @@
 import { focusFirstSetting } from "../lib/focusSetting";
 import { CASE, IF, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
+  Background,
   BaseEdge,
   EdgeLabelRenderer,
   type EdgeProps,
@@ -19,7 +20,6 @@ import {
   type ReactFlowInstance,
   useReactFlow,
   useStore,
-  ViewportPortal,
 } from "@xyflow/react";
 import { ChevronDown, ChevronRight, CornerDownLeft, Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1725,28 +1725,6 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
   );
 }
 
-/** Margins of the sheet around the chart, and its narrowest width (a short flow still lies on a page). */
-const SHEET_PAD_X = 48;
-const SHEET_PAD_Y = 48;
-const SHEET_MIN_W = 760;
-
-/**
- * The flow is written on one white sheet lying on the desk, like the manual's A4 pages: no grid,
- * no folded corner, only the sheet's soft shadow. It grows down with the flow and sits under the
- * frames and lines (z-index below the frames' -1), moving with the chart as it pans and zooms.
- */
-function FlowSheet({ bounds }: { bounds: { x: number; y: number; width: number; height: number } }) {
-  const width = Math.max(bounds.width + SHEET_PAD_X * 2, SHEET_MIN_W);
-  const left = bounds.x + bounds.width / 2 - width / 2;
-  return (
-    <div
-      aria-hidden="true"
-      className="flow-sheet pointer-events-none absolute"
-      style={{ left, top: bounds.y - SHEET_PAD_Y, width, height: bounds.height + SHEET_PAD_Y * 2 }}
-    />
-  );
-}
-
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode, join: JoinNode, terminal: TerminalNode };
 const NO_BREAKPOINTS: string[] = [];
 const NO_TODOS: string[] = [];
@@ -2164,7 +2142,7 @@ export function FlowCanvas() {
   const chartEdges = keepSame(keptEdges.current, edges);
 
   if (!flow || !root) {
-    return <div className="flow-desk flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+    return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
       </div>;
@@ -2173,7 +2151,7 @@ export function FlowCanvas() {
   return (
     <ReactFlow
       key={`${root.id}/${callKey(path)}`}
-      className={`flow-desk ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
+      className={`canvas-bg ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
       colorMode={theme}
       nodes={chartNodes}
       edges={chartEdges}
@@ -2301,9 +2279,7 @@ export function FlowCanvas() {
         focus.set((at && frameAt(layout.frames, at.x, at.y)?.id) ?? null);
       }}
     >
-      <ViewportPortal>
-        <FlowSheet bounds={bounds} />
-      </ViewportPortal>
+      <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       <BranchLight layout={layout} />
       <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
