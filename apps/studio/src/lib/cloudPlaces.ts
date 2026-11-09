@@ -3,11 +3,12 @@
 // like) is not installed, and for unattended runs.
 //
 // The flow keeps reading and writing its own folder. For a file it reads,
-// a download node (box.download) puts it in work/ at the start of the run
-// and the nodes that read input/受注.xlsx read work/受注.xlsx instead. For
-// what it writes, an upload node (box.upload) sends each file under output/
-// after the last node that writes it. Where in the storage is a setting in
-// config/settings.json (the Box path or ID), so whoever receives the flow
+// a download node (box.download, googledrive.download, onedrive.download)
+// puts it in work/ at the start of the run and the nodes that read
+// input/受注.xlsx read work/受注.xlsx instead. For what it writes, an upload
+// node sends each file under output/ after the last node that writes it.
+// Where in the storage is a setting in config/settings.json (a path, an ID
+// or a link), so whoever receives the flow
 // changes the setting, not the nodes; an oauth.signIn node at the start
 // keeps the sign-in ready (it asks a person only the first time).
 import type { ConfigFile, ConfigItem, EditOp, Flow, Step, StepTypeDef } from "@spellsheet/schema";
@@ -16,7 +17,7 @@ import { SETTINGS_PATH } from "./filePlaces";
 
 /** A cloud storage reached through its API, and the custom node that does it. */
 export interface CloudService {
-  id: "box";
+  id: "box" | "googledrive" | "onedrive";
   /** The custom node (extension) that holds the download and upload nodes. */
   plugin: string;
   download: string;
@@ -24,6 +25,11 @@ export interface CloudService {
   /** For oauth.signIn. */
   authorizeUrl: string;
   tokenUrl: string;
+  /** The access asked for at sign-in, and what else the sign-in page needs (Google's refresh token). */
+  scope?: string;
+  authorizeParams?: Record<string, string>;
+  /** What a person pasted for a file or folder, as the setting keeps it. */
+  target: (text: string) => string;
   /** What the OAuth secret must allow: the token URL's and the API's sites, and the extension. */
   sites: string[];
   /** Where people make the app that gives the client ID. */
@@ -39,9 +45,46 @@ export const BOX: CloudService = {
   tokenUrl: "https://api.box.com/oauth2/token",
   sites: ["https://api.box.com", "plugin:box"],
   console: "https://app.box.com/developers/console",
+  target: (text) => boxTarget(text),
 };
 
-export const CLOUD_SERVICES: CloudService[] = [BOX];
+export const GOOGLE_DRIVE: CloudService = {
+  id: "googledrive",
+  plugin: "googledrive",
+  download: "googledrive.download",
+  upload: "googledrive.upload",
+  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+  scope: "https://www.googleapis.com/auth/drive",
+  // Without these Google gives no refresh token, and the flow would ask for a sign-in every hour.
+  authorizeParams: { access_type: "offline", prompt: "consent" },
+  sites: ["https://oauth2.googleapis.com", "https://www.googleapis.com", "plugin:googledrive"],
+  console: "https://console.cloud.google.com/apis/credentials",
+  target: (text) => googleTarget(text),
+};
+
+export const ONE_DRIVE: CloudService = {
+  id: "onedrive",
+  plugin: "onedrive",
+  download: "onedrive.download",
+  upload: "onedrive.upload",
+  // Work and school accounts (OneDrive for Business and SharePoint).
+  authorizeUrl: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+  tokenUrl: "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+  scope: "offline_access Files.ReadWrite.All Sites.ReadWrite.All",
+  sites: ["https://login.microsoftonline.com", "https://graph.microsoft.com", "plugin:onedrive"],
+  console: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+  // A link (sharing link, SharePoint address) is kept whole: Graph finds the item from it.
+  target: (text) => (/^https?:\/\//i.test(text.trim()) ? text.trim() : pathTarget(text)),
+};
+
+export const CLOUD_SERVICES: CloudService[] = [BOX, GOOGLE_DRIVE, ONE_DRIVE];
+
+const pathTarget = (text: string) =>
+  text
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
 
 const norm = (path: string) => path.trim().replace(/\\/g, "/").replace(/^\.\//, "");
 
@@ -54,7 +97,19 @@ export function boxTarget(text: string): string {
   const t = text.trim();
   const link = t.match(/^https?:\/\/[^/]*box\.com\/(?:file|folder)\/(\d+)/i);
   if (link?.[1]) return link[1];
-  return t.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  return pathTarget(t);
+}
+
+/**
+ * A Google Drive address (https://drive.google.com/file/d/<ID>/view,
+ * …/drive/folders/<ID>, docs.google.com/spreadsheets/d/<ID>) becomes its ID;
+ * a path from My Drive is kept.
+ */
+export function googleTarget(text: string): string {
+  const t = text.trim();
+  const link = t.match(/^https?:\/\/(?:drive|docs)\.google\.com\/.*?(?:\/d\/|\/folders\/|[?&]id=)([A-Za-z0-9_-]{10,})/);
+  if (link?.[1]) return link[1];
+  return pathTarget(t);
 }
 
 /** Where a step sits: the list it is in, and how to name that place in an edit. */
@@ -220,6 +275,8 @@ export function cloudChange(args: {
         authorizeUrl: service.authorizeUrl,
         tokenUrl: service.tokenUrl,
         redirectUrl,
+        ...(service.scope ? { scope: service.scope } : {}),
+        ...(service.authorizeParams ? { authorizeParams: service.authorizeParams } : {}),
       },
     } as Step;
     insert(signIn, reader);

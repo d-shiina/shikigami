@@ -1,5 +1,6 @@
 // 「クラウドストレージから読む」「クラウドストレージに書き出す」: the flow
-// reaches Box through its API (lib/cloudPlaces.ts), so it runs on PCs
+// reaches Box, Google Drive or OneDrive / SharePoint through its API
+// (lib/cloudPlaces.ts), so it runs on PCs
 // without the sync app. One dialog does all of it: install the custom node
 // that comes with Writer when it is missing, choose or register the OAuth
 // app to sign in with, and say where in the storage. Picking a sync app's
@@ -9,7 +10,7 @@ import { useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { agent, extensionsApi } from "../lib/api";
-import { BOX, boxTarget, cloudChange } from "../lib/cloudPlaces";
+import { CLOUD_SERVICES, type CloudService, cloudChange } from "../lib/cloudPlaces";
 import { placeName } from "../lib/filePlaces";
 import { t } from "../lib/i18n";
 import { ProjectContext, projectApi } from "../project";
@@ -21,8 +22,9 @@ const input =
 
 const message = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
 
-/** The other services, shown so people see what is coming; not chosen yet. */
-const COMING = ["Google ドライブ", "OneDrive・SharePoint"];
+/** The secret already allowed to reach the service's custom node, or a new one. */
+const secretFor = (oauth: { name: string; sites: string[] }[], service: CloudService) =>
+  oauth.find((s) => s.sites.includes(`plugin:${service.plugin}`))?.name ?? NEW;
 
 export function CloudPlaceDialog({
   file,
@@ -36,8 +38,10 @@ export function CloudPlaceDialog({
   onSynced: () => void;
 }) {
   const c = t.places.cloudDialog;
-  const service = BOX;
-  const label = "Box";
+  const [serviceId, setServiceId] = useState<CloudService["id"]>("box");
+  const service = CLOUD_SERVICES.find((x) => x.id === serviceId) ?? CLOUD_SERVICES[0]!;
+  const words = c.services[service.id]!;
+  const label = words.short;
   const project = useContext(ProjectContext);
   const flow = useStudio((s) => s.flow);
   const types = useStudio((s) => s.stepTypes);
@@ -47,25 +51,28 @@ export function CloudPlaceDialog({
   const applyOps = useStudio((s) => s.applyOps);
   const installedNode = types.some((x) => x.type === service.download);
   const oauth = secrets.filter((s) => s.kind === "oauth");
-  const [secret, setSecret] = useState(() => oauth.find((s) => s.sites.includes(`plugin:${service.plugin}`))?.name ?? oauth[0]?.name ?? NEW);
-  const [newName, setNewName] = useState(label);
+  const [secret, setSecret] = useState(() => secretFor(oauth, service));
+  const [newName, setNewName] = useState(words.secret);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [redirect, setRedirect] = useState("");
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plugin, setPlugin] = useState<"missing" | "installing" | "installed">(installedNode ? "installed" : "missing");
-  const [restartNeeded, setRestartNeeded] = useState(false);
+  // Custom nodes installed from this dialog: they work after Writer restarts.
+  const [installedNow, setInstalledNow] = useState<string[]>([]);
+  const [installing, setInstalling] = useState(false);
+  const restartNeeded = installedNow.includes(service.plugin);
+  const plugin = installedNode || restartNeeded ? "installed" : installing ? "installing" : "missing";
 
   useEffect(() => void loadSecrets(), [loadSecrets]);
-  // The first time the list arrives, choose the secret already allowed to reach the node.
-  const [chose, setChose] = useState(false);
+  // When the list arrives and when the service changes, choose the secret already allowed to reach its node.
+  const secretsKey = oauth.map((s) => `${s.name}:${s.sites.join(",")}`).join("|");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chosen again only when the service or the list changes
   useEffect(() => {
-    if (chose || oauth.length === 0) return;
-    setChose(true);
-    setSecret(oauth.find((s) => s.sites.includes(`plugin:${service.plugin}`))?.name ?? oauth[0]?.name ?? NEW);
-  }, [chose, oauth, service.plugin]);
+    setSecret(secretFor(oauth, service));
+    setNewName(words.secret);
+  }, [service.id, secretsKey]);
   // The redirect URL of a sign-in node the flow already has for that secret.
   useEffect(() => {
     const existing = (flow?.steps ?? []).find((s) => s.type === "oauth.signIn" && s.params?.secret === secret);
@@ -83,22 +90,22 @@ export function CloudPlaceDialog({
 
   const install = async () => {
     setError(null);
-    setPlugin("installing");
+    setInstalling(true);
     try {
       const preview = await extensionsApi.stageShipped(service.plugin);
       await extensionsApi.install(preview.id);
-      setPlugin("installed");
-      setRestartNeeded(true);
+      setInstalledNow((list) => [...list, service.plugin]);
     } catch (e) {
-      setPlugin("missing");
       setError(message(e));
+    } finally {
+      setInstalling(false);
     }
   };
 
   const submit = async () => {
     const isNew = secret === NEW;
     const name = isNew ? newName.trim() : secret;
-    const where = boxTarget(target);
+    const where = service.target(target);
     if (!name || !where || !redirect.trim() || (isNew && !clientId.trim())) {
       setError(c.missing);
       return;
@@ -163,31 +170,34 @@ export function CloudPlaceDialog({
 
         <div className="mt-4 text-[12px] font-medium text-slate-600">{c.service}</div>
         <div className="mt-1 flex flex-wrap gap-1.5" role="radiogroup" aria-label={c.service}>
-          <span
-            role="radio"
-            aria-checked="true"
-            className="flex h-8 items-center gap-1.5 rounded-md border-[1.5px] border-brand-500 bg-brand-50 px-3 text-[13px] font-medium text-brand-600 dark:bg-brand-500/10"
-          >
-            <Cloud size={14} strokeWidth={1.75} aria-hidden="true" />
-            {label}
-          </span>
-          {COMING.map((name) => (
-            <span
-              key={name}
-              role="radio"
-              aria-checked="false"
-              aria-disabled="true"
-              className="flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-[13px] text-slate-400"
-            >
-              {name}
-              <span className="text-[11px]">{c.soon}</span>
-            </span>
-          ))}
+          {CLOUD_SERVICES.map((x) => {
+            const on = x.id === service.id;
+            return (
+              <button
+                key={x.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => {
+                  setServiceId(x.id);
+                  setError(null);
+                }}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] ${
+                  on
+                    ? "border-[1.5px] border-brand-500 bg-brand-50 font-medium text-brand-600 dark:bg-brand-500/10"
+                    : "border border-slate-300 text-slate-700 hover:border-brand-500 hover:text-brand-500"
+                }`}
+              >
+                {on && <Cloud size={14} strokeWidth={1.75} aria-hidden="true" />}
+                {c.services[x.id]?.label}
+              </button>
+            );
+          })}
         </div>
 
         {plugin !== "installed" ? (
           <div className="mt-4 rounded-md bg-slate-50 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-700 dark:bg-white/5">
-            {c.needPlugin(label)}
+            {c.needPlugin(words.label)}
             <div className="mt-2 flex justify-end">
               <button
                 type="button"
@@ -201,7 +211,7 @@ export function CloudPlaceDialog({
           </div>
         ) : restartNeeded ? (
           <div className="mt-4 flex items-center gap-2 rounded-md bg-moegi-50 px-3 py-2.5 text-[12.5px] text-moegi-700 dark:bg-moegi-500/10">
-            <span className="flex-1">{c.installed(label)}</span>
+            <span className="flex-1">{c.installed(words.label)}</span>
             <button
               type="button"
               onClick={() => void extensionsApi.restart().catch((e: unknown) => setError(message(e)))}
@@ -227,7 +237,7 @@ export function CloudPlaceDialog({
           {secret === NEW && (
             <div className="space-y-2 rounded-md border border-slate-200 p-3">
               <p className="text-[12px] leading-relaxed text-slate-500">
-                {c.appHint(label)}{" "}
+                {words.appHint} {c.shared}{" "}
                 <button
                   type="button"
                   onClick={() => void agent.openLink(service.console).catch(() => {})}
@@ -245,14 +255,14 @@ export function CloudPlaceDialog({
           <Field label={c.redirect} hint={c.redirectHint} value={redirect} onChange={setRedirect} placeholder="https://www.example.com/" />
           <Field
             label={file ? c.file : c.folder}
-            hint={c.targetHint(label)}
+            hint={`${words.targetHint}${c.targetHint}`}
             value={target}
             onChange={setTarget}
             placeholder={file ? c.filePlaceholder : c.folderPlaceholder}
           />
           <p className="flex gap-1.5 text-[12px] leading-relaxed text-slate-500">
             <Info size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
-            {c.signInNote(label)}
+            {c.signInNote(words.label)}
           </p>
         </fieldset>
 

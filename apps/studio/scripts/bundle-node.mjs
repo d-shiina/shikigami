@@ -22,7 +22,7 @@ const NODE_SHA256 = {
 };
 
 // The custom nodes shipped with Writer (examples/plugins/<name>).
-const SHIPPED_PLUGINS = ["box"];
+const SHIPPED_PLUGINS = ["box", "googledrive", "onedrive"];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const outDir = join(root, "apps/studio/src-tauri/bundled");
