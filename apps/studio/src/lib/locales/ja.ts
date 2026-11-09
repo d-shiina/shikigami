@@ -583,6 +583,7 @@ export const ja = {
     update: "更新として取り込む",
     updateNote: (published: string | null) =>
       published ? `版に加わります。今の公開版 ${published} はそのまま動き続け、確認して公開すると切り替わります。` : "この PC のフローの内容を置き換えます。元に戻すこともできます。",
+    keptInputs: (names: string) => `input/ の ${names} は、この PC にあるものをそのまま使います（受け取ったファイルでは上書きしません）。`,
     copy: "別のフローとして追加",
     copyNote: (name: string) => `「${name} (2)」のように別に並べます。`,
     import: "取り込む",

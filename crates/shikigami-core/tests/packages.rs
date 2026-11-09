@@ -350,3 +350,75 @@ fn files_not_listed_stay_out() {
     );
     assert!(!manifest.contents.iter().any(|e| e.path.contains("input/")));
 }
+
+#[test]
+fn an_update_keeps_the_input_files_already_here() {
+    let from = tempfile::tempdir().unwrap();
+    let svc = service_at(from.path());
+    let flow = plain(
+        &svc,
+        "名簿の取り込み",
+        vec![Step::new("log.message").with_param("message", "m")],
+    );
+    svc.write_project_file(&flow.id, "input/名簿.xlsx", b"sample", false)
+        .unwrap();
+    svc.write_project_file(&flow.id, "templates/ひな形.xlsx", b"v1", false)
+        .unwrap();
+    let with_input = PackageOptions {
+        content: PackageContent::Current,
+        include_input: true,
+        ..PackageOptions::default()
+    };
+    let (_, bytes) = svc.export_package(&flow.id, &with_input).unwrap();
+
+    let to = tempfile::tempdir().unwrap();
+    let other = service_at(to.path());
+    other.import_file(&bytes, None, ai()).unwrap();
+    // First time: the sample comes along. Then this PC puts its own data.
+    assert_eq!(
+        other
+            .read_project_file(&flow.id, "input/名簿.xlsx")
+            .unwrap(),
+        b"sample"
+    );
+    other
+        .write_project_file(&flow.id, "input/名簿.xlsx", b"ours", true)
+        .unwrap();
+
+    svc.write_project_file(&flow.id, "input/名簿.xlsx", b"sample 2", true)
+        .unwrap();
+    svc.write_project_file(&flow.id, "input/追加.csv", b"new", false)
+        .unwrap();
+    svc.write_project_file(&flow.id, "templates/ひな形.xlsx", b"v2", true)
+        .unwrap();
+    rename(&svc, &flow.id, "ひな形を直した");
+    let (_, bytes) = svc.export_package(&flow.id, &with_input).unwrap();
+
+    // The sheet says which files stay as they are.
+    let existing = other
+        .preview_package(&bytes, &[])
+        .unwrap()
+        .existing
+        .unwrap();
+    assert_eq!(existing.kept_inputs, ["input/名簿.xlsx"]);
+
+    let updated = other
+        .import_file(&bytes, Some(ImportConflict::Update), ai())
+        .unwrap();
+    assert_eq!(updated.mode, ImportMode::Updated);
+    let read = |path: &str| other.read_project_file(&flow.id, path).unwrap();
+    assert_eq!(read("input/名簿.xlsx"), b"ours");
+    assert_eq!(read("input/追加.csv"), b"new");
+    assert_eq!(read("templates/ひな形.xlsx"), b"v2");
+
+    // A copy is a new flow: it gets everything in the file.
+    let copied = other
+        .import_file(&bytes, Some(ImportConflict::Copy), ai())
+        .unwrap();
+    assert_eq!(
+        other
+            .read_project_file(&copied.outcome.flow.id, "input/名簿.xlsx")
+            .unwrap(),
+        b"sample 2"
+    );
+}

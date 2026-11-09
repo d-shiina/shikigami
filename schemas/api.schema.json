@@ -2598,6 +2598,13 @@
         "diff": {
           "description": "From the current content here to the package's content.",
           "$ref": "#/$defs/FlowDiff"
+        },
+        "keptInputs": {
+          "description": "The package's files under `input/` that an update leaves out,\nbecause this PC already has a file of that name there.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
