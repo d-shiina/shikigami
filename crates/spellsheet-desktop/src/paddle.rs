@@ -104,7 +104,7 @@ pub fn engine_for(accurate: bool) -> Result<&'static Paddle, String> {
 /// Where the models and runtime are, if anywhere.
 pub fn find_dir() -> Option<PathBuf> {
     let has_models = |d: &Path| d.join(DET_MODEL).is_file() && d.join(REC_MODEL).is_file();
-    if let Some(dir) = std::env::var_os("SPELLSHEET_OCR_DIR") {
+    if let Some(dir) = spellsheet_core::paths::env_var("OCR_DIR") {
         return Some(PathBuf::from(dir)).filter(|d| has_models(d));
     }
     let exe = std::env::current_exe().ok()?;

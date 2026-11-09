@@ -90,7 +90,7 @@ impl BrowserAdapter {
     pub fn discover() -> Self {
         let node = spellsheet_runtime::node::node_program();
         let exe_dir = spellsheet_runtime::node::exe_dir();
-        let script = std::env::var_os("SPELLSHEET_BROWSER_ADAPTER")
+        let script = spellsheet_core::paths::env_var("BROWSER_ADAPTER")
             .map(PathBuf::from)
             .or_else(|| {
                 exe_dir

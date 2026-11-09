@@ -390,7 +390,7 @@ mod snapshots {
     #[tokio::test]
     async fn dialogs_draw_in_both_themes_and_languages() {
         let temp = tempfile::tempdir().unwrap();
-        let dir = std::env::var_os("SPELLSHEET_SNAPSHOT_DIR")
+        let dir = spellsheet_core::paths::env_var("SNAPSHOT_DIR")
             .map_or_else(|| temp.path().to_path_buf(), std::path::PathBuf::from);
         std::fs::create_dir_all(&dir).unwrap();
         let cases: [Case; 8] = [

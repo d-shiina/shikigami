@@ -14,7 +14,7 @@ pub const BUNDLED_NODE_DIR: &str = "node";
 /// `SPELLSHEET_NODE` when set, otherwise the Node.js shipped next to the
 /// running executable, otherwise `node` on PATH.
 pub fn node_program() -> PathBuf {
-    resolve(std::env::var_os("SPELLSHEET_NODE"), exe_dir().as_deref())
+    resolve(spellsheet_core::paths::env_var("NODE"), exe_dir().as_deref())
 }
 
 /// The folder of the running executable, where the installer puts the
