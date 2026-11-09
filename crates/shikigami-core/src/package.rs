@@ -288,6 +288,10 @@ pub struct ExistingFlow {
     pub has_package_version: bool,
     /// From the current content here to the package's content.
     pub diff: FlowDiff,
+    /// The package's files under `input/` that an update leaves out,
+    /// because this PC already has a file of that name there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept_inputs: Vec<String>,
 }
 
 /// What importing a package would do, shown before importing.
