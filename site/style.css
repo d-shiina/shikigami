@@ -411,15 +411,10 @@ footer a { color: var(--fg-muted); }
 .cmp td { color: var(--fg); width: 21%; }
 .cmp .me { background: var(--accent-soft); }
 .cmp thead .me { color: var(--accent); }
-.cmp .fn { font-size: 11px; vertical-align: super; line-height: 0; margin-left: 2px; }
-.cmp-src { margin-top: 16px; font-size: 13px; color: var(--fg-muted); }
-.cmp-src summary { cursor: pointer; font-weight: 600; }
-.cmp-src p { margin: 10px 0; }
-.cmp-src ol { margin: 0; padding-left: 1.6em; }
-.cmp-src li { margin: 4px 0; overflow-wrap: anywhere; }
-.cmp-src li.nonum { list-style: none; margin-left: -1.6em; margin-top: 10px; }
 .cmp tbody th, .cmp thead th:first-child { position: sticky; left: 0; background: var(--bg); z-index: 1; }
 @media (max-width: 560px) { .cmp tbody th { width: 88px; white-space: normal; } }
 .cmp-h3 { margin: 48px 0 8px; font-size: 20px; }
 .cmp-sub { margin-bottom: 20px; }
-.cmp tr.sum th, .cmp tr.sum td { font-weight: 600; border-top: 2px solid var(--line); }
+.cmp-2 { min-width: 0; table-layout: fixed; }
+.cmp-2 td { width: auto; }
+.cmp-note { margin-top: 16px; font-size: 13px; color: var(--fg-muted); max-width: 52em; }
