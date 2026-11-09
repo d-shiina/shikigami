@@ -60,7 +60,7 @@ Use the "Tests" tab of the panel under the chart.
 - **Save this run as a test case**: after running the flow, keeps that run's inputs, how it ended and its outputs in `tests/` as the expected result. For a run that stopped with an error, the error and the node it stopped at are what is expected. Secret inputs and outputs, and long values the record cut short, are not kept (it says so)
 - **Run all**, or ▶ on a row: runs each case with the working content and shows whether it went as expected, and if not, where and how it differs ("Output “total”  Expected 3  Actual 4"). For a case that stopped with an error, you can jump to the node
 - While they run, "Stop" stops the case running now and starts no more
-- To change a case, open its file under `tests/` in the project shelf
+- To change a case, open its file under `tests/` in "Project" on the left
 
 ## From an AI
 
@@ -91,4 +91,4 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # a flow file too
 - The exit code is 1 when any case differs, for batch files and CI
 - `--json` prints one JSON object (`passed`, `failed`, `cases[]`; each case has `passed`, `runId`, `status`, `error`, `mismatches[]`). A mismatch has `at` (e.g. `outputs.total`), `expected` and `actual`
 
-Example: `examples/tutorials/sales-csv/tests/`, from the [sales CSV tutorial](tutorials/sales-csv.md).
+Example: `examples/tutorials/sales-csv/tests/`, for the flow that combines branch sales CSVs into one workbook.

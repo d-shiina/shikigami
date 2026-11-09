@@ -2,7 +2,7 @@
 
 [English](../release.md) | 日本語
 
-インストール版の Writer は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Writer が開き直す）か、Writer を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
+インストール版の Writer は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Writer が開き直す）か、Writer を閉じたとき（次に開くと新しい版）です。更新が待っている間は、サイドバーの「設定」に点が付きます。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
 - 確認先：`https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`
@@ -13,7 +13,7 @@
 
 ## CLI（MCP サーバー）も一緒に更新される
 
-リリース版のインストーラーには `spellsheet.exe`（CLI・MCP サーバー）が Writer と同じフォルダーに入ります。Claude Code にはこの `spellsheet.exe` を登録しておけば、Writer を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Writer 右下のバージョン表示を開くとコピーできます。
+リリース版のインストーラーには `spellsheet.exe`（CLI・MCP サーバー）が Writer と同じフォルダーに入ります。Claude Code にはこの `spellsheet.exe` を登録しておけば、Writer を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Writer の「設定」→「AI」の「MCP サーバーの登録」でコピーできます。
 
 ```powershell
 claude mcp add --scope user spellsheet -- "<インストール先>\spellsheet.exe" mcp

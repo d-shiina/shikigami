@@ -2,7 +2,7 @@
 
 English | [日本語](ja/release.md)
 
-The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
+The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). While an update waits, "Settings" in the sidebar shows a dot. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
 - Checked at: `https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`
@@ -13,7 +13,7 @@ The installed Writer updates itself the way VS Code does. It checks for a new ve
 
 ## The CLI (MCP server) is updated too
 
-The release installer puts `spellsheet.exe` (CLI and MCP server) in the same folder as Writer. Register this `spellsheet.exe` with Claude Code and the MCP server is updated with every Writer update, at the same path. Copy the registration command from the version menu at the bottom right of Writer.
+The release installer puts `spellsheet.exe` (CLI and MCP server) in the same folder as Writer. Register this `spellsheet.exe` with Claude Code and the MCP server is updated with every Writer update, at the same path. Copy the registration command from "MCP server registration" under Settings → AI in Writer.
 
 ```powershell
 claude mcp add --scope user spellsheet -- "<install folder>\spellsheet.exe" mcp

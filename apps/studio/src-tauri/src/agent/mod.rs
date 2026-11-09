@@ -1026,7 +1026,7 @@ pub fn agent_login_cancel(login: State<'_, AgentLogin>) {
 }
 
 /// Opens the sign-in page, or one of SpellSheet's own docs pages (the
-/// tutorials), in the default browser. Nothing else.
+/// guide for AI chats), in the default browser. Nothing else.
 #[tauri::command]
 pub fn agent_open_url(url: String) -> CmdResult<()> {
     if !is_sign_in_url(&url) && !is_docs_url(&url) {
@@ -1125,7 +1125,7 @@ fn open_gemini(program: &Path) -> CmdResult<()> {
 /// The docs folder of the repository in Cargo.toml (`repository`).
 const DOCS_URL: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/");
 
-/// SpellSheet's own pages on GitHub (the tutorials Studio links to).
+/// SpellSheet's own pages on GitHub (the guides Studio links to).
 fn is_docs_url(url: &str) -> bool {
     url.starts_with(DOCS_URL) && !url.contains(char::is_whitespace) && !url.contains("..")
 }
@@ -1684,7 +1684,7 @@ mod tests {
         assert!(DOCS_URL.starts_with("https://github.com/"), "{DOCS_URL}");
         assert!(!is_sign_in_url(env!("CARGO_PKG_REPOSITORY")));
         assert!(!is_sign_in_url("https://claude.com/ x"));
-        assert!(is_docs_url(&format!("{DOCS_URL}ja/tutorials/README.md")));
+        assert!(is_docs_url(&format!("{DOCS_URL}ja/ai-chat.md")));
         assert!(!is_docs_url(&format!("{DOCS_URL}../../x")));
         assert!(!is_docs_url(
             "https://github.com/someone/else/blob/main/docs/a.md"
