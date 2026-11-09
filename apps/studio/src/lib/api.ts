@@ -345,7 +345,7 @@ export const api = {
   /** What each 配布フォルダー holds now, against the flows here. */
   scanDistribution: () => call<DistributionView[]>("scan_distribution"),
   /** Puts the published version into a 配布フォルダー; returns the file. */
-  placeInDistribution: (id: string, folder: string) => call<string>("place_in_distribution", { id, folder }),
+  placeInDistribution: (id: string, folder: string, only?: { flowId: string; path: string }[]) => call<string>("place_in_distribution", { id, folder, only }),
   /** Shows a file selected in Explorer. */
   revealFile: (path: string) => call<void>("reveal_file", { path }),
   /** The `.spx` file opened from Explorer that is waiting to be shown, once. */
