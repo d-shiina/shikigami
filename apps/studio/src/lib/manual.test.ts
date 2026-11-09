@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { buildManual, type Chapter, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
+import { operated } from "./manualExport";
+import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
 const contract = JSON.parse(readFileSync(new URL("../../../../schemas/contract/step-types.json", import.meta.url), "utf8")) as {
@@ -130,21 +131,35 @@ describe("the 手順書 of a flow", () => {
     expect(hidden.drafts).toBe(0);
   });
 
-  it("lays the manual out as sheets: a cover, then one screen per page", () => {
+  it("lays the manual out as sheets: a cover, then chapters, screens together while they fit", () => {
     const moved: ManualManifest = { ...manifest, shots: manifest.shots.map((s, i) => ({ ...s, view: `v${i}` })) };
     const pages = pagesOf(buildManual(flow, defs, moved));
     expect(pages[0]?.kind).toBe("cover");
     expect(pages.map((p) => p.number)).toEqual(pages.map((_, i) => i + 1));
     const body = pages.flatMap((p) => (p.kind === "body" ? [p] : []));
-    // Each chapter starts on its own sheet, and no sheet holds two pictures.
+    // Each chapter starts on its own sheet.
     expect(body.filter((p) => p.first).map((p) => p.chapter.number)).toEqual([1, 2, 3, 4, 5]);
-    for (const p of body) expect(p.blocks.filter((b) => b.kind === "item" && b.item.kind === "scene" && b.item.shot).length).toBeLessThanOrEqual(1);
-    // The second login screen goes on the next sheet, under the branch it belongs to.
-    const second = body.find((p) => p.shot?.file === "003.jpg");
+    // Low screens share a sheet.
+    const low: ManualManifest = { ...moved, shots: moved.shots.map((s) => ({ ...s, width: 1100, height: 100, mark: undefined })) };
+    const shared = pagesOf(buildManual(flow, defs, low)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const pictured = (p: (typeof shared)[number]) => p.blocks.filter((b) => b.kind === "item" && b.item.kind === "scene" && b.item.shot).length;
+    expect(shared.map(pictured)).toContain(2);
+    // Tall screens do not fit together: the second goes on the next sheet, under the branch it belongs to.
+    const tall: ManualManifest = { ...moved, shots: moved.shots.map((s) => ({ ...s, width: 400, height: 2000, mark: undefined })) };
+    const sheets = pagesOf(buildManual(flow, defs, tall)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const second = sheets.find((p) => p.shot?.file === "003.jpg");
     expect(second?.first).toBe(false);
     expect(second?.blocks[0]).toMatchObject({ kind: "label", continued: true, item: { kind: "branch" } });
-    // Words only: one run of pages per chapter.
-    expect(pagesOf(buildManual(flow, defs, moved), false).length).toBe(1 + doc.chapters.length);
+    // Words only: no more sheets than with the screens.
+    expect(pagesOf(buildManual(flow, defs, moved), false).length).toBeLessThanOrEqual(pages.length);
+  });
+
+  it("puts a page's blocks in frames by depth", () => {
+    const pages = pagesOf(buildManual(flow, defs, manifest)).flatMap((p) => (p.kind === "body" ? [p] : []));
+    const withBranch = pages.find((p) => p.blocks.some((b) => b.kind === "label"));
+    const branch = frameTree(withBranch?.blocks ?? []).find((n) => n.kind === "frame");
+    expect(branch).toMatchObject({ kind: "frame", label: { item: { kind: "branch" } } });
+    expect(branch?.kind === "frame" && branch.children.length).toBeGreaterThan(0);
   });
 
   it("leaves out screens the person hid", () => {
@@ -177,5 +192,41 @@ describe("pictures in the 手順書", () => {
     expect(maskStale({ hidden: false, boxes: [{ x: 0, y: 0, width: 5, height: 5, kind: "blur" }], width: 800, height: 600 }, shot)).toBe(false);
     expect(maskStale({ hidden: false, boxes: [{ x: 0, y: 0, width: 5, height: 5, kind: "blur" }], width: 1024, height: 600 }, shot)).toBe(true);
     expect(maskStale(undefined, shot)).toBe(false);
+  });
+});
+
+describe("what the 手順書 blurs", () => {
+  it("keeps the operated button clear inside a blurred table cell", () => {
+    const cell = { x: 808, y: 313, width: 172, height: 64 };
+    const button = { x: 816, y: 334, width: 93, height: 35 };
+    const parts = blurRegions([cell], [button]);
+    expect(parts.length).toBeGreaterThan(0);
+    const overlaps = (a: { x: number; y: number; width: number; height: number }) =>
+      a.x < button.x + button.width && button.x < a.x + a.width && a.y < button.y + button.height && button.y < a.y + a.height;
+    expect(parts.some(overlaps)).toBe(false);
+    expect(parts.reduce((n, p) => n + p.width * p.height, 0)).toBe(cell.width * cell.height - button.width * button.height);
+  });
+
+  it("still blurs a field that is the operated element itself", () => {
+    const field = { x: 120, y: 245, width: 280, height: 34 };
+    expect(blurRegions([field], [field])).toEqual([field]);
+  });
+
+  it("keeps a value a node only reads under the blur", () => {
+    const cell = { x: 100, y: 200, width: 300, height: 40 };
+    const name = { x: 110, y: 208, width: 80, height: 24 };
+    const marks = operated([
+      { number: 1, rect: name, operates: false },
+      { number: null, rect: name },
+    ]);
+    expect(blurRegions([cell], marks)).toEqual([cell]);
+    expect(operated([{ number: 2, rect: name, operates: true }])).toEqual([name]);
+  });
+});
+
+describe("words with holes", () => {
+  it("turns {{ }} in a name into a chip", () => {
+    const parts = humanize([{ text: "「{{ order['注文番号'] }} を出荷」ボタンを押す" }], new Map([["order", "注文"]]));
+    expect(parts).toEqual([{ text: "「" }, { code: "注文の「注文番号」" }, { text: " を出荷」ボタンを押す" }]);
   });
 });

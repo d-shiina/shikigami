@@ -6,7 +6,7 @@
 // and work with no screen (variables, logs) folded into one quiet line.
 // This module only builds that outline; ManualView draws it and
 // manualExport writes it as one HTML file.
-import type { Flow, Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { Flow, PublishedState, Step, StepTypeDef, VariableDef, VersionSummary } from "@shikigami/schema";
 import { t } from "./i18n";
 import { blockLabel } from "./keywords";
 import { type Part, plain, readable, secretName, sentence } from "./sentence";
@@ -63,6 +63,16 @@ export type ManualStep = {
   ran: number | null;
   /** Where it is in the scene's picture. */
   mark: Rect | null;
+  /**
+   * It presses, types into or picks the marked thing (a button, a field), so
+   * the mark stays readable through the blur over values. A node that only
+   * reads (getText of a customer's name) keeps its mark blurred.
+   */
+  operates: boolean;
+  /** The node's description: said as a 「ポイント」 beside the step. */
+  note: string | null;
+  /** The login it enters, if any: said as a 「注意」 (the password is never shown). */
+  login: string | null;
 };
 
 /** A screen and what is done on it. */
@@ -150,7 +160,16 @@ function varWords(vars: VariableDef[]): Map<string, string> {
 
 /** `order['注文番号']` → `orderの「注文番号」`, variable names → their descriptions. */
 export function humanize(parts: Part[], words: ReadonlyMap<string, string>): Part[] {
-  return parts.map((p) => {
+  // Words can carry `{{ expr }}` holes too (a button named "{{ order['注文番号'] }} を出荷"): the holes become chips.
+  const split = parts.flatMap((p): Part[] =>
+    "text" in p && p.text.includes("{{")
+      ? p.text
+          .split(/(\{\{.*?\}\})/)
+          .filter((piece) => piece !== "")
+          .map((piece) => (piece.startsWith("{{") && piece.endsWith("}}") ? { code: readable(piece.slice(2, -2).trim()) } : { text: piece }))
+      : [p],
+  );
+  return split.map((p) => {
     if (!("code" in p)) return p;
     let text = p.code.replace(/([\p{L}_][\p{L}\p{N}_]*)\[['"]([^'"]+)['"]\]/gu, (_, v: string, col: string) =>
       t.manual.column(words.get(v) ?? v, col),
@@ -193,7 +212,30 @@ function manualStep(step: Step, callPath: string[], ctx: Ctx): ManualStep {
   const id = step.id ?? "";
   const key = keyOf(callPath, id);
   ctx.next.n += 1;
-  return { key, stepId: id, callPath, number: ctx.next.n, ...describe(step, ctx), ran: count(ctx, key), mark: null };
+  return {
+    key,
+    stepId: id,
+    callPath,
+    number: ctx.next.n,
+    ...describe(step, ctx),
+    ran: count(ctx, key),
+    mark: null,
+    operates: screenMoment(step.type) === "before",
+    note: step.description?.trim() || null,
+    login: loginOf(step.params),
+  };
+}
+
+/** The first saved login a node's settings refer to (`{ "secret": … }`). */
+function loginOf(value: unknown): string | null {
+  const name = secretName(value);
+  if (name) return name;
+  if (!value || typeof value !== "object") return null;
+  for (const v of Object.values(value as Record<string, unknown>)) {
+    const found = loginOf(v);
+    if (found) return found;
+  }
+  return null;
 }
 
 /** The ordered blocks of a step, with their labels. */
@@ -550,6 +592,31 @@ function countPictures(list: ManualItem[], drafts = false): number {
 }
 
 /**
+ * The values to blur on a picture (`regions`), less what the steps operate:
+ * a button inside a table cell must stay readable, or the reader cannot see
+ * what is pressed. A region that is the marked element itself (an input
+ * field) stays blurred; a larger region around a mark is cut into the parts
+ * around it.
+ */
+export function blurRegions(regions: Rect[] | undefined, marks: Rect[]): Rect[] {
+  const area = (r: Rect) => r.width * r.height;
+  const inside = (m: Rect, r: Rect) => m.x >= r.x - 2 && m.y >= r.y - 2 && m.x + m.width <= r.x + r.width + 2 && m.y + m.height <= r.y + r.height + 2;
+  return (regions ?? []).flatMap((r) => {
+    const m = marks.find((mark) => inside(mark, r) && area(mark) < area(r) * 0.7);
+    if (!m) return [r];
+    const top = Math.max(r.y, m.y);
+    const bottom = Math.min(r.y + r.height, m.y + m.height);
+    const parts: Rect[] = [
+      { x: r.x, y: r.y, width: r.width, height: top - r.y },
+      { x: r.x, y: bottom, width: r.width, height: r.y + r.height - bottom },
+      { x: r.x, y: top, width: Math.max(r.x, m.x) - r.x, height: bottom - top },
+      { x: Math.min(r.x + r.width, m.x + m.width), y: top, width: r.x + r.width - Math.min(r.x + r.width, m.x + m.width), height: bottom - top },
+    ];
+    return parts.filter((p) => p.width > 0 && p.height > 0);
+  });
+}
+
+/**
  * The part of a picture to show: around the marked elements, wide enough
  * to see where they are, the whole picture when nothing is marked.
  */
@@ -612,13 +679,51 @@ export type Page =
 
 const isContainer = (item: ManualItem): item is Container => item.kind === "branch" || item.kind === "loop" || item.kind === "group";
 
-/**
- * The 手順書 as sheets: a cover (what the flow does, contents), then each
- * chapter from a new sheet, and a new sheet for each screen with a picture
- * so the picture can be large. A branch or loop that goes on over a sheet
- * is named again at the top of the next one.
+/** Where a scene's picture is marked: its numbered operations and what it waits for. */
+export const sceneRects = (scene: Scene): Rect[] => [
+  ...scene.steps.flatMap((s) => (s.mark ? [s.mark] : [])),
+  ...scene.waits.flatMap((w) => (w.mark ? [w.mark] : [])),
+];
+
+/*
+ * How tall things are on an A4 sheet (794 × 1123 CSS px), roughly, to put
+ * as much on a sheet as fits. The sheet's own CSS keeps what is drawn there;
+ * these only decide where a new sheet starts.
  */
-/** `pictures: false` keeps each chapter on one run of pages (the words-only export). */
+const ROOM = 930;
+const WIDTH = 698;
+const FRAME_INSET = 30;
+const HEIGHT = { heading: 92, continued: 34, label: 58, caption: 32, step: 62, note: 66, wait: 58, quiet: 34, gap: 22 };
+const PICTURE_MAX = 567;
+
+function stepHeight(step: ManualStep): number {
+  return HEIGHT.step + (step.note ? HEIGHT.note : 0);
+}
+
+function blockHeight(block: PageBlock, pictures: boolean): number {
+  if (block.kind === "label") return HEIGHT.label;
+  const item = block.item;
+  if (item.kind === "quiet") return HEIGHT.quiet;
+  if (item.kind === "action") return stepHeight(item.step) + (item.step.login ? HEIGHT.note : 0);
+  let h = HEIGHT.caption + HEIGHT.gap;
+  if (pictures && item.shot) {
+    const crop = cropOf(item.shot.width, item.shot.height, sceneRects(item));
+    const width = WIDTH - block.depth * FRAME_INSET;
+    h += Math.min(PICTURE_MAX, (width * crop.height) / Math.max(1, crop.width));
+  }
+  h += item.steps.reduce((n, step) => n + stepHeight(step), 0) + item.waits.length * HEIGHT.wait;
+  if (item.steps.some((step) => step.login)) h += HEIGHT.note;
+  return h;
+}
+
+/**
+ * The 手順書 as sheets: a cover (what the flow does, contents, revisions),
+ * then each chapter from a new sheet. A sheet takes screens until the next
+ * one would not fit; a screen is never cut, and a heading is never left at
+ * the foot of a sheet without what comes under it. A branch or loop that
+ * goes on over a sheet is named again at the top of the next one.
+ * `pictures: false` lays out the words-only export.
+ */
 export function pagesOf(doc: ManualDoc, pictures = true): Page[] {
   const pages: Page[] = [{ kind: "cover", number: 1 }];
   for (const chapter of doc.chapters) {
@@ -634,6 +739,8 @@ export function pagesOf(doc: ManualDoc, pictures = true): Page[] {
       }
     };
     walk(chapter.items, 0, []);
+    let used = 0;
+    let filled = false;
     const start = (first: boolean, open: { item: Container; depth: number }[]) => {
       const page: Extract<Page, { kind: "body" }> = {
         kind: "body",
@@ -645,18 +752,78 @@ export function pagesOf(doc: ManualDoc, pictures = true): Page[] {
         shot: null,
       };
       pages.push(page);
+      used = (first ? HEIGHT.heading : HEIGHT.continued) + open.length * HEIGHT.label;
+      filled = false;
       return page;
     };
     let current = start(true, []);
-    for (const { block, open } of flat) {
-      const shot = pictures && block.kind === "item" && block.item.kind === "scene" ? block.item.shot : null;
-      if (shot && current.shot) current = start(false, open);
+    flat.forEach(({ block, open }, i) => {
+      const h = blockHeight(block, pictures);
+      // A heading goes with the first thing under it.
+      const next = flat[i + 1];
+      const need = h + (block.kind === "label" && next ? blockHeight(next.block, pictures) : 0);
+      if (filled && used + need > ROOM) current = start(false, open);
       current.blocks.push(block);
+      used += h;
+      if (block.kind === "item") filled = true;
+      const shot = pictures && block.kind === "item" && block.item.kind === "scene" ? block.item.shot : null;
       if (shot && !current.shot && block.kind === "item" && block.item.kind === "scene") {
         current.shot = shot;
         current.title = block.item.title ?? chapter.title;
       }
-    }
+    });
   }
   return pages;
+}
+
+/** A page's blocks as frames: each branch, loop or group holds what is inside it on that page. */
+export type PageNode =
+  | { kind: "frame"; label: Extract<PageBlock, { kind: "label" }>; children: PageNode[] }
+  | { kind: "item"; block: Extract<PageBlock, { kind: "item" }> };
+
+export function frameTree(blocks: PageBlock[]): PageNode[] {
+  const root: PageNode[] = [];
+  const stack: Extract<PageNode, { kind: "frame" }>[] = [];
+  for (const block of blocks) {
+    while (stack.length > 0 && (stack.at(-1)?.label.depth ?? -1) >= block.depth) stack.pop();
+    const into = stack.at(-1)?.children ?? root;
+    if (block.kind === "label") {
+      const frame: Extract<PageNode, { kind: "frame" }> = { kind: "frame", label: block, children: [] };
+      into.push(frame);
+      stack.push(frame);
+    } else {
+      into.push({ kind: "item", block });
+    }
+  }
+  return root;
+}
+
+/** What the cover says about the version: from the published version and the saved versions. */
+export type Edition = {
+  /** 「第 3 版」, or 「公開前」. */
+  label: string;
+  /** The day it was published, as words. */
+  updated: string | null;
+  /** The published version, when the flow has changed since it. */
+  changedSince: number | null;
+  /** Saved versions, newest first. */
+  revisions: { label: string; date: string; text: string }[];
+};
+
+/** The cover's version: the published one (第 n 版) and the saved versions as the revision history. */
+export function editionOf(published: PublishedState | null, versions: VersionSummary[], date: (iso: string) => string): Edition {
+  return {
+    label: published ? t.manual.editionOf(published.version) : t.manual.unpublished,
+    updated: published ? date(published.publishedAt) : null,
+    changedSince: published && !published.matchesCurrent ? published.version : null,
+    revisions: [...versions]
+      .sort((a, b) => b.number - a.number)
+      .slice(0, 12)
+      .map((v) => ({
+        label: t.manual.editionOf(v.number),
+        date: date(v.createdAt),
+        // A version named only by its number (v3) has nothing more to say.
+        text: v.note?.trim() || (/^v\d+$/.test(v.name.trim()) ? "" : v.name.trim()),
+      })),
+  };
 }

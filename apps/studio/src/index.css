@@ -35,6 +35,18 @@
   --color-desk: #f6f7f8;
   /* The manual's desk: grey enough that the white A4 sheets read as paper on it. */
   --manual-desk: #e6e8ec;
+  /* The 手順書's colours: the swirl's navy for headings, its colours for what a note says. */
+  --manual-navy: #0f3a66;
+  --manual-band: #0f3a66;
+  --manual-check: #3f9a5a;
+  --manual-check-bg: #eef8f1;
+  --manual-caution: #e8501f;
+  --manual-caution-bg: #fff3ec;
+  --manual-point: #0b7680;
+  --manual-point-line: #12a7b4;
+  --manual-point-bg: #e9f8f9;
+  --manual-loop-bg: #eef3f9;
+  --manual-loop-line: #b9cbe0;
   --color-sheet: #ffffff;
   --color-ink: #1b1d22;
 
@@ -118,6 +130,17 @@
   --color-paper: #121316;
   --color-desk: #0e0f11;
   --manual-desk: #0a0b0d;
+  --manual-navy: #9cc3ea;
+  --manual-band: #123456;
+  --manual-check: #5cc27e;
+  --manual-check-bg: #16241a;
+  --manual-caution: #f07a52;
+  --manual-caution-bg: #2a1912;
+  --manual-point: #3fcbd5;
+  --manual-point-line: #3fcbd5;
+  --manual-point-bg: #10262a;
+  --manual-loop-bg: #18212c;
+  --manual-loop-line: #34465c;
   --color-sheet: #17181b;
   --color-ink: #e6e7ea;
 
