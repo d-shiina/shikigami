@@ -702,11 +702,17 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
   );
 }
 
-/** Boxes over a picture: what is hidden (blurred or black). */
-function MaskBoxes({ boxes, crop, k }: { boxes: MaskBox[]; crop: Rect; k: number }) {
+/**
+ * Boxes over a picture: what is hidden (blurred or black). The values the
+ * page showed (`regions`: fields, cells, "label  value" rows) are blurred
+ * here too, as the 書き出し does by default, so what is on the screen is
+ * what goes out and a screen shared from here does not show them either.
+ */
+function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Rect[]; crop: Rect; k: number }) {
+  const all: MaskBox[] = [...(regions ?? []).map((r) => ({ ...r, kind: "blur" as const })), ...boxes];
   return (
     <>
-      {boxes.map((b, i) => (
+      {all.map((b, i) => (
         <span
           key={i}
           className={`absolute ${b.kind === "black" ? "bg-slate-900" : "bg-slate-200/50 backdrop-blur-[6px]"}`}
@@ -745,7 +751,7 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             className="absolute max-w-none"
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
-          <MaskBoxes boxes={mask?.boxes ?? []} crop={crop} k={k} />
+          <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={crop} k={k} />
           {marks.map((m, i) => (
             <span
               key={m.number ?? `wait-${i}`}
@@ -809,7 +815,7 @@ function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string
     <Overlay onClose={onClose} label={t.manual.whole}>
       <div className="relative" style={{ width: shot.width * k, height: shot.height * k }}>
         {url && <img src={url} alt="" className="absolute inset-0 h-full w-full" />}
-        <MaskBoxes boxes={mask?.boxes ?? []} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+        <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
       </div>
     </Overlay>
   );
@@ -875,7 +881,7 @@ function MaskEditor({
           }}
         >
           {url && <img src={url} alt="" draggable={false} className={`absolute inset-0 h-full w-full ${hidden ? "opacity-30" : ""}`} />}
-          <MaskBoxes boxes={boxes} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+          <MaskBoxes boxes={boxes} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
           {boxes.map((b, i) => (
             <button
               key={i}

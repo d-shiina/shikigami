@@ -14,6 +14,7 @@ import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog
 
 import { cancelPick, highlight, pick } from "./pick.ts";
 import { record, stopRecording } from "./record.ts";
+import { fieldRegions, type Region } from "./regions.ts";
 import { AdapterError, describe, locate, scope, type Frame, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
@@ -1013,21 +1014,7 @@ export class Adapter {
       mark = await element.boundingBox({ timeout: 800 }).catch(() => null);
     }
     const viewport = page.viewportSize() ?? (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
-    const regions = await page
-      .evaluate((max) => {
-        const out: { x: number; y: number; width: number; height: number }[] = [];
-        const fields = document.querySelectorAll(
-          "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=image]), textarea, select, [contenteditable=''], [contenteditable=true], td",
-        );
-        for (const el of fields) {
-          if (out.length >= max) break;
-          const r = el.getBoundingClientRect();
-          if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
-          out.push({ x: r.left, y: r.top, width: r.width, height: r.height });
-        }
-        return out;
-      }, 400)
-      .catch(() => []);
+    const regions = await this.regions(page);
     // Password fields, secrets and what the run typed are covered in one
     // soft grey: the 手順書 says in words what goes in them.
     await page.screenshot({
@@ -1043,6 +1030,35 @@ export class Adapter {
     const scroll = await page.evaluate(() => [window.scrollX, window.scrollY]).catch(() => [0, 0]);
     const view = `${page.url()} @${scroll.join(",")}`;
     return { path, width: viewport.width, height: viewport.height, mark, regions, title, view };
+  }
+
+  /**
+   * Where the values are on the visible part of the page (fields, cells,
+   * "label  value" rows), in the main page and in the frames inside it, for
+   * the 手順書 to blur. A frame that cannot be read is left out, not the picture.
+   */
+  private async regions(page: Page): Promise<Region[]> {
+    const MAX = 800;
+    const out: Region[] = await page.evaluate(fieldRegions, MAX).catch(() => []);
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame() || out.length >= MAX) continue;
+      try {
+        const box = await (await frame.frameElement()).boundingBox();
+        if (!box || box.width < 2 || box.height < 2) continue;
+        const inner = await frame.evaluate(fieldRegions, MAX - out.length);
+        for (const r of inner) {
+          // Cut to the frame: what scrolls out of it is not on the picture.
+          const x0 = Math.max(box.x, box.x + r.x);
+          const y0 = Math.max(box.y, box.y + r.y);
+          const x1 = Math.min(box.x + box.width, box.x + r.x + r.width);
+          const y1 = Math.min(box.y + box.height, box.y + r.y + r.height);
+          if (x1 - x0 >= 2 && y1 - y0 >= 2) out.push({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+        }
+      } catch {
+        // A frame that went away or is not ready: its values are not blurred.
+      }
+    }
+    return out;
   }
 
   /** True when `target` is (or becomes, within `waitMs`) visible; never throws for a missing element. */
