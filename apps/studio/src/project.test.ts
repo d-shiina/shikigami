@@ -88,6 +88,46 @@ describe("the open sheet", () => {
   });
 });
 
+describe("the unsaved question", () => {
+  it("opens nothing for an answer that comes after another flow was opened", async () => {
+    const { createProjectStore } = await import("./project");
+    const api = {
+      list: async (id: string) => ({ flowId: id, dir: "", folders: [], files: [] }),
+      readText: async (id: string, path: string) => `${id}:${path}`,
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    let answer: (a: AskAnswer) => void = () => {};
+    const store = createProjectStore(api, { added: () => "", unsaved: () => new Promise((r) => (answer = r)) });
+    await store.getState().load("old");
+    await store.getState().openFile("input/a.csv");
+    store.getState().editSheet("edited");
+    const opening = store.getState().openFile("input/b.csv");
+    // While the question is open, the AI makes a flow and it is opened.
+    await store.getState().load("new");
+    answer("other");
+    await opening;
+    expect(store.getState().flowId).toBe("new");
+    expect(store.getState().sheet).toBeNull();
+  });
+
+  it("closes the sheet after 「保存しない」, and keeps it on cancel", async () => {
+    const { createProjectStore } = await import("./project");
+    const api = {
+      list: async (id: string) => ({ flowId: id, dir: "", folders: [], files: [] }),
+      readText: async () => "text",
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    let next: AskAnswer = "cancel";
+    const store = createProjectStore(api, { added: () => "", unsaved: async () => next });
+    await store.getState().load("s");
+    await store.getState().openFile("input/a.csv");
+    store.getState().editSheet("edited");
+    await store.getState().leaveSheet();
+    expect(store.getState().sheet?.text).toBe("edited");
+    next = "other";
+    await store.getState().leaveSheet();
+    expect(store.getState().sheet).toBeNull();
+  });
+});
+
 describe("settings autosave", () => {
   it("writes a setting typed just before another flow is opened", async () => {
     const { createProjectStore } = await import("./project");
