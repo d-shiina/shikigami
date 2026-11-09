@@ -123,6 +123,12 @@ pub struct PackageRequires {
     /// Inputs asked for when the flow runs (no default value).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs: Vec<PackageInput>,
+    /// Places outside the flow's folder it reads or writes, written out in
+    /// full in its steps or as a folder in its settings files
+    /// (`\\fs01\経理`, `%USERPROFILE%\Box\経理`): the PC that runs it
+    /// has to reach them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub places: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -255,6 +261,8 @@ pub enum CheckKind {
     Secret,
     Site,
     App,
+    /// A place outside the flow's folder (`Missing`: this PC cannot reach it now).
+    Place,
 }
 
 /// One thing the package needs, checked against this PC.
@@ -360,6 +368,7 @@ pub fn requirements(flows: &[&Flow], registry: &StepRegistry) -> PackageRequires
         sites: sites.into_iter().collect(),
         apps: apps.into_iter().collect(),
         inputs,
+        places: Vec::new(),
     }
 }
 

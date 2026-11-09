@@ -951,9 +951,9 @@ impl SecretProvider for Vault {
             SecretField::AccessToken => {
                 return Err(SecretError::new(
                     "SECRET_FIELD_NOT_ALLOWED",
-                    "accessToken can only be used as the auth of http.request",
+                    "accessToken can only be used as the auth of http.request or in a custom node's secret setting",
                 )
-                .with_hint("Use { \"secret\": .., \"field\": \"accessToken\" } as http.request auth, after oauth.signIn.")
+                .with_hint("Use { \"secret\": .., \"field\": \"accessToken\" } as http.request auth or in a custom node's secret setting, after oauth.signIn.")
                 .with_secret(&reference.secret));
             }
             SecretField::Username => values.username,

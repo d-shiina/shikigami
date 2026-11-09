@@ -8,6 +8,7 @@ Many web APIs (Box, Google, Microsoft 365, Salesforce, …) do not take a fixed 
 |---|---|---|
 | `oauth.signIn` | Makes sure there is a usable sign-in for a secret: reuses or refreshes the saved tokens, otherwise lets the person sign in in the browser | `{ secret, signedIn, via, expiresAt, scope }` (never the tokens) |
 | `http.request` with `auth: { "secret": "<name>", "field": "accessToken" }` | Calls the API with the access token. It is refreshed first when it is about to expire | as usual ([system.md](system.md)) |
+| A custom node's `oauth` setting with `{ "secret": "<name>", "field": "accessToken" }` | The same, refreshed before it is handed to the node (e.g. [Box](../examples/plugins/box)). The secret's sites need `plugin:<name>` | depends on the node |
 
 ## Any fixed redirect URL works
 

@@ -54,7 +54,33 @@ A settings file in `config/` lists named values with a type and a description, s
 }
 ```
 
-Types are `text`, `number`, `boolean`, `date` and `list`. `config.read` with `{ "path": "config/settings.json" }` saved as `settings` gives `settings.threshold`. A wrong format gives `CONFIG_INVALID`.
+Types are `text`, `number`, `boolean`, `date`, `list` and `folder`. `config.read` with `{ "path": "config/settings.json" }` saved as `settings` gives `settings.threshold`. A wrong format gives `CONFIG_INVALID`.
+
+A `folder` is a folder's full path. `%USERPROFILE%` and other `%NAME%` parts are replaced with the PC's environment variables when read: Box Drive and OneDrive folders sit in each user's profile, so `%USERPROFILE%\Box\Accounts` works on everyone's PC.
+
+### Files on a file server or in Box
+
+File params take full paths too: a file server (`\\fs01\accounts\orders.xlsx`) and folders synced with cloud storage (Box Drive, OneDrive, Google Drive, Dropbox) are read and written where they are. Unattended runs (the worker) run as the signed-in user, so whatever that person can open works. For Box Drive, sign in to Box Drive on that PC.
+
+Keep the place as a `folder` setting rather than in the nodes, so whoever receives the flow changes one setting:
+
+```json
+{ "name": "ordersFolder", "type": "folder", "value": "\\\\fs01\\accounts\\orders" }
+```
+
+and write `{{ settings.ordersFolder }}/orders.xlsx` in the node.
+
+In Writer:
+
+- When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** and **Read from cloud storage** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`). Folders inside the user's profile are kept as `%USERPROFILE%\…`
+- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the folder you pick
+- **Browse…** in a node's settings asks, for a file outside the flow's folder, whether to read it where it is or copy it in
+- A `.spx` lists the full paths and the settings' folders under what the receiving PC needs; on import, Writer checks whether this PC opens them
+- The AI's `list_project_files` returns the missing input files as `needed`
+
+Keep `work/` in the flow's folder: it is emptied at every run, and in a synced folder the sync lags behind (locked files) and others see half-made files.
+
+Without Box Drive, the Box custom nodes (`box.*`) read and write through the Box API.
 
 ## Encodings
 

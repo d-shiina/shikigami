@@ -530,3 +530,35 @@ fn plugins_from_before_the_rename_load_from_a_read_only_folder() {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(found.plugins.len(), 1, "{:?}", found.problems);
 }
+
+#[test]
+fn the_box_example_takes_an_oauth_access_token() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/box");
+    let plugin = Plugin::load(&dir, &[]).unwrap();
+    let types: Vec<_> = plugin
+        .step_defs()
+        .iter()
+        .map(|d| d.step_type.clone())
+        .collect();
+    assert_eq!(types, ["box.list", "box.download", "box.upload"]);
+    let download = &plugin.step_defs()[1];
+    assert_eq!(download.path_params, ["to"]);
+    assert_eq!(
+        download.plugin.as_ref().unwrap().credentials[0].kind,
+        spellsheet_core::secret::SecretKind::Oauth
+    );
+    // The OAuth setting offers the access token; other secret settings do not.
+    let fields =
+        &download.params_schema["properties"]["account"]["oneOf"][1]["properties"]["field"]["enum"];
+    assert!(
+        fields.as_array().unwrap().contains(&json!("accessToken")),
+        "{fields}"
+    );
+    let ocr = Plugin::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/azure-ocr"),
+        &[],
+    )
+    .unwrap();
+    let key = &ocr.step_defs()[0].params_schema["properties"]["key"].to_string();
+    assert!(!key.contains("accessToken"), "{key}");
+}

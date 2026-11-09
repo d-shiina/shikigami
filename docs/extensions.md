@@ -106,6 +106,7 @@ Register API keys and the like in Writer (Secrets) and pick them by name in a no
 - An extension only receives secrets in the settings listed in `secretParams`.
 - A secret reaches an extension only if its allowed sites include `plugin:<name>` (e.g. `plugin:azureocr`); otherwise the node fails with `SECRET_PLUGIN_NOT_ALLOWED`.
 - With `credentials` in the manifest naming the kind (`login` / `apiKey` / `oauth`), Writer offers secrets of that kind and opens the new-secret form with it.
+- A setting of kind `oauth` takes the access token obtained by `oauth.signIn` (`{ "secret": "Box", "field": "accessToken" }`). SpellSheet refreshes it when less than 2 minutes are left before handing it over, so the extension never deals with refreshing and never sees the client secret or the refresh token. The secret's sites still need `plugin:<name>`.
 
 ## Writing an extension
 
@@ -125,6 +126,7 @@ Two samples:
 | Sample | Shows |
 |---|---|
 | [examples/plugins/azure-ocr](../examples/plugins/azure-ocr) | Cloud AI-OCR (Azure AI Document Intelligence): sending outside, an API key, a file setting, naming settings |
+| [examples/plugins/box](../examples/plugins/box) | Box: list a folder, download, upload; taking an OAuth access token |
 | [examples/plugins/hello](../examples/plugins/hello) | The smallest one; file locking (`resources`) |
 
 ### Manifest

@@ -110,6 +110,12 @@ pub struct ProjectFiles {
     pub folders: Vec<String>,
     /// Every file except `flow.json`, sorted by path.
     pub files: Vec<ProjectFile>,
+    /// Files the flow reads from `input/` that are not there yet: ask the
+    /// person where they come from (put the file in `input/`, or read it
+    /// from a file server or a folder synced with cloud storage set in
+    /// `config/`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub needed: Vec<crate::places::NeededFile>,
 }
 
 /// A file carried in a bundle.
@@ -168,6 +174,12 @@ pub enum ConfigType {
     Date,
     /// A list of texts.
     List,
+    /// A folder's full path (`\\server\share\受注`, a Box Drive or
+    /// OneDrive folder). `%USERPROFILE%` and other `%NAME%` parts are
+    /// replaced with this PC's environment variables when read, so one
+    /// setting works for everyone whose synced folder is in their own
+    /// profile.
+    Folder,
 }
 
 impl ConfigFile {
@@ -190,10 +202,45 @@ impl ConfigFile {
             if out.contains_key(&item.name) {
                 return Err(format!("'{}' appears twice", item.name));
             }
-            out.insert(item.name, item.value);
+            let value = match (item.value_type, item.value) {
+                (ConfigType::Folder, Value::String(path)) => Value::String(expand_env(&path)),
+                (_, value) => value,
+            };
+            out.insert(item.name, value);
         }
         Ok(out)
     }
+}
+
+/// `path` with each `%NAME%` replaced by the environment variable (left as
+/// it is when there is no such variable), as Windows Explorer does.
+pub fn expand_env(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut rest = path;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after.find('%') {
+            Some(end) if end > 0 && !after[..end].contains(['\\', '/']) => {
+                let name = &after[..end];
+                match std::env::var(name) {
+                    Ok(value) => out.push_str(&value),
+                    Err(_) => {
+                        out.push('%');
+                        out.push_str(name);
+                        out.push('%');
+                    }
+                }
+                rest = &after[end + 1..];
+            }
+            _ => {
+                out.push('%');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Checks a path written relative to a project folder and returns it as a
@@ -325,6 +372,7 @@ pub fn list(id: &FlowId, dir: &Path) -> CoreResult<ProjectFiles> {
         dir: dir.to_string_lossy().into_owned(),
         folders: all,
         files,
+        needed: Vec::new(),
     })
 }
 
