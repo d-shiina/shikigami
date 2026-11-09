@@ -4,7 +4,10 @@
 
 `spellsheet mcp` は AI クライアント（Claude Code / Codex / Cursor など）に SpellSheet のフロー編集・検証・実行を MCP ツールとして提供します。Writer と同じ Flow Core を使うため、AI の変更は Writer に即座に反映され、Writer から Undo できます。GUI がなくても単独で動きます。
 
-![MCP からの編集が Writer に反映された様子](../assets/studio-mcp-edit.png)
+<picture>
+  <source srcset="../assets/writer-ja-dark.webp" media="(prefers-color-scheme: dark)">
+  <img src="../assets/writer-ja.webp" alt="AI の編集がそのまま Writer に反映される様子。中央にフロー図、右に AI チャット">
+</picture>
 
 ## 接続方法
 

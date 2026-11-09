@@ -1762,21 +1762,7 @@ export const ja = {
     withAi: "AI に依頼",
     withAiBody: "組んだ内容は、確認してから使えます（Ctrl+Enter でも送れます）",
     otherWays: "ほかの始め方：",
-    sample: "見本を開く",
     byHand: "空のフローを作る",
-  },
-  samples: {
-    title: "見本",
-    lead: "完成版を開いて中身を確かめたり、手順を読みながら自分で、または AI と一緒に作ったりできます",
-    all: "チュートリアルの一覧",
-    open: "完成版を開く",
-    read: "手順を読む",
-    needsSite: "練習用のサイトで試します",
-    items: {
-      "sales-csv": { name: "支店の売上 CSV を 1 つの Excel にまとめる", uses: "CSV・Excel" },
-      invoices: { name: "受注一覧から取引先ごとの請求書を作る", uses: "Excel・Word のひな形" },
-      "web-orders": { name: "Web の受注システムで未処理の注文を出荷する", uses: "ブラウザ・ログイン" },
-    } as Record<string, { name: string; uses: string }>,
   },
   // Windows の通知：実行が人を待ち始めたとき、窓が後ろにいれば出す（lib/attention.ts）。
   attention: {

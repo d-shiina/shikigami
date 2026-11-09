@@ -2,21 +2,20 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@spellsheet/schema";
-import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
+import { CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { DistributionNotice, useDistributionCheck } from "./Distribution";
 import { relativeTime } from "../lib/changes";
 import { copyText, menuFor, openMenu } from "../lib/contextMenu";
-import { agent, api, type ScheduleView } from "../lib/api";
+import { api, type ScheduleView } from "../lib/api";
 import { describeWhen } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { deleteFlowsAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 import { projectApi } from "../project";
 import { fileToFlowFile } from "./HandOff";
-import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
 const SORT_KEY = "spellsheet.studio.flows.sort";
 
@@ -85,17 +84,10 @@ function ImportConflict() {
   );
 }
 
-/** Opens a tutorial's page in the browser; a failure is said in the status line. */
-function useReadTutorial() {
-  const store = useStudioApi();
-  return (id?: Sample["id"]) =>
-    void agent.openUrl(tutorialUrl(id)).catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }));
-}
-
 /**
  * The first screen of an empty workspace. Flows are made by asking the AI
  * (docs/design/ai-authoring.md, 人の手の役割), so the request box comes first;
- * the samples and an empty flow to build by hand are smaller ways in below.
+ * an empty flow to build by hand and importing are smaller ways in below.
  */
 function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
   const agentStore = useAgentApi();
@@ -111,7 +103,6 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
     }
     setText("");
   };
-  const showSamples = () => document.getElementById("samples-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <section aria-label={t.firstSteps.title} className="rounded-lg border border-slate-200 bg-sheet p-5">
       <h2 className="text-[15px] font-semibold text-ink">{t.firstSteps.title}</h2>
@@ -150,11 +141,6 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
       </form>
       <p className="mt-4 flex flex-wrap items-center gap-x-1 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
         {t.firstSteps.otherWays}
-        <button type="button" onClick={showSamples} className="flex items-center gap-1 text-brand-600 hover:underline">
-          <BookOpen size={12} strokeWidth={1.75} aria-hidden="true" />
-          {t.firstSteps.sample}
-        </button>
-        <span aria-hidden="true">・</span>
         <button type="button" onClick={onCreate} className="flex items-center gap-1 text-brand-600 hover:underline">
           <MousePointerClick size={12} strokeWidth={1.75} aria-hidden="true" />
           {t.firstSteps.byHand}
@@ -165,69 +151,6 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
           {t.importFlow}
         </button>
       </p>
-    </section>
-  );
-}
-
-/** The tutorials, under the list: read the steps, or open the finished flow with its files. */
-function Samples() {
-  const importFile = useStudio((s) => s.importFile);
-  const setPlace = useStudio((s) => s.setPlace);
-  const read = useReadTutorial();
-  const [busy, setBusy] = useState<string | null>(null);
-  const open = async (sample: Sample) => {
-    if (!sample.bundle || busy) return;
-    setBusy(sample.id);
-    try {
-      // Opened before, it asks here whether to update it or keep a copy.
-      if (await importFile(await sample.bundle())) setPlace("flows");
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <section className="mt-6" aria-labelledby="samples-title">
-      <div className="mb-1 flex items-baseline gap-2">
-        <h2 id="samples-title" className="text-[13px] font-semibold text-ink">
-          {t.samples.title}
-        </h2>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-500">{t.samples.lead}</span>
-        <button type="button" onClick={() => read()} className="flex shrink-0 items-center gap-1 text-[12px] text-brand-600 hover:underline">
-          {t.samples.all}
-          <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      </div>
-      <ul className="border-y border-slate-200">
-        {SAMPLES.map((sample) => {
-          const item = t.samples.items[sample.id] ?? { name: sample.id, uses: "" };
-          return (
-            <li key={sample.id} className="flex items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0">
-              <BookOpen size={16} strokeWidth={1.75} className="shrink-0 text-brand-600" aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] text-ink">{item.name}</div>
-                <div className="truncate text-[12px] text-slate-500">
-                  {item.uses}
-                  {!sample.bundle && t.paren(t.samples.needsSite)}
-                </div>
-              </div>
-              <button type="button" onClick={() => read(sample.id)} className="flex h-7 shrink-0 items-center gap-1 px-2 text-[12px] text-slate-600 hover:text-ink">
-                {t.samples.read}
-                <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
-              </button>
-              {sample.bundle && (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void open(sample)}
-                  className="h-7 shrink-0 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {t.samples.open}
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }
@@ -667,7 +590,6 @@ export function FlowsPage() {
             </SelectionBar>
           </>
         )}
-        <Samples />
       </div>
     </div>
   );
