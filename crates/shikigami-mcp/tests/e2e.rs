@@ -374,6 +374,42 @@ async fn a_run_that_cannot_be_recorded_is_not_started() {
 }
 
 #[tokio::test]
+async fn test_step_takes_the_values_of_the_variables_it_reads() {
+    let h = start(ServerOptions::default()).await;
+    // A step from inside a forEach, tried as it is written in the flow.
+    let step = json!({
+        "type": "variable.set",
+        "params": { "name": "x", "expression": "num(row.金額) * rate" },
+    });
+    let out = h
+        .ok(
+            "test_step",
+            json!({ "step": step, "variables": { "row": { "金額": "1,200", "_row": 2 }, "rate": 2 } }),
+        )
+        .await;
+    assert_eq!(out["status"], "succeeded", "{out}");
+    assert_eq!(out["output"], 2400);
+    // Templates in params too.
+    let out = h
+        .ok(
+            "test_step",
+            json!({
+                "step": { "type": "variable.set", "params": { "name": "x", "value": "{{ row.顧客名 }}様" } },
+                "variables": { "row": { "顧客名": "山田商事" } },
+            }),
+        )
+        .await;
+    assert_eq!(out["output"], "山田商事様");
+    // Without the values the step cannot run, and says what is missing.
+    let out = h.ok("test_step", json!({ "step": step })).await;
+    assert_eq!(out["status"], "failed", "{out}");
+    let text = out["error"].to_string();
+    assert!(text.contains("row"), "{text}");
+    assert!(out["hint"].as_str().unwrap().contains("`row`"), "{out}");
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
 async fn test_step_runs_one_step_without_touching_flows() {
     let h = start(ServerOptions::default()).await;
     let out = h.ok(

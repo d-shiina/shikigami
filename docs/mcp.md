@@ -92,7 +92,7 @@ In Writer, **Settings → AI → MCP server registration → Cursor → Add to C
 | browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId`. `image: true` also returns the screenshot to the AI |
 |  | `ask_user_to_pick` | When the AI cannot tell which element is meant, the person clicks it in the browser (the click does not reach the page) and it comes back as a `target`. Writer shows the request and can decline it ([browser.md](browser.md)) |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
-| try | `test_step` | Run one node on the spot and return its output (for a browser node also the page after it, for a desktop node the window it worked on). Does not change the flow. Saves the result as evidence and returns an `observationId` |
+| try | `test_step` | Run one node on the spot and return its output (for a browser node also the page after it, for a desktop node the window it worked on). A node that reads variables (`{{ row.顧客名 }}`, an expression) is tried as written: pass their values in `variables`, as they would be at that point of a run. Does not change the flow. Saves the result as evidence and returns an `observationId` |
 
 - Each validation issue carries a hint for fixing it (`hint`: close names, required and allowed params, when to use expressions vs. templates…), so the AI can fix it in one go.
 - Input schemas are generated from the Rust types. Results come back as `structuredContent` (JSON).
