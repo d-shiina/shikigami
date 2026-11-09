@@ -323,8 +323,8 @@ fn migrate_servers(servers: &mut serde_json::Map<String, Value>, old: &str) -> b
     changed
 }
 
-/// `C:\…\<old>.exe` -> `C:\…\spellsheet.exe`, `<old>` -> `spellsheet`; other
-/// commands are not ours.
+/// `C:\…\<old>.exe` -> `C:\…\spellsheet.exe` (when that file is there),
+/// `<old>` -> `spellsheet`; other commands are not ours.
 fn new_command(command: &str, old: &str) -> Option<String> {
     let start = command.rfind(['\\', '/']).map_or(0, |i| i + 1);
     let file = &command[start..];
@@ -336,7 +336,21 @@ fn new_command(command: &str, old: &str) -> Option<String> {
     } else {
         return None;
     };
-    Some(format!("{}{new_file}", &command[..start]))
+    let new = format!("{}{new_file}", &command[..start]);
+    // A path to another build of the command (a source checkout's
+    // `target\debug`) is left as it is until that build has the new name.
+    (start == 0 || replacement_exists(&new)).then_some(new)
+}
+
+#[cfg(not(test))]
+fn replacement_exists(path: &str) -> bool {
+    Path::new(path).is_file()
+}
+
+/// The tests' paths are made up (`C:\Users\…`).
+#[cfg(test)]
+fn replacement_exists(_: &str) -> bool {
+    true
 }
 
 /// Codex's `config.toml`: `[mcp_servers.<old>]` (and its sub-tables) and
@@ -383,18 +397,17 @@ fn migrate_toml(text: &str) -> String {
     out
 }
 
-/// A `command` in `text` that still starts the old command.
+/// A `command` in `text` that still starts the old command by its name
+/// (paths to other builds of it are left as they are on purpose).
 fn toml_still_starts_old(text: &str, old: &str) -> bool {
     text.lines().any(|line| {
         let line = line.to_ascii_lowercase();
         line.contains("command")
             && [
-                format!("\"{old}"),
-                format!("'{old}"),
-                format!("\\{old}."),
-                format!("/{old}."),
-                format!("\\{old}\""),
-                format!("/{old}\""),
+                format!("\"{old}\""),
+                format!("\"{old}.exe\""),
+                format!("'{old}'"),
+                format!("'{old}.exe'"),
             ]
             .iter()
             .any(|p| line.contains(p.as_str()))
