@@ -33,6 +33,7 @@ import { SecretsPage } from "./components/SecretsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
+import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
 import { Sidebar } from "./components/Sidebar";
 import { AiButton, Brand, SearchBar } from "./components/ShellBar";
 import { ManualView } from "./components/ManualView";
@@ -461,6 +462,9 @@ function Shell() {
       <RunInputsDialog />
       <ApprovalDialog />
       <AskDialog />
+      <HandOffDialog />
+      <ReceiveSheet />
+      <OpenedFiles />
       <PickRequestCard />
       <ContextMenu />
       <FileDragLayer />

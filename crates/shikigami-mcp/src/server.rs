@@ -199,7 +199,7 @@ SpellSheet Writer, and flows run later without you.\n\
 - Versions: when the user says a flow works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
 - Unattended runs (spellsheet run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the flow is ready, ask the user to review it in Writer's レビュー台 and press 確認して公開. get_flow `published` shows the version in force and whether the working content matches it. run_flow runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
 - The workspace policy (get_policy) limits sites and programs (SITE_NOT_ALLOWED / APP_NOT_ALLOWED) and may hold run_flow, test_step or delete_flow for the user's approval: APPROVAL_REQUIRED returns an approvalId and Writer shows the request. Tell the user in chat what you want to do and why, then repeat the exact same call with approvalId (and approvalWaitMs to wait). On APPROVAL_DENIED or POLICY_DENIED stop and ask the user; never work around a refusal with other steps or tools.\n\
-- Sharing: export_flow returns a bundle (flow + versions, secret defaults removed) that import_flow accepts in another workspace. On IMPORT_CONFLICT ask the user whether to update the existing flow or import a copy.\n\
+- Sharing: to hand a flow to another person or PC, export_flow with path writes a .spx file (published version, the flows it calls, folder files except input/, logins by name only). import_flow with path and check: true shows what a received .spx holds and what this PC still needs; then import_flow with path imports it. On IMPORT_CONFLICT ask the user whether to update the existing flow or import a copy. An imported flow runs unattended only after a person publishes it here.\n\
 - Logins: never ask the user for a password or other secret in chat, and never write one into a flow or a tool call. The user registers secrets by name in SpellSheet Writer (シークレット); list_secrets shows the names and sites. Type them with browser.fill value { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (also in test_step); they work only on the registered sites. When inspect_page reports `login` (or a step fails with SECRET_NOT_FOUND, SECRET_FIELD_EMPTY or SECRET_SITE_*) and no secret fits, call request_secret with a name, the site and the fields: Writer asks the user to register it in a form you never see. Tell the user in chat to enter it in Writer, then call request_secret again with waitMs (or list_secrets). Or let them log in by hand with test_step browser.waitForHuman. In flows, browser.open `session` keeps the login between runs.\n\
 - Web APIs with a fixed key or token: a secret of kind apiKey (the key is its password; ask with request_secret kind apiKey, sites = the API's origin), sent by http.request auth { \"secret\": \"<name>\", \"field\": \"password\" } with authType bearer or header. list_secrets shows each secret's kind (login / apiKey / oauth).\n\
 - Web APIs with OAuth (Box, Google, Microsoft 365...): register the app as a secret of kind oauth (username = client ID, password = client secret, sites = the token URL's and the API's origins; ask with request_secret kind oauth), put oauth.signIn (authorizeUrl, tokenUrl, redirectUrl exactly as registered at the provider; any fixed URL works, no localhost needed) before the calls, and use http.request auth { \"secret\": \"<name>\", \"field\": \"accessToken\" }. The person signs in once in the browser; later runs reuse and refresh the tokens.\n\
@@ -232,6 +232,8 @@ struct Inner {
     /// Run ID under which test_step / inspect_page keep adapter state
     /// (open pages) for this MCP session.
     session: RunId,
+    /// Whether this server may write (export_flow's `path` writes a file).
+    can_write: bool,
 }
 
 /// Outcome of one tool call before it is turned into an MCP result.
@@ -251,6 +253,7 @@ impl ShikigamiMcp {
                 tool_router.remove_route(name);
             }
         }
+        let can_write = options.allow.contains(&ToolClass::Write);
         let audit = AuditLog::new(service.store().local_root());
         // Steps look secrets up in the workspace's vault; this server only
         // ever reveals their names.
@@ -269,6 +272,7 @@ impl ShikigamiMcp {
                 audit,
                 adapters: options.adapters,
                 session: RunId::generate(),
+                can_write,
             }),
             tool_router,
         }
@@ -888,23 +892,83 @@ impl ShikigamiMcp {
         self.finish("diff_versions", &peer, Some(&p.flow_id), outcome)
     }
 
-    /// Export a flow as a bundle (flow + its versions) for another workspace or person.
-    /// Defaults of secret variables are removed. Pass the result's bundle to import_flow.
+    /// Export a flow for another workspace or person. With `path`, writes the `.spx` file the user
+    /// hands over (published version, the flows it calls, its folder's files except input/; logins
+    /// by name only) and returns what it holds and needs. Without `path`, returns a JSON bundle
+    /// for import_flow. Defaults of secret variables are removed either way.
+    /// (Marked read-only: a read-only server refuses `path`, and the file is new, never overwritten.)
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn export_flow(
         &self,
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<ExportFlowParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let outcome = self
-            .svc()
-            .export(
-                &FlowId::new(p.flow_id.as_str()),
-                p.include_versions.unwrap_or(true),
-            )
-            .map(|b| json!({ "bundle": b }))
-            .map_err(Into::into);
+        let id = FlowId::new(p.flow_id.as_str());
+        let outcome = match p.path.as_deref() {
+            Some(path) => self.export_package_to(&id, path, &p),
+            None => self
+                .svc()
+                .export(&id, p.include_versions.unwrap_or(true))
+                .map(|b| json!({ "bundle": b }))
+                .map_err(Into::into),
+        };
         self.finish("export_flow", &peer, Some(&p.flow_id), outcome)
+    }
+
+    fn export_package_to(&self, id: &FlowId, path: &str, p: &ExportFlowParams) -> Outcome {
+        use shikigami_core::package::{
+            PACKAGE_EXTENSION, PackageContent, PackageOptions, PackageVersions,
+        };
+        let options = PackageOptions {
+            content: if p.current.unwrap_or(false) {
+                PackageContent::Current
+            } else {
+                PackageContent::Auto
+            },
+            versions: if p.include_versions == Some(false) {
+                PackageVersions::None
+            } else {
+                PackageVersions::Content
+            },
+            include_input: p.include_input.unwrap_or(false),
+            exclude: Vec::new(),
+            only: None,
+            exported_by: std::env::var("USERNAME").ok(),
+        };
+        if !self.inner.can_write {
+            return Err(err(
+                "READ_ONLY",
+                "this server is read-only; export_flow without path returns the bundle instead",
+            ));
+        }
+        let (manifest, bytes) = self.svc().export_package(id, &options)?;
+        let target = std::path::Path::new(path);
+        let file = if target.is_dir() {
+            target.join(shikigami_core::package::file_name(
+                &manifest.flow.name,
+                manifest.flow.version.as_ref().map(|v| v.number),
+            ))
+        } else if target.extension().is_some_and(|e| e == PACKAGE_EXTENSION) {
+            target.to_path_buf()
+        } else {
+            return Err(err(
+                "INVALID_PATH",
+                format!("path must be a folder or end with .{PACKAGE_EXTENSION}"),
+            ));
+        };
+        if file.exists() {
+            return Err(err(
+                "FILE_EXISTS",
+                format!("{} already exists; choose another name", file.display()),
+            ));
+        }
+        std::fs::write(&file, &bytes)
+            .map_err(|e| err("WRITE_FAILED", format!("{}: {e}", file.display())))?;
+        Ok(json!({
+            "path": file.to_string_lossy(),
+            "manifest": manifest,
+            "hint": "Tell the user the file name and what the receiver needs (manifest.requires: extensions, logins by name, sites). Logins are never in the file.",
+        }))
     }
 
     /// Recent runs (newest first), optionally only those of one flow.
@@ -1345,8 +1409,11 @@ impl ShikigamiMcp {
         self.finish("restore_version", &peer, Some(&p.flow_id), outcome)
     }
 
-    /// Import a bundle from export_flow (or a bare flow document). The flow keeps its
-    /// ID; if that ID exists the call fails with IMPORT_CONFLICT unless onConflict is given.
+    /// Import a flow: a `.spx` file the user was handed (`path`), or a bundle from export_flow.
+    /// The flow keeps its ID; if that ID exists the call fails with IMPORT_CONFLICT unless
+    /// onConflict is given. With `check`, imports nothing and returns what the file holds, the
+    /// difference from the flow here, and what this PC still needs. An imported flow does not run
+    /// unattended until a person publishes it here.
     #[tool(annotations(
         read_only_hint = false,
         destructive_hint = false,
@@ -1357,11 +1424,7 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<ImportFlowParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let outcome = self
-            .svc()
-            .import_bundle(p.bundle, p.on_conflict, actor(&peer))
-            .map(|o| to_value(&o))
-            .map_err(Into::into);
+        let outcome = self.import_flow_inner(&peer, p);
         let id = outcome
             .as_ref()
             .ok()
@@ -1369,6 +1432,37 @@ impl ShikigamiMcp {
             .and_then(Value::as_str)
             .map(str::to_owned);
         self.finish("import_flow", &peer, id.as_deref(), outcome)
+    }
+
+    fn import_flow_inner(&self, peer: &Peer<RoleServer>, p: ImportFlowParams) -> Outcome {
+        let value = match (p.bundle, p.path.as_deref()) {
+            (Some(bundle), None) => bundle,
+            (None, Some(path)) => {
+                let bytes = std::fs::read(path)
+                    .map_err(|e| err("FILE_NOT_FOUND", format!("{path}: {e}")))?;
+                if p.check.unwrap_or(false) {
+                    let secrets: Vec<String> = self
+                        .inner
+                        .vault
+                        .summaries()
+                        .map(|list| list.into_iter().map(|s| s.name).collect())
+                        .unwrap_or_default();
+                    return Ok(to_value(&self.svc().preview_file(&bytes, &secrets)?));
+                }
+                shikigami_core::service::file_to_bundle_value(&bytes)?
+            }
+            _ => {
+                return Err(err(
+                    "INVALID_PARAMS",
+                    "give either bundle or path (a .spx file)",
+                ));
+            }
+        };
+        Ok(to_value(&self.svc().import_bundle(
+            value,
+            p.on_conflict,
+            actor(peer),
+        )?))
     }
 
     /// Move steps that sit next to each other in one block into a new flow and replace them

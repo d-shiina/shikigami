@@ -185,23 +185,41 @@ enum FlowCmd {
     Create {
         name: String,
     },
-    /// Import a bundle (`*.shikigami.json`) or a flow JSON file.
+    /// Import a flow file someone handed over (`*.spx`), an older bundle
+    /// (`*.shikigami.json`) or a flow JSON file.
     Import {
         file: PathBuf,
         /// When the flow ID already exists: `update` it (undoable) or
         /// import a `copy` under a new ID.
         #[arg(long, value_enum)]
         on_conflict: Option<OnConflict>,
+        /// Only show what the file holds and what this PC still needs
+        /// (extensions, logins, allowed sites); import nothing.
+        #[arg(long)]
+        check: bool,
     },
-    /// Write a bundle (flow + versions) for another workspace or person.
+    /// Write the flow as one file to hand to another person or PC (`.spx`):
+    /// the published version by default, with the flows it calls and its
+    /// folder's files (not `input/` unless asked). Logins go by name only.
     Export {
         id: String,
-        /// Output file (default: stdout).
+        /// Output file or folder (default: `<name> v<n>.spx` here). A name
+        /// ending in `.json` writes the older JSON bundle; `-` writes that
+        /// bundle to stdout.
         #[arg(long, short = 'o')]
         output: Option<PathBuf>,
-        /// Leave the named versions out.
+        /// Export the current content instead of the published version.
+        #[arg(long)]
+        current: bool,
+        /// Include every version, not only the exported one.
+        #[arg(long, conflicts_with = "no_versions")]
+        all_versions: bool,
+        /// Leave versions out.
         #[arg(long)]
         no_versions: bool,
+        /// Include the files under `input/` (usually real business data).
+        #[arg(long)]
+        with_input: bool,
     },
     Delete {
         id: String,
@@ -1035,10 +1053,23 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
             )?;
             println!("{}", out.flow.id);
         }
-        FlowCmd::Import { file, on_conflict } => {
-            let text = std::fs::read_to_string(file)
-                .with_context(|| format!("reading {}", file.display()))?;
-            let value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+        FlowCmd::Import {
+            file,
+            on_conflict,
+            check,
+        } => {
+            let bytes =
+                std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+            if *check {
+                let secrets: Vec<String> = Vault::open(svc.store().root())
+                    .list()
+                    .map(|list| list.into_iter().map(|s| s.name).collect())
+                    .unwrap_or_default();
+                let preview = svc.preview_file(&bytes, &secrets)?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+                return Ok(());
+            }
+            let value = shikigami_core::service::file_to_bundle_value(&bytes)?;
             let on_conflict = on_conflict.map(|c| match c {
                 OnConflict::Update => ImportConflict::Update,
                 OnConflict::Copy => ImportConflict::Copy,
@@ -1056,21 +1087,79 @@ fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
         FlowCmd::Export {
             id,
             output,
+            current,
+            all_versions,
             no_versions,
+            with_input,
         } => {
-            let bundle = svc.export(&FlowId::new(id.as_str()), !no_versions)?;
-            let json = serde_json::to_string_pretty(&bundle)? + "\n";
-            match output {
-                Some(path) => {
-                    std::fs::write(path, json)
-                        .with_context(|| format!("writing {}", path.display()))?;
-                    eprintln!(
-                        "wrote {} ({} version(s))",
-                        path.display(),
-                        bundle.versions.len()
-                    );
+            let id = FlowId::new(id.as_str());
+            let legacy = output
+                .as_deref()
+                .is_some_and(|p| p == Path::new("-") || p.extension().is_some_and(|e| e == "json"));
+            if legacy {
+                let bundle = svc.export(&id, !no_versions)?;
+                let json = serde_json::to_string_pretty(&bundle)? + "\n";
+                match output.as_deref() {
+                    Some(path) if path != Path::new("-") => {
+                        std::fs::write(path, json)
+                            .with_context(|| format!("writing {}", path.display()))?;
+                    }
+                    _ => print!("{json}"),
                 }
-                None => print!("{json}"),
+                return Ok(());
+            }
+            use shikigami_core::package::{PackageContent, PackageOptions, PackageVersions};
+            let options = PackageOptions {
+                content: if *current {
+                    PackageContent::Current
+                } else {
+                    PackageContent::Auto
+                },
+                versions: if *no_versions {
+                    PackageVersions::None
+                } else if *all_versions {
+                    PackageVersions::All
+                } else {
+                    PackageVersions::Content
+                },
+                include_input: *with_input,
+                exclude: Vec::new(),
+                only: None,
+                exported_by: std::env::var("USERNAME")
+                    .or_else(|_| std::env::var("USER"))
+                    .ok(),
+            };
+            let (manifest, bytes) = svc.export_package(&id, &options)?;
+            let name = shikigami_core::package::file_name(
+                &manifest.flow.name,
+                manifest.flow.version.as_ref().map(|v| v.number),
+            );
+            let path = match output {
+                Some(p) if p.is_dir() => p.join(&name),
+                Some(p) => p.clone(),
+                None => PathBuf::from(&name),
+            };
+            std::fs::write(&path, &bytes).with_context(|| format!("writing {}", path.display()))?;
+            let what = match (&manifest.flow.version, manifest.flow.published) {
+                (Some(v), true) => format!("published version v{}", v.number),
+                (Some(v), false) => format!("version v{}", v.number),
+                (None, _) => "current content (not saved as a version)".to_owned(),
+            };
+            eprintln!("wrote {} ({what})", path.display());
+            let r = &manifest.requires;
+            for (label, items) in [
+                ("logins", &r.secrets),
+                ("sites", &r.sites),
+                ("apps", &r.apps),
+            ] {
+                if !items.is_empty() {
+                    eprintln!("  needs {label}: {}", items.join(", "));
+                }
+            }
+            if !r.plugins.is_empty() {
+                let plugins: Vec<String> =
+                    r.plugins.iter().map(|(k, v)| format!("{k} {v}")).collect();
+                eprintln!("  needs extensions: {}", plugins.join(", "));
             }
         }
         FlowCmd::Files { id } => {
@@ -1379,9 +1468,8 @@ fn print_outcome(out: &shikigami_core::EditOutcome) {
 /// Reads a flow JSON file or the flow inside a bundle.
 /// A flow file or bundle, with the sub-flows a bundle carries.
 fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut value = shikigami_core::service::file_to_bundle_value(&bytes)?;
     let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
         // `scenario` / `subscenarios`: bundles from before flows were
@@ -1400,7 +1488,7 @@ fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
 
 /// A target is a file path when it ends with `.json` or exists on disk.
 fn is_file(target: &str) -> bool {
-    target.ends_with(".json") || Path::new(target).is_file()
+    target.ends_with(".json") || target.ends_with(".spx") || Path::new(target).is_file()
 }
 
 fn resolve(svc: &FlowService, target: &str) -> Result<(Flow, Vec<Flow>)> {
@@ -1426,7 +1514,7 @@ fn project_dirs(
     if !(target.ends_with(".json") || path.is_file()) {
         return Ok(Some(svc.project_dir(&flow.id)?));
     }
-    let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let value = shikigami_core::service::file_to_bundle_value(&std::fs::read(path)?)?;
     let file = std::path::absolute(path)?;
     if !shikigami_core::version::is_bundle(&value) {
         return Ok(file.parent().map(Path::to_path_buf));
@@ -1438,6 +1526,7 @@ fn project_dirs(
         .unwrap_or_default();
     let base = name
         .strip_suffix(".shikigami.json")
+        .or_else(|| name.strip_suffix(".spx"))
         .or_else(|| name.strip_suffix(".json"))
         .unwrap_or(&name)
         .to_owned();

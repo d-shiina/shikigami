@@ -10,6 +10,7 @@ The promises SpellSheet makes to the outside, and the rules for changing them. F
 |---|---|---|
 | The flow file format (`schemaVersion`) | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | Saved flows, shared workspaces |
 | Named versions and bundles (`*.shikigami.json`, `formatVersion`) | `version.rs` → `schemas/api.schema.json` | Handing over to other PCs and workspaces |
+| `.spx` files (`manifest.json`, `format: spellsheet.package`, `formatVersion`) | `package.rs` → `schemas/api.schema.json` | Handing a flow to another person or PC |
 | Built-in node types (type names, params, blocks, whether `saveAs` applies, `risk`) | Each adapter → `schemas/contract/step-types.json` | Flows, what the AI has learned to write |
 | MCP tools (names, arguments, results, permission classes, annotations) | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI clients, skills |
 | Error codes (`code` and `retryable`) | `CoreError::code`, each node's errors | AI fixes, `onError` and retry decisions |

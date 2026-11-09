@@ -2,7 +2,7 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
@@ -14,6 +14,7 @@ import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBo
 import { deleteFlowsAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 import { projectApi } from "../project";
+import { fileToFlowFile } from "./HandOff";
 import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
 const SORT_KEY = "shikigami.studio.flows.sort";
@@ -328,7 +329,8 @@ export function FlowsPage() {
   const summaries = useStudio((s) => s.summaries);
   const setPasteOpen = useStudio((s) => s.setPasteOpen);
   const create = useStudio((s) => s.create);
-  const importFile = useStudio((s) => s.importFile);
+  const receiveFile = useStudio((s) => s.receiveFile);
+  const openHandOff = useStudio((s) => s.openHandOff);
   const setPlace = useStudio((s) => s.setPlace);
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
@@ -359,7 +361,7 @@ export function FlowsPage() {
         },
       },
       { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(s.id, "", false).catch(() => {}) },
-      { label: t.exportFlow, icon: Download, run: () => void exportMany([s.id]) },
+      { label: t.handOff.open, icon: Send, run: () => void openHandOff(s.id) },
       { label: t.menu.copyId, icon: Copy, run: () => copyText(s.id) },
       "-",
       {
@@ -502,8 +504,8 @@ export function FlowsPage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    // A conflict is answered on this page, so only move to the editor once it is in.
-    if (await importFile(await file.text())) setPlace("flows");
+    // What it holds and what this PC needs is shown before anything is imported.
+    await receiveFile(await fileToFlowFile(file));
   };
 
   return (
@@ -544,7 +546,7 @@ export function FlowsPage() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
           {summaries.length > 0 && <ViewMenu view={view} />}
-          <input ref={picker} type="file" accept=".json,application/json" className="hidden" onChange={onPick} />
+          <input ref={picker} type="file" accept=".spx,.json,application/json" className="hidden" onChange={onPick} />
           {/* The one filled button makes a flow; its arrow holds the other ways in (Linear, GitHub). */}
           {/* With no flows yet, the request box below is the way in (one filled button a screen). */}
           <div className="flex shrink-0" hidden={creating || summaries.length === 0}>

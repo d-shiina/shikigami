@@ -612,6 +612,14 @@ fn origin(url: &str) -> Option<(String, String, Option<String>)> {
     Some((scheme, host, port))
 }
 
+/// `https://host[:port]` of an http(s) URL, as the allow-list compares it.
+pub fn site_origin(url: &str) -> Option<String> {
+    origin(url).map(|(scheme, host, port)| match port {
+        Some(port) => format!("{scheme}://{host}:{port}"),
+        None => format!("{scheme}://{host}"),
+    })
+}
+
 /// One `sites` entry: `https://example.com`, `https://*.example.com`,
 /// optionally with a port.
 struct SitePattern {
