@@ -251,11 +251,16 @@ fn real_main() -> Result<ExitCode> {
                 println!("wrote {}", path.display());
             }
         }
-        Command::Mcp { allow, writer_chat } => {
+        Command::Mcp {
+            allow,
+            writer_chat,
+            inbox,
+        } => {
             let mut options = spellsheet_mcp::ServerOptions {
                 allow: Vec::new(),
                 adapters: adapters.clone(),
                 writer_chat: *writer_chat,
+                inbox: inbox.clone(),
             };
             for name in allow {
                 let Some(class) = spellsheet_mcp::ToolClass::parse(name) else {

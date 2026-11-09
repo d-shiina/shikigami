@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use spellsheet_core::{
     Actor, ActorKind, FileStore, FlowId, FlowService, NewReview, ReviewVerdict, StepNote,
 };
-use spellsheet_mcp::{ServerOptions, SpellSheetMcp, ToolClass};
+use spellsheet_mcp::{MESSAGES_KEY, ServerOptions, SpellSheetMcp, ToolClass};
 use spellsheet_runtime::Runtime;
 
 struct Harness {
@@ -1454,4 +1454,41 @@ async fn a_wait_by_hand_stopped_in_writer_tells_the_ai() {
     assert!(!shared.stopped.load(std::sync::atomic::Ordering::SeqCst));
     assert!(by_hand::gone(&h.root));
     h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn what_the_person_writes_meanwhile_comes_with_the_next_tool_result() {
+    let folder = tempfile::tempdir().unwrap();
+    let inbox = spellsheet_core::ChatInbox::new(folder.path().join("inbox"));
+    let h = start(ServerOptions {
+        writer_chat: true,
+        inbox: Some(inbox.dir().to_path_buf()),
+        ..ServerOptions::default()
+    })
+    .await;
+    let quiet = h.ok("list_flows", json!({})).await;
+    assert!(quiet.get(MESSAGES_KEY).is_none());
+
+    inbox.post("item_1", "保存先は output/ の下にして").unwrap();
+    let told = h.ok("list_flows", json!({})).await;
+    assert_eq!(
+        told[MESSAGES_KEY]["messages"],
+        json!(["保存先は output/ の下にして"])
+    );
+    assert!(
+        told[MESSAGES_KEY]["note"]
+            .as_str()
+            .unwrap()
+            .contains("while you were working")
+    );
+    assert!(inbox.waiting().is_empty());
+
+    // A failed call carries it too: the AI reads its errors.
+    inbox.post("item_2", "やっぱり CSV で").unwrap();
+    let (is_error, failed) = h.call("get_flow", json!({ "flowId": "missing" })).await;
+    assert!(is_error);
+    assert_eq!(failed[MESSAGES_KEY]["messages"], json!(["やっぱり CSV で"]));
+
+    let again = h.ok("list_flows", json!({})).await;
+    assert!(again.get(MESSAGES_KEY).is_none());
 }
