@@ -15,10 +15,10 @@ The transport is **stdio**: the AI client starts `spellsheet mcp` as a child pro
 The plugin is recommended: it bundles the MCP settings and a skill that teaches how to write flows.
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-(Before Claude Code 2.1.275: `/plugin marketplace add d-shiina/spellsheet`, then `/plugin install spellsheet@spellsheet`.)
+(Before Claude Code 2.1.275: `/plugin marketplace add spellsheet/spellsheet`, then `/plugin install spellsheet@spellsheet`.)
 
 To register only the MCP server:
 

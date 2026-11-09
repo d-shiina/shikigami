@@ -8,11 +8,11 @@
 
 ### 主な変更
 
-- 製品の中に残っていた以前の名前を、すべて SpellSheet に変えました。リポジトリは `d-shiina/spellsheet` になり、更新もここから届きます。以前の版から更新すると、最初の起動で次のものを自動で引き継ぎます
+- 製品の中に残っていた以前の名前を、すべて SpellSheet に変えました。リポジトリは `spellsheet/spellsheet` になり、更新もここから届きます。以前の版から更新すると、最初の起動で次のものを自動で引き継ぎます
   - AI ツール（Claude Code・Claude Desktop・Codex・Cursor・Gemini CLI・Copilot CLI・VS Code・Windsurf）に登録した MCP サーバー：名前を `spellsheet` に、コマンドを `spellsheet.exe` に書き換えます。書き換える前のファイルは `<ファイル名>.before-spellsheet` として隣に残します。AI ツールは一度起動し直してください
   - 無人実行のタスク（`SpellSheet\Worker`）：`spellsheet.exe` で動くように登録し直します（次のサインインから）
   - Writer の画面の設定（テーマ・言語・最近開いたフロー・AI との会話など）、シークレット、設定ファイル、カスタム ノード
-- Claude Code のプラグインは `/plugin install spellsheet --marketplace d-shiina/spellsheet` で入れ直してください（以前の名前のプラグインは自動では置き換わりません）
+- Claude Code のプラグインは `/plugin install spellsheet --marketplace spellsheet/spellsheet` で入れ直してください（以前の名前のプラグインは自動では置き換わりません）
 - この版で書き出したフロー（`.spx`）と、Writer で保存した設定ファイルは、0.1.20 以前の SpellSheet では開けません。フローを受け取る PC も更新してください
 
 ### 変更
