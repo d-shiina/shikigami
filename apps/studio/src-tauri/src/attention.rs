@@ -144,11 +144,10 @@ mod toast {
 
     pub(super) fn remove(app: &AppHandle, tag: &str) {
         let toast = shown().lock().ok().and_then(|mut s| s.remove(tag));
-        if let Some(toast) = toast {
-            if let Ok(notifier) = ToastNotificationManager::CreateToastNotifierWithId(&app_id(app))
-            {
-                let _ = notifier.Hide(&toast);
-            }
+        if let Some(toast) = toast
+            && let Ok(notifier) = ToastNotificationManager::CreateToastNotifierWithId(&app_id(app))
+        {
+            let _ = notifier.Hide(&toast);
         }
         if let Ok(history) = ToastNotificationManager::History() {
             let _ = history.RemoveGroupedTagWithId(
