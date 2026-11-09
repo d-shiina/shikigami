@@ -48,6 +48,7 @@ mod jab;
 pub mod jabmap;
 pub mod keys;
 pub mod menu;
+pub mod ocr_fit;
 pub mod ocr_table;
 #[cfg(windows)]
 mod overlay;
@@ -945,8 +946,11 @@ impl DesktopStep {
             (Some(other @ OcrEngine::Other(_)), _) => other.name().to_owned(),
             _ => "paddle".to_owned(),
         };
+        let kind = options.kind;
+        let choices = ocr_fit::choices(params)?;
         let lines = visual::read_lines(self.backend.as_ref(), &picture, options).await?;
         let mut output = visual::read_output(&lines);
+        ocr_fit::fit_output(&mut output, kind, choices.as_deref());
         output["engine"] = json!(engine);
         if params.get("table").and_then(Value::as_bool) == Some(true) {
             let header = params.get("headerRow").and_then(Value::as_u64).unwrap_or(1) as usize;
@@ -966,7 +970,10 @@ impl DesktopStep {
                         .collect(),
                 })
                 .collect();
-            let table = ocr_table::read_table(&picture.image, &local);
+            let mut table = ocr_table::read_table(&picture.image, &local);
+            if let Some(t) = table.as_mut() {
+                ocr_fit::fit_cells(&mut t.cells, header, kind, choices.as_deref());
+            }
             let json = table.map_or_else(
                 || json!({ "cells": [], "rows": [] }),
                 |t| ocr_table::table_json(&t, header),
@@ -1546,7 +1553,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: READ_TEXT,
             kind: Kind::ReadText,
             label: "文字認識（OCR）",
-            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height, confidence?, unsure? }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\", \"windows\" or an added engine's name, and warning says when the default fell back to Windows OCR; confidence is 0–1 and unsure lists the positions in text of characters read with low confidence, where the engine says). With table: true it also splits the table on the picture into rows and columns by its ruled lines (or, without lines, by the gaps between columns of text): cells (every row as a list of texts) and rows (the rows after headerRow, default 1, as records named by its cells: e.g. {{ invoice.rows[0].金額 }}). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
+            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height, confidence?, unsure? }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\", \"windows\" or an added engine's name, and warning says when the default fell back to Windows OCR; confidence is 0–1 and unsure lists the positions in text of characters read with low confidence, where the engine says). With table: true it also splits the table on the picture into rows and columns by its ruled lines (or, without lines, by the gaps between columns of text): cells (every row as a list of texts) and rows (the rows after headerRow, default 1, as records named by its cells: e.g. {{ invoice.rows[0].金額 }}). textKind (number, amount, date, phone, alphanumeric, katakana) makes PaddleOCR read only the characters such a field holds, and candidates snaps each line to the nearest of the texts listed (staff names, product names), keeping what was read as lines[].read (and candidate: true): both help most with handwriting. For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
             params: json!({
                 "target": picture,
                 "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
@@ -1554,12 +1561,16 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 "engine": ocr_engine_schema(),
             "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" },
                 "table": { "type": "boolean", "description": "表の読み取り：罫線（なければ文字の並び）で表を行と列に分け、出力に cells（行ごとの文字の並び）と rows（見出しの行の名前で引ける各行）を足す" },
-                "headerRow": { "type": "integer", "minimum": 0, "description": "見出しの行：表の何行目が見出しか（既定 1、0 で見出しなし）。table と使う" }
+                "headerRow": { "type": "integer", "minimum": 0, "description": "見出しの行：表の何行目が見出しか（既定 1、0 で見出しなし）。table と使う" },
+                "textKind": { "type": "string", "enum": ["any", "number", "amount", "date", "phone", "alphanumeric", "katakana"], "description": "文字の種類：欄に入る文字の種類。PaddleOCR はその種類の文字だけから選んで読む（手書きの 0 と O、1 と l などの読み違いが減る）。ほかのエンジンでは読んだ後で種類外の文字を除く。全角の数字・英字は半角に直す" },
+                "candidates": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "候補：入りうる文字の一覧（担当者名・品名など）。読んだ行を一番近い候補に直す（半分以上違う、または同じくらい近い候補が 2 つあるときは直さない）。元の読みは lines[].read に残る" }
             }),
             required: &[],
             has_output: true,
             examples: vec![
                 json!({ "type": READ_TEXT, "name": "請求書の明細を読む", "params": { "file": "{{ outDir }}\\請求書.png", "table": true }, "saveAs": "invoice" }),
+                json!({ "type": READ_TEXT, "name": "手書きの金額欄を読む", "params": { "file": "{{ outDir }}\\伝票.png", "accurate": true, "textKind": "amount" }, "saveAs": "amount" }),
+                json!({ "type": READ_TEXT, "name": "手書きの担当者名を読む", "params": { "file": "{{ outDir }}\\伝票.png", "accurate": true, "candidates": ["山田 太郎", "佐藤 花子", "鈴木 一郎"] }, "saveAs": "staff" }),
                 json!({ "type": READ_TEXT, "name": "合計欄を読む", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 620, "y": 410, "width": 180, "height": 32 } } }, "saveAs": "total" }),
                 json!({ "type": READ_TEXT, "name": "請求書画像を読む", "params": { "file": "{{ outDir }}\\請求書.png" }, "saveAs": "total" }),
             ],

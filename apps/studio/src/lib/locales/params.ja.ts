@@ -59,6 +59,8 @@ export const paramsJa = {
     engine: "OCR エンジン",
     accurate: "高精度（手書き向け・遅い）",
     table: "表の読み取り",
+    textKind: "文字の種類",
+    candidates: "候補",
     maxRows: "最大の行数",
     // Files
     path: "ファイル",
@@ -244,6 +246,7 @@ export const paramsJa = {
     button: { left: "左", right: "右" },
     unit: { line: "行", page: "ページ" },
     engine: { paddle: "標準（PaddleOCR）", windows: "Windows 標準 OCR" },
+    textKind: { any: "指定なし", number: "数字", amount: "金額", date: "日付", phone: "電話番号", alphanumeric: "英数字", katakana: "カタカナ" },
     buttons: { ok: "OK", okCancel: "OK・キャンセル", yesNo: "はい・いいえ", yesNoCancel: "はい・いいえ・キャンセル" },
     kind: { file: "ファイルを 1 つ", files: "ファイルを複数", folder: "フォルダー", save: "保存先を指定" },
     align: { left: "左揃え", center: "中央揃え", right: "右揃え" },
