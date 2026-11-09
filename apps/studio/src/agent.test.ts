@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { activity, type AgentState, createAgentStore, currentChat } from "./agent";
+import { activity, type AgentState, createAgentStore, currentChat, openAsk } from "./agent";
 import type { AgentApi, AgentInfo } from "./lib/api";
 
 function fakeStorage() {
@@ -385,5 +385,19 @@ describe("agent store", () => {
     expect(store.getState().install).toEqual({ phase: "stopping" });
     store.getState().onInstallEvent({ kind: "cancelled" });
     expect(store.getState().install).toEqual({ phase: "idle" });
+  });
+
+  it("asks about a node in that flow's conversation, even while another one is shown", async () => {
+    fakeStorage();
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    store.getState().focus({ id: "scn_a", name: "A" });
+    store.getState().newChat({ id: "scn_b", name: "B" });
+    expect(now(store.getState()).flowId).toBe("scn_b");
+
+    openAsk(store, { about: { id: "scn_a", name: "A" }, draft: "「受注を読む」を直して" });
+    expect(now(store.getState())).toMatchObject({ flowId: "scn_a", draft: "「受注を読む」を直して" });
+    expect(store.getState().open).toBe(true);
   });
 });

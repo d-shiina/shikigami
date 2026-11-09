@@ -75,7 +75,7 @@ export function useStepMenu() {
         icon: MessageSquareText,
         shortcut: "Ctrl+J",
         // The pane sends the selected node along with the request.
-        run: () => openAsk(agent, { draft: t.props.askFixDraft(step.name || stepLabel(step.type, s.stepTypes.find((d) => d.type === step.type)?.label)) }),
+        run: () => openAsk(agent, { about: s.flow ? { id: s.flow.id, name: s.flow.name } : undefined, draft: t.props.askFixDraft(step.name || stepLabel(step.type, s.stepTypes.find((d) => d.type === step.type)?.label)) }),
       },
       "-",
       own && { label: t.menu.runTo, icon: Play, disabled: running, run: () => void store.getState().runTo(id) },

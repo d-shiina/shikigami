@@ -175,7 +175,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
             <button
               type="button"
               title={t.props.askFixTitle(agentName)}
-              onClick={() => agent && openAsk(agent, { draft: t.props.askFixDraft(step.name || typeTitle(step, def)) })}
+              onClick={() => agent && openAsk(agent, { about: { id: flow.id, name: flow.name }, draft: t.props.askFixDraft(step.name || typeTitle(step, def)) })}
               className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink"
             >
               <MessageSquareText size={12} strokeWidth={1.75} aria-hidden="true" />
