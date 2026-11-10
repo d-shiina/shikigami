@@ -1,5 +1,5 @@
 //! The AI pane: runs the person's own coding agent (Claude Code, Codex,
-//! Gemini CLI, GitHub Copilot or Cursor) in the background with SpellSheet's MCP
+//! Gemini CLI, GitHub Copilot, Cursor or Antigravity) in the background with SpellSheet's MCP
 //! server, one process per message. What differs between them is in
 //! `providers`.
 //!
@@ -27,7 +27,8 @@ use crate::AppState;
 mod providers;
 pub use providers::AgentKind;
 use providers::{
-    CodexStream, CopilotStream, CursorStream, GeminiStream, INBOX, KNOWN, Turn, child_path,
+    AntigravityStream, CodexStream, CopilotStream, CursorStream, GeminiStream, INBOX, KNOWN, Turn,
+    child_path,
 };
 
 pub(crate) const AGENT_EVENT: &str = "agent-event";
@@ -175,6 +176,10 @@ pub struct AgentInfo {
     installable: bool,
     /// The pane can sign it in (`agent_login`).
     signs_in: bool,
+    /// It runs on an API key the person pastes in Writer (`agent_set_api_key`).
+    uses_api_key: bool,
+    /// That key is saved.
+    has_api_key: bool,
 }
 
 /// One of the agents Studio knows, for choosing which to use.
@@ -472,12 +477,59 @@ pub fn agent_info() -> AgentInfo {
             && config.kind != AgentKind::Command
             && config.command.is_none(),
         kind: config.kind,
-        signs_in: config.kind.login_args().is_some() || config.kind == AgentKind::Gemini,
+        signs_in: config.kind.login_args().is_some() || config.kind.signs_in_on_own_screen(),
+        uses_api_key: config.kind.api_key().is_some(),
+        has_api_key: api_key_of(config.kind).is_some(),
         name: config.name(),
         command: command.map(|p| p.display().to_string()),
         problem,
         remembers: config.kind.remembers(),
     }
+}
+
+/// The saved API key `kind` runs on, if it runs on one.
+fn api_key_of(kind: AgentKind) -> Option<String> {
+    let (name, _) = kind.api_key()?;
+    match api_keys().load(name) {
+        Ok(key) => key.filter(|k| !k.is_empty()),
+        Err(e) => {
+            tracing::warn!(error = %e.message, "cannot read the AI's API key");
+            None
+        }
+    }
+}
+
+fn api_keys() -> Box<dyn spellsheet_secrets::ApiKeys> {
+    spellsheet_secrets::platform_api_keys(agent_dir())
+}
+
+/// Saves the API key the AI in use runs on (`None` or empty deletes it),
+/// in Windows Credential Manager, never in config.json.
+#[tauri::command]
+pub fn agent_set_api_key(key: Option<String>) -> CmdResult<AgentInfo> {
+    let kind = AgentConfig::load().kind;
+    let Some((name, _)) = kind.api_key() else {
+        return Err(err(
+            "INVALID_INPUT",
+            format!("{} は API キーを使いません", kind.label()),
+        ));
+    };
+    let key = key.map(|k| k.trim().to_owned()).filter(|k| !k.is_empty());
+    let keys = api_keys();
+    match key {
+        Some(key) => {
+            if key.len() > 256 || key.chars().any(|c| c.is_whitespace() || c.is_control()) {
+                return Err(err(
+                    "INVALID_INPUT",
+                    "API キーの形ではありません。コピーしたキーをそのまま貼り付けてください",
+                ));
+            }
+            keys.store(name, &key)
+        }
+        None => keys.remove(name),
+    }
+    .map_err(|e| err("STORAGE_ERROR", e.message))?;
+    Ok(agent_info())
 }
 
 /// The agents Studio can run, and which are on this PC.
@@ -670,6 +722,14 @@ fn install_script(kind: AgentKind) -> String {
             "curl https://cursor.com/install -fsS | bash".to_owned()
         };
     }
+    if kind == AgentKind::Antigravity {
+        // Google's own installer (a single program; no Node.js needed).
+        return if cfg!(windows) {
+            "irm https://antigravity.google/cli/install.ps1 | iex".to_owned()
+        } else {
+            "curl -fsSL https://antigravity.google/cli/install.sh | bash".to_owned()
+        };
+    }
     let Some(package) = kind.npm_package() else {
         return if cfg!(windows) {
             "irm https://claude.ai/install.ps1 | iex".to_owned()
@@ -789,7 +849,8 @@ pub async fn agent_send(
     if let Some(own) = &own {
         std::fs::create_dir_all(own).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
     }
-    let (mut args, env) = providers::prepare(
+    let api_key = api_key_of(config.kind);
+    let (mut args, mut env) = providers::prepare(
         config.kind,
         &Turn {
             dir: &dir,
@@ -798,6 +859,7 @@ pub async fn agent_send(
             system_prompt: SYSTEM_PROMPT,
             session: input.session_id.as_deref(),
             own: own.as_deref(),
+            api_key: api_key.is_some(),
         },
     )
     .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
@@ -811,6 +873,15 @@ pub async fn agent_send(
                     .replace("{workspace}", &workspace.display().to_string())
             })
             .collect();
+    }
+    if config.kind == AgentKind::Antigravity
+        && let Some(settings) = providers::antigravity_settings()
+        && let Err(e) = providers::allow_spellsheet_in(&settings)
+    {
+        tracing::warn!(error = %e, "cannot let Antigravity use SpellSheet's tools");
+    }
+    if let (Some(key), Some((_, var))) = (api_key, config.kind.api_key()) {
+        env.push((var, key));
     }
     let prompt = with_context(message, input.flow.as_ref());
     if config.kind.prompt_as_argument() {
@@ -861,12 +932,22 @@ pub async fn agent_send(
                 },
             );
         };
-        // Dropping stdin afterwards ends the prompt.
+        // Dropping stdin afterwards ends the prompt. Antigravity reads its
+        // stdin as a conversation, which closing ends: it stays open until
+        // the reply is done.
+        let mut held_stdin = None;
         if let Some(mut stdin) = child.stdin.take()
             && !kind.prompt_as_argument()
-            && let Err(e) = stdin.write_all(prompt.as_bytes()).await
         {
-            tracing::warn!(error = %e, "cannot write to the agent");
+            if let Err(e) = stdin
+                .write_all(kind.stdin_payload(&prompt).as_bytes())
+                .await
+            {
+                tracing::warn!(error = %e, "cannot write to the agent");
+            } else if kind == AgentKind::Antigravity {
+                let _ = stdin.flush().await;
+                held_stdin = Some(stdin);
+            }
         }
         let mut stderr = child.stderr.take();
         let stderr_task = tauri::async_runtime::spawn(async move {
@@ -907,6 +988,7 @@ pub async fn agent_send(
                                 let done = matches!(event, AgentEvent::Done { .. });
                                 if done {
                                     heard();
+                                    drop(held_stdin.take());
                                 }
                                 finished |= done;
                                 emit(event);
@@ -917,6 +999,7 @@ pub async fn agent_send(
                 }
             }
         }
+        drop(held_stdin);
         let status = child.wait().await;
         heard();
         let stderr = stderr_task.await.unwrap_or_default();
@@ -990,8 +1073,17 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
             agent_info().problem.unwrap_or_default(),
         ));
     };
-    if kind == AgentKind::Gemini {
-        return open_gemini(&program);
+    if kind.api_key().is_some() {
+        return Err(err(
+            "AGENT_NEEDS_API_KEY",
+            format!(
+                "{} は API キーで動きます。AI チャットの欄にキーを貼り付けてください",
+                kind.label()
+            ),
+        ));
+    }
+    if kind.signs_in_on_own_screen() {
+        return open_own_screen(kind, &program);
     }
     let Some(login_args) = kind.login_args().filter(|_| kind != AgentKind::Command) else {
         return Err(err(
@@ -1201,12 +1293,13 @@ fn is_sign_in_url_of(kind: AgentKind, url: &str) -> bool {
     kind.sign_in_pages().iter().any(|p| url.starts_with(p)) && !url.contains(char::is_whitespace)
 }
 
-/// Gemini CLI signs in only on its own screen: open it in a window of its
-/// own, where the person picks "Sign in with Google".
-fn open_gemini(program: &Path) -> CmdResult<()> {
+/// Antigravity signs in only on its own screen: open it in a window of its
+/// own, which opens Google's sign-in page in the browser.
+fn open_own_screen(kind: AgentKind, program: &Path) -> CmdResult<()> {
+    let name = kind.label();
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("cmd");
-        c.args(["/c", "start", "Gemini CLI"]).arg(program);
+        c.args(["/c", "start", name]).arg(program);
         c
     } else {
         let mut c = std::process::Command::new("x-terminal-emulator");
@@ -1217,15 +1310,15 @@ fn open_gemini(program: &Path) -> CmdResult<()> {
         command.env("PATH", path);
     }
     command.current_dir(agent_dir());
-    command.spawn().map(drop).map_err(|e| {
-        err(
-            "AGENT_FAILED",
-            format!("Gemini CLI の画面を開けません: {e}"),
-        )
-    })?;
+    command
+        .spawn()
+        .map(drop)
+        .map_err(|e| err("AGENT_FAILED", format!("{name} の画面を開けません: {e}")))?;
     Err(err(
         "AGENT_LOGIN_OWN_SCREEN",
-        "Gemini CLI の画面を開きました。「Sign in with Google」を選んでサインインし、終わったらその画面を閉じて、もう一度送ってください。",
+        format!(
+            "{name} の画面を開きました。ブラウザーに出る Google の画面でサインインし、終わったら {name} の画面を閉じて、もう一度送ってください。"
+        ),
     ))
 }
 
@@ -1253,6 +1346,8 @@ async fn logged_in(kind: AgentKind, program: &Path) -> bool {
     let args: &[&str] = match kind {
         AgentKind::ClaudeCode => &["auth", "status", "--json"],
         AgentKind::Codex => &["login", "status"],
+        // No way to ask; after installing it has not signed in yet.
+        AgentKind::Antigravity => return false,
         _ => return true,
     };
     let mut command = Command::new(program);
@@ -1378,6 +1473,7 @@ pub(crate) enum Stream {
     Gemini(GeminiStream),
     Copilot(CopilotStream),
     Cursor(CursorStream),
+    Antigravity(AntigravityStream),
     /// Each line is the reply.
     Plain,
 }
@@ -1390,6 +1486,7 @@ impl Stream {
             AgentKind::Gemini => Self::Gemini(GeminiStream::default()),
             AgentKind::Copilot => Self::Copilot(CopilotStream::default()),
             AgentKind::Cursor => Self::Cursor(CursorStream::default()),
+            AgentKind::Antigravity => Self::Antigravity(AntigravityStream::default()),
             AgentKind::Command => Self::Plain,
         }
     }
@@ -1401,6 +1498,7 @@ impl Stream {
             Self::Gemini(s) => s.line(line),
             Self::Copilot(s) => s.line(line),
             Self::Cursor(s) => s.line(line),
+            Self::Antigravity(s) => s.line(line),
             Self::Plain => vec![AgentEvent::Text {
                 text: format!("{line}\n"),
             }],

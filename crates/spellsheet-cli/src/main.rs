@@ -264,7 +264,13 @@ fn real_main() -> Result<ExitCode> {
                 allow: Vec::new(),
                 adapters: adapters.clone(),
                 writer_chat: *writer_chat,
-                inbox: inbox.clone(),
+                // An AI whose MCP settings cannot carry a per-message
+                // argument (Antigravity) passes the folder in its environment.
+                inbox: inbox.clone().or_else(|| {
+                    std::env::var_os("SPELLSHEET_CHAT_INBOX")
+                        .filter(|v| *writer_chat && !v.is_empty())
+                        .map(std::path::PathBuf::from)
+                }),
             };
             for name in allow {
                 let Some(class) = spellsheet_mcp::ToolClass::parse(name) else {

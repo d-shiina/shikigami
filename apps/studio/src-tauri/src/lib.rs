@@ -288,6 +288,7 @@ pub fn run() {
             agent::agent_info,
             agent::agent_choices,
             agent::agent_select,
+            agent::agent_set_api_key,
             agent::agent_send,
             agent::agent_stop,
             agent::agent_note,
