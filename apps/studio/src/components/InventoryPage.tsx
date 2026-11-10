@@ -34,6 +34,7 @@ import {
   type WorkTask,
   WORTH_MINUTES,
 } from "../lib/inventory";
+import { SheetSubheading } from "./SheetHeading";
 import { SheetNumber } from "./SheetNumber";
 
 /** How often the open sheet looks for what the AI saved (it writes from another process). */
@@ -394,7 +395,9 @@ function Chart({ rows }: { rows: { task: WorkTask; score: TaskAssessment }[] }) 
   );
   return (
     <section className="mt-6" aria-label={i.chartTitle}>
-      <h3 className="mb-2 text-[13px] font-semibold text-ink">{i.chartTitle}</h3>
+      <h3 className="mb-2">
+        <SheetSubheading>{i.chartTitle}</SheetSubheading>
+      </h3>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={i.chartTitle}>
         <rect x={midX} y={8} width={left + pw - midX} height={midY - 8} className="fill-brand-50" />
         <rect x={left} y={8} width={pw} height={ph} fill="none" className="stroke-slate-300" />
