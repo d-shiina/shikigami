@@ -36,4 +36,4 @@ Excel は `excel.*`（`crates/spellsheet-excel`）で、xlsx を直接読み書�
 
 ## Windows API を使うアダプター
 
-ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`spellsheet-desktop` の `uia.rs`）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ノードは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。
+ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`spellsheet-desktop` の `uia` モジュール）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ノードは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。
