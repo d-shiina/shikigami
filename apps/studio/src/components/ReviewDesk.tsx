@@ -1,14 +1,14 @@
 // The review desk: AI edits waiting to be looked at, across every flow.
 // Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
-import { ArrowRight, Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, CloudUpload, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Undo2, X } from "lucide-react";
 import type { HistoryEntry, Step, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { useStudio } from "../context";
 import { api, type RunRecord } from "../lib/api";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime } from "../lib/changes";
-import { type Effect, effects as effectsOf } from "../lib/effects";
+import { effects as effectsOf } from "../lib/effects";
 import { type ChangeCard, changeCards, checksOf, digest, headline, partDiff, purpose, stepBefore, summarize, wordDiff } from "../lib/review";
 import { type Part, sentence } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
@@ -16,11 +16,17 @@ import { FeedbackBox, Observations, type Observed, type Review, SendBackForm, Se
 import { Monogram } from "./FlowsPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { Promises, usePromises } from "./Promises";
-import { promiseCounts } from "../lib/promises";
-import { stepLabel, t } from "../lib/i18n";
+import { type Promised, promiseCounts } from "../lib/promises";
+import { locale, stepLabel, t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
-import { fillTarget, type InputRow, inputRows, unchangedRows } from "../lib/approval";
+import { inputRows, unchangedRows } from "../lib/approval";
+import { readCheck, usedRows } from "../lib/reviewFiles";
+import { filePath } from "../lib/preview";
+import { projectApi } from "../project";
+import { flatten } from "../lib/review";
+import { Masthead, Stripe } from "./Masthead";
 import { FlowAtAGlance } from "./ReviewFlow";
+import { FileBox, OutputValues, UsedTable } from "./ReviewResult";
 
 export type InboxItem = {
   flowId: string;
@@ -227,8 +233,13 @@ function useReview() {
   const checks = useMemo(() => checksOf(oldestFirst), [oldestFirst]);
   const markKey = `${flowId}@${newest?.revision ?? 0}`;
   const freshPromises = promises.filter((p) => p.fresh);
-  const unansweredPromises = freshPromises.filter((p) => !answers[`${markKey}:promise:${p.name}`]).length;
+  const runs = useMemo(() => evidence.filter((e): e is TestRun => e.kind === "testRun"), [evidence]);
+  // One answer for the result as a whole (the files and values the trial run gave), one per judgement the AI made.
+  const hasResult = runs.length > 0 || promises.length > 0;
+  const resultKey = `${markKey}:result`;
+  const unansweredResult = hasResult && !answers[resultKey] ? 1 : 0;
   const unansweredChecks = checks.filter((q) => !answers[`${markKey}:${q}`]).length;
+  const questions = (hasResult ? 1 : 0) + checks.length;
   return {
     flow,
     flowId,
@@ -244,9 +255,11 @@ function useReview() {
     feedback,
     checks,
     markKey,
-    unansweredPromises,
-    unansweredChecks,
-    unanswered: unansweredPromises + unansweredChecks,
+    runs,
+    hasResult,
+    resultKey,
+    questions,
+    unanswered: unansweredResult + unansweredChecks,
     broken: promiseCounts(promises).broken,
   };
 }
@@ -291,10 +304,11 @@ function Reviewed() {
 }
 
 /**
- * The AI's change as a report on one sheet of paper, the same paper as the
- * procedure: what the AI says it did, the three things to decide at a
- * glance, then the promises, the AI's questions, what it touches outside and
- * what changed, with the verdict always at the bottom of the desk.
+ * The AI's change as a report on one sheet of paper, with the same head as
+ * the manual. A person who does not read flows judges it by three things, in
+ * this order: what the trial run produced (the real files and values), the
+ * decisions the AI made on its own, and the files and systems it works with.
+ * The flow itself is below, folded. The verdict stays at the bottom of the desk.
  */
 export function ReviewReport() {
   const r = useReview();
@@ -304,8 +318,7 @@ export function ReviewReport() {
   const seenMarks = useMarks((m) => m.seen);
   const setSendBackWith = useMarks((m) => m.setSendBackWith);
   const setSending = useMarks((m) => m.setSending);
-  const [runsOpen, setRunsOpen] = useState<boolean | null>(null);
-  const { flow, oldestFirst, summary, newest, oldest, defs, markKey } = r;
+  const { flow, oldestFirst, summary, newest, oldest, defs, markKey, runs } = r;
   const cards = useMemo(
     () => changeCards(oldestFirst, summary, flow?.steps ?? [], r.feedback?.revision ?? null),
     [oldestFirst, summary, flow, r.feedback],
@@ -317,12 +330,16 @@ export function ReviewReport() {
         .filter((l) => l.verb === "variable" || l.verb === "flow" || l.verb === "replace" || (l.verb === "remove" && !l.stepId && l.subject.startsWith(t.variables))),
     [oldestFirst, flow, defs],
   );
-  const effects = useMemo(() => {
+  const used = useMemo(() => {
     const newestFirst = [...oldestFirst].reverse();
-    return effectsOf(flow?.steps ?? [], summary.steps, summary.removed, defs, (step) => stepBefore(step, newestFirst));
+    const effects = effectsOf(flow?.steps ?? [], summary.steps, summary.removed, defs, (step) => stepBefore(step, newestFirst));
+    // Targets read with the starting values no node changes: `{{ outFile }}` as output/売上まとめ.xlsx.
+    const values = flow ? unchangedRows(inputRows(flow, {}), flow.steps ?? [], flow.variables) : [];
+    return usedRows(effects, values);
   }, [oldestFirst, flow, summary, defs]);
-  // Targets read with the starting values no node changes: `{{ outFile }}` as output/売上まとめ.xlsx.
-  const values = useMemo(() => (flow ? unchangedRows(inputRows(flow, {}), flow.steps ?? [], flow.variables) : []), [flow]);
+  const latest = runs.at(-1) ?? null;
+  const record = useRunRecord(latest?.runId ?? null);
+  const folderFiles = useFolderFiles(r.flowId, latest?.finishedAt ?? "");
   if (!newest || !oldest) {
     return (
       <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24">
@@ -331,8 +348,7 @@ export function ReviewReport() {
     );
   }
   const title = purpose(oldestFirst, summary);
-  const explanation = explanationOf(oldestFirst, title);
-  const runs = r.evidence.filter((e): e is TestRun => e.kind === "testRun");
+  const said = [title, ...explanationOf(oldestFirst, title)].filter(Boolean);
   const observed = r.evidence.filter((e): e is Observed => e.kind === "observation");
   const sendBackWithText = (text: string) => {
     if (!r.flowId) return;
@@ -340,131 +356,280 @@ export function ReviewReport() {
     setSending(r.flowId);
   };
   const changedIds = cards.filter((c) => c.kind !== "removed" && !c.movedOnly).map((c) => c.stepId);
-  const showRuns = runsOpen ?? r.freshPromises.length === 0;
-  const flowName = flow?.name ?? "";
-  // A small change with no new promise reads best from what changed; otherwise the promises lead.
-  const changesFirst = r.freshPromises.length === 0 && r.checks.length === 0;
-  let n = changesFirst ? 1 : 0;
-  const sectionCount = 1 + (r.checks.length > 0 ? 1 : 0) + 2;
-  const changesSection =
-    summary.created && flow ? (
-      // A new flow has no "before": read it whole, in order, instead of a card per node.
-      <PaperSection n={changesFirst ? 1 : sectionCount} title={t.desk.flowTitle} note={t.desk.flowNote}>
-        <FlowAtAGlance flow={flow} defs={defs} />
-      </PaperSection>
-    ) : (
-    <PaperSection n={changesFirst ? 1 : sectionCount} title={t.desk.changes} aside={headline(summary)}>
-            <div className="space-y-3">
-              {cards.map((card) => (
-                <ChangeCardView
-                  key={card.stepId}
-                  card={card}
-                  defs={defs}
-                  lines={oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
-                  seen={Boolean(seenMarks[`${markKey}:${card.stepId}`])}
-                  onSee={() => see(`${markKey}:${card.stepId}`)}
-                />
-              ))}
-            </div>
-            {others.length > 0 && (
-              <div className="mt-3">
-                <div className="mb-1 text-[12px] font-bold text-slate-500">{t.desk.otherChanges}</div>
-                <Lines lines={others} detailed />
-              </div>
-            )}
-          </PaperSection>
-    );
+  const revision = flow?.revision ?? 0;
+  const nodeCount = flatten(flow?.steps ?? []).length;
+  const live = used.filter((u) => u.status !== "removed");
+  const outputFiles = live.filter((u) => u.kind === "outputFile" && u.preview && !u.atRun);
+  // The source data to compare the result with: the files it reads by name, and what is in the folders it reads.
+  const inputFiles = [
+    ...live.filter((u) => u.kind === "inputFile" && u.preview && !u.atRun).map((u) => u.preview!),
+    ...live.filter((u) => u.kind === "inputFolder").flatMap((u) => folderFiles.filter((f) => f.startsWith(`${u.target.replace(/[\\/]+$/, "")}/`))),
+  ].filter((path, i, all) => all.indexOf(path) === i).slice(0, SOURCE_FILES);
+  const outputs = Object.entries(record?.report?.outputs ?? {});
+  const stamp = latest?.finishedAt ?? "";
+  const statusWord = (status: string) => (t.runLog.status as Record<string, string>)[status] ?? status;
+  const when = new Date(newest.at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  // A small change nobody tried and the AI has no question about reads best from what changed.
+  const changesFirst = !summary.created && !r.hasResult && r.checks.length === 0;
+  let n = 0;
+  const resultAnswer = answers[r.resultKey];
+  const chip = (on: boolean, tone: string) =>
+    `inline-flex h-8 items-center gap-1 rounded-lg border px-3.5 text-[13px] whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-300 bg-sheet text-ink hover:border-slate-500"}`;
+  const changes = (number: number) => (
+    <PaperSection n={number} title={t.desk.changes} aside={headline(summary)}>
+      <div className="space-y-3">
+        {cards.map((card) => (
+          <ChangeCardView
+            key={card.stepId}
+            card={card}
+            defs={defs}
+            lines={oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
+            seen={Boolean(seenMarks[`${markKey}:${card.stepId}`])}
+            onSee={() => see(`${markKey}:${card.stepId}`)}
+          />
+        ))}
+      </div>
+      {others.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-[12px] font-bold text-slate-500">{t.desk.otherChanges}</div>
+          <Lines lines={others} detailed />
+        </div>
+      )}
+    </PaperSection>
+  );
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="canvas-bg min-h-0 flex-1 overflow-y-auto px-6 pt-8 pb-12">
-        <article className="@container mx-auto max-w-[940px] rounded-lg border border-slate-200 bg-sheet px-6 py-7 shadow-sheet xl:px-11 xl:py-9" data-review-report>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b-[1.5px] border-ink pb-2 text-[12px] text-slate-500">
-            <span className="truncate">
-              {flowName} ・ {t.desk.reportOf}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <ActorMark entry={newest} size={16} />
-              {actorLabel(newest)} ・ {relativeTime(newest.at)} ・{" "}
-              {summary.created ? t.evidence.revision(newest.revision) : `${t.evidence.revision(oldest.revision - 1)} → ${newest.revision}`} ・ {headline(summary)}
-            </span>
-          </div>
-          <h1 className="mt-5 text-[22px] leading-snug font-bold">{title}</h1>
-          {explanation.length > 0 && (
-            <div className="mt-2 text-[13px] leading-relaxed text-slate-600">
+        <article
+          className="@container relative mx-auto max-w-[940px] overflow-hidden rounded-lg border border-slate-200 bg-sheet px-6 pt-10 pb-7 shadow-sheet xl:px-11 xl:pb-9"
+          data-review-report
+        >
+          <Stripe className="top-0 h-[5px]" />
+          <Masthead
+            kind={t.desk.reportOf}
+            title={flow?.name ?? ""}
+            tag={
+              <span className={`ml-2.5 inline-block rounded-md px-2 align-[4px] text-[12px] leading-[22px] font-bold ${summary.created ? "bg-moegi-100 text-moegi-500" : "bg-amber-50 text-amber-700"}`}>
+                {summary.created ? t.desk.tagCreated : t.desk.tagChanged}
+              </span>
+            }
+            facts={[
+              {
+                label: t.desk.factBy,
+                value: (
+                  <span className="flex items-center gap-1.5">
+                    <ActorMark entry={newest} size={16} />
+                    {actorLabel(newest)}
+                  </span>
+                ),
+              },
+              { label: t.desk.factAt, value: `${when}（${relativeTime(newest.at)}）` },
+              {
+                label: t.desk.factContent,
+                value: summary.created ? t.desk.nodeCount(nodeCount) : `${headline(summary)}（${t.evidence.revision(oldest.revision - 1)} → ${newest.revision}）`,
+              },
+              { label: t.desk.factRun, value: latest ? statusWord(latest.status) : t.desk.factNotRun },
+            ]}
+          />
+          {said.length > 0 && (
+            <blockquote className="border-l-[3px] border-brand-100 pl-3 text-[13.5px] leading-[1.7]">
               <div className="text-[12px] text-slate-500">{t.desk.explanationLead}</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                {explanation.map((line) => (
-                  <li key={line} className="whitespace-pre-wrap">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {said.map((line) => (
+                <p key={line} className="whitespace-pre-wrap">
+                  {line}
+                </p>
+              ))}
+            </blockquote>
           )}
+          <p className="mt-3 text-[13.5px] leading-[1.7] text-slate-500">{t.desk.lead}</p>
           {r.feedback && (
             <div className="mt-4">
               <FeedbackBox feedback={r.feedback} fixedAfter={newest.revision > r.feedback.revision} />
             </div>
           )}
-          <Tiles review={r} effects={effects} values={values} created={summary.created} />
 
-          {changesFirst && changesSection}
-          <PaperSection id="review-promises" n={++n} title={t.promises.title} note={t.desk.promisesNote} aside={r.freshPromises.length > 0 ? t.promises.fromAi(r.freshPromises.length) : undefined}>
-            {r.flowId && (
-              <Promises
-                flowId={r.flowId}
-                revision={flow?.revision ?? 0}
-                promises={r.promises}
-                answers={Object.fromEntries(
-                  r.freshPromises.flatMap((p) => {
-                    const a = answers[`${markKey}:promise:${p.name}`];
-                    return a ? [[p.name, a]] : [];
-                  }),
-                )}
-                onAnswer={(name, value) => answer(`${markKey}:promise:${name}`, value)}
-                onWrong={(p) => sendBackWithText(t.promises.wrongNote(p.text))}
-                onAsk={() => sendBackWithText(t.promises.askReason)}
-              />
-            )}
+          {changesFirst && changes(++n)}
+
+          <PaperSection
+            id="review-result"
+            n={++n}
+            title={t.desk.result}
+            note={t.desk.resultNote}
+            aside={latest ? `${t.desk.factRun} ・ ${relativeTime(latest.finishedAt)}` : undefined}
+          >
+            <div className="space-y-3">
+              {!latest && (
+                <div className="rounded-lg border border-dashed border-slate-300 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-600">
+                  <p>{t.evidence.notTested}</p>
+                  <button type="button" onClick={() => sendBackWithText(t.desk.askTryRun)} className="mt-1 text-[12.5px] font-semibold text-brand-600 hover:underline">
+                    {t.desk.askTryRunButton}
+                  </button>
+                </div>
+              )}
+              {latest && latest.revision !== revision && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] text-amber-700">{t.desk.staleTest}</p>}
+              {latest && latest.status !== "succeeded" && (
+                <p className="rounded-lg bg-shu-50 px-3 py-2 text-[12.5px] leading-relaxed text-shu-600">
+                  <b>{statusWord(latest.status)}</b>
+                  {latest.errorMessage && <span className="ml-2 break-all">{latest.errorMessage}</span>}
+                </p>
+              )}
+              {latest && outputFiles.map((f) => <FileBox key={f.target} flowId={r.flowId} path={f.preview!} label={t.desk.outputFile} stamp={stamp} />)}
+              {latest && <OutputValues outputs={outputs} />}
+              {latest && inputFiles.length > 0 && (
+                <Fold title={t.desk.sourceData(inputFiles.length)} note={t.desk.sourceDataNote} plain>
+                  <div className="space-y-2">
+                    {inputFiles.map((path) => (
+                      <FileBox key={path} flowId={r.flowId} path={path} label={t.desk.inputFile} stamp={stamp} quiet />
+                    ))}
+                  </div>
+                </Fold>
+              )}
+              {r.flowId && (r.promises.length > 0 || latest) && (
+                <AutoChecks
+                  flowId={r.flowId}
+                  revision={revision}
+                  promises={r.promises}
+                  onAsk={() => sendBackWithText(t.promises.askReason)}
+                />
+              )}
+              {r.hasResult && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-paper px-4 py-3">
+                  <p className="min-w-[12em] flex-1 text-[14px] font-bold">{t.desk.resultAsk}</p>
+                  <button type="button" onClick={() => answer(r.resultKey, resultAnswer === "ok" ? null : "ok")} className={chip(resultAnswer === "ok", "border-moegi-500 bg-moegi-100 text-moegi-500")}>
+                    {resultAnswer === "ok" && <Check size={13} strokeWidth={2.25} aria-hidden="true" />}
+                    {t.desk.resultRight}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (resultAnswer !== "no") sendBackWithText(t.desk.resultWrongNote);
+                      answer(r.resultKey, resultAnswer === "no" ? null : "no");
+                    }}
+                    className={chip(resultAnswer === "no", "border-shu-500 bg-shu-50 text-shu-600")}
+                  >
+                    {t.desk.resultWrong}
+                  </button>
+                </div>
+              )}
+            </div>
           </PaperSection>
 
           {r.checks.length > 0 && (
-            <PaperSection id="review-checks" n={++n} title={t.desk.checks} note={t.desk.checksNote} aside={t.desk.checksFrom(r.checks.length)}>
-              <Checks checks={r.checks} markKey={markKey} onNo={(q) => sendBackWithText(t.desk.checkNote(q))} />
+            <PaperSection
+              id="review-checks"
+              n={++n}
+              title={t.desk.judgements}
+              note={t.desk.judgementsNote}
+              aside={t.desk.answeredOf(r.checks.filter((q) => answers[`${markKey}:${q}`]).length, r.checks.length)}
+            >
+              <Checks checks={r.checks} markKey={markKey} onNo={(q) => sendBackWithText(t.desk.checkNote(readCheck(q).rule))} />
             </PaperSection>
           )}
 
-          <PaperSection id="review-effects" n={++n} title={t.desk.effects} note={t.desk.effectsNote}>
-            <EffectList effects={effects} values={values} created={summary.created} />
+          <PaperSection id="review-effects" n={++n} title={t.desk.used} note={t.desk.usedNote}>
+            <UsedTable rows={used} created={summary.created} />
           </PaperSection>
 
-          {!changesFirst && changesSection}
+          {!summary.created && !changesFirst && changes(++n)}
 
-          {(runs.length > 0 || observed.length > 0) && (
-            <section className="mt-8">
-              <button
-                type="button"
-                onClick={() => setRunsOpen(!showRuns)}
-                className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-[13px] font-bold text-slate-600 hover:text-ink"
-              >
-                <span className="w-3 text-slate-400">{showRuns ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}</span>
-                {t.desk.tryRuns}
-                {runs.at(-1) && <span className="ml-auto text-[12px] font-normal text-slate-500">{relativeTime(runs.at(-1)!.finishedAt)}</span>}
-              </button>
-              {showRuns && (
-                <div className="mt-3 space-y-4">
-                  <TestResult runs={runs} revision={flow?.revision ?? 0} changedIds={changedIds} />
+          <div className="mt-9 space-y-2">
+            {flow && (
+              <Fold title={t.desk.flowContent(nodeCount)}>
+                <FlowAtAGlance flow={flow} defs={defs} />
+              </Fold>
+            )}
+            {(runs.length > 0 || observed.length > 0) && (
+              <Fold title={t.desk.tryRuns} aside={latest ? relativeTime(latest.finishedAt) : undefined}>
+                <div className="space-y-4">
+                  <TestResult runs={runs} revision={revision} changedIds={changedIds} />
                   {observed.length > 0 && (
                     <Section title={t.desk.screens}>
                       <Observations items={observed} />
                     </Section>
                   )}
                 </div>
-              )}
-            </section>
-          )}
+              </Fold>
+            )}
+          </div>
         </article>
       </div>
+    </div>
+  );
+}
+
+/** How many input files the report offers to compare with the result. */
+const SOURCE_FILES = 8;
+
+/** The files in the flow's folder the report can show, read again after each trial run. */
+function useFolderFiles(flowId: string | undefined, stamp: string): string[] {
+  const [files, setFiles] = useState<string[]>([]);
+  useEffect(() => {
+    setFiles([]);
+    if (!flowId) return;
+    let live = true;
+    projectApi.list(flowId).then(
+      (list) => live && setFiles(list.files.map((f) => f.path).filter((path) => filePath(path) !== null)),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [flowId, stamp]);
+  return files;
+}
+
+/** A part of the report kept folded: there to open, not to read first. */
+function Fold({ title, note, aside, plain = false, children }: { title: string; note?: string; aside?: string; plain?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className={plain ? "" : "rounded-lg border border-slate-200"}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className={`flex w-full items-center gap-1.5 text-left hover:text-ink ${plain ? "text-[12.5px] text-slate-600" : "px-3 py-2.5 text-[13px] font-bold text-slate-600"}`}
+      >
+        {open ? <ChevronDown size={13} className="shrink-0 text-slate-400" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-slate-400" aria-hidden="true" />}
+        {title}
+        {note && <span className="font-normal text-slate-500">{note}</span>}
+        {aside && <span className="ml-auto text-[12px] font-normal text-slate-500">{aside}</span>}
+      </button>
+      {open && <div className={plain ? "mt-2" : "border-t border-slate-200 px-3 py-3"}>{children}</div>}
+    </section>
+  );
+}
+
+/**
+ * What the machine checked: each expected result the AI wrote, as a chip that
+ * says whether the flow gives it. The table behind them (inputs, expected
+ * values, running them again) opens on demand.
+ */
+function AutoChecks({ flowId, revision, promises, onAsk }: { flowId: string; revision: number; promises: Promised[]; onAsk: () => void }) {
+  const [open, setOpen] = useState(false);
+  const tone = (p: Promised) => (!p.kept ? "bg-slate-100 text-slate-600" : p.kept.passed ? "bg-moegi-100 text-moegi-500" : "bg-shu-50 text-shu-600");
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px]">
+        <span className="font-bold text-slate-500">{t.desk.autoChecks}</span>
+        {promises.length === 0 && <span className="text-slate-500">{t.desk.autoChecksNone}</span>}
+        {promises.map((p) => (
+          <span key={p.name} className={`inline-flex items-center gap-1 rounded-md px-2 leading-6 ${tone(p)}`}>
+            {p.kept?.passed ? <Check size={12} strokeWidth={2.25} aria-hidden="true" /> : p.kept ? <X size={12} strokeWidth={2.25} aria-hidden="true" /> : null}
+            {p.text}
+            {!p.kept && <span className="text-[11.5px]">（{t.promises.unchecked}）</span>}
+            {p.kept && !p.kept.passed && <span className="text-[11.5px]">（{t.promises.broken}）</span>}
+          </span>
+        ))}
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex items-center gap-0.5 text-[12px] text-brand-600 hover:underline">
+          {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+          {t.desk.autoChecksDetail}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-2 rounded-lg border border-slate-200 px-3 py-2.5">
+          <Promises flowId={flowId} revision={revision} promises={promises} answering={false} answers={{}} onAnswer={() => undefined} onWrong={() => undefined} onAsk={onAsk} />
+        </div>
+      )}
     </div>
   );
 }
@@ -489,6 +654,7 @@ export function ReviewFoot({ report }: { report: boolean }) {
         <ReviewActions
           compact={!report}
           unanswered={r.unanswered}
+          questions={r.questions}
           broken={r.broken}
           sending={sending}
           setSending={(on) => setSending(on ? (r.flowId ?? null) : null)}
@@ -496,56 +662,6 @@ export function ReviewFoot({ report }: { report: boolean }) {
           onBack={report ? undefined : () => setView("report")}
         />
       </div>
-    </div>
-  );
-}
-
-/** The three things to decide, at a glance: whether the promises hold, what waits for an answer, and what changes outside. Each leads to its section. */
-function Tiles({ review: r, effects, values, created }: { review: ReturnType<typeof useReview>; effects: Effect[]; values: InputRow[]; created: boolean }) {
-  const counts = promiseCounts(r.promises);
-  const changed = effects.filter((e) => e.status !== "same");
-  const danger = changed.some((e) => e.risk === "dangerous" && e.status !== "removed");
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
-  const promise =
-    r.promises.length === 0
-      ? { tone: "plain", big: t.desk.tileNoPromises, small: t.desk.tileNoPromisesSub }
-      : counts.broken > 0
-        ? { tone: "bad", big: t.desk.tileBroken(counts.broken), small: t.desk.tileOfPromises(r.promises.length) }
-        : counts.unchecked > 0
-          ? { tone: "plain", big: t.desk.tileUnchecked(counts.unchecked), small: t.desk.tileUncheckedSub }
-          : { tone: "good", big: t.desk.tileKept, small: t.desk.tilePromises(r.promises.length) };
-  const asked = r.freshPromises.length + r.checks.length;
-  const ask =
-    r.unanswered > 0
-      ? { tone: "plain", big: t.desk.tileAsk(r.unanswered), small: t.desk.tileAskSub(r.unansweredPromises, r.unansweredChecks) }
-      : { tone: "plain", big: t.desk.tileAnswered, small: asked > 0 ? t.desk.tileAnsweredSub : "" };
-  const first = changed[0];
-  const outside =
-    changed.length > 0
-      ? {
-          tone: danger ? "bad" : "plain",
-          big: t.desk.tileEffects(changed.length),
-          small: first ? `${created ? "" : `${t.desk.effect[first.status]}：`}${first.action}${first.target ? ` ${fillTarget(first.target, values)}` : ""}` : "",
-        }
-      : { tone: "plain", big: t.desk.tileNoEffects, small: t.desk.tileNoEffectsSub };
-  const tone = {
-    bad: "bg-shu-50 text-shu-600",
-    good: "bg-moegi-100 text-moegi-500",
-    plain: "bg-slate-100 text-ink",
-  } as Record<string, string>;
-  const tiles: [string, typeof promise][] = [
-    ["review-promises", promise],
-    ...(asked > 0 ? ([[r.checks.length > 0 && r.unansweredPromises === 0 ? "review-checks" : "review-promises", ask]] as [string, typeof promise][]) : []),
-    ["review-effects", outside],
-  ];
-  return (
-    <div className="mt-5 flex flex-col gap-2.5 @min-[640px]:flex-row">
-      {tiles.map(([id, tile]) => (
-        <button key={tile.big} type="button" onClick={() => jump(id)} className={`min-w-0 flex-1 rounded-lg px-3.5 py-2.5 text-left hover:brightness-[0.97] ${tone[tile.tone]}`}>
-          <span className="block text-[16px] leading-snug font-bold">{tile.big}</span>
-          {tile.small && <span className={`mt-0.5 block truncate text-[12px] ${tile.tone === "plain" ? "text-slate-600" : ""}`}>{tile.small}</span>}
-        </button>
-      ))}
     </div>
   );
 }
@@ -703,72 +819,6 @@ function Marked({ parts, marks, other, tone }: { parts: Part[]; marks?: boolean[
   );
 }
 
-/** What the flow touches outside, with what this review changes on top. */
-function EffectList({ effects, values, created }: { effects: Effect[]; values: InputRow[]; created: boolean }) {
-  const [showSame, setShowSame] = useState(false);
-  const changed = effects.filter((e) => e.status !== "same");
-  const same = effects.filter((e) => e.status === "same");
-  if (effects.length === 0) return <p className="text-[12px] text-slate-500">{t.desk.noEffects}</p>;
-  return (
-    <div className="space-y-1">
-      {changed.length === 0 && <p className="text-[12px] text-slate-600">{t.desk.noEffectChange}</p>}
-      {changed.map((e) => (
-        <EffectRow key={`${e.status}${e.action}${e.target}`} effect={e} values={values} plain={created} />
-      ))}
-      {same.length > 0 && (
-        <>
-          <button type="button" onClick={() => setShowSame(!showSame)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink">
-            {showSame ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
-            {t.desk.sameEffects(same.length)}
-          </button>
-          {showSame && same.map((e) => <EffectRow key={`same${e.action}${e.target}`} effect={e} values={values} plain={created} />)}
-        </>
-      )}
-    </div>
-  );
-}
-
-const EFFECT_TAG: Record<Effect["status"], string> = {
-  added: "bg-moegi-100 text-moegi-500",
-  changed: "bg-amber-50 text-amber-700",
-  removed: "bg-slate-100 text-slate-600",
-  same: "",
-};
-
-function EffectRow({ effect, values, plain }: { effect: Effect; values: InputRow[]; plain: boolean }) {
-  const goTo = useStudio((s) => s.goTo);
-  const danger = effect.risk === "dangerous";
-  return (
-    <button
-      type="button"
-      onClick={() => effect.status !== "removed" && effect.stepId && goTo(effect.stepId)}
-      className="flex w-full items-start gap-1.5 rounded-md px-1 py-0.5 text-left text-[12.5px] leading-relaxed hover:bg-slate-100"
-    >
-      {effect.status === "same" || plain ? (
-        <span className={`${plain ? "w-4" : "w-[3.2em]"} shrink-0 text-center text-slate-400`}>・</span>
-      ) : (
-        <span className={`mt-0.5 w-[3.2em] shrink-0 rounded-md text-center text-[10px] leading-4 font-bold ${EFFECT_TAG[effect.status]}`}>
-          {t.desk.effect[effect.status]}
-        </span>
-      )}
-      <span className={`min-w-0 ${effect.status === "same" ? "text-slate-500" : ""} ${effect.status === "removed" ? "line-through" : ""}`}>
-        <span className={danger ? "font-semibold text-shu-600" : effect.reads ? "" : "font-semibold"}>{effect.action}</span>
-        {effect.target && (
-          <span className="ml-1 font-mono text-[12px] break-all" title={effect.target}>
-            {fillTarget(effect.target, values)}
-          </span>
-        )}
-        {effect.external && (
-          <span className="mt-0.5 flex items-center gap-1 text-[11.5px] text-amber-700">
-            <CloudUpload size={12} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-            {t.desk.sentOutside(effect.external.service, effect.external.data)}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
-
 // Run records do not change once a run has finished.
 const records = new Map<string, Promise<RunRecord>>();
 function useRunRecord(runId: string | null): RunRecord | null {
@@ -875,7 +925,10 @@ function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; 
             >
               {value === "ok" ? <Check size={10} strokeWidth={3} /> : value === "no" ? <X size={10} strokeWidth={3} /> : null}
             </span>
-            <p className="min-w-[16em] flex-1 text-[13px] leading-relaxed font-semibold whitespace-pre-wrap">{q}</p>
+            <p className="min-w-[16em] flex-1 text-[13.5px] leading-relaxed font-semibold">
+              {readCheck(q).rule}
+              {readCheck(q).example && <span className="mt-0.5 block text-[12.5px] font-normal whitespace-pre-wrap text-slate-500">{readCheck(q).example}</span>}
+            </p>
             <div className="flex shrink-0 gap-1.5">
               <button type="button" onClick={() => pick("ok")} className={chip(value === "ok", "border-moegi-500 text-moegi-500")}>
                 {t.desk.answerOk}
@@ -906,6 +959,7 @@ function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; 
  */
 export function ReviewActions({
   unanswered = 0,
+  questions = 0,
   broken = 0,
   sending,
   setSending,
@@ -914,6 +968,8 @@ export function ReviewActions({
   onBack,
 }: {
   unanswered?: number;
+  /** How many answers the report asks for (the result, each judgement). */
+  questions?: number;
   broken?: number;
   sending: boolean;
   setSending: (on: boolean) => void;
@@ -947,6 +1003,16 @@ export function ReviewActions({
           <div className="flex flex-wrap gap-x-3 text-[12px]">
             {broken > 0 && <span className="font-semibold text-shu-600">{t.desk.barBroken(broken)}</span>}
             {compact && unanswered > 0 && <span className="text-slate-500">{t.desk.barUnanswered(unanswered)}</span>}
+          </div>
+        )}
+        {!compact && questions > 0 && (
+          <div className="mb-0.5 flex items-center gap-2.5 text-[12.5px] whitespace-nowrap">
+            <span className="flex gap-1" aria-hidden="true">
+              {Array.from({ length: questions }, (_, i) => (
+                <i key={i} className={`h-1.5 w-6 rounded-full ${i < questions - unanswered ? "bg-moegi-500" : "bg-slate-200"}`} />
+              ))}
+            </span>
+            {t.desk.progress(questions - unanswered, questions)}
           </div>
         )}
         {!compact || means ? <p className="line-clamp-2 text-[11.5px] leading-relaxed text-slate-500">{means ?? where}</p> : null}

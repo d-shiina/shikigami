@@ -49,10 +49,11 @@ pub struct CreateFlowParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -80,10 +81,11 @@ pub struct UpdateFlowParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -112,10 +114,11 @@ pub struct AddStepParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -142,10 +145,11 @@ pub struct UpdateStepParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -171,10 +175,11 @@ pub struct RemoveStepParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -201,10 +206,11 @@ pub struct MoveStepParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
@@ -234,10 +240,11 @@ pub struct ExtractSubflowParams {
     /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    /// Questions the reviewer must answer because only a person knows: your
-    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
-    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
-    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    /// The decisions you made that the person did not ask for, for them to
+    /// confirm: one each, at most 10, stated as the rule you applied (e.g.
+    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
+    /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<String>,
 }
