@@ -37,7 +37,6 @@
   --manual-desk: #e6e8ec;
   /* The 手順書's colours: the swirl's navy for headings, its colours for what a note says. */
   --manual-navy: #0f3a66;
-  --manual-band: #0f3a66;
   --manual-check: #3f9a5a;
   --manual-check-bg: #eef8f1;
   --manual-caution: #e8501f;
@@ -131,7 +130,6 @@
   --color-desk: #0e0f11;
   --manual-desk: #0a0b0d;
   --manual-navy: #9cc3ea;
-  --manual-band: #123456;
   --manual-check: #5cc27e;
   --manual-check-bg: #16241a;
   --manual-caution: #f07a52;
