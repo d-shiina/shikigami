@@ -27,6 +27,7 @@ import { flatten } from "../lib/review";
 import { Masthead, Stripe } from "./Masthead";
 import { FlowAtAGlance } from "./ReviewFlow";
 import { FileBox, OutputValues, UsedTable } from "./ReviewResult";
+import { SheetNumber } from "./SheetNumber";
 
 export type InboxItem = {
   flowId: string;
@@ -670,8 +671,8 @@ export function ReviewFoot({ report }: { report: boolean }) {
 export function PaperSection({ id, n, title, note, aside, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; children: React.ReactNode }) {
   return (
     <section id={id} className="mt-9 scroll-mt-6">
-      <h2 className="flex items-center gap-2 text-[15px] font-bold">
-        {n !== undefined && <span className="grid h-5 w-5 place-items-center rounded-md bg-ink text-[11.5px] text-paper">{n}</span>}
+      <h2 className="flex items-baseline gap-2.5 text-[15px] font-bold">
+        {n !== undefined && <SheetNumber n={n} className="text-[13px] text-brand-600" />}
         {title}
         {aside && <span className="ml-auto text-[12px] font-normal text-slate-500">{aside}</span>}
       </h2>

@@ -34,6 +34,7 @@ import {
   type WorkTask,
   WORTH_MINUTES,
 } from "../lib/inventory";
+import { SheetNumber } from "./SheetNumber";
 
 /** How often the open sheet looks for what the AI saved (it writes from another process). */
 const POLL_MS = 1500;
@@ -229,10 +230,10 @@ function Empty({ onStart }: { onStart: () => void }) {
     <article className="rounded-lg border border-slate-200 bg-sheet px-8 py-9 shadow-sheet">
       <h2 className="text-[18px] font-semibold text-ink">{i.emptyTitle}</h2>
       <p className="mt-2 max-w-[640px] text-[13.5px] leading-relaxed text-slate-600">{i.emptyLead}</p>
-      <ol className="mt-5 grid gap-2 @[44rem]:grid-cols-4">
+      <ol className="mt-6 grid gap-x-5 gap-y-4 @[44rem]:grid-cols-4">
         {i.emptySteps.map((step, n) => (
-          <li key={step} className="rounded-lg border border-slate-200 bg-paper px-3 py-2.5 text-[13px] text-ink">
-            <span className="mb-1 grid h-5 w-5 place-items-center rounded-md bg-ink text-[11.5px] font-semibold text-paper">{n + 1}</span>
+          <li key={step} className="border-t-2 border-brand-300 pt-2.5 text-[13px] leading-relaxed text-ink first:border-brand-500">
+            <SheetNumber n={n + 1} className="block text-[11.5px] text-brand-600" />
             {step}
           </li>
         ))}
