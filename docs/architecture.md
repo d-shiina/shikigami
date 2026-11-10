@@ -525,29 +525,31 @@ The first product milestone: **create a web flow from an MCP client in natural l
 
 ## 13. Implementation status and limits
 
+This section says what exists and what is known not to work. It gives no counts of nodes or tools: the lists are generated, in [schemas/contract/step-types.json](../schemas/contract/step-types.json) and [mcp.md](mcp.md).
+
 ### Implemented (with tests)
 
-- Rust workspace, pnpm workspace, CI (fmt, clippy, test on Linux / Windows; TS typecheck, tests, generated-file drift)
-- Flow Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration framework
-- Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state (snapshots)
-- CLI: `flow list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
-- Studio (Tauri 2 + React): flow list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move nodes; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and node state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
-- MCP server (Phase 2): `spellsheet mcp` (stdio), 20 tools for flows, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
-- Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
-- Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
-- Claude Code plugin: `plugins/spellsheet` (MCP settings + skill `spellsheet-flows`) and the marketplace definition. Passes `claude plugin validate`
+- Rust workspace, pnpm workspace, CI (fmt, clippy and tests on Linux and Windows; TS typecheck, tests, generated-file drift; the sample flows run end to end)
+- Flow Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration, named versions and publishing, flow folders (`input/`, `config/`, `templates/`, `output/`, `work/`, `logs/`, `tests/`), bundles (`.spx`), the audit trail
+- Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state, breakpoints and pausing, starting from a node, test cases
+- CLI: flows, versions, runs, tests, validation, secrets, policy and approvals, plugins, schedules, the worker, the audit trail (`spellsheet --help`)
+- Writer and Runner (Tauri 2 + React): the flow chart (automatic layout), node settings generated from schemas, picking elements on screen, the review of AI changes, the manual view, run log and node state, the AI chat, live updates from outside changes (MCP / CLI), Japanese / English UI
+- MCP server: `spellsheet mcp` (stdio); tools for flows, nodes, validation, history, versions, runs, tests, files, secrets by name, and inspecting screens; structured results and error codes; tool annotations; permission classes limited with `--allow`; approvals by `policy.json`; audit log. Automated E2E with the rmcp client ([mcp.md](mcp.md))
+- Built-in nodes: browsers ([browser.md](browser.md)), Windows apps through UI Automation, Java Access Bridge, image search and OCR ([desktop.md](desktop.md)), Excel / Word / mail ([office.md](office.md)), files ([files.md](files.md)), PDF ([pdf.md](pdf.md)), databases ([database.md](database.md)), HTTP / programs / clipboard / dialogs ([system.md](system.md))
+- Worker: schedules, file triggers, jobs from a management server ([schedules.md](schedules.md), [remote.md](remote.md))
+- Node plugins and the Claude Code plugin ([extensions.md](extensions.md), `plugins/spellsheet`)
 
-### Not implemented (later phases)
+### Not implemented
 
-- Java Access Bridge and image recognition for Windows (SAP GUI Scripting comes with the SAP plugin); resource exclusion between processes (§10.5); browser downloads and uploads
-- Drag-and-drop editing in Studio, breakpoints and stepping, a UI element inspector, diff view (Phase 5)
-- SQLite, per-client tool permissions, allowed folders for file operations, credential store integration, MCP's Streamable HTTP
+- Resuming a run after its process ended
+- Per-client tool permissions for MCP, MCP's Streamable HTTP transport
+- Saved node positions and free drag-and-drop layout in Writer (the chart is laid out automatically)
+- A management tool for many PCs (only the reference server in [remote.md](remote.md))
 
 ### Known limits
 
-- Undo/Redo is **one stack per flow shared by all clients** (AI changes can be undone from Studio, but it is not per user).
+- Undo/Redo is **one stack per flow shared by all clients** (AI changes can be undone from Writer, but it is not per user).
 - Variable scope is flat (loop variables are one per flow too), like most RPA products.
 - When a run is cancelled, `control.try`'s `finally` still runs (for at most 60 seconds; cancelling again cuts it short) and the run ends `cancelled`. An adapter that does not answer when the run closes cannot keep it open (at most 15 seconds each).
 - Runs cannot resume midway (after a process restart). A run whose process ended first (crash, shutdown, killed) is closed as `failed` with `RUN_INTERRUPTED` the next time any SpellSheet process starts a run; start it again.
-- Studio's flowchart is an automatic display layout; node positions are not saved.
-- During development, Studio was started on Linux under Xvfb to check editing, running and live updates (Linux is not a product target). **Starting Studio on a real Windows machine is unconfirmed** (CI confirms build and tests only).
+- **What has been checked on real PCs is small.** CI builds and tests on Windows, and drives small test windows (WinForms, Swing). On real PCs SpellSheet has been used only by its maintainer during development; the checks against real business apps in [design/real-app-checks.md](design/real-app-checks.md) have not been run yet, and each node guide lists what is unverified under "Verified and limits". The installers are not code-signed yet ([Code signing policy](../CODE_SIGNING_POLICY.md)).

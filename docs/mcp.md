@@ -131,7 +131,8 @@ The flow changes themselves (EditOps and their inverses) are recorded with the c
 ## Verified and limits
 
 - **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Writer open shows up in Writer, and Writer's Undo is recorded in the history as Writer.
-- **Not yet verified**: a conversation where Claude Code actually builds a flow with the tools, connecting from Codex / Cursor, and running on real Windows machines.
+- **Used in development, not systematically verified**: Claude Code building flows with these tools from Writer's AI chat, on the maintainer's Windows PCs.
+- **Not yet verified**: the other AI clients (Codex, Cursor, Gemini CLI, GitHub Copilot) end to end, and PCs other than the maintainer's.
 - Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `spellsheet run` for long or unattended runs.
 - Per-client tool permissions are not implemented (there is the server-wide `--allow` and the workspace-wide `policy.json`).
 - The audit log is JSONL. Indexing it in SQLite is not implemented.

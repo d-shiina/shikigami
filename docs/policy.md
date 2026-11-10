@@ -83,7 +83,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `notify` | empty | Where unattended runs (the worker's schedules and `spellsheet run`) are reported: a list of `{ "webhook", "on", "format", "flows" }`. See [schedules.md](schedules.md#notifications) |
 | `desktop.waitUnlockedMinutes` | none (stop at once) | While the screen is locked, nodes that use the mouse and keyboard wait up to this many minutes for someone to unlock it, then stop with `DESKTOP_UNAVAILABLE`. The run log says once that it is waiting. For PCs with people at them ([schedules.md](schedules.md)) |
 
-`allow` = go ahead, `ask` = after a person approves in Writer, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.
+`allow` = go ahead, `ask` = after a person approves in Writer, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting files, sheets and mail, sending mail, HTTP to the outside, running programs and so on; the full list is each node type's `risk` in `list_step_types`). Unregistered node types count as `dangerous`.
 
 A broken `policy.json` (bad JSON, unknown fields, `sites` that are not origins) never means "allow everything": runs stop with `POLICY_INVALID`. The settings are read when a run starts, so a change applies from the next run.
 
