@@ -8,7 +8,7 @@
 //! and a message carrying a registered secret value is refused before it
 //! leaves the PC. See docs/design/studio-ai-pane.md.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Mutex;
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use spellsheet_core::{ErrorPayload, UserConfig};
+use spellsheet_core::{ChatInbox, ErrorPayload, UserConfig};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -26,7 +26,7 @@ use crate::AppState;
 
 mod providers;
 pub use providers::AgentKind;
-use providers::{CodexStream, CopilotStream, GeminiStream, KNOWN, Turn, child_path};
+use providers::{CodexStream, CopilotStream, GeminiStream, INBOX, KNOWN, Turn, child_path};
 
 pub(crate) const AGENT_EVENT: &str = "agent-event";
 
@@ -41,6 +41,7 @@ You are an AI called from inside SpellSheet Writer (RPA for Windows, a desktop a
 - Read, edit and test-run flows only with the spellsheet MCP tools. Files and commands are not available.
 - When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Writer shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Writer's review, where a person checks what they do.
 - The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Writer has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
+- The person may write more while you work. It comes with the result of your next SpellSheet tool call as `messagesFromThePerson`: read it at once and take it into account from there on, without starting over; where it differs from the request you are working on, it wins. Say briefly in your reply how you took it in.
 - When asked to fix something that was sent back, read the feedback in get_flow (details in get_review), fix it as noted, and briefly report what you fixed.
 - When the work depends on a decision only the person can make and you see 2 to 4 ways (how to handle a case, which way to build it), call ask_user_to_choose with the question, the answers (a short label and one sentence on what happens) and the one you recommend, instead of listing them in your reply. Writer shows them as a card right under your reply in the AI chat (if you mention it, say 「下のカード」 or 「AI チャットのカード」; never say it is in the browser). Then end your turn without repeating them; the answer comes as the next message. Do not use it for yes/no confirmations of what you were asked to do, or when one way is clearly right.
 - Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Writer.
@@ -250,6 +251,11 @@ pub enum AgentEvent {
         flow_id: String,
         name: String,
     },
+    /// The AI read these messages the person sent while it worked (they
+    /// came with a tool result).
+    Heard {
+        ids: Vec<String>,
+    },
     Done {
         ok: bool,
         message: Option<String>,
@@ -386,7 +392,45 @@ struct Envelope {
 pub(crate) struct AgentTurns {
     next: AtomicU64,
     running: Mutex<HashMap<String, CancellationToken>>,
+    /// Messages the person sends to a running turn, by turn id.
+    inboxes: Mutex<HashMap<String, TurnInbox>>,
 }
+
+/// Where a running turn's messages wait for the AI's next tool call.
+struct TurnInbox {
+    /// The turn's own folder; the inbox is in it.
+    own: PathBuf,
+    inbox: ChatInbox,
+    posted: Vec<String>,
+    heard: HashSet<String>,
+}
+
+impl TurnInbox {
+    fn new(own: PathBuf) -> Self {
+        Self {
+            inbox: ChatInbox::new(own.join(INBOX)),
+            own,
+            posted: Vec::new(),
+            heard: HashSet::new(),
+        }
+    }
+
+    /// Messages the AI has taken since the last look.
+    fn newly_heard(&mut self) -> Vec<String> {
+        let waiting: HashSet<String> = self.inbox.waiting().into_iter().collect();
+        let fresh: Vec<String> = self
+            .posted
+            .iter()
+            .filter(|id| !waiting.contains(*id) && !self.heard.contains(*id))
+            .cloned()
+            .collect();
+        self.heard.extend(fresh.iter().cloned());
+        fresh
+    }
+}
+
+/// How often a running turn looks whether the AI took a message.
+const HEARD_EVERY: std::time::Duration = std::time::Duration::from_millis(700);
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -716,6 +760,21 @@ pub async fn agent_send(
     let workspace = state.service.store().root().to_path_buf();
     let dir = agent_dir();
     std::fs::create_dir_all(&dir).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    let turn_id = format!(
+        "turn_{}_{}",
+        std::process::id(),
+        turns.next.fetch_add(1, Ordering::Relaxed)
+    );
+    // Messages sent while it works reach the AI through SpellSheet's tools;
+    // an agent of its own (`command`) gets them as the next message.
+    let own = (config.kind != AgentKind::Command).then(|| {
+        let turns_dir = dir.join(TURNS);
+        forget_old_turns(&turns_dir, &lock(&turns.inboxes));
+        turns_dir.join(&turn_id)
+    });
+    if let Some(own) = &own {
+        std::fs::create_dir_all(own).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    }
     let (mut args, env) = providers::prepare(
         config.kind,
         &Turn {
@@ -724,6 +783,7 @@ pub async fn agent_send(
             workspace: &workspace,
             system_prompt: SYSTEM_PROMPT,
             session: input.session_id.as_deref(),
+            own: own.as_deref(),
         },
     )
     .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
@@ -754,19 +814,20 @@ pub async fn agent_send(
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     let mut child = command.spawn().map_err(|e| {
+        if let Some(own) = &own {
+            let _ = std::fs::remove_dir_all(own);
+        }
         err(
             "AGENT_FAILED",
             format!("{} を起動できません: {e}", config.name()),
         )
     })?;
 
-    let turn_id = format!(
-        "turn_{}_{}",
-        std::process::id(),
-        turns.next.fetch_add(1, Ordering::Relaxed)
-    );
     let cancel = CancellationToken::new();
     lock(&turns.running).insert(turn_id.clone(), cancel.clone());
+    if let Some(own) = own {
+        lock(&turns.inboxes).insert(turn_id.clone(), TurnInbox::new(own));
+    }
     let prompt = with_context(message, input.flow.as_ref());
     let kind = config.kind;
     let id = turn_id.clone();
@@ -797,8 +858,19 @@ pub async fn agent_send(
         let mut finished = false;
         let mut stopped = false;
         let mut stream = Stream::new(kind);
+        // Says which messages sent meanwhile the AI has read.
+        let heard = || {
+            let ids = lock(&app.state::<AgentTurns>().inboxes)
+                .get_mut(&id)
+                .map(TurnInbox::newly_heard)
+                .unwrap_or_default();
+            if !ids.is_empty() {
+                emit(AgentEvent::Heard { ids });
+            }
+        };
         if let Some(stdout) = child.stdout.take() {
             let mut lines = BufReader::new(stdout).lines();
+            let mut look = tokio::time::interval(HEARD_EVERY);
             loop {
                 tokio::select! {
                     () = cancel.cancelled() => {
@@ -806,11 +878,16 @@ pub async fn agent_send(
                         stopped = true;
                         break;
                     }
+                    _ = look.tick() => heard(),
                     line = lines.next_line() => match line {
                         Ok(Some(line)) => {
                             let events = stream.line(&line);
                             for event in events {
-                                finished |= matches!(event, AgentEvent::Done { .. });
+                                let done = matches!(event, AgentEvent::Done { .. });
+                                if done {
+                                    heard();
+                                }
+                                finished |= done;
                                 emit(event);
                             }
                         }
@@ -820,6 +897,7 @@ pub async fn agent_send(
             }
         }
         let status = child.wait().await;
+        heard();
         let stderr = stderr_task.await.unwrap_or_default();
         if stopped {
             emit(AgentEvent::done(false, Some("止めました".to_owned()), None));
@@ -1170,6 +1248,75 @@ async fn logged_in(kind: AgentKind, program: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Gives a running turn a message the person wrote while it works; the AI
+/// reads it with the result of its next SpellSheet tool call.
+#[tauri::command]
+pub fn agent_note(
+    state: State<'_, AppState>,
+    turns: State<'_, AgentTurns>,
+    turn_id: String,
+    id: String,
+    message: String,
+) -> CmdResult<()> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(err("INVALID_INPUT", "メッセージが空です"));
+    }
+    if state.vault.mask(message) != message {
+        return Err(err(
+            "SECRET_IN_MESSAGE",
+            "登録済みのパスワードか認証コードが含まれているため、AI に送りませんでした。シークレットは名前で伝えてください。",
+        ));
+    }
+    let mut inboxes = lock(&turns.inboxes);
+    let Some(turn) = inboxes.get_mut(&turn_id) else {
+        // Ended, or an agent that cannot take messages meanwhile: the pane
+        // sends it as the next message.
+        return Err(err("TURN_ENDED", "作業が終わっています"));
+    };
+    turn.inbox
+        .post(&id, message)
+        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    turn.posted.push(id);
+    Ok(())
+}
+
+/// After a turn: takes back the messages the AI never read (the pane sends
+/// them as the next message) and returns their ids. Every other message
+/// given to the turn was read.
+#[tauri::command]
+pub fn agent_take_notes(turns: State<'_, AgentTurns>, turn_id: String) -> Vec<String> {
+    let Some(turn) = lock(&turns.inboxes).remove(&turn_id) else {
+        return Vec::new();
+    };
+    let left = turn.inbox.take().into_iter().map(|m| m.id).collect();
+    let _ = std::fs::remove_dir_all(&turn.own);
+    left
+}
+
+/// Each running turn's own folder is in here.
+const TURNS: &str = "turns";
+
+/// Removes the folders of turns from earlier runs of Writer (closed before
+/// the pane took their messages back).
+fn forget_old_turns(turns_dir: &Path, running: &HashMap<String, TurnInbox>) {
+    let Ok(entries) = std::fs::read_dir(turns_dir) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > std::time::Duration::from_secs(24 * 3600));
+        if old && !running.contains_key(&name) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 #[tauri::command]
 pub fn agent_stop(turns: State<'_, AgentTurns>, turn_id: String) {
     if let Some(cancel) = lock(&turns.running).remove(&turn_id) {
@@ -1473,6 +1620,22 @@ mod tests {
         assert!(SYSTEM_PROMPT.contains("AI チャット"));
         assert!(SYSTEM_PROMPT.contains("not in a web browser"));
         assert!(SYSTEM_PROMPT.contains("never say it is in the browser"));
+    }
+
+    #[test]
+    fn says_once_which_messages_the_ai_took() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut turn = TurnInbox::new(dir.path().join("turn_1"));
+        for (id, text) in [("item_1", "output/ に"), ("item_2", "日付つきで")] {
+            turn.inbox.post(id, text).unwrap();
+            turn.posted.push(id.to_owned());
+        }
+        assert!(turn.newly_heard().is_empty());
+        // The MCP server takes what is there with a tool result.
+        let server = ChatInbox::new(dir.path().join("turn_1").join(INBOX));
+        assert_eq!(server.take().len(), 2);
+        assert_eq!(turn.newly_heard(), ["item_1", "item_2"]);
+        assert!(turn.newly_heard().is_empty());
     }
 
     #[test]

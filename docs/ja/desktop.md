@@ -160,21 +160,16 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | アプリ | いまの見え方 | 予定 |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP、Office の画面 | UI Automation で部品が見える | – |
-| SAP GUI for Windows | SAP GUI Scripting が有効なら、それを通して見える（下の「SAP GUI」）。無効なら UI Automation で一部だけ（`inspect_ui` に注記） | – |
+| SAP GUI for Windows | UI Automation で一部だけ（`inspect_ui` に注記）。SAP のプラグイン（有料、別に提供）を入れると、SAP GUI Scripting を通して中まで見える（下の「SAP GUI」） | – |
 | Java（Swing・AWT など） | Java Access Bridge が有効なら、それを通して見える（下の「Java アプリ」）。無効なら枠だけ（注記） | – |
 | Citrix / リモートデスクトップの中 | 部品は見えない。画像（`image`）と文字（`ocr`）で場所を指す | – |
 | Excel のデータ | – | xlsx を直接読み書きする `excel.*`（[adapters.md](adapters.md)） |
 
 ## SAP GUI
 
-対象のウィンドウが SAP GUI for Windows で、SAP GUI Scripting が有効なら、同じ `desktop.*` のノードが UI Automation の代わりにスクリプトの仕組みを通して動きます（UI Automation では SAP の項目や表の多くが見えないため）。
+UI Automation では SAP GUI の項目や表の多くが見えません。本体だけで操作するときは、見えている部品のほかに、文字（`target.ocr`）や画像（`target.image`）で場所を指します。
 
-- **スクリプトを有効にする**（SAP の管理者が一度、各 PC でも一度）：SAP サーバーでトランザクション RZ11 から `sapgui/user_scripting` を `TRUE` に。SAP GUI の［オプション］>［アクセシビリティとスクリプト］>［スクリプト］で「スクリプトを有効にする」をオンにし、「スクリプトが接続したときに通知」などの 2 つはオフに（オンのままだと操作のたびに確認が出ます）
-- `inspect_ui` は SAP の部品を id（`wnd[0]/usr/txtRSYST-BNAME`）とほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`tab`・`table`、ALV グリッドは `grid` など）で一覧にします。`element.id` にそのまま写します。SAP GUI で記録したスクリプトの id（`/app/con[0]/ses[0]/wnd[0]/…`）や、対象ウィンドウの中の id（`usr/…`）でも動きます
-- 各ノードの動き：`desktop.click` はボタンを押す・チェックの切り替え・ラジオボタン・タブ・メニューの選択（ラベルや入力欄では F2 ＝ダブルクリックと同じ）。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り。`desktop.select` はコンボボックスの項目を表示名かキーで選ぶ。`desktop.press` は SAP のファンクションキー（Enter、Shift / Ctrl 付きの F1〜F12、Ctrl+S、Esc、PageUp / PageDown）を実際のキーボードを使わずに送る。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` はテーブルコントロールと ALV グリッドをスクロールしながら全部読む。`desktop.type`・`desktop.mouseClick` などマウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
-- `sap.runTransaction` はトランザクションを開始し（`code`：`VA03`）、そのあとのステータスバー `{ type, text }`（`S` 成功、`W` 警告、`E` エラーなど）を返すので、`control.if` で確かめられます
-- スクリプトが無効なときに SAP の部品 id を書いた対象は `SAP_SCRIPTING_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
-- **実際の SAP ではまだ確認していません**：SAP のスクリプト API の資料をもとに書いています。CI には SAP GUI がありません
+SAP のプラグイン（有料、別に提供）を入れると、対象のウィンドウが SAP GUI のとき、同じ `desktop.*` のノードが SAP GUI Scripting を通して動きます。`inspect_ui` には SAP の部品 id（`wnd[0]/usr/txtRSYST-BNAME`）が並び、フローの書き方はほかのアプリと変わりません。プラグインが「このウィンドウは自分が読む」と申し出る仕組みは [design/plugins.md](../design/plugins.md) §10 にあります。
 
 ## Java アプリ
 
@@ -212,10 +207,8 @@ Java のアプリ（Swing・AWT と、それで作られた多くの社内シス
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | 複数見つかった（候補の位置つき）。`nth` か `region` で決める |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | 画像ファイルがない／一色だけの画像（どこにでも当たる） |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` なのに PaddleOCR が入っていない／Windows OCR にその言語がない |
-| `SAP_SCRIPTING_OFF` | SAP の部品 id を書いたが、SAP GUI Scripting がそのウィンドウに届かない。有効にする（「SAP GUI」） |
 | `JAVA_BRIDGE_OFF` | Java のウィンドウだが、Java Access Bridge が無効か見つからない。有効にする（「Java アプリ」） |
 | `JAVA_NOT_READY` | Java アプリがまだ起動中。ノードの待ち時間のあいだ再試行する |
-| `NOT_SAP_WINDOW` | SAP GUI でないウィンドウに `sap.runTransaction` |
 | `TABLE_TOO_LARGE` | 10000 行を超えた。`maxRows` を書くか、アプリで絞り込んでから読む |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | その名前のメニュー項目が出ていない（出ている項目つき）／複数ある。上のメニューから順に書く |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |

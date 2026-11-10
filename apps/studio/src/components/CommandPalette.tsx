@@ -317,7 +317,7 @@ export function CommandPalette() {
                 </div>
               );
             })}
-            {/* Nodes this PC does not have yet: custom nodes, managed from Settings. */}
+            {/* Nodes this PC does not have yet: plugins, managed on their own page. */}
             <div className="sticky -bottom-1.5 mt-1.5 border-t border-slate-200 bg-slate-50 pt-1.5 pb-1.5">
               <button
                 type="button"

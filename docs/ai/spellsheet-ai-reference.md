@@ -1586,19 +1586,6 @@ Output: yes (saveAs)
 Example: `{"type":"process.run","params":{"program":"robocopy","args":["C:\\work\\out","\\\\server\\share\\out","/E"],"okExitCodes":[0,1,2,3]},"saveAs":"copied"}`
 
 
-### sap.*
-
-#### sap.runTransaction (SAP トランザクション開始)
-
-Starts the SAP transaction `code` (e.g. VA03, /nVA03 is not needed) in the SAP GUI window `target.window`, as typing it into the command field does. Output: the status bar then, { type, text } (type S success, W warning, E error, A abort, I info, or empty). Needs SAP GUI Scripting (enabled on the SAP server with sapgui/user_scripting and in SAP GUI's options). The other steps on SAP GUI are the usual desktop.* ones with SAP component ids from inspect_ui.
-
-Params:
-- `target`*: { window*: { title: text, match: "contains" | "exact" | "prefix" | "suffix" | "pattern", process: text, className: text, exact: true | false, nth: whole number }, element: { id: text, name: text, role: "button" | "calendar" | "checkbox" | "combobox" | "textbox" | "link" | "image" | "listitem" | "list" | "menu" | "menubar" | "menuitem" | "progressbar" | "radio" | "scrollbar" | "slider" | "spinbutton" | "status" | "tablist" | "tab" | "text" | "toolbar" | "tooltip" | "tree" | "treeitem" | "custom" | "group" | "thumb" | "grid" | "row" | "document" | "splitbutton" | "window" | "pane" | "header" | "columnheader" | "table" | "titlebar" | "separator" | "semanticzoom" | "appbar", className: text, exact: true | false, nth: whole number, within: object, after: object } } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
-- `code`*: text — トランザクションコード（例 VA03）
-Output: yes (saveAs)
-Example: `{"type":"sap.runTransaction","name":"受注照会を開く","params":{"target":{"window":{"process":"saplogon.exe","title":"SAP Easy Access"}},"code":"VA03"},"saveAs":"status"}`
-
-
 ### variable.*
 
 #### variable.set (変数への代入)

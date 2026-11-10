@@ -1961,6 +1961,74 @@ impl Executor {
         }
     }
 
+    /// Runs one action of an installed node outside the flow's steps (no
+    /// step events): the transfers of a flow folder set to cloud storage
+    /// ([`crate::cloud`]). Paths are resolved from the flow's folder and
+    /// sites checked against the policy as for a step; `id` stands for the
+    /// step in what the handler reports.
+    pub(crate) async fn run_action(
+        &self,
+        id: &StepId,
+        step_type: &str,
+        mut params: Value,
+    ) -> Result<Value, Interrupt> {
+        let handler = self.handlers.get(step_type).cloned().ok_or_else(|| {
+            RunError::new(
+                "UNSUPPORTED_STEP_TYPE",
+                format!("no handler for step type '{step_type}'"),
+            )
+        })?;
+        if let (Some(dir), Some(keys)) = (&self.project_dir, self.path_params.get(step_type)) {
+            project::resolve_params(&mut params, keys, dir);
+        }
+        if let Some(defs) = self.target_defs.get(step_type)
+            && let Err(refusal) = self.policy.check_targets(defs, &params)
+        {
+            return Err(RunError {
+                details: Some(refusal.details),
+                ..RunError::new(refusal.code, refusal.message)
+            }
+            .into());
+        }
+        let timeout_ms = self
+            .default_timeouts
+            .get(step_type)
+            .copied()
+            .unwrap_or(self.default_timeout_ms);
+        let cancel = self.cancel.child_token();
+        let input = ActionInput {
+            run_id: self.run_id.clone(),
+            step_id: id.clone(),
+            step_type: step_type.to_owned(),
+            attempt: 1,
+            params,
+            cancel: cancel.clone(),
+            timeout_ms,
+            emitter: self.emitter.clone(),
+            secrets: self.secrets.clone(),
+            sites_restricted: !self.policy.sites.is_empty(),
+        };
+        let outcome = tokio::select! {
+            biased;
+            () = self.cancel.cancelled() => None,
+            r = tokio::time::timeout(Duration::from_millis(timeout_ms), handler.execute(input)) => Some(r),
+        };
+        cancel.cancel();
+        match outcome {
+            None => Err(Interrupt::Cancelled),
+            Some(Ok(Ok(value))) => Ok(value),
+            Some(Ok(Err(e))) => Err(RunError::from(e).into()),
+            Some(Err(_)) => Err(RunError {
+                details: Some(json!({ "timeoutMs": timeout_ms })),
+                ..RunError::new(
+                    "STEP_TIMEOUT",
+                    format!("{step_type} timed out after {timeout_ms} ms"),
+                )
+            }
+            .into()),
+        }
+    }
+
     /// Saves a picture of the screen the failed step worked on (its browser
     /// context or its window) beside the run's log, and adds its path to the
     /// error as `details.screenshot`, so an unattended failure can be seen

@@ -211,7 +211,16 @@ pub(crate) struct Turn<'a> {
     pub workspace: &'a Path,
     pub system_prompt: &'a str,
     pub session: Option<&'a str>,
+    /// This turn's own folder: the messages the person sends while it runs
+    /// ([`INBOX`]), and the settings that name that folder.
+    pub own: Option<&'a Path>,
 }
+
+/// The folder in a turn's own folder for what the person sends meanwhile.
+pub(crate) const INBOX: &str = "inbox";
+/// Gemini reads its settings from the agent folder, which every turn
+/// shares: they name the inbox through this variable, set for each turn.
+const INBOX_VAR: &str = "SPELLSHEET_CHAT_INBOX";
 
 /// The tool's arguments and environment for one message (written to its
 /// stdin), after writing the files it reads its settings from.
@@ -223,16 +232,37 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
         "mcp".to_owned(),
     ];
     // The pane shows ask_user_to_choose as a card; an agent of its own
-    // (`command`) prints only text, so it does not get that tool.
+    // (`command`) prints only text, so it does not get that tool, nor
+    // messages sent while it works (they go as the next message).
+    let own = turn.own.filter(|_| kind != AgentKind::Command);
     if kind != AgentKind::Command {
         server_args.push("--writer-chat".to_owned());
     }
+    let inbox_arg = |shared: bool| {
+        own.map(|own| {
+            if shared {
+                format!("${{{INBOX_VAR}}}")
+            } else {
+                own.join(INBOX).display().to_string()
+            }
+        })
+    };
+    // Settings files in the shared agent folder must not name one turn's inbox.
+    let with_inbox = |shared: bool| {
+        let mut args = server_args.clone();
+        if let Some(inbox) = inbox_arg(shared) {
+            args.push("--inbox".to_owned());
+            args.push(inbox);
+        }
+        args
+    };
+    // Where this turn's settings go when they name its inbox.
+    let settings_dir = own.unwrap_or(turn.dir);
     let mut env = Vec::new();
     let args = match kind {
         AgentKind::ClaudeCode | AgentKind::Command => {
-            let mcp = turn.dir.join("mcp.json");
-            let server =
-                json!({ "mcpServers": { SERVER: { "command": turn.cli, "args": server_args } } });
+            let mcp = settings_dir.join("mcp.json");
+            let server = json!({ "mcpServers": { SERVER: { "command": turn.cli, "args": with_inbox(false) } } });
             write_if_changed(&mcp, &server.to_string())?;
             let system = turn.dir.join("system-prompt.md");
             write_if_changed(&system, turn.system_prompt)?;
@@ -245,14 +275,14 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
         AgentKind::Codex => {
             // Codex reads AGENTS.md in its working folder as instructions.
             write_if_changed(&turn.dir.join("AGENTS.md"), turn.system_prompt)?;
-            codex_args(turn.cli, &server_args, session)
+            codex_args(turn.cli, &with_inbox(false), session)
         }
         AgentKind::Gemini => {
             write_if_changed(&turn.dir.join("GEMINI.md"), turn.system_prompt)?;
             let settings = json!({
                 "mcpServers": { SERVER: {
                     "command": turn.cli,
-                    "args": server_args,
+                    "args": with_inbox(true),
                     // Its tools run without asking; nothing else can.
                     "trust": true,
                 }},
@@ -266,15 +296,18 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
             )?;
             // Read this folder's settings; it is Studio's own folder.
             env.push(("GEMINI_CLI_TRUST_WORKSPACE", "true".to_owned()));
+            if let Some(own) = own {
+                env.push((INBOX_VAR, own.join(INBOX).display().to_string()));
+            }
             gemini_args(session)
         }
         AgentKind::Copilot => {
             write_if_changed(&turn.dir.join("AGENTS.md"), turn.system_prompt)?;
-            let mcp = turn.dir.join("copilot-mcp.json");
+            let mcp = settings_dir.join("copilot-mcp.json");
             let server = json!({ "mcpServers": { SERVER: {
                 "type": "local",
                 "command": turn.cli,
-                "args": server_args,
+                "args": with_inbox(false),
                 "tools": ["*"],
             }}});
             write_if_changed(&mcp, &server.to_string())?;
@@ -717,6 +750,7 @@ mod tests {
             workspace: Path::new("D:\\work"),
             system_prompt: "be brief",
             session,
+            own: None,
         }
     }
 
@@ -807,6 +841,65 @@ mod tests {
         assert_eq!(
             mcp.pointer("/mcpServers/spellsheet/args/1"),
             Some(&json!("D:\\work"))
+        );
+    }
+
+    #[test]
+    fn every_agent_learns_where_this_turns_messages_wait() {
+        let dir = tempfile::tempdir().unwrap();
+        let own = dir.path().join("turns").join("turn_1");
+        std::fs::create_dir_all(&own).unwrap();
+        let inbox = own.join(INBOX).display().to_string();
+        let with_own = |session| Turn {
+            own: Some(&own),
+            ..turn(dir.path(), session)
+        };
+        let server_args = |file: &Path| -> Vec<Value> {
+            let config: Value =
+                serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+            config
+                .pointer("/mcpServers/spellsheet/args")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .clone()
+        };
+
+        // Claude Code and Copilot: settings of this turn's own, naming its inbox.
+        let (args, _) = prepare(AgentKind::ClaudeCode, &with_own(None)).unwrap();
+        let mcp = own.join("mcp.json");
+        assert!(args.contains(&mcp.display().to_string()));
+        assert_eq!(server_args(&mcp)[4..], [json!("--inbox"), json!(inbox)]);
+        prepare(AgentKind::Copilot, &with_own(None)).unwrap();
+        assert_eq!(
+            server_args(&own.join("copilot-mcp.json"))[4..],
+            [json!("--inbox"), json!(inbox)]
+        );
+
+        // Codex: on the command line.
+        let (args, _) = prepare(AgentKind::Codex, &with_own(None)).unwrap();
+        assert!(
+            args.join(" ")
+                .contains(&format!("'--writer-chat','--inbox',{}]", toml_str(&inbox)))
+        );
+
+        // Gemini: its shared settings name a variable set for this turn.
+        let (_, env) = prepare(AgentKind::Gemini, &with_own(None)).unwrap();
+        assert!(env.contains(&(INBOX_VAR, inbox.clone())));
+        assert_eq!(
+            server_args(&dir.path().join(".gemini/settings.json"))[4..],
+            [json!("--inbox"), json!("${SPELLSHEET_CHAT_INBOX}")]
+        );
+
+        // An agent of its own gets messages as the next message instead.
+        let command = Turn {
+            own: Some(&own),
+            ..turn(dir.path(), None)
+        };
+        prepare(AgentKind::Command, &command).unwrap();
+        assert_eq!(
+            server_args(&dir.path().join("mcp.json")),
+            [json!("--workspace"), json!("D:\\work"), json!("mcp")]
         );
     }
 

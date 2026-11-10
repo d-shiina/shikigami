@@ -168,3 +168,40 @@ hello/
 - シークレットの「使ってよい先」に `plugin:<name>` を追加
 - CLI：`spellsheet plugin list` / `spellsheet plugin check <dir>`
 - サンプル：`examples/plugins/hello`（Node.js、依存なし）
+
+## 10. ウィンドウの読み方を差し込む（`bridge`）
+
+UI Automation では中が一部しか見えないアプリがあります（SAP GUI など）。プラグインはマニフェストに `bridge` を書いて、「このウィンドウは自分のほうがよく見える」と申し出られます。そのウィンドウへの `desktop.*` のノードと `inspect_ui` はプラグインを通して動き、プラグインができないこと（ウィンドウそのものの操作、マウス、OCR、画像）は UI Automation が受け持ちます。本体に入っている Java Access Bridge と同じ扱いです。フローの書き方は変わりません。
+
+```json
+"bridge": {
+  "app": "sapgui",
+  "windows": [{ "className": "SAP_FRONTEND_SESSION" }, { "process": "saplogon" }]
+}
+```
+
+- `app`：`inspect_ui` の `app` に出る名前（小文字と数字。`uia`・`java` は使えない）
+- `windows`：受け持つウィンドウ。`className`（完全一致）と `process`（`.exe` の有無・大文字小文字は問わない）のうち、書いたものがすべて合うウィンドウ。どちらも書かない項目は書けない
+
+本体は、`bridge` のあるプラグインをノード用とは別にもう 1 つ起動し（同じ `command`）、画面操作のスレッドから 1 つずつ呼びます。どの呼び出しにも `hwnd`（ウィンドウのハンドル）が付きます。`element` は `desktop.*` の `target.element` そのまま（`id`・`name`・`role`・`nth`・`within`・`after` など）です。
+
+| method | params | 返すもの |
+|---|---|---|
+| `bridge.attach` | `title`・`process`・`className` | 届くなら何でもよい。届かないならエラー（`details.hint` に開け方） |
+| `bridge.inspect` | `maxNodes`・`root`（その部品の下だけ。無ければ `null`） | `inspect_ui` の結果（`backend`・`snapshot`・`hint`）。`app` と `window` は本体が足す |
+| `bridge.probe` | `element` | `{ found, visible, enabled }` |
+| `bridge.click` | `element` | ノードの出力 |
+| `bridge.setValue` | `element`・`value`・`secret`（シークレットなら true。ログに出さない） | ノードの出力 |
+| `bridge.getValue` | `element` | 値 |
+| `bridge.select` | `element`・`option` | ノードの出力 |
+| `bridge.press` | `chord`（`{ modifiers: [仮想キーコード], key: 仮想キーコード }`） | ノードの出力。`null` を返すと本体が実際のキーボードで送る |
+| `bridge.focus` | `element` | 何でもよい |
+| `bridge.screenRect` | `element` | `{ left, top, width, height }`（画面上の位置。マウスのノードが使う） |
+| `bridge.menu` | `path`（メニューバーの上からの名前） | ノードの出力 |
+| `bridge.table` | `element`（無ければ `null`）・`maxRows` | `desktop.getTable` の出力 |
+
+- シークレットを `bridge.setValue` に渡すのは、そのシークレットの「使ってよい先」に `plugin:<名前>` があるときだけです（無ければ `SECRET_PLUGIN_NOT_ALLOWED`）。対象のアプリ（`app:xxx.exe`）の確認は今までどおり行います。渡した値は、プラグインが標準エラーに書いたログの中で `***` に置き換えます
+- エラーの形はノードと同じ（§6）。`bridge.attach` が失敗したウィンドウは UI Automation で見え、`inspect_ui` に注記が付きます。部品を名指しした操作は、そのエラーで止まります
+- 1 回の呼び出しは、関係のない行をいくら書いても 60 秒で打ち切り、プロセスは次の呼び出しで起動し直します
+- プラグインを入れたり外したりしたあとは、Writer などを起動し直すと反映されます
+- `sap` という名前は予約から外しました（SAP GUI への対応は SAP のプラグインに移したため）。公式の一覧では名前の重なりを CI で確かめます

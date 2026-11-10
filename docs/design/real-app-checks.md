@@ -29,20 +29,7 @@ CI で確かめているもの（ここではやらなくてよい）：WinForms
 
 ## 2. SAP GUI
 
-前提：SAP の管理者が RZ11 で `sapgui/user_scripting = TRUE`、PC の SAP GUI で［オプション］>［アクセシビリティとスクリプト］>［スクリプト］の「スクリプトを有効にする」をオン、通知の 2 つをオフ（[desktop.md](../desktop.md)「SAP GUI」）。テスト用のクライアントで行う。
-
-| # | 何を | 手順 | 期待 | 結果 |
-|---|---|---|---|---|
-| 2-1 | 見える | ログオン画面で AI に `inspect_ui` を頼む | `wnd[0]/usr/txtRSYST-BNAME` などの id と役割が並ぶ | |
-| 2-2 | ログオン | `desktop.setValue` でユーザー・パスワード（シークレット）、`desktop.press` で Enter | ログオンできる | |
-| 2-3 | トランザクション | `sap.runTransaction`（`code: "SU3"` など） | 画面が開き、ステータスバーが返る | |
-| 2-4 | 入力と読み取り | 開いた画面の入力欄に `desktop.setValue` → `desktop.getValue` | 同じ値 | |
-| 2-5 | コンボボックス | `desktop.select`（表示名で、キーで） | どちらでも選べる | |
-| 2-6 | ファンクションキー | `desktop.press`（`F3`、`Shift+F1`、`Ctrl+S`） | 戻る・保存などが働く | |
-| 2-7 | メニューバー | `desktop.selectMenu`（`path: ["システム", "ステータス"]` など） | ダイアログが開く | |
-| 2-8 | ALV グリッド | 一覧系の T-code（SE16 で小さなテーブルなど）で `desktop.getTable` | 全行（画面に見えていない行も） | |
-| 2-9 | テーブルコントロール | テーブルコントロールのある画面で `desktop.getTable` | 全行 | |
-| 2-10 | スクリプト無効 | スクリプトをオフにして 2-4 | `SAP_SCRIPTING_OFF`（手順つき） | |
+SAP GUI Scripting を通した操作は SAP のプラグイン（有料、別に提供）に移しました。確認の手順はプラグインの側にあります。本体だけのときは、SAP GUI のウィンドウで `inspect_ui` に「UI Automation で見ている。SAP のプラグインがあれば中まで見える」という注記が出ること、`target.ocr` で文字を指して操作できることを確かめます。
 
 ## 3. Java アプリ
 
