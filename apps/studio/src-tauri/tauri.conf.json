@@ -42,7 +42,8 @@
     ],
     "windows": {
       "nsis": {
-        "installerHooks": "windows/installer-hooks.nsh"
+        "installerHooks": "windows/installer-hooks.nsh",
+        "languages": ["English", "Japanese"]
       }
     }
   },
