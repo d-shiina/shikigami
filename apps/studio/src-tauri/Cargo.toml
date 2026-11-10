@@ -1,5 +1,5 @@
 [package]
-name = "spellsheet-studio"
+name = "spellsheet-writer"
 description = "SpellSheet Writer (Tauri 2 desktop app)"
 version.workspace = true
 edition.workspace = true
@@ -10,7 +10,7 @@ repository.workspace = true
 # Only the rlib: the staticlib and cdylib that the Tauri template adds are for
 # iOS/Android, and each one is a full extra link (with LTO) of the whole app.
 [lib]
-name = "spellsheet_studio_lib"
+name = "spellsheet_writer_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
