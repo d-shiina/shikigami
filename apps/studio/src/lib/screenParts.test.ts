@@ -63,10 +63,11 @@ describe("a screen for the AI", () => {
 
   it("goes into the request before the person's words", () => {
     const { tree, parts } = cleanTree(app, "app");
-    const text = composeRequest("保存して", "INSTRUCTIONS", null, null, [{ kind: "app", title: "請求システム", where: "billing.exe", tree, parts }]);
+    const text = composeRequest("保存して", "INSTRUCTIONS", null, null, [{ kind: "app", title: "請求システム", where: "billing.exe", window: { process: "billing.exe", title: "請求", nth: 2 }, tree, parts }]);
     expect(text.indexOf("画面の部品")).toBeGreaterThan(text.indexOf("INSTRUCTIONS"));
     expect(text.indexOf("画面の部品")).toBeLessThan(text.indexOf("保存して"));
     expect(text).toContain("process: billing.exe");
+    expect(text).toContain('{"process":"billing.exe","title":"請求","nth":2}');
     expect(composeRequest("保存して", "I", null)).not.toContain("画面の部品");
   });
 });

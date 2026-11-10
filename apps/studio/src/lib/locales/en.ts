@@ -1480,6 +1480,7 @@ export const en: Dict = {
       sectionLead: "The parts Writer read from this screen (no typed values or table contents). As \"The screen\" in the instructions says, give these parts a target.",
       appHead: (title: string, process: string) => `Windows app "${title}" (process: ${process})`,
       webHead: (title: string, url: string) => `Web page "${title}" (${url})`,
+      window: (json: string) => `Use this as the "window" of these parts' targets, as it is: ${json}`,
       rowsLeft: (n: number) => `(${n} data rows left out)`,
       cut: "(cut here: too long)",
     },

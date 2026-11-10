@@ -1479,6 +1479,7 @@ export const ja = {
       sectionLead: "Writer がこの画面から読んだ部品の一覧です（入力されている値や表の中身は入れていません）。指示の「The screen」のとおり、ここにある部品は target を書いてください。",
       appHead: (title: string, process: string) => `Windows のアプリ「${title}」（process: ${process}）`,
       webHead: (title: string, url: string) => `Web ページ「${title}」（${url}）`,
+      window: (json: string) => `この画面の部品の target の "window" は、これをそのまま使ってください：${json}`,
       rowsLeft: (n: number) => `（データの行 ${n} 件は入れていません）`,
       cut: "（長いので、ここまで）",
     },

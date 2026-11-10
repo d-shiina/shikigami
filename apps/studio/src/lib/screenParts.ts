@@ -12,6 +12,8 @@ export type Screen = {
   title: string;
   /** The process (app) or address (web). */
   where: string;
+  /** An app's window as the picker found it (title, match, nth when one process has several): what its targets start with. */
+  window?: Record<string, unknown>;
   /** The cleaned tree. */
   tree: string;
   parts: number;
@@ -95,7 +97,7 @@ export function screensSection(screens: Screen[]): string[] {
   return [
     `===== ${s.section} =====`,
     s.sectionLead,
-    ...screens.flatMap((screen) => ["", screen.kind === "app" ? s.appHead(screen.title, screen.where) : s.webHead(screen.title, screen.where), "```text", screen.tree, "```"]),
+    ...screens.flatMap((screen) => ["", screen.kind === "app" ? s.appHead(screen.title, screen.where) : s.webHead(screen.title, screen.where), ...(screen.window ? [s.window(JSON.stringify(screen.window))] : []), "```text", screen.tree, "```"]),
     "",
   ];
 }

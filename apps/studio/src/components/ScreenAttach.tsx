@@ -49,7 +49,7 @@ export function ScreenAttach({ chatId }: { chatId: string }) {
       if (!window) return null;
       const ui = await api.pointAt("desktop", { window, maxNodes: 600 });
       const info = (ui.window ?? {}) as { title?: string; process?: string };
-      return { kind: "app", title: info.title ?? String(window.title ?? ""), where: info.process ?? String(window.process ?? ""), ...cleanTree(String(ui.snapshot ?? ""), "app") };
+      return { kind: "app", title: info.title ?? String(window.title ?? ""), where: info.process ?? String(window.process ?? ""), window, ...cleanTree(String(ui.snapshot ?? ""), "app") };
     });
   const readWeb = (address: string) =>
     read(async () => {
