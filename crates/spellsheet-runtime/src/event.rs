@@ -323,6 +323,15 @@ pub struct RunReport {
     /// logins, OAuth tokens), never their values.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secrets_used: Vec<String>,
+    /// What the run worked on outside itself: files and folders it read,
+    /// wrote or deleted, sites and programs it opened, addresses it sent
+    /// to, in the order it first did (see [`crate::touched`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub touched: Vec<crate::touched::Touched>,
+    /// The picture of the last page a browser step worked on, as the run
+    /// left it (`RunOptions::last_screen`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_screen: Option<String>,
 }
 
 /// How a run was started.

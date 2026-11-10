@@ -36,7 +36,7 @@ const CheckIcon = () => (
   </svg>
 );
 
-export type View = "story" | "flow" | "variables";
+export type View = "story" | "flow" | "variables" | "result";
 
 /**
  * Flow chart, procedure or variables: three ways to read the same flow. On
@@ -46,6 +46,8 @@ function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: Rev
   const place = useStudio((s) => s.place);
   const options: [ReviewView, string][] = [
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
+    // A finished run of the flow on paper, with its earlier runs (not on the review desk).
+    ...(place === "flows" ? [["result", t.result.view] as [ReviewView, string]] : []),
     ["flow", t.viewFlow],
     ["story", t.viewStory],
     ["variables", t.vars.table.view],
@@ -352,7 +354,7 @@ function PaneToggle({ view }: { view: ReviewView }) {
   const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
   const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
   const showFlowProps = useStudio((s) => s.showFlowProps);
-  if ((place !== "flows" && place !== "review") || view === "variables" || view === "report") return null;
+  if ((place !== "flows" && place !== "review") || view === "variables" || view === "report" || view === "result") return null;
   return (
     <button
       type="button"

@@ -25,6 +25,7 @@ import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
 import { ReviewFoot, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
+import { RunResultView } from "./components/RunResult";
 import { useReviewView } from "./lib/reviewView";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
@@ -324,7 +325,25 @@ function InboxSlot({ room, width, grip }: { room: boolean; width: number; grip: 
 type PlaceProps = { view: View; onView: (view: View) => void; fit: Fit; sizes: Sizes; grip: Grip };
 
 function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
-  return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
+  // A link to a node (a row of the 実行結果, a log line) shows it on the chart.
+  const revealed = useStudio((s) => s.reveal?.seq ?? 0);
+  const lastRevealed = useRef(revealed);
+  useEffect(() => {
+    if (revealed === lastRevealed.current) return;
+    lastRevealed.current = revealed;
+    if (view === "result") onView("flow");
+  }, [revealed, view, onView]);
+  const result = view === "result";
+  return (
+    <Editor
+      view={result ? "flow" : view}
+      onView={onView}
+      report={result ? <RunResultView onView={onView} /> : undefined}
+      right={fit.right && !result ? <Inspector /> : null}
+      rightWidth={sizes.right}
+      grip={grip}
+    />
+  );
 }
 
 /**
@@ -370,13 +389,20 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" ? raw : "flow"));
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" || raw === "result" ? raw : "flow"));
   const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
   const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
   const openName = useStudio((s) => s.flow?.name ?? "");
+  // A run of the whole flow that went to the end turns the editor to its 実行結果.
+  const resultFor = useStudio((s) => s.resultFor);
+  useEffect(() => {
+    if (resultFor && resultFor.flowId === openId && place === "flows") setView("result");
+    // Only when a run ends, not when another flow is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultFor?.seq]);
   // The AI pane follows the flow open in the editor; other conversations keep running.
   useEffect(() => {
     focusAgent(openId ? { id: openId, name: openName } : null);

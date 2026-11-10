@@ -15,7 +15,7 @@ use spellsheet_core::call::MAX_CALL_DEPTH;
 use spellsheet_core::expr::{self, Expr};
 use spellsheet_core::policy::{Policy, TargetDef};
 use spellsheet_core::project;
-use spellsheet_core::registry::{builtin, control, flow, is_control_type};
+use spellsheet_core::registry::{RiskLevel, builtin, control, flow, is_control_type};
 use spellsheet_core::resource::{DESKTOP_INPUT, ResourceDef, resource_keys};
 use spellsheet_core::secret::SecretProvider;
 use spellsheet_core::validate::LAST_ERROR_VAR;
@@ -34,6 +34,8 @@ use crate::runlog::RunLog;
 use crate::screens::Moment;
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+/// Closes a browser: the run keeps a picture of its page first.
+const BROWSER_CLOSE: &str = "browser.close";
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
 /// How long the picture of the screen at a failure may take.
 const FAILURE_SHOT_LIMIT: Duration = Duration::from_secs(10);
@@ -70,6 +72,15 @@ struct EmitterInner {
     failed: Mutex<Option<(StepId, Value)>>,
     /// Where the pictures for the 手順書 go, and which steps have one.
     screens: Option<crate::screens::Screens>,
+    /// The places the run worked on outside itself, for its report.
+    touched: Mutex<crate::touched::TouchedList>,
+    /// Where to keep the picture of the last page a browser step worked on.
+    last_screen: Option<PathBuf>,
+    /// The browser the latest browser step worked on (its rendered
+    /// `context`, `Null` without one) while it is open.
+    last_page: Mutex<Option<Value>>,
+    /// The picture at `last_screen` was taken.
+    screen_taken: Mutex<bool>,
 }
 
 impl Emitter {
@@ -89,6 +100,10 @@ impl Emitter {
                 log: Mutex::new(log),
                 failed: Mutex::new(None),
                 screens: None,
+                touched: Mutex::new(crate::touched::TouchedList::default()),
+                last_screen: None,
+                last_page: Mutex::new(None),
+                screen_taken: Mutex::new(false),
             }),
             call_path: Arc::from([]),
         }
@@ -101,6 +116,63 @@ impl Emitter {
             inner.screens = Some(crate::screens::Screens::new(dir));
         }
         self
+    }
+
+    /// Keeps a picture of the last page a browser step worked on at `path`
+    /// (see [`Executor::capture_last_page`]). Call before the emitter is shared.
+    pub(crate) fn with_last_screen(mut self, path: PathBuf) -> Self {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.last_screen = Some(path);
+        }
+        self
+    }
+
+    /// Notes the places a step that succeeded worked on.
+    pub(crate) fn touch(&self, places: Vec<crate::touched::Place>, step_type: &str, step: &StepId) {
+        if places.is_empty() {
+            return;
+        }
+        if let Ok(mut list) = self.inner.touched.lock() {
+            for mut place in places {
+                place.target = self.mask(&place.target);
+                list.add(place, step_type, step, &self.call_path);
+            }
+        }
+    }
+
+    /// The places the run worked on, taken out (stamp them with `finish`).
+    pub(crate) fn take_touched(&self) -> crate::touched::TouchedList {
+        self.inner
+            .touched
+            .lock()
+            .map(|mut list| std::mem::take(&mut *list))
+            .unwrap_or_default()
+    }
+
+    fn last_screen_path(&self) -> Option<PathBuf> {
+        self.inner.last_screen.clone()
+    }
+
+    pub(crate) fn last_page(&self) -> Option<Value> {
+        self.inner.last_page.lock().ok().and_then(|p| p.clone())
+    }
+
+    fn set_last_page(&self, page: Option<Value>) {
+        if let Ok(mut last) = self.inner.last_page.lock() {
+            *last = page;
+        }
+    }
+
+    fn screen_taken(&self) {
+        if let Ok(mut taken) = self.inner.screen_taken.lock() {
+            *taken = true;
+        }
+    }
+
+    /// Where the last page's picture is, once it was taken.
+    pub(crate) fn last_screen(&self) -> Option<PathBuf> {
+        let taken = self.inner.screen_taken.lock().is_ok_and(|t| *t);
+        self.inner.last_screen.clone().filter(|_| taken)
     }
 
     /// The next picture's path for `step`, unless it has one already (in
@@ -602,6 +674,8 @@ pub(crate) struct Executor {
     pub target_defs: Arc<HashMap<String, Vec<TargetDef>>>,
     /// The workspace policy as it was when the run started.
     pub policy: Arc<Policy>,
+    /// Each step type's risk, to tell what only reads (see [`crate::touched`]).
+    pub risks: Arc<HashMap<String, RiskLevel>>,
 }
 
 fn expr_error(e: expr::ExprError) -> RunError {
@@ -668,6 +742,7 @@ impl Executor {
             library: self.library.clone(),
             target_defs: self.target_defs.clone(),
             policy: self.policy.clone(),
+            risks: self.risks.clone(),
         }
     }
 
@@ -1848,6 +1923,9 @@ impl Executor {
             .map(|ms| (ms as u64).min(timeout_ms));
 
         self.capture_screen(step, &params, Moment::Before).await;
+        if step.step_type == BROWSER_CLOSE {
+            self.capture_last_page(params.get("context")).await;
+        }
         let mut attempt = 1;
         loop {
             self.check_cancel()?;
@@ -1928,6 +2006,7 @@ impl Executor {
                         will_retry: false,
                     });
                     self.capture_screen(step, &params, Moment::After).await;
+                    self.touch(step, &params);
                     if let Some(name) = &step.save_as {
                         self.set_var(name, value, Some(&step.id));
                     }
@@ -2034,6 +2113,84 @@ impl Executor {
     /// error as `details.screenshot`, so an unattended failure can be seen
     /// afterwards. Uses the adapter's own screenshot step; does nothing for
     /// other steps, when the run writes no log, or when the screen is gone.
+    /// Notes what a step that succeeded worked on outside the run, and
+    /// which browser the run is on.
+    fn touch(&self, step: &Step, params: &Value) {
+        let risk = self
+            .risks
+            .get(&step.step_type)
+            .copied()
+            .unwrap_or(RiskLevel::Interactive);
+        let none: [String; 0] = [];
+        let places = crate::touched::places(
+            &step.step_type,
+            params,
+            risk,
+            self.path_params
+                .get(&step.step_type)
+                .map_or(&none[..], |v| &v[..]),
+            self.target_defs
+                .get(&step.step_type)
+                .map_or(&[], |v| &v[..]),
+        );
+        self.emitter.touch(places, &step.step_type, &step.id);
+        if step.step_type == BROWSER_CLOSE {
+            self.emitter.set_last_page(None);
+        } else if step.step_type.starts_with("browser.") {
+            self.emitter
+                .set_last_page(Some(params.get("context").cloned().unwrap_or(Value::Null)));
+        }
+    }
+
+    /// Keeps a picture of the page the run's browser shows now, as the run
+    /// leaves it: before `browser.close`, and when the run ends with the
+    /// browser still open. A later picture replaces an earlier one, so
+    /// what stays is the last page. `context` names the browser (from
+    /// `browser.close`); `None` means the one the latest browser step used.
+    pub(crate) async fn capture_last_page(&self, context: Option<&Value>) {
+        let Some(path) = self.emitter.last_screen_path() else {
+            return;
+        };
+        let context = match context {
+            Some(c) => c.clone(),
+            None => match self.emitter.last_page() {
+                Some(c) => c,
+                None => return,
+            },
+        };
+        let Some(handler) = self.handlers.get("browser.screenshot").cloned() else {
+            return;
+        };
+        if let Some(dir) = path.parent()
+            && std::fs::create_dir_all(dir).is_err()
+        {
+            return;
+        }
+        let mut params = Map::new();
+        params.insert("path".into(), Value::String(path.display().to_string()));
+        if !context.is_null() {
+            params.insert("context".into(), context);
+        }
+        let cancel = CancellationToken::new();
+        let input = ActionInput {
+            run_id: self.run_id.clone(),
+            step_id: StepId::new("lastPage"),
+            step_type: "browser.screenshot".to_owned(),
+            attempt: 1,
+            params: Value::Object(params),
+            cancel: cancel.clone(),
+            timeout_ms: FAILURE_SHOT_LIMIT.as_millis() as u64,
+            emitter: self.emitter.clone(),
+            secrets: self.secrets.clone(),
+            sites_restricted: false,
+        };
+        let taken = tokio::time::timeout(FAILURE_SHOT_LIMIT, handler.execute(input)).await;
+        cancel.cancel();
+        if matches!(taken, Ok(Ok(_))) && path.is_file() {
+            self.emitter.screen_taken();
+        }
+    }
+
     pub(crate) async fn capture_failure(&self, flow: &Flow, error: &mut RunError) {
         if self.policy.records.failure_screenshots == Some(false) {
             return;

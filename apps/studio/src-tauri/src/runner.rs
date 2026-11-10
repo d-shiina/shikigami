@@ -143,6 +143,9 @@ pub async fn runner_run(
         return Err(err("INVALID_INPUT", format!("{name} is not an input")));
     }
     let project_dir = Some(state.service.project_dir(&id)?);
+    let run_id = spellsheet_core::RunId::generate();
+    let last_screen =
+        spellsheet_runtime::record::last_screen_path(state.service.store().local_root(), &run_id);
     let handle = state
         .runtime
         .start(
@@ -154,6 +157,8 @@ pub async fn runner_run(
                 version: Some(run.version),
                 subflows: run.subflows,
                 origin: RunOrigin::new(RunTrigger::Studio).requested_by(RUNNER_REQUESTER),
+                run_id: Some(run_id),
+                last_screen,
                 ..RunOptions::default()
             },
         )

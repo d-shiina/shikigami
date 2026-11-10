@@ -259,6 +259,7 @@ impl Agent {
                     project_dir,
                     full_run: true,
                     origin: origin.clone(),
+                    last_screen: spellsheet_runtime::record::last_screen_path(&root, &run_id),
                     ..RunOptions::default()
                 },
             )
@@ -919,6 +920,8 @@ impl Agent {
                 ..RunOrigin::new(RunTrigger::Schedule).requested_by(s.name.clone())
             },
             secrets_used: Vec::new(),
+            touched: Vec::new(),
+            last_screen: None,
         };
         let hooks = lock(&self.hooks).clone();
         for hook in hooks {

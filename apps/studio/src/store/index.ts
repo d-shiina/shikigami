@@ -160,6 +160,11 @@ export type StudioState = {
   editing: string | null;
   /** 「ここまで実行」: the run pauses before this node, runs it, and pauses again after. */
   trying: string | null;
+  /**
+   * A run of the whole flow that went to the end: the editor turns to its
+   * 実行結果. `seq` changes for each one.
+   */
+  resultFor: { flowId: string; runId: string; seq: number } | null;
   /** A run waiting for values of inputs with no default (「実行に必要な入力」). */
   askInputs: { flowId: string; options: RunOptions } | null;
   /** The last 「ノードの単体実行」 (only that node ran), until another node is run alone. */
@@ -467,6 +472,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       reveal: null,
       editing: null,
       trying: null,
+      resultFor: null,
       askInputs: null,
       stepTest: null,
       tested: {},

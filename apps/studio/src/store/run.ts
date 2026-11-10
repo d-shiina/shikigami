@@ -180,6 +180,11 @@ export type RunState = {
   trailHidden: boolean;
   /** Stop was pressed and the run has not ended yet. */
   stopping: boolean;
+  /**
+   * The person ran the whole flow (実行): not 「ここから」「ここまで」 or step
+   * by step. Such a run that goes to the end shows its 実行結果.
+   */
+  whole?: boolean;
 };
 
 /** How far a loop got in a run: its round now (from 1), out of how many when known, and how it ended. */

@@ -11,6 +11,7 @@ import type {
   EditOutcome,
   ErrorPayload,
   Evidence,
+  FileStamp,
   ExtractOutcome,
   HistoryEntry,
   ImportConflict,
@@ -57,6 +58,7 @@ export type StepTestResult = {
   logs: { level: LogLevel; message: string }[];
 };
 import { invoke } from "@tauri-apps/api/core";
+import type { FlowRun } from "./runResult";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Drafts, ManualManifest, Mask } from "./manual";
 
@@ -441,6 +443,12 @@ export const api = {
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
   /** A finished run's report and events (runs/<id>/), for what an AI test run did. */
   runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
+  /** The flow's finished runs, newest first, from wherever they were started (its 実行結果's list). */
+  flowRuns: (id: string) => call<FlowRun[]>("flow_runs", { id }),
+  /** The picture of the last page a run's browser showed, as a data URL; null when it kept none. */
+  runLastScreen: (runId: string) => call<string | null>("run_last_screen", { runId }),
+  /** A file's size and SHA-256 now (a relative path is in the flow's folder); null when it is not a file. */
+  fileStamp: (id: string, path: string) => call<FileStamp | null>("file_stamp", { id, path }),
   /** How long each step of a flow usually takes (ms, by step id), from its latest finished runs. */
   stepTimes: (id: string) => call<Record<string, number>>("step_times", { id }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */

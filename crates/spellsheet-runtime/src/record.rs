@@ -89,6 +89,15 @@ impl RunRecorder {
     }
 }
 
+/// Where a run keeps the picture of the last page its browser showed
+/// (`RunOptions::last_screen`), next to its events and report: kept and
+/// deleted with them. `None` for a malformed id.
+pub fn last_screen_path(workspace: &Path, run_id: &RunId) -> Option<PathBuf> {
+    run_dir(workspace, run_id)
+        .ok()
+        .map(|d| d.join("last-screen.png"))
+}
+
 fn run_dir(workspace: &Path, run_id: &RunId) -> std::io::Result<PathBuf> {
     if !run_id.is_well_formed() {
         return Err(std::io::Error::new(
@@ -318,6 +327,8 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
         subflows: Vec::new(),
         origin,
         secrets_used: Vec::new(),
+        touched: Vec::new(),
+        last_screen: None,
     };
     fs::write(dir.join("report.json"), serde_json::to_vec_pretty(&report)?)
 }

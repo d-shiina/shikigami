@@ -166,10 +166,18 @@ pub(crate) async fn run(
     workspace: &Path,
     policy: &Path,
     flow: Flow,
-    options: RunOptions,
+    mut options: RunOptions,
     json: bool,
     vars: bool,
 ) -> Result<RunStatus> {
+    // The run keeps the last page its browser showed with its record.
+    let run_id = options
+        .run_id
+        .get_or_insert_with(spellsheet_core::RunId::generate)
+        .clone();
+    if options.full_run && options.last_screen.is_none() {
+        options.last_screen = spellsheet_runtime::record::last_screen_path(workspace, &run_id);
+    }
     // Nodes are told by name, with the ID that finds them in the flow file.
     let names = spellsheet_runtime::names::StepNames::new(
         std::iter::once(&flow).chain(options.subflows.iter().map(|s| &s.flow)),

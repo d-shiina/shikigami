@@ -26,6 +26,7 @@ pub mod sidecar;
 pub mod single;
 pub mod start;
 pub mod testing;
+pub mod touched;
 mod used_secrets;
 
 use std::collections::{BTreeSet, HashMap};
@@ -102,6 +103,10 @@ pub struct RunOptions {
     /// the flow's 手順書. Off when the policy's `records.manualScreens` is
     /// `false`.
     pub screens_dir: Option<PathBuf>,
+    /// Keep a picture of the last page a browser step worked on here: taken
+    /// before `browser.close` and when the run ends with the browser still
+    /// open, for the run's 実行結果. Usually [`record::last_screen_path`].
+    pub last_screen: Option<PathBuf>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -118,6 +123,8 @@ pub struct Runtime {
     secrets: Option<Arc<dyn SecretProvider>>,
     /// Params naming sites and programs, per step type.
     target_defs: Arc<HashMap<String, Vec<TargetDef>>>,
+    /// Each step type's risk.
+    risks: Arc<HashMap<String, spellsheet_core::registry::RiskLevel>>,
     /// `policy.json` of the workspace, read when each run starts.
     policy_path: Option<Arc<PathBuf>>,
 }
@@ -297,6 +304,9 @@ impl Runtime {
         {
             emitter = emitter.with_screens(dir);
         }
+        if let Some(path) = options.last_screen.clone() {
+            emitter = emitter.with_last_screen(path);
+        }
         // Folders whose `work/` the run starts empty.
         let fresh_work: Vec<PathBuf> =
             if options.full_run && options.start_at.is_none() {
@@ -370,6 +380,7 @@ impl Runtime {
                 library: Arc::new(library),
                 target_defs: self.target_defs.clone(),
                 policy: Arc::new(policy),
+                risks: self.risks.clone(),
             },
         );
         let mut inputs = options.inputs;
@@ -506,6 +517,8 @@ impl Runtime {
             // While the browser or window is still open (the hooks below close them).
             if let Some(error) = error.as_mut() {
                 executor.capture_failure(&flow, error).await;
+            } else if status == RunStatus::Succeeded {
+                executor.capture_last_page(None).await;
             }
             let error = error.map(|e| {
                 let mut e = emitter.mask_error(e);
@@ -541,6 +554,13 @@ impl Runtime {
                 }
             }
 
+            // Files are read through for their SHA-256: off the async threads.
+            let list = emitter.take_touched();
+            let touched = tokio::task::spawn_blocking(move || list.finish())
+                .await
+                .unwrap_or_default();
+            let last_screen = emitter.last_screen().map(|p| p.display().to_string());
+
             let duration_ms = u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX);
             emitter.update_snapshot(|s| {
                 s.status = status;
@@ -569,6 +589,8 @@ impl Runtime {
                 secrets_used: secrets_used
                     .and_then(|used| used.lock().ok().map(|u| u.iter().cloned().collect()))
                     .unwrap_or_default(),
+                touched,
+                last_screen,
             }
         });
 
@@ -708,6 +730,12 @@ impl RuntimeBuilder {
                     .iter()
                     .filter(|def| !def.targets.is_empty())
                     .map(|def| (def.step_type.clone(), def.targets.clone()))
+                    .collect(),
+            ),
+            risks: Arc::new(
+                self.registry
+                    .iter()
+                    .map(|def| (def.step_type.clone(), def.risk))
                     .collect(),
             ),
             policy_path: None,

@@ -27,6 +27,15 @@ Nothing is written twice. The trail is read from the records each part already k
 
 Fields of `--json`: `at`, `source`, `actor`, `who` (client, schedule name or the person on the management server), `action`, `flowId`, `revision`, `version`, `runId`, `ok`, `errorCode`, `detail`, `secrets` (runs only: the names of the secrets the run used, such as typed passwords, API keys, saved logins and OAuth tokens; never their values. Also `secretsUsed` in the run's `report.json`).
 
+### What a run worked on
+
+A run's `report.json` also says what the run did outside itself. Writer's 実行結果 (Result) shows it on paper; every run of a flow, from wherever it was started, is listed beside it under 実行の履歴 (Run history).
+
+- `touched`: the places the run worked on, one entry each, in the order it first did, as the nodes ran with them (templates filled in, relative paths made full, secrets masked): `target` (a file, folder, URL, program or mail address), `stepTypes`, `stepId` and `callPath` (the first node on it), `reads` (only read), `count` and `at` (first time).
+  - A file the run wrote carries `file` (`size` and `sha256`) as it was when the run ended, so a later change to it shows. One that was not there at the end is `gone: true` (deleted or moved).
+  - An element of a page or window a node clicked, typed into or chose from is `screen: true`, with the node's target as JSON in `target`. What was typed is not kept.
+- `lastScreen`: for a run that used a browser, the picture of the last page it showed (`runs/<run-id>/last-screen.png`), taken before `browser.close` and when the run ends with the browser still open. Password fields and fields that got a secret are blacked out.
+
 ## How long it is kept
 
 Run records, the run logs in each flow's `logs/` and MCP calls are kept for 90 days: older ones are deleted on each PC when a run ends. Change it with `records.keepDays` in `policy.json` ([policy.md](policy.md)); `0` keeps them for good. The change journal is kept: undo and the flow's history need it. Publish records live with the versions and are kept with them.

@@ -96,9 +96,11 @@ export const runActions = ({ api, set, get }: StoreContext) =>
           band: loadBandSettings(),
           ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
         });
+        // Not a run up to, from or step by step through a node: its end shows the 実行結果.
+        const whole = !options?.step && !options?.stopAt && !options?.startAt;
         set((s) => ({
           // Events may have arrived before the command returned.
-          run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
+          run: { ...(s.run?.runId === runId ? s.run : newRun(runId, flow.id)), whole },
           // A new run's result replaces what a node run alone gave.
           stepTest: null,
           // Values tested alone before this run are older than what it reads.
@@ -431,6 +433,10 @@ export const runActions = ({ api, set, get }: StoreContext) =>
         set({ trying: null });
         void get().debug({ action: "stepOver" });
       } else if (trying && env.type === "runFinished") set({ trying: null });
+      const ended = get().run;
+      if (env.type === "runFinished" && env.status === "succeeded" && ended?.runId === env.runId && ended.whole && ended.flowId) {
+        set({ resultFor: { flowId: ended.flowId, runId: env.runId, seq: env.seq } });
+      }
     },
 
     hideTrail() {
