@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 use spellsheet_core::registry::StepTypeDef;
+use spellsheet_core::secret::{SecretField, SecretRef};
 use spellsheet_runtime::sidecar::{SidecarClient, SidecarConfig};
 use spellsheet_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
@@ -131,6 +132,20 @@ impl Plugin {
 
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// The program started for this plugin, its arguments and folder: a
+    /// plugin with a `bridge` is started a second time for it.
+    pub fn command(&self) -> (PathBuf, Vec<String>, PathBuf) {
+        let program = &self.manifest.command.program;
+        let path = if program.contains(['/', '\\']) {
+            self.dir.join(program)
+        } else if spellsheet_runtime::node::is_node(program) {
+            spellsheet_runtime::node::node_program()
+        } else {
+            PathBuf::from(program)
+        };
+        (path, self.manifest.command.args.clone(), self.dir.clone())
     }
 
     pub fn step_defs(&self) -> &[StepTypeDef] {
@@ -295,9 +310,16 @@ impl ActionHandler for PluginStep {
                 _ => Map::new(),
             };
             for key in &self.secret_params {
-                if let Some(value) = params.get(key).cloned()
-                    && let Some(text) = self.secret_text(&input, &value)?
-                {
+                let Some(value) = params.get(key).cloned() else {
+                    continue;
+                };
+                let text = match SecretRef::from_value(&value) {
+                    Some(Ok(reference)) if reference.field == SecretField::AccessToken => {
+                        Some(self.access_token(&input, &reference.secret).await?)
+                    }
+                    _ => self.secret_text(&input, &value)?,
+                };
+                if let Some(text) = text {
                     params.insert(key.clone(), Value::String(text));
                 }
             }
@@ -312,6 +334,19 @@ impl ActionHandler for PluginStep {
 }
 
 impl PluginStep {
+    /// The OAuth access token of the secret `name` (signed in with
+    /// `oauth.signIn`), refreshed when it is about to expire, as for
+    /// `http.request`; only when the secret lists this plugin.
+    async fn access_token(&self, input: &ActionInput, name: &str) -> Result<String, StepError> {
+        let (token, sites) = spellsheet_system::oauth::access_token(input, name).await?;
+        let site = format!("{PLUGIN_SITE_PREFIX}{}", self.plugin);
+        if !sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
+            return Err(not_allowed(name, &self.plugin, &site));
+        }
+        self.client.mask(&token);
+        Ok(token)
+    }
+
     /// The value of a secret reference, when the secret lists this plugin
     /// (`plugin:<name>`) among the places it may be used.
     fn secret_text(&self, input: &ActionInput, value: &Value) -> Result<Option<String>, StepError> {
@@ -320,18 +355,22 @@ impl PluginStep {
         };
         let site = format!("{PLUGIN_SITE_PREFIX}{}", self.plugin);
         if !secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
-            return Err(StepError::permanent(
-                "SECRET_PLUGIN_NOT_ALLOWED",
-                format!("secret '{}' may not be passed to the {} plugin", secret.name, self.plugin),
-            )
-            .with_details(json!({
-                "hint": format!("Ask the user to add {site} to this secret's sites in Writer (シークレット) if this plugin may use it.")
-            })));
+            return Err(not_allowed(&secret.name, &self.plugin, &site));
         }
         // Masked in the plugin's own diagnostics too.
         self.client.mask(&secret.value);
         Ok(Some(secret.value))
     }
+}
+
+fn not_allowed(secret: &str, plugin: &str, site: &str) -> StepError {
+    StepError::permanent(
+        "SECRET_PLUGIN_NOT_ALLOWED",
+        format!("secret '{secret}' may not be passed to the {plugin} plugin"),
+    )
+    .with_details(json!({
+        "hint": format!("Ask the user to add {site} to this secret's sites in Writer (シークレット) if this plugin may use it.")
+    }))
 }
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ use spellsheet_core::registry::{
     StepTypeDef,
 };
 use spellsheet_core::resource::{DESKTOP_INPUT, ResourceDef};
-use spellsheet_core::secret::text_or_secret_schema;
+use spellsheet_core::secret::{text_or_secret_schema, token_or_secret_schema};
 use spellsheet_core::{Flow, Step, Validator};
 
 /// File name of the manifest inside a plugin folder.
@@ -67,7 +67,6 @@ pub const RESERVED_NAMES: &[&str] = &[
     "dialog",
     "mail",
     "pdf",
-    "sap",
     "spellsheet",
 ];
 
@@ -109,7 +108,32 @@ pub struct Manifest {
     /// The registered secrets its steps take, by kind.
     #[serde(default)]
     pub credentials: Vec<CredentialManifest>,
+    /// Windows whose `desktop.*` steps go through this plugin, because it
+    /// sees more of them than UI Automation (docs/design/plugins.md §10).
+    #[serde(default)]
+    pub bridge: Option<BridgeManifest>,
     pub steps: Vec<StepManifest>,
+}
+
+/// The windows a plugin reaches for the `desktop.*` steps.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BridgeManifest {
+    /// The app name inspect_ui shows for these windows (`sapgui`).
+    pub app: String,
+    pub windows: Vec<BridgeWindowManifest>,
+}
+
+/// A window the bridge takes: every field given must match.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BridgeWindowManifest {
+    /// The window class, exactly.
+    #[serde(default)]
+    pub class_name: Option<String>,
+    /// The process name, with or without `.exe`.
+    #[serde(default)]
+    pub process: Option<String>,
 }
 
 /// A registered secret the plugin's steps take.
@@ -297,6 +321,37 @@ impl Manifest {
         if self.steps.is_empty() {
             p.add("steps", "no steps", "declare at least one step");
         }
+        if let Some(bridge) = &self.bridge {
+            let app_ok = !bridge.app.is_empty()
+                && bridge
+                    .app
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+            if !app_ok || ["uia", "java"].contains(&bridge.app.as_str()) {
+                p.add(
+                    "bridge.app",
+                    format!("'{}' is not an app name", bridge.app),
+                    "use lowercase letters and digits other than uia and java, e.g. sapgui",
+                );
+            }
+            if bridge.windows.is_empty() {
+                p.add(
+                    "bridge.windows",
+                    "no windows",
+                    "name the windows by className and/or process, e.g. { \"className\": \"SAP_FRONTEND_SESSION\" }",
+                );
+            }
+            for (i, window) in bridge.windows.iter().enumerate() {
+                let empty = |v: &Option<String>| v.as_deref().is_none_or(|s| s.trim().is_empty());
+                if empty(&window.class_name) && empty(&window.process) {
+                    p.add(
+                        &format!("bridge.windows[{i}]"),
+                        "neither className nor process",
+                        "give at least one of them, or every window would go to the plugin",
+                    );
+                }
+            }
+        }
         if !self.homepage.is_empty() && !self.homepage.starts_with("https://") {
             p.add(
                 "homepage",
@@ -471,7 +526,17 @@ impl Manifest {
                         .get("description")
                         .and_then(Value::as_str)
                         .unwrap_or("text, or a registered secret { \"secret\": \"<name>\", \"field\": \"password\" }");
-                    let mut schema = text_or_secret_schema(description);
+                    // A setting that takes an OAuth secret also takes its
+                    // access token (`field: "accessToken"`, refreshed by the host).
+                    let oauth = self
+                        .credentials
+                        .iter()
+                        .any(|c| c.kind == "oauth" && c.params.contains(key));
+                    let mut schema = if oauth {
+                        token_or_secret_schema(description)
+                    } else {
+                        text_or_secret_schema(description)
+                    };
                     // Studio names the field by its title, as for other params.
                     if let (Some(title), Some(map)) =
                         (property.get("title"), schema.as_object_mut())

@@ -657,6 +657,81 @@ pub fn copy_into_project(
     Ok(added)
 }
 
+/// Copies one file from anywhere on the PC into the flow's folder under
+/// the name a node already reads (`input/受注.xlsx`), whatever it was
+/// called where it was.
+#[tauri::command]
+pub fn copy_into_project_as(
+    state: State<'_, AppState>,
+    id: FlowId,
+    from: String,
+    path: String,
+    overwrite: bool,
+) -> CmdResult<ProjectFile> {
+    Ok(state
+        .service
+        .copy_into_project(&id, std::path::Path::new(&from), &path, overwrite)?)
+}
+
+/// The folders on this PC that a cloud storage app keeps in sync (Box
+/// Drive, OneDrive), and the user's profile folder, for "read it from Box
+/// or OneDrive".
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncFolders {
+    pub profile: Option<String>,
+    pub folders: Vec<SyncFolder>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncFolder {
+    pub name: String,
+    pub path: String,
+}
+
+#[tauri::command]
+pub fn sync_folders() -> SyncFolders {
+    let profile = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
+    let mut folders: Vec<SyncFolder> = Vec::new();
+    let mut add = |name: String, path: std::path::PathBuf| {
+        let path = path.to_string_lossy().into_owned();
+        if std::path::Path::new(&path).is_dir()
+            && !folders.iter().any(|f| f.path.eq_ignore_ascii_case(&path))
+        {
+            folders.push(SyncFolder { name, path });
+        }
+    };
+    if let Some(home) = &profile {
+        let home = std::path::Path::new(home);
+        for name in ["Box", "Dropbox", "Google Drive", "iCloudDrive"] {
+            add(name.into(), home.join(name));
+        }
+    }
+    // Google Drive for desktop shows the drive as a drive letter (G: by
+    // default) holding マイドライブ / My Drive and 共有ドライブ / Shared drives.
+    for letter in 'D'..='Z' {
+        for name in ["マイドライブ", "My Drive", "共有ドライブ", "Shared drives"] {
+            add(
+                "Google Drive".into(),
+                std::path::PathBuf::from(format!("{letter}:\\{name}")),
+            );
+        }
+    }
+    // OneDrive sets these for the personal and the work account.
+    for var in ["OneDriveCommercial", "OneDrive", "OneDriveConsumer"] {
+        if let Ok(path) = std::env::var(var) {
+            let path = std::path::PathBuf::from(path);
+            let name = path
+                .file_name()
+                .map_or_else(|| "OneDrive".into(), |n| n.to_string_lossy().into_owned());
+            add(name, path);
+        }
+    }
+    SyncFolders { profile, folders }
+}
+
 #[tauri::command]
 pub fn create_project_folder(
     state: State<'_, AppState>,
@@ -1328,6 +1403,66 @@ pub async fn test_step(
         error: report.error,
         logs,
     })
+}
+
+/// 「参照…」 in the cloud storage dialog: signs in with `secret` (asking a
+/// person only when there is no sign-in to refresh yet) and lists `folder`
+/// of the storage with its plugin (`<service>.list`).
+#[tauri::command]
+pub async fn cloud_list(
+    state: State<'_, AppState>,
+    service: String,
+    secret: String,
+    sign_in: Option<Map<String, Value>>,
+    folder: String,
+) -> CmdResult<Value> {
+    if let Some(mut params) = sign_in {
+        params.insert("secret".into(), Value::String(secret.clone()));
+        let mut step = spellsheet_core::Step::new("oauth.signIn");
+        step.params = params;
+        run_alone(&state, step).await?;
+    }
+    let mut step = spellsheet_core::Step::new(format!("{service}.list"));
+    step.params.insert(
+        "account".into(),
+        serde_json::json!({ "secret": secret, "field": "accessToken" }),
+    );
+    step.params.insert("folder".into(), Value::String(folder));
+    run_alone(&state, step).await
+}
+
+/// Runs one step outside any flow and returns its result (or its error).
+async fn run_alone(state: &AppState, step: spellsheet_core::Step) -> CmdResult<Value> {
+    let single = spellsheet_runtime::single::flow_for(
+        step,
+        state.runtime.registry(),
+        &Map::new(),
+        spellsheet_runtime::single::Context::default(),
+    )
+    .map_err(|m| err("UNKNOWN_STEP_TYPE", m))?;
+    let to_payload = |e: spellsheet_runtime::RunError| ErrorPayload {
+        code: e.code,
+        message: e.message,
+        details: e.details,
+    };
+    let handle = state
+        .runtime
+        .start(
+            single.flow.clone(),
+            RunOptions {
+                origin: RunOrigin::new(RunTrigger::Studio),
+                ..RunOptions::default()
+            },
+        )
+        .map_err(to_payload)?;
+    let report = handle
+        .wait()
+        .await
+        .map_err(|e| err("INTERNAL", e.message))?;
+    match report.error {
+        Some(e) => Err(to_payload(e)),
+        None => Ok(single.result(&report.outputs)),
+    }
 }
 
 /// Records a started run, sends its events to the windows as `event`, and

@@ -4,7 +4,10 @@ English | [日本語](ja/mcp.md)
 
 `spellsheet mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Writer, so AI edits show up in Writer immediately and can be undone there. It also runs on its own, without a GUI.
 
-![An MCP edit showing up in Writer](assets/studio-mcp-edit.png)
+<picture>
+  <source srcset="assets/writer-en-dark.webp" media="(prefers-color-scheme: dark)">
+  <img src="assets/writer-en.webp" alt="Writer showing the AI's edits as they happen: the flow in the middle, the AI chat on the right">
+</picture>
 
 ## Connecting
 
@@ -15,10 +18,10 @@ The transport is **stdio**: the AI client starts `spellsheet mcp` as a child pro
 The plugin is recommended: it bundles the MCP settings and a skill that teaches how to write flows.
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-(Before Claude Code 2.1.275: `/plugin marketplace add d-shiina/spellsheet`, then `/plugin install spellsheet@spellsheet`.)
+(Before Claude Code 2.1.275: `/plugin marketplace add spellsheet/spellsheet`, then `/plugin install spellsheet@spellsheet`.)
 
 To register only the MCP server:
 
@@ -49,6 +52,10 @@ In Writer, **Settings → AI → MCP server registration → Cursor → Add to C
   }
 }
 ```
+
+### MCP Bundle (other clients)
+
+Each release also has `spellsheet.mcpb`, an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) with `spellsheet.exe` and the Node.js, browser adapter and OCR files the installer ships, so it works without installing Writer. Clients that take bundles (Claude Desktop and others) install it from the file; clients that read the [MCP Registry](https://registry.modelcontextprotocol.io/) find it there. It runs on Windows 10/11 (x64) only, and uses the same workspace as Writer, so installing Writer too lets you see and review what the AI builds.
 
 ### Options
 

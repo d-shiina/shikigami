@@ -43,6 +43,9 @@ pub fn load() -> Loaded {
     let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
     let found = spellsheet_plugins::discover(&spellsheet_plugins::default_dirs(), &taken);
     let plugins = found.plugins.iter().map(|p| p.summary()).collect();
+    spellsheet_desktop::plugin_bridge::register(
+        found.plugins.iter().filter_map(bridge_of).collect(),
+    );
     adapters.extend(
         found
             .plugins
@@ -54,6 +57,32 @@ pub fn load() -> Loaded {
         plugins,
         problems: found.problems,
     }
+}
+
+/// The windows `plugin` reaches for the `desktop.*` steps, when it declares
+/// a `bridge`.
+fn bridge_of(
+    plugin: &spellsheet_plugins::Plugin,
+) -> Option<spellsheet_desktop::plugin_bridge::BridgeSpec> {
+    use spellsheet_desktop::plugin_bridge::{BridgeSpec, WindowMatch};
+    let manifest = plugin.manifest();
+    let bridge = manifest.bridge.as_ref()?;
+    let (program, args, dir) = plugin.command();
+    Some(BridgeSpec {
+        plugin: manifest.name.clone(),
+        app: bridge.app.clone(),
+        windows: bridge
+            .windows
+            .iter()
+            .map(|w| WindowMatch {
+                class_name: w.class_name.clone(),
+                process: w.process.clone(),
+            })
+            .collect(),
+        program,
+        args,
+        dir,
+    })
 }
 
 /// The adapters available in this build and on this PC.

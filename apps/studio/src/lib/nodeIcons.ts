@@ -209,7 +209,6 @@ const BY_TYPE: Record<string, LucideIcon> = {
   "desktop.check": SquareCheck,
   "desktop.getTable": Table,
   "desktop.selectMenu": Menu,
-  "sap.runTransaction": Terminal,
   "desktop.scroll": ArrowDownUp,
   "desktop.mouseScroll": Mouse,
   "desktop.drag": Move,

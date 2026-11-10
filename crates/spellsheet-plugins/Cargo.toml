@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 spellsheet-core.workspace = true
 spellsheet-runtime.workspace = true
+spellsheet-system.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 jsonschema.workspace = true

@@ -20,6 +20,7 @@ import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
 
 import { FileSheet } from "./components/FileSheet";
+import { NeededFilesWatch } from "./components/FilePlaces";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
@@ -252,6 +253,7 @@ function Editor({
             </ReactFlowProvider>
           )}
           {!report && view !== "variables" && hasFlow && <FlowSearch />}
+          {hasFlow && <NeededFilesWatch />}
           <FileSheet />
           {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
           {!report && view === "flow" && (

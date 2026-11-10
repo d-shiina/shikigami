@@ -4,7 +4,10 @@
 
 `spellsheet mcp` は AI クライアント（Claude Code / Codex / Cursor など）に SpellSheet のフロー編集・検証・実行を MCP ツールとして提供します。Writer と同じ Flow Core を使うため、AI の変更は Writer に即座に反映され、Writer から Undo できます。GUI がなくても単独で動きます。
 
-![MCP からの編集が Writer に反映された様子](../assets/studio-mcp-edit.png)
+<picture>
+  <source srcset="../assets/writer-ja-dark.webp" media="(prefers-color-scheme: dark)">
+  <img src="../assets/writer-ja.webp" alt="AI の編集がそのまま Writer に反映される様子。中央にフロー図、右に AI チャット">
+</picture>
 
 ## 接続方法
 
@@ -15,10 +18,10 @@
 プラグイン（MCP 設定と、フロー作成の作法を教えるスキルを同梱）を入れるのがおすすめです。
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/spellsheet` のあと `/plugin install spellsheet@spellsheet`。）
+（Claude Code 2.1.275 より前は `/plugin marketplace add spellsheet/spellsheet` のあと `/plugin install spellsheet@spellsheet`。）
 
 MCP サーバーだけを登録する場合：
 
@@ -49,6 +52,10 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
   }
 }
 ```
+
+### MCP Bundle（そのほかのクライアント）
+
+各リリースには `spellsheet.mcpb` も付いています。`spellsheet.exe` と、インストーラーと同じ Node.js・ブラウザアダプター・OCR のファイルを [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) にしたもので、Writer を入れなくても動きます。Bundle を受け付けるクライアント（Claude Desktop など）はこのファイルから、[MCP Registry](https://registry.modelcontextprotocol.io/) を読むクライアントはそこから入れられます。Windows 10/11（x64）専用です。作業フォルダーは Writer と同じなので、Writer も入れておくと AI が組んだものを見て確認できます。
 
 ### オプション
 

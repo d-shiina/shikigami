@@ -2,17 +2,18 @@
 
 English | [日本語](ja/release.md)
 
-The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
+The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). While an update waits, "Settings" in the sidebar shows a dot. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
-- Checked at: `https://github.com/d-shiina/spellsheet/releases/latest/download/latest.json`
+- Checked at: `https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`
+- Versions up to 0.1.20 check the old address `https://github.com/d-shiina/spellsheet/...` and reach the new one through GitHub's redirect for moved repositories. Never create a repository named `spellsheet` under `d-shiina`: the redirect would stop and those versions could no longer update
 - Tamper protection: installers are signed with a dedicated signing key, and Writer verifies them with the public key embedded at release time before replacing itself
 - Installer: NSIS (per user, no administrator rights).
 - Development builds (`pnpm studio:dev`) do not check
 
 ## The CLI (MCP server) is updated too
 
-The release installer puts `spellsheet.exe` (CLI and MCP server) in the same folder as Writer. Register this `spellsheet.exe` with Claude Code and the MCP server is updated with every Writer update, at the same path. Copy the registration command from the version menu at the bottom right of Writer.
+The release installer puts `spellsheet.exe` (CLI and MCP server) in the same folder as Writer. Register this `spellsheet.exe` with Claude Code and the MCP server is updated with every Writer update, at the same path. Copy the registration command from "MCP server registration" under Settings → AI in Writer.
 
 ```powershell
 claude mcp add --scope user spellsheet -- "<install folder>\spellsheet.exe" mcp
@@ -54,7 +55,9 @@ If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`,
 3. The `Release` workflow (`.github/workflows/release.yml`) builds on Windows and publishes the release. It stops if the tag and the `Cargo.toml` version differ, or if the signing key is not registered (one-time setup above)
    - Release notes are the `CHANGELOG.md` section whose heading has the version (for example `## [0.2.0] - 2026-11-06`); without one they link to `CHANGELOG.md`
    - A version with a hyphen (`0.2.0-beta.1`) becomes a pre-release, which installed copies of SpellSheet Writer do not update to
+   - The release also gets `spellsheet.mcpb` (the MCP server as an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb): `spellsheet.exe` with the same `node\`, `browser-adapter\` and `ocr\` folders the installer ships) and `server.json`, its entry for the [MCP Registry](https://registry.modelcontextprotocol.io/) with the bundle's SHA-256 (`scripts/build-mcpb.mjs`)
    - The installers are also kept on the run page as the `installers-<version>` artifact for 14 days
+4. To list the version in the MCP Registry, download `server.json` from the release and publish it with [`mcp-publisher`](https://github.com/modelcontextprotocol/registry/releases): `mcp-publisher login github`, then `mcp-publisher publish` in the folder that holds `server.json`. The name `io.github.<owner>/spellsheet` follows the repository's owner, so the account that signs in must be a public member of that GitHub organization
 
 A pull request that changes the release build (the workflow, `apps/studio/scripts/`, the Tauri configuration) runs the same build as a trial: it publishes nothing and leaves the installers on the run page, so they can be installed by hand before tagging. Without the signing key it signs with a throwaway key.
 
@@ -62,7 +65,7 @@ Once published, installed copies of Writer find the update the next time they st
 
 ## Product site (GitHub Pages)
 
-`site/` is the product page and the download page (Japanese, plain HTML with no build step). `.github/workflows/pages.yml` publishes it when `site/` changes on main and again after each Release run, writing `site/release.json` with the newest installer so the download button points at that `SpellSheet.Writer_<version>_x64-setup.exe`. The page also asks the GitHub API for the latest release and falls back to the release page, and it reads the repository from its own address, so a rename needs no change. One-time setup: Settings → Pages → Source: "GitHub Actions".
+`site/` is the product page and the download page (Japanese, plain HTML with no build step), published at https://spellsheet.github.io/ by the [spellsheet/spellsheet.github.io](https://github.com/spellsheet/spellsheet.github.io) repository. Its workflow checks this repository every 15 minutes and publishes again when `site/`, the manual or the latest release has changed (run its Deploy workflow by hand to publish at once). It writes `release.json` with the newest installer so the download button points at that `SpellSheet.Writer_<version>_x64-setup.exe`; the page also asks the GitHub API for the latest release and falls back to the release page. This repository's own page, the old address https://spellsheet.github.io/spellsheet/, only redirects there (`.github/workflows/pages.yml`, `site-moved/`).
 
 ## Building a release locally
 

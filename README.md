@@ -5,8 +5,8 @@
 # SpellSheet
 
 <p align="center">
-  <a href="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/d-shiina/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/d-shiina/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/d-shiina/spellsheet" alt="Release"></a>
+  <a href="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml"><img src="https://github.com/spellsheet/spellsheet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/spellsheet/spellsheet/releases/latest"><img src="https://img.shields.io/github/v/release/spellsheet/spellsheet" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4" alt="Platform: Windows 10 | 11">
 </p>
@@ -19,16 +19,22 @@ MCP-native desktop RPA where AI and humans build, edit, and run the same automat
 
 SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-![SpellSheet Writer](docs/assets/studio-phase1.png)
+<img src="docs/assets/demo-en.gif" alt="In SpellSheet Writer, Claude Code is asked in the AI chat to make invoices per customer; the flow grows node by node in the middle, and pressing Run then runs it without AI, lighting up each node in turn">
 
 ## Getting started
 
-1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
-2. Start **SpellSheet Writer** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
-3. To have AI build flows, open the AI pane with "AI chat" at the top right of Writer (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
+1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
+2. Start **SpellSheet Writer** from the Start menu.
+3. To have AI build flows, open "AI chat" at the top of Writer (Ctrl+J), pick the AI you use (Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot) and press its button, such as "Install Claude Code": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
 
-To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.
+The installer and `spellsheet.exe` are not code-signed yet ([Code signing policy](CODE_SIGNING_POLICY.md)), so Windows SmartScreen may warn on the first run; choose "More info", then "Run anyway".
+
+**Using only an MCP client?** Each release also has `spellsheet.mcpb`, an MCP Bundle with the same MCP server (Windows 10/11 x64 only), for clients that install servers from a bundle or from the [MCP Registry](https://registry.modelcontextprotocol.io/). Writer is still the place to see and review what the AI builds. See [docs/mcp.md](docs/mcp.md).
+
+The rest of this page is for developers.
+
+The [user manual](https://spellsheet.github.io/manual/) (in Japanese for now) explains every screen, the folders a flow keeps, test cases, sharing a flow and the AI setup for the people who use SpellSheet at work. Its source is [apps/manual](apps/manual/).
 
 ## Status
 
@@ -38,7 +44,6 @@ Writer's UI is available in English and Japanese (the language menu under "Spell
 
 | Document | Contents |
 |---|---|
-| [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, flow format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/ai-chat.md](docs/ai-chat.md) | Building flows with an AI chat that has no MCP (Microsoft Copilot): the guide to give it, pasting its answer into Writer, what is left for a person |
@@ -54,7 +59,7 @@ Writer's UI is available in English and Japanese (the language menu under "Spell
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
 | [docs/adapters.md](docs/adapters.md) | Where each node type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
-| [docs/extensions.md](docs/extensions.md) | Custom nodes: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
+| [docs/extensions.md](docs/extensions.md) | Plugins: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding SpellSheet (manifest + separate process) |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Writer's layout rules: where each button goes and how it looks, and why |
 | [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the flow format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
@@ -90,7 +95,7 @@ packages/schema         TypeScript types generated from the Rust types
 packages/browser-adapter  Browser automation process (Playwright)
 plugins/spellsheet      Claude Code plugin (MCP settings + skill)
 schemas/                Generated JSON Schema (public contract)
-examples/               Sample flows, tutorials and example custom nodes
+examples/               Sample flows (CI runs them end to end) and example plugins
 ```
 
 `spellsheet-core` depends on no other crate in the workspace; every entry point (Writer, CLI, MCP server, Worker) edits flows through it. The crates that touch Windows APIs keep `unsafe` to the modules that call them; everywhere else it is forbidden by the workspace lints. See [docs/architecture.md](docs/architecture.md) for the full design.
@@ -161,10 +166,10 @@ Edits made with the CLI while Writer is open show up in Writer immediately.
 In Claude Code, install the plugin (the `spellsheet` command must be on PATH):
 
 ```text
-/plugin install spellsheet --marketplace d-shiina/spellsheet
+/plugin install spellsheet --marketplace spellsheet/spellsheet
 ```
 
-If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from the version menu at the bottom right of Writer; see [docs/release.md](docs/release.md)).
+If you installed Writer, register the `spellsheet.exe` in Writer's folder so the MCP server is updated together with Writer (copy the command from "MCP server registration" under Settings → AI in Writer; see [docs/release.md](docs/release.md)).
 
 To register only the MCP server: `claude mcp add spellsheet -- spellsheet mcp`. When developing from the repository without `spellsheet` on PATH, register the built executable by its absolute path (`cargo build -p spellsheet-cli` updates it):
 
@@ -178,4 +183,4 @@ See [docs/mcp.md](docs/mcp.md) for Codex / Cursor settings and the tool list. AI
 
 ## License
 
-[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.
+[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [Code signing policy](CODE_SIGNING_POLICY.md) for how the installers are signed, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.

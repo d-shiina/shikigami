@@ -539,7 +539,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 
 ### Not implemented (later phases)
 
-- SAP GUI Scripting, Java Access Bridge and image recognition for Windows; resource exclusion between processes (§10.5); browser downloads and uploads
+- Java Access Bridge and image recognition for Windows (SAP GUI Scripting comes with the SAP plugin); resource exclusion between processes (§10.5); browser downloads and uploads
 - Drag-and-drop editing in Studio, breakpoints and stepping, a UI element inspector, diff view (Phase 5)
 - SQLite, per-client tool permissions, allowed folders for file operations, credential store integration, MCP's Streamable HTTP
 

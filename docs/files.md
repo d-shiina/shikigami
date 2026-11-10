@@ -56,7 +56,66 @@ A settings file in `config/` lists named values with a type and a description, s
 }
 ```
 
-Types are `text`, `number`, `boolean`, `date` and `list`. `config.read` with `{ "path": "config/settings.json" }` saved as `settings` gives `settings.threshold`. A wrong format gives `CONFIG_INVALID`.
+Types are `text`, `number`, `boolean`, `date`, `list` and `folder`. `config.read` with `{ "path": "config/settings.json" }` saved as `settings` gives `settings.threshold`. A wrong format gives `CONFIG_INVALID`.
+
+A `folder` is a folder's full path. `%USERPROFILE%` and other `%NAME%` parts are replaced with the PC's environment variables when read: Box Drive and OneDrive folders sit in each user's profile, so `%USERPROFILE%\Box\Accounts` works on everyone's PC.
+
+### Files on a file server or in cloud storage
+
+File params take full paths too: a file server (`\\fs01\accounts\orders.xlsx`) and folders synced with cloud storage (Box Drive, OneDrive, Google Drive, Dropbox) are read and written where they are. Unattended runs (the worker) run as the signed-in user, so whatever that person can open works. For Box Drive, sign in to Box Drive on that PC.
+
+Keep the place as a `folder` setting rather than in the nodes, so whoever receives the flow changes one setting:
+
+```json
+{ "name": "ordersFolder", "type": "folder", "value": "\\\\fs01\\accounts\\orders" }
+```
+
+and write `{{ settings.ordersFolder }}/orders.xlsx` in the node.
+
+In Writer:
+
+- When the flow reads a file from `input/` that is not there, the input part of the files panel says so and offers **Put it in the folder** (pick a file; it is copied under that name), **Read from a file server** (pick a folder: a `folder` setting is added and the nodes reading that file read `{{ settings.<name> }}/…`) and **Read from cloud storage** (below). Folders inside the user's profile are kept as `%USERPROFILE%\…`
+- **Change where files are written** in the output part of the files panel points every node writing into `output/` at the file server folder you pick; cloud storage sends the files at the end of each run (below)
+- **Browse…** in a node's settings asks, for a file outside the flow's folder, whether to read it where it is or copy it in
+- A `.spx` lists the full paths and the settings' folders under what the receiving PC needs; on import, Writer checks whether this PC opens them
+- The AI's `list_project_files` returns the missing input files as `needed`, and the cloud storage setting as `cloud` (with an input place, `needed` is empty)
+
+### Cloud storage (API)
+
+On PCs without the sync app (Box Drive and the like), and for unattended runs, the flow's folder reaches the storage through its API: Box, Google Drive, and OneDrive / SharePoint. It is a setting of the folder, not nodes: the nodes keep reading `input/orders.xlsx` and writing `output/invoice.pdf`, so the same flow also runs with the files put in its folder by hand.
+
+- **Input**: each time a whole run starts, the files directly in a cloud storage folder are fetched into `input/` (replacing files of the same name), before the first node.
+- **Output**: each time a run ends without an error, the files it wrote directly in `output/` (new or changed during the run) are sent to a cloud storage folder (replacing files of the same name). They stay in `output/` too.
+
+In the files panel, **Read from cloud storage** (for a missing input file) and **Change where files are written → Write to cloud storage** ask for:
+
+| Field | What |
+|---|---|
+| Service | Box, Google Drive or OneDrive / SharePoint |
+| Secret to sign in with | An OAuth app secret. A new one takes the client ID and client secret of the app made in the service's developer console; the API's sites and `plugin:<name>` are added to its sites |
+| Redirect URL | The one registered with the app ([oauth.md](oauth.md)) |
+| Folder | A path from the top of the storage (`Accounting/Orders`), or the address of the folder (Box, Google Drive) or its link (OneDrive / SharePoint) |
+| Names to fetch (input only) | `*.xlsx` and the like. Empty: every file in the folder (not the folders in it) |
+
+The setting is `config/cloud.json`:
+
+```jsonc
+{
+  "format": "spellsheet.cloud",
+  "input": {
+    "service": "box", "label": "Box", "secret": "Box",
+    "signIn": { "authorizeUrl": "…", "tokenUrl": "…", "redirectUrl": "…" },
+    "folder": "Accounting/Orders", "pattern": "*.xlsx"
+  },
+  "output": { "service": "onedrive", "label": "OneDrive / SharePoint", "secret": "Microsoft", "signIn": { … }, "folder": "Accounting/Out" }
+}
+```
+
+Input and output may use different services or accounts (secrets). The run signs in with `oauth.signIn` first: the first run opens the sign-in page, later runs stay signed in ([oauth.md](oauth.md)). The run's log says what was moved (`Fetched 2 files from Accounting/Orders in Box into input/ (orders.xlsx, prices.xlsx)`); when a transfer fails the run fails, named as the transfer. 「ここから実行」 (run from a node) keeps `input/` as it is. The token is never in the setting, so the flow can be handed over: the receiver signs in with their own account and changes the folder if needed.
+
+The work is done by the plugin of the service (`box`, `googledrive`, `onedrive`): `<name>.downloadFolder` and `<name>.upload`. These plugins do not come with Writer and are offered separately: add the one you received on the **Plugins** page and restart Writer. Their nodes (`googledrive.list`, `googledrive.download`, `googledrive.downloadFolder`, `googledrive.upload`, …) can also be used in a flow.
+
+Keep `work/` in the flow's folder: it is emptied at every run, and in a synced folder the sync lags behind (locked files) and others see half-made files.
 
 ## Encodings
 
