@@ -9,7 +9,7 @@ SpellSheet のファイルは、次の 3 か所にあります。
 |---|---|
 | **ワークスペース**（フローの保存先） | フロー、版、ログイン情報（暗号化）、実行の許可の設定。既定は `%APPDATA%\SpellSheet\workspace` |
 | `%APPDATA%\SpellSheet` | Writer の設定（`config.json`：どこをワークスペースにするかなど） |
-| `%LOCALAPPDATA%\SpellSheet` | この PC だけのもの（カスタム ノード、Writer のログ、共有ワークスペースのときの PC ごとの記録） |
+| `%LOCALAPPDATA%\SpellSheet` | この PC だけのもの（プラグイン、Writer のログ、共有ワークスペースのときの PC ごとの記録） |
 
 ワークスペースの場所は、Writer のサイドバーの上の保存先の名前にマウスを重ねると出ます。「設定」→「保存先」で変えられます。
 

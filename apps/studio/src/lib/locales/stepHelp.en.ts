@@ -95,7 +95,6 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "desktop.check": { summary: "Check or uncheck a checkbox in an app (the same state however often it runs)", words: "check uncheck checkbox tick" },
   "desktop.closeWindow": { summary: "Close a window", words: "quit exit" },
   "desktop.getTable": { summary: "Read an app's grid or list at once as a table", words: "table grid list rows read" },
-  "sap.runTransaction": { summary: "Start a SAP transaction (VA03…) in SAP GUI", words: "sap transaction tcode erp" },
   "desktop.selectMenu": { summary: "Choose an app's menu item (menu bar or right-click)", words: "menu context right click file" },
   "desktop.scroll": { summary: "Scroll a list or bring a part into view (no mouse)", words: "scroll page down list bottom" },
   "desktop.mouseScroll": { summary: "Turn the mouse wheel over an app", words: "wheel scroll mouse" },

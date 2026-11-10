@@ -1,8 +1,9 @@
 // The one column on the left, as in Linear and Notion: the workspace at the
 // top (where the work is stored), then the places (the flow library, what
 // waits for review, runs, logins), the flows worked on lately
-// (pinned first), and settings at the foot, apart from the work. Custom nodes (added nodes, code: plugins) are
-// managed from Settings, not here: few PCs have any. Lists live in their places, not here. Runs
+// (pinned first), and settings at the foot, apart from the work. Plugins (code:
+// extensions / plugins: features and nodes added later, such as cloud storage)
+// have their own place here. Lists live in their places, not here. Runs
 // (schedules now, run history next) are one row here. The AI is not a place
 // but a helper on whatever is open, so it is not here: its button sits in the
 // window's bar beside the search, and its chat opens on the right (ShellBar).
@@ -10,7 +11,7 @@
 // Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
 // as a strip, as Linear and VS Code do: the places stay one click away and
 // their counts stay in sight. Hovering an icon names it.
-import { AppWindow, FolderClosed, Pin, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
+import { AppWindow, Blocks, FolderClosed, Pin, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
@@ -266,6 +267,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
           title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
           mini={mini}
         />
+        <Item icon={Blocks} label={t.extensions.place} on={place === "extensions"} onClick={go("extensions")} title={t.extensions.placeTitle} mini={mini} />
         {!mini && <RecentFlows />}
       </nav>
       <div className={mini ? "space-y-1 px-1.5 py-1.5" : "space-y-px px-2 py-1.5"}>
@@ -274,7 +276,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
         <Item
           icon={Settings2}
           label={t.shell.settings}
-          on={place === "settings" || place === "extensions"}
+          on={place === "settings"}
           onClick={go("settings")}
           dot={update !== null}
           title={update ? `${t.updateAvailable} v${update}` : t.shell.settings}
