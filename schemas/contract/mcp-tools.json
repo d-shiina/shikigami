@@ -277,6 +277,12 @@
           "message": {
             "type": "string"
           },
+          "app": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "candidates": {
             "type": "array",
             "items": true

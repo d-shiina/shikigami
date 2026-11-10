@@ -1594,3 +1594,180 @@ async fn what_the_person_writes_meanwhile_comes_with_the_next_tool_result() {
     let again = h.ok("list_flows", json!({})).await;
     assert!(again.get(MESSAGES_KEY).is_none());
 }
+
+/// A Windows app the person points at: the pick waits until Writer's
+/// request is answered on screen (`clicked`) or declined (`cancelPick`).
+mod in_app {
+    use std::sync::Mutex;
+
+    use spellsheet_runtime::{Adapter, BoxFuture, RuntimeBuilder, StepError};
+    use tokio::sync::Notify;
+
+    use super::*;
+
+    #[derive(Default)]
+    pub struct Shared {
+        pub clicked: Notify,
+        pub declined: Notify,
+        /// What the server asked the adapter, in order.
+        pub asked: Mutex<Vec<Value>>,
+    }
+
+    pub struct FakeDesktop(pub Arc<Shared>);
+
+    impl Adapter for FakeDesktop {
+        fn name(&self) -> &str {
+            "desktop"
+        }
+
+        fn install(&self, builder: RuntimeBuilder) -> RuntimeBuilder {
+            builder
+        }
+
+        fn inspect<'a>(
+            &'a self,
+            _session: &'a str,
+            params: Value,
+        ) -> BoxFuture<'a, Result<Value, StepError>> {
+            Box::pin(async move {
+                self.0.asked.lock().unwrap().push(params.clone());
+                match params["action"].as_str() {
+                    Some("pick") => {
+                        tokio::select! {
+                            () = self.0.clicked.notified() => Ok(json!({
+                                "target": { "window": { "process": "hanbai.exe" }, "element": { "id": "btnSearch" } },
+                                "how": "id",
+                                "label": "button「検索」",
+                                "window": { "title": "販売管理 - 受注一覧", "process": "hanbai.exe" },
+                                "app": "販売管理",
+                                "rect": { "x": 10, "y": 20, "width": 60, "height": 24 },
+                            })),
+                            () = self.0.declined.notified() => Ok(json!({ "cancelled": true })),
+                        }
+                    }
+                    Some("cancelPick") => {
+                        self.0.declined.notify_one();
+                        Ok(json!({ "cancelled": true }))
+                    }
+                    _ => Ok(json!({
+                        "window": { "title": "販売管理 - 受注一覧", "process": "hanbai.exe" },
+                        "snapshot": "- button \"検索\" id=btnSearch",
+                    })),
+                }
+            })
+        }
+    }
+
+    pub async fn harness() -> (Harness, Arc<Shared>) {
+        let shared = Arc::new(Shared::default());
+        let desktop: Arc<dyn Adapter> = Arc::new(FakeDesktop(shared.clone()));
+        let runtime = Runtime::builder().adapter(desktop.as_ref()).build();
+        let h = start_with(
+            runtime,
+            ServerOptions {
+                adapters: vec![desktop],
+                ..ServerOptions::default()
+            },
+        )
+        .await;
+        (h, shared)
+    }
+
+    /// What Writer and the person do: wait for the request to show (Writer
+    /// minimises for it), then click in the app or decline it in Writer.
+    pub async fn answer(root: &std::path::Path, shared: &Shared, click: bool) {
+        let store = FileStore::open(root).unwrap();
+        let picks = spellsheet_core::PickRequestStore::new(store.local_root());
+        for _ in 0..200 {
+            if let Some(r) = picks.pending().unwrap().first() {
+                assert_eq!(r.app, spellsheet_core::PickApp::Desktop);
+                assert_eq!(
+                    r.message,
+                    "未出荷の注文を探すときに押すボタンをクリックしてください"
+                );
+                // The pick has started once the adapter was asked.
+                for _ in 0..200 {
+                    if !shared.asked.lock().unwrap().is_empty() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                if click {
+                    shared.clicked.notify_one();
+                } else {
+                    picks.cancel(&r.id).unwrap();
+                }
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("the request never showed in Writer");
+    }
+}
+
+#[tokio::test]
+async fn an_ai_asks_the_person_to_point_at_a_part_of_a_windows_app() {
+    let (h, shared) = in_app::harness().await;
+    let ask = json!({ "app": "desktop", "message": "未出荷の注文を探すときに押すボタンをクリックしてください" });
+    let (out, ()) = tokio::join!(
+        h.ok("ask_user_to_pick", ask),
+        in_app::answer(&h.root, &shared, true)
+    );
+    assert_eq!(out["status"], "picked", "{out}");
+    assert_eq!(out["target"]["element"]["id"], "btnSearch");
+    assert_eq!(out["label"], "button「検索」");
+    assert!(
+        out.get("rect").is_none(),
+        "screen places are not for the AI: {out}"
+    );
+    assert!(out["observationId"].as_str().is_some(), "{out}");
+    let asked = shared.asked.lock().unwrap().clone();
+    // The question is on the banner over the apps, with how to stop under it.
+    assert_eq!(asked[0]["action"], "pick");
+    assert_eq!(
+        asked[0]["message"],
+        "未出荷の注文を探すときに押すボタンをクリックしてください"
+    );
+    assert!(asked[0]["hint"].as_str().unwrap().contains("Esc"));
+    // The window it picked is kept as what the change is based on.
+    assert_eq!(asked[1]["window"]["process"], "hanbai.exe");
+    assert!(
+        spellsheet_core::PickRequestStore::new(FileStore::open(&h.root).unwrap().local_root())
+            .pending()
+            .unwrap()
+            .is_empty()
+    );
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_pick_in_an_app_declined_in_writer_tells_the_ai() {
+    let (h, shared) = in_app::harness().await;
+    let ask = json!({ "app": "desktop", "message": "未出荷の注文を探すときに押すボタンをクリックしてください" });
+    let (out, ()) = tokio::join!(
+        h.ok("ask_user_to_pick", ask),
+        in_app::answer(&h.root, &shared, false)
+    );
+    assert_eq!(out["status"], "cancelled", "{out}");
+    assert!(out["hint"].as_str().unwrap().contains("Ask them in chat"));
+    let asked = shared.asked.lock().unwrap().clone();
+    assert!(
+        asked.iter().any(|a| a["action"] == "cancelPick"),
+        "{asked:?}"
+    );
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn ask_user_to_pick_names_the_places_it_knows() {
+    let (h, _) = in_app::harness().await;
+    let (is_error, out) = h
+        .call(
+            "ask_user_to_pick",
+            json!({ "app": "excel", "message": "保存ボタン" }),
+        )
+        .await;
+    assert!(is_error);
+    assert!(out.to_string().contains("desktop"), "{out}");
+    h.client.cancel().await.unwrap();
+}

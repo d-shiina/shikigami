@@ -227,6 +227,9 @@ pub enum Op {
     /// not a part of it (nodes that act on the window itself).
     Pick {
         message: Option<String>,
+        /// A second, quieter line under `message` (how to stop), for an
+        /// AI's question that takes the first line.
+        hint: Option<String>,
         timeout_ms: u64,
         labels: serde_json::Value,
         window_only: bool,

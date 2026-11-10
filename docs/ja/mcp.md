@@ -99,7 +99,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `stop_flow` | 実行のキャンセル |
 |  | `run_tests` | フローのテストケース（`tests/`、全部か `cases`）を作業中の内容で流し、期待と比べる：`passed`・`failed`・`cases[]`（`mismatches[]`）（[testing.md](testing.md)）。全部終わるまで待つ。承認は `run_flow` と同じ |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す。`image: true` でスクリーンショットも AI に返す |
-|  | `ask_user_to_pick` | どの部品かわからないとき、人にブラウザでクリックしてもらい（クリックはページに届かない）、`target` で受け取る。Writer にも依頼が出て、そこから断れる（[browser.md](browser.md)） |
+|  | `ask_user_to_pick` | どの部品かわからないとき、人にブラウザで、または `app: "desktop"` で Windows アプリの上でクリックしてもらい（クリックはページやアプリに届かない）、`target` で受け取る。Writer にも依頼が出て、そこから断れる。アプリで指してもらうあいだ Writer は最小化する（[browser.md](browser.md)・[desktop.md](desktop.md)） |
 | デスクトップ | `inspect_ui` | 開いているウィンドウの一覧、または 1 つのウィンドウの部品の一覧（`target` の選び方は [desktop.md](desktop.md)）。ウィンドウを見たときは部品ツリーを証跡に保存し `observationId` を返す |
 | 試行 | `test_step` | ノードを 1 つその場で実行して出力を返す（browser ノードなら実行後のページ、desktop ノードなら操作したウィンドウも）。変数を読むノード（`{{ row.顧客名 }}` や式）は、その時点の値を `variables` に渡せば書いたまま試せる。フローは変更しない。試した結果を証跡に保存し `observationId` を返す |
 

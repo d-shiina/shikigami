@@ -434,6 +434,9 @@ export const en: Dict = {
   pickHow: (candidates: number) =>
     `Switch to the browser window and click the element. The click does not reach the page, so nothing is pressed.${candidates > 1 ? ` The candidates it is torn between are numbered 1–${candidates}.` : ""} If you are not sure, press "Not sure" in the browser or decline here.`,
   pickCancel: "Decline",
+  pickAskedApp: "The AI asks you to select an element in an app",
+  pickHowApp:
+    "Writer is minimized. Read the question shown over your apps and click the element. The click does not reach the app, so nothing is pressed. Press Esc or right-click if you are not sure.",
   humanAsked: "The AI waits for you in the browser",
   humanHow:
     "Switch to the browser window and do it there. Press \"Done\" when you have finished; it also goes on by itself once the page it waits for shows.",
@@ -763,6 +766,7 @@ export const en: Dict = {
       inspect_ui: "Inspect app window",
       test_step: "Run a single node",
       ask_user_to_choose: "Show choices",
+      ask_user_to_pick: "Ask you to point on screen",
     },
     choice: {
       recommended: "Recommended",

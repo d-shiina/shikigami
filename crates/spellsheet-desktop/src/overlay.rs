@@ -76,6 +76,9 @@ const WINDOW_THICKNESS: i32 = 4;
 const TAG_TEXT: COLORREF = COLORREF(0x00FF_FFFF);
 /// The picker's banner (how to stop), and the tags, in 96-DPI pixels.
 const PICK_BANNER_SIZE: (i32, i32) = (360, 34);
+/// The banner when an AI asks the person to point: its question, and how to
+/// stop under it.
+const ASK_BANNER_SIZE: (i32, i32) = (640, 54);
 const TAG_HEIGHT: i32 = 24;
 const TAG_PADDING: i32 = 10;
 const TAG_FONT: i32 = 13;
@@ -183,8 +186,9 @@ pub struct Overlay {
 const WM_WAKE: u32 = WM_APP + 1;
 
 impl Overlay {
-    /// Starts picking: a banner with `message`, and the hooks.
-    pub fn pick(message: String) -> Result<Self, StepError> {
+    /// Starts picking: a banner with `message` (and `hint` under it, when
+    /// given), and the hooks.
+    pub fn pick(message: String, hint: Option<String>) -> Result<Self, StepError> {
         if BUSY.swap(true, Ordering::SeqCst) {
             return Err(StepError::permanent(
                 "PICK_BUSY",
@@ -195,7 +199,7 @@ impl Overlay {
             *input = None;
         }
         if let Ok(mut banner) = BANNER.lock() {
-            *banner = (message, String::new());
+            *banner = (message, hint.unwrap_or_default());
         }
         SWALLOW_UP.store(false, Ordering::SeqCst);
         match Self::start(Mode::Pick, Duration::from_secs(15 * 60)) {
@@ -692,10 +696,13 @@ fn place_pick_banner(banner: HWND, mouse: POINT) {
             return;
         };
         let scale = GetDpiForWindow(banner).max(96) as i32;
-        let size = (
-            PICK_BANNER_SIZE.0 * scale / 96,
-            PICK_BANNER_SIZE.1 * scale / 96,
-        );
+        let asking = BANNER.lock().is_ok_and(|b| !b.1.is_empty());
+        let base = if asking {
+            ASK_BANNER_SIZE
+        } else {
+            PICK_BANNER_SIZE
+        };
+        let size = (base.0 * scale / 96, base.1 * scale / 96);
         let (x, y) =
             hover::pick_banner_at(rect_tuple(work), size, (mouse.x, mouse.y), 16 * scale / 96);
         let mut now = RECT::default();
@@ -1033,6 +1040,14 @@ unsafe fn paint_banner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> 
         let _ = EndPaint(hwnd, &ps);
     }
     LRESULT(0)
+}
+
+/// Ends a pick that is waiting for a click, as Esc would (an AI's request
+/// the person declined in Writer). Does nothing when no pick waits.
+pub fn cancel_pick() {
+    if CAPTURING.load(Ordering::SeqCst) {
+        set_input(Input::Cancelled);
+    }
 }
 
 fn set_input(input: Input) {

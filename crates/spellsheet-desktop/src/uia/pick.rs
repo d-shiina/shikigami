@@ -18,6 +18,7 @@ impl Uia {
     pub(super) fn pick(
         &self,
         message: Option<String>,
+        hint: Option<String>,
         timeout_ms: u64,
         labels: &Value,
         window_only: bool,
@@ -29,7 +30,7 @@ impl Uia {
                 "Click the part to pick (Esc to cancel)".into()
             }
         });
-        let overlay = Overlay::pick(message)?;
+        let overlay = Overlay::pick(message, hint)?;
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         // SAFETY: plain Win32 call.
         let own = unsafe { GetCurrentProcessId() };

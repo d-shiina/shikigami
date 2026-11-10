@@ -459,11 +459,15 @@ pub struct InspectPageParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AskUserToPickParams {
-    /// What to point at, in one sentence for the user, shown on the page (Japanese is fine),
-    /// e.g. 「出荷するときに押すボタンをクリックしてください」.
+    /// What to point at, in one sentence for the user, shown on the page or over the app
+    /// (Japanese is fine), e.g. 「出荷するときに押すボタンをクリックしてください」.
     pub message: String,
-    /// Elements you are torn between, as step targets. They are outlined with numbers 1, 2, …
-    /// so the user can click one of them (or something else).
+    /// Where to point: "browser" (default: the open web page) or "desktop" (a Windows app,
+    /// anywhere on the screen; the answer is a desktop.* target).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    /// Browser only: elements you are torn between, as step targets. They are outlined with
+    /// numbers 1, 2, … so the user can click one of them (or something else).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidates: Vec<Value>,
     /// Browser context whose page to point at (default "default").

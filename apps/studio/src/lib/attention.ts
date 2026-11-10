@@ -35,7 +35,7 @@ export interface WriterWaits {
   flow: Pick<Flow, "id" | "name" | "steps"> | null;
   secretRequests: Pick<SecretRequest, "name">[];
   approvals: Pick<ApprovalRequest, "id">[];
-  pickRequests: Pick<PickRequest, "id" | "kind" | "message">[];
+  pickRequests: Pick<PickRequest, "id" | "kind" | "message" | "app">[];
 }
 
 function stepName(steps: Flow["steps"], id: string): string | null {
@@ -71,9 +71,12 @@ export function writerAsk(s: WriterWaits): Ask | null {
   const ai: [string, string][] = [
     ...s.secretRequests.map((r): [string, string] => [`secret:${r.name}`, t.bar.secretAskTitle]),
     ...s.approvals.map((r): [string, string] => [`approval:${r.id}`, t.approvalAsked]),
-    ...s.pickRequests.map((r): [string, string] =>
-      r.kind === "human" ? [`pick:${r.id}`, r.message || t.humanAsked] : [`pick:${r.id}`, t.pickAsked],
-    ),
+    // Pointing at an app: Writer itself steps aside, and the question shows over the apps.
+    ...s.pickRequests
+      .filter((r) => r.app !== "desktop")
+      .map((r): [string, string] =>
+        r.kind === "human" ? [`pick:${r.id}`, r.message || t.humanAsked] : [`pick:${r.id}`, t.pickAsked],
+      ),
   ];
   if (ai.length > 0) {
     return { tag: `ai:${ai.map(([key]) => key).join(",")}`, title: t.attention.aiTitle, body: ai[0]![1] };
