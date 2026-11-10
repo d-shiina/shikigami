@@ -171,7 +171,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 {
   "format": "spellsheet.answer",
   "summary": "受注一覧を開いて検索する\n受注システムにログインし、注文番号で検索します。",
-  "checks": ["検索するのは注文番号でよいですか？"],
+  "checks": ["受注は注文番号で検索します（顧客名では検索しません）"],
   "flow": {
     "name": "受注を検索する",
     "variables": [ { "name": "orderNo", "type": "string", "direction": "input", "default": "" } ],
@@ -189,7 +189,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 ```
 
 - summary: first line is a short title of what the flow does; then why and how. No step type names.
-- checks: questions only the person can answer (your assumptions about their business), one each. Use [] when nothing is uncertain.
+- checks: each decision you made that the person did not tell you (which site or file, how odd data is treated, what is overwritten), one each, stated as the rule you applied, not as a question: 「ニュースは NHK NEWS WEB から取ります」, not 「どこから取りますか？」. The person answers yes, or no with what is right. When you cannot guess, still pick the likely choice, build it, and state it here. Always write the whole flow; never answer with questions and no steps. Use [] when you decided nothing yourself.
 - flow: leave out id, revision, metadata and schemaVersion. Writer adds them.
 
 ## Steps
@@ -522,6 +522,18 @@ pub fn read_answer(text: &str) -> Result<ChatAnswer, Vec<AnswerProblem>> {
     if !problems.is_empty() {
         return Err(problems);
     }
+    // An unsure AI sometimes answers with questions and no steps; taking that
+    // in would leave an empty flow waiting for review, with nothing to approve.
+    if value
+        .get("steps")
+        .and_then(Value::as_array)
+        .is_none_or(Vec::is_empty)
+    {
+        return Err(vec![AnswerProblem::new(
+            "/flow/steps",
+            "The flow has no steps. Write the whole flow now: where something is not known, choose the likely way, build it, and state that choice in checks.",
+        )]);
+    }
     let flow: Flow = serde_json::from_value(value)
         .map_err(|e| vec![AnswerProblem::new("/flow", e.to_string())])?;
     Ok(ChatAnswer {
@@ -848,6 +860,17 @@ mod tests {
     }
 
     #[test]
+    fn a_flow_without_steps_is_sent_back_to_the_ai() {
+        let reply = "```json\n{ \"format\": \"spellsheet.answer\", \"summary\": \"ニュースを保存する\", \"checks\": [\"取得元はどこにしますか？\"], \"flow\": { \"name\": \"ニュース\", \"steps\": [] } }\n```";
+        let problems = read_answer(reply).unwrap_err();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].path, "/flow/steps");
+        assert!(problems[0].message.contains("no steps"));
+        let bare = read_answer("{ \"name\": \"空\" }").unwrap_err();
+        assert_eq!(bare[0].path, "/flow/steps");
+    }
+
+    #[test]
     fn reads_a_whole_reply_with_prose_around_the_json() {
         let reply = "フローを作りました。\n\n```json\n{ \"format\": \"spellsheet.answer\", \"summary\": \"挨拶する\", \"checks\": [\"これでよいですか？\"], \"flow\": { \"name\": \"挨拶\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"こんにちは\" } } ] } }\n```\n\nStudio に貼り付けてください。";
         let answer = read_answer(reply).unwrap();
@@ -861,7 +884,7 @@ mod tests {
 
     #[test]
     fn reads_a_bare_flow() {
-        let answer = read_answer("{ \"name\": \"x\", \"steps\": [] }").unwrap();
+        let answer = read_answer("{ \"name\": \"x\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a\" } } ] }").unwrap();
         assert_eq!(answer.flow.name, "x");
         assert!(answer.summary.is_none());
     }
@@ -919,21 +942,21 @@ mod tests {
 
     #[test]
     fn keeps_non_breaking_spaces_inside_strings() {
-        let kept = "{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"a\u{00a0}b\", \"steps\": [] } }";
+        let kept = "{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"a\u{00a0}b\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a\" } } ] } }";
         assert_eq!(read_answer(kept).unwrap().flow.name, "a\u{00a0}b");
-        let copied = "{\u{00a0}\"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"c\", \"steps\": [] } }";
+        let copied = "{\u{00a0}\"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"c\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a\" } } ] } }";
         assert_eq!(read_answer(copied).unwrap().flow.name, "c");
     }
 
     #[test]
     fn reads_a_whole_answer_whose_closing_fence_was_left_off() {
-        let reply = "```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"挨拶\", \"steps\": [] } }\n";
+        let reply = "```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"挨拶\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a\" } } ] } }\n";
         assert_eq!(read_answer(reply).unwrap().flow.name, "挨拶");
     }
 
     #[test]
     fn prefers_the_block_that_says_it_is_the_answer() {
-        let reply = "例：\n```json\n{ \"steps\": [] }\n```\n答え：\n```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"本物\", \"steps\": [] } }\n```";
+        let reply = "例：\n```json\n{ \"steps\": [] }\n```\n答え：\n```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"本物\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a\" } } ] } }\n```";
         assert_eq!(read_answer(reply).unwrap().flow.name, "本物");
     }
 

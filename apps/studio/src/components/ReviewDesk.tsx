@@ -20,7 +20,7 @@ import { type Promised, promiseCounts } from "../lib/promises";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
 import { inputRows, unchangedRows } from "../lib/approval";
-import { readCheck, usedRows } from "../lib/reviewFiles";
+import { isQuestion, readCheck, usedRows } from "../lib/reviewFiles";
 import { filePath } from "../lib/preview";
 import { projectApi } from "../project";
 import { flatten } from "../lib/review";
@@ -175,6 +175,9 @@ type Marks = {
   setSending(flowId: string | null): void;
   see(key: string): void;
   answer(key: string, value: "ok" | "no" | null): void;
+  /** What the person wrote for an answer: what is right after "No", or the answer to a question. */
+  notes: Record<string, string>;
+  note(key: string, text: string): void;
 };
 /** What the person has seen and answered on the report; the AI chat answers the same questions (ChatHandoff). */
 export const useMarks = create<Marks>((set) => ({
@@ -185,6 +188,8 @@ export const useMarks = create<Marks>((set) => ({
   sending: null,
   setSending: (flowId) => set(flowId ? { sending: flowId } : { sending: null, sendBackWith: undefined }),
   see: (key) => set((m) => (m.seen[key] ? m : { seen: { ...m.seen, [key]: true } })),
+  notes: {},
+  note: (key, text) => set((m) => ({ notes: { ...m.notes, [key]: text } })),
   answer: (key, value) =>
     set((m) => {
       const answers = { ...m.answers };
@@ -527,7 +532,7 @@ export function ReviewReport() {
               note={t.desk.judgementsNote}
               aside={t.desk.answeredOf(r.checks.filter((q) => answers[`${markKey}:${q}`]).length, r.checks.length)}
             >
-              <Checks checks={r.checks} markKey={markKey} onNo={(q) => sendBackWithText(t.desk.checkNote(readCheck(q).rule))} />
+              <Checks checks={r.checks} markKey={markKey} onSend={sendBackWithText} />
             </PaperSection>
           )}
 
@@ -909,50 +914,89 @@ function TestResult({ runs, revision, changedIds }: { runs: TestRun[]; revision:
   );
 }
 
-/** The AI's questions only a person can answer. "No…" opens the send-back form with the question quoted. */
-function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; onNo: (q: string) => void }) {
+/**
+ * What the AI decided for itself, for the person to confirm. A decision is
+ * answered yes or no (with what is right); a question the AI asked instead
+ * is answered in words. The answers that need the AI go back to it together.
+ */
+function Checks({ checks, markKey, onSend }: { checks: string[]; markKey: string; onSend: (text: string) => void }) {
   const answers = useMarks((m) => m.answers);
   const answer = useMarks((m) => m.answer);
+  const notes = useMarks((m) => m.notes);
+  const note = useMarks((m) => m.note);
+  const keyOf = (q: string) => `${markKey}:${q}`;
+  const forAi = checks.flatMap((q) => {
+    const key = keyOf(q);
+    const rule = readCheck(q).rule;
+    const said = (notes[key] ?? "").trim();
+    if (isQuestion(q)) return said ? [t.desk.questionAnswer(rule, said)] : [];
+    return answers[key] === "no" ? [t.desk.checkNote(rule) + said] : [];
+  });
   return (
-    <ul className="border-t border-slate-200">
-      {checks.map((q) => {
-        const key = `${markKey}:${q}`;
-        const value = answers[key];
-        const pick = (v: "ok" | "no") => answer(key, value === v ? null : v);
-        const chip = (on: boolean, tone: string) =>
-          `rounded-md border px-2.5 text-[12px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
-        return (
-          <li key={q} className="flex flex-wrap items-start gap-x-4 gap-y-1.5 border-b border-slate-100 px-1 py-2.5">
-            <span
-              className={`mt-[4px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border text-white ${
-                value === "ok" ? "border-moegi-500 bg-moegi-500" : value === "no" ? "border-shu-500 bg-shu-500" : "border-slate-400"
-              }`}
-            >
-              {value === "ok" ? <Check size={10} strokeWidth={3} /> : value === "no" ? <X size={10} strokeWidth={3} /> : null}
-            </span>
-            <p className="min-w-[16em] flex-1 text-[13.5px] leading-relaxed font-semibold">
-              {readCheck(q).rule}
-              {readCheck(q).example && <span className="mt-0.5 block text-[12.5px] font-normal whitespace-pre-wrap text-slate-500">{readCheck(q).example}</span>}
-            </p>
-            <div className="flex shrink-0 gap-1.5">
-              <button type="button" onClick={() => pick("ok")} className={chip(value === "ok", "border-moegi-500 text-moegi-500")}>
-                {t.desk.answerOk}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (value !== "no") onNo(q);
-                  pick("no");
-                }}
-                className={chip(value === "no", "border-shu-500 text-shu-600")}
-              >
-                {t.desk.answerNo}
-              </button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <ul className="border-t border-slate-200">
+        {checks.map((q) => {
+          const key = keyOf(q);
+          const value = answers[key];
+          const question = isQuestion(q);
+          const pick = (v: "ok" | "no") => answer(key, value === v ? null : v);
+          const chip = (on: boolean, tone: string) =>
+            `rounded-md border px-2.5 text-[12px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+          const box = question
+            ? value
+              ? "border-brand-500 bg-brand-500"
+              : "border-slate-400"
+            : value === "ok"
+              ? "border-moegi-500 bg-moegi-500"
+              : value === "no"
+                ? "border-shu-500 bg-shu-500"
+                : "border-slate-400";
+          return (
+            <li key={q} className="border-b border-slate-100 px-1 py-2.5">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
+                <span className={`mt-[4px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border text-white ${box}`}>
+                  {value === "ok" || (question && value) ? <Check size={10} strokeWidth={3} /> : value === "no" ? <X size={10} strokeWidth={3} /> : null}
+                </span>
+                <p className="min-w-[16em] flex-1 text-[13.5px] leading-relaxed font-semibold">
+                  {readCheck(q).rule}
+                  {readCheck(q).example && <span className="mt-0.5 block text-[12.5px] font-normal whitespace-pre-wrap text-slate-500">{readCheck(q).example}</span>}
+                </p>
+                {!question && (
+                  <div className="flex shrink-0 gap-1.5">
+                    <button type="button" onClick={() => pick("ok")} className={chip(value === "ok", "border-moegi-500 text-moegi-500")}>
+                      {t.desk.answerOk}
+                    </button>
+                    <button type="button" onClick={() => pick("no")} className={chip(value === "no", "border-shu-500 text-shu-600")}>
+                      {t.desk.answerNo}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {(question || value === "no") && (
+                <label className="mt-1.5 ml-[30px] flex items-start gap-2 text-[12.5px]">
+                  <span className="mt-1.5 shrink-0 text-slate-600">{question ? t.desk.yourAnswer : t.desk.whatIsRight}</span>
+                  <textarea
+                    rows={1}
+                    value={notes[key] ?? ""}
+                    placeholder={question ? t.desk.yourAnswerHint : t.desk.whatIsRightHint}
+                    onChange={(e) => {
+                      note(key, e.target.value);
+                      if (question) answer(key, e.target.value.trim() ? "no" : null);
+                    }}
+                    className="min-h-8 min-w-0 flex-1 resize-y rounded-md border border-slate-300 bg-sheet px-2 py-1 text-[13px] text-ink placeholder:text-slate-400 focus:border-brand-500 focus:outline-none"
+                  />
+                </label>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {forAi.length > 0 && (
+        <button type="button" onClick={() => onSend(t.desk.answersForAi(forAi.join("\n")))} className="mt-3 rounded-md border border-slate-300 px-3 text-[12.5px] leading-7 font-semibold text-ink hover:bg-slate-100">
+          {t.desk.sendAnswers(forAi.length)}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -987,10 +1031,13 @@ export function ReviewActions({
   const approveAndPublish = useStudio((s) => s.approveAndPublish);
   const published = useStudio((s) => s.published);
   const revertAll = useStudio((s) => s.revertAll);
+  const flow = useStudio((s) => s.flow);
   const [hint, setHint] = useState<"keep" | "sendBack" | "revert" | null>(null);
   if (pending.length === 0) return null;
   const blocker = groupRevertBlocker(pending, history);
   const created = pending.some((e) => e.kind === "create");
+  // A new flow the AI left without nodes has nothing to approve: it is sent back instead.
+  const empty = created && flatten(flow?.steps ?? []).length === 0;
   if (sending) {
     return (
       <div className="py-3">
@@ -998,7 +1045,7 @@ export function ReviewActions({
       </div>
     );
   }
-  const where = published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet;
+  const where = empty ? t.desk.emptyFlow : published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet;
   const means = hint === null ? null : { keep: t.desk.keepMeans, sendBack: t.desk.sendBackMeans, revert: t.desk.revertMeans }[hint];
   const hover = (key: NonNullable<typeof hint>) => ({ onMouseEnter: () => setHint(key), onFocus: () => setHint(key), onMouseLeave: () => setHint(null), onBlur: () => setHint(null) });
   return (
@@ -1059,9 +1106,10 @@ export function ReviewActions({
         <button
           type="button"
           onClick={() => void approveAndPublish()}
-          title={t.desk.keepTitle}
+          disabled={empty}
+          title={empty ? t.desk.emptyFlow : t.desk.keepTitle}
           {...hover("keep")}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary hover:bg-primary-hover"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary enabled:hover:bg-primary-hover disabled:opacity-50"
         >
           <Check size={14} strokeWidth={2} aria-hidden="true" />
           {t.desk.keep}

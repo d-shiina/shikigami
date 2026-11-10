@@ -80,6 +80,14 @@ export function usedRows(effects: Effect[], values: InputRow[]): UsedRow[] {
   return all.filter((r) => !(named && r.atRun && r.reads)).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 }
 
+/**
+ * Whether the AI asked rather than stated what it decided ("どこから取りますか？"):
+ * yes or no does not answer it, the person writes the answer.
+ */
+export function isQuestion(text: string): boolean {
+  return /[？?]/.test(readCheck(text).rule);
+}
+
 /** An AI's judgement as written in `checks`: the rule on the first line, this run's example after it. */
 export function readCheck(text: string): { rule: string; example: string | null } {
   const [first, ...rest] = text.trim().split("\n");

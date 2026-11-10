@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Effect } from "./effects";
-import { readCheck, usedRows } from "./reviewFiles";
+import { isQuestion, readCheck, usedRows } from "./reviewFiles";
 
 const effect = (over: Partial<Effect>): Effect => ({ stepId: "s", action: "読み取り", target: "", risk: "safe", reads: true, status: "added", ...over });
 
@@ -42,5 +42,14 @@ describe("readCheck", () => {
       example: "今回の例：\"6,000\" を 6,000 円として足した",
     });
     expect(readCheck("CSV はすべて読む")).toEqual({ rule: "CSV はすべて読む", example: null });
+  });
+});
+
+describe("isQuestion", () => {
+  it("tells a question the AI asked from a decision it stated", () => {
+    expect(isQuestion("ニュースの取得元はどこにしますか？（Google ニュースなど）")).toBe(true);
+    expect(isQuestion("Is it the order number?")).toBe(true);
+    expect(isQuestion("ニュースは NHK NEWS WEB から取ります\n今回の例：10 件")).toBe(false);
+    expect(isQuestion("ニュースは NHK から取ります\n今回の例：どれ？")).toBe(false);
   });
 });

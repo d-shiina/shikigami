@@ -17,7 +17,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 {
   "format": "spellsheet.answer",
   "summary": "受注一覧を開いて検索する\n受注システムにログインし、注文番号で検索します。",
-  "checks": ["検索するのは注文番号でよいですか？"],
+  "checks": ["受注は注文番号で検索します（顧客名では検索しません）"],
   "flow": {
     "name": "受注を検索する",
     "variables": [ { "name": "orderNo", "type": "string", "direction": "input", "default": "" } ],
@@ -35,7 +35,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 ```
 
 - summary: first line is a short title of what the flow does; then why and how. No step type names.
-- checks: questions only the person can answer (your assumptions about their business), one each. Use [] when nothing is uncertain.
+- checks: each decision you made that the person did not tell you (which site or file, how odd data is treated, what is overwritten), one each, stated as the rule you applied, not as a question: 「ニュースは NHK NEWS WEB から取ります」, not 「どこから取りますか？」. The person answers yes, or no with what is right. When you cannot guess, still pick the likely choice, build it, and state it here. Always write the whole flow; never answer with questions and no steps. Use [] when you decided nothing yourself.
 - flow: leave out id, revision, metadata and schemaVersion. Writer adds them.
 
 ## Steps
