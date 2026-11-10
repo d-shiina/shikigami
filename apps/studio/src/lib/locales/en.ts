@@ -1930,7 +1930,6 @@ export const en: Dict = {
   confirmRestoreAgain: "Restore (press again)",
   versionField: { name: "Flow name", description: "Description", tags: "Tags", settings: "Flow settings" },
   timelineAll: (n: number) => ` (all ${n})`,
-  personMark: "You",
   flowCreated: "Created the flow",
   flowDeleted: "Deleted the flow",
   manual: {
