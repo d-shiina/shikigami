@@ -114,6 +114,10 @@ struct Api {
     project_file: ProjectFile,
     config_file: ConfigFile,
     test_case: crate::testcase::TestCase,
+    work_inventory: crate::inventory::WorkInventory,
+    inventory_patch: crate::inventory::InventoryPatch,
+    inventory_summary: crate::inventory::InventorySummary,
+    assessment: crate::inventory::Assessment,
 }
 
 fn api_schema() -> Value {

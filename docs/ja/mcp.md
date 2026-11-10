@@ -79,6 +79,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `diff_versions` | 版どうし・版と現在の差分（ノード ID 単位。既定は「最新の版 → 現在」） |
 |  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く）。`path` を渡すと、人や別の PC に渡す `.spx` ファイルを書く。既定は確定版（`current` で今の内容）、`include_input` で `input/` のファイルも入れる。既にあるファイルは上書きしない（[設計](../design/sharing-versioning.md)） |
 |  | `list_project_files` / `read_project_file` | フローのフォルダー（入力・設定・ひな形・出力・作業・ログ）のファイル一覧と、テキストファイルの中身（[files.md](files.md#フローのフォルダー)） |
+|  | `get_work_inventory` | 業務の棚卸し：`id` なしで棚卸しの一覧と聞き取りの手引き `guide`、`id` ありでその棚卸しと `assessment`（作る順・月の時間・減らせそうな時間・まだ聞いていないこと）（[inventory.md](inventory.md)） |
 |  | `list_secrets` | Writer で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 |  | `get_policy` | ワークスペースの `policy.json`：許可するサイト・アプリ、AI の操作の承認（allow / ask / deny）。書き換えるツールはない（[policy.md](policy.md)） |
 | write | `create_flow` | 新規作成（ノード ID は省略可） |
@@ -92,6 +93,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `extract_subflow` | 同じブロックに並んだノードを新しいフローに切り出し、`flow.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](../design/subflows.md)） |
 |  | `write_project_file` / `delete_project_file` | フローのフォルダーにファイルを置く（`text`、またはこの PC のファイルを `copyFrom`。置き換えは `overwrite`）/ ごみ箱へ移す |
 |  | `save_test_case` | テストケースを保存（`tests/<名前>.json`：`description`・`inputs`・`expect`。置き換えは `overwrite`）。`description` は業務の言葉の約束として書く：Writer の確認パネルは AI が保存したケースを「約束」として結果と一緒に見せる。入力変数でない名前とシークレットの入力は断る（[testing.md](testing.md)） |
+|  | `save_work_inventory` | 聞き取った業務を、聞くたびに記録（`id` なしで新しく始める）。棚卸しと、SpellSheet が計算した assessment を返す（[inventory.md](inventory.md)） |
 |  | `request_secret` | ログイン情報をユーザーに求める。Writer に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Writer でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
 | run | `run_flow` | Runtime で作業中の内容を実行（AI の試し実行。AI は実行に関与しない）。`waitMs` で完了まで待てる。`published: true` で確定版を実行。`secret: true` の入力変数には値を渡せない |
 |  | `stop_flow` | 実行のキャンセル |

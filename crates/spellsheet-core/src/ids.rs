@@ -97,6 +97,12 @@ define_id!(
     "pck"
 );
 
+define_id!(
+    /// Identifier of a stock-take of a person's work (業務の棚卸し).
+    InventoryId,
+    "inv"
+);
+
 fn is_well_formed(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128

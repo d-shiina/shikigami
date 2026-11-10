@@ -25,6 +25,7 @@ spellsheet-secrets.workspace = true
 spellsheet-agent.workspace = true
 spellsheet-system.workspace = true
 spellsheet-plugins.workspace = true
+spellsheet-excel.workspace = true
 base64.workspace = true
 tauri = { version = "2.12.5", features = ["tray-icon"] }
 tauri-plugin-updater = "2.14.1"

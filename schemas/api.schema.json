@@ -120,6 +120,18 @@
     },
     "test_case": {
       "$ref": "#/$defs/TestCase"
+    },
+    "work_inventory": {
+      "$ref": "#/$defs/WorkInventory"
+    },
+    "inventory_patch": {
+      "$ref": "#/$defs/InventoryPatch"
+    },
+    "inventory_summary": {
+      "$ref": "#/$defs/InventorySummary"
+    },
+    "assessment": {
+      "$ref": "#/$defs/Assessment"
     }
   },
   "required": [
@@ -161,7 +173,11 @@
     "project_files",
     "project_file",
     "config_file",
-    "test_case"
+    "test_case",
+    "work_inventory",
+    "inventory_patch",
+    "inventory_summary",
+    "assessment"
   ],
   "$defs": {
     "Flow": {
@@ -4311,6 +4327,698 @@
         "succeeded",
         "failed",
         "cancelled"
+      ]
+    },
+    "WorkInventory": {
+      "description": "One stock-take: one person's (or one team's) work.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/InventoryId"
+        },
+        "title": {
+          "description": "What is taken stock of, e.g. 「経理課 月次の締め」.",
+          "type": "string"
+        },
+        "about": {
+          "description": "Whose work: department and role, e.g. 「経理課 2 名、請求と支払」.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "systems": {
+          "description": "Systems and tools used every day (受注システム（Web）, 販売管理（Windows）, Excel, Outlook…).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/InventoryStatus",
+          "default": "interviewing"
+        },
+        "notes": {
+          "description": "Anything else worth keeping from the interview.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkTask"
+          },
+          "default": []
+        },
+        "createdBy": {
+          "description": "Who made it (the AI client, or Writer).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "InventoryId": {
+      "description": "Identifier of a stock-take of a person's work (業務の棚卸し).",
+      "type": "string"
+    },
+    "InventoryStatus": {
+      "oneOf": [
+        {
+          "description": "Still being asked about.",
+          "type": "string",
+          "const": "interviewing"
+        },
+        {
+          "description": "The person confirmed the list and the numbers.",
+          "type": "string",
+          "const": "done"
+        }
+      ]
+    },
+    "WorkTask": {
+      "description": "One piece of work.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`t1`, `t2`… given when the task is added; stays the same.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The work in the person's words, e.g. 「受注メールの Excel を販売管理に入力」.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What is done, one or two sentences.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steps": {
+          "description": "The order of the work, in business words.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frequency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Frequency"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minutes": {
+          "description": "Minutes one time takes one person.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "people": {
+          "description": "How many people do it (default 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "manualShare": {
+          "description": "Share of that time (percent, 0 to 100) that is hands-only work a flow\ncan take over: copying, typing, downloading, checking against a list.\nJudging, phoning and talking stay with people.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ease": {
+          "description": "How easy it is to build with SpellSheet.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Level"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "easeReasons": {
+          "description": "Why it is that easy or hard (input is data or paper, fixed steps,\nexceptions, kind of screen).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "errorImpact": {
+          "description": "What a mistake costs: high (money, customers, deadlines), medium, low.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Level"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "systems": {
+          "description": "Systems and apps it uses.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "description": "What it reads: files, mails, forms, paper.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "description": "What it makes or updates.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exceptions": {
+          "description": "The cases that do not follow the usual steps, and how often.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepTypes": {
+          "description": "SpellSheet node types a flow for it would use (from list_step_types).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "plugins": {
+          "description": "Plugins it needs, if any.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notNow": {
+          "description": "Why it does not suit automation now (judgment at its core, once a\nyear, a system about to be replaced). Set: the task is not ranked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flowIds": {
+          "description": "Flows made for it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "description": "Anything else, e.g. which numbers are estimates.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Frequency": {
+      "description": "How often: `times` per `per`, e.g. 3 per week.",
+      "type": "object",
+      "properties": {
+        "times": {
+          "type": "number",
+          "format": "double"
+        },
+        "per": {
+          "$ref": "#/$defs/Period"
+        }
+      },
+      "required": [
+        "times",
+        "per"
+      ]
+    },
+    "Period": {
+      "type": "string",
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ]
+    },
+    "Level": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "InventoryPatch": {
+      "description": "A change to a stock-take: given fields replace what is there, the rest\nstays. Without `id` a new stock-take is made.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The stock-take to change. Omit to start a new one (`title` needed).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InventoryId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "about": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "systems": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InventoryStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tasks": {
+          "description": "Tasks to add (no `id`) or change (`id` of an existing one: only the\nfields given change; `null` clears one).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskPatch"
+          }
+        },
+        "removeTasks": {
+          "description": "IDs of tasks to take out.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "TaskPatch": {
+      "description": "A task to add or change. Fields as in [`WorkTask`]; `null` clears one.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "An existing task's ID (`t3`). Omit to add a task (`name` needed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steps": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "frequency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Frequency"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minutes": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "people": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "manualShare": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ease": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Level"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "easeReasons": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "errorImpact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Level"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "systems": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "exceptions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepTypes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "plugins": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "notNow": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flowIds": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "InventorySummary": {
+      "description": "A line for lists of stock-takes.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/InventoryId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "about": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/InventoryStatus"
+        },
+        "tasks": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "savableMinutes": {
+          "type": "number",
+          "format": "double"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "tasks",
+        "savableMinutes",
+        "updatedAt"
+      ]
+    },
+    "Assessment": {
+      "description": "The whole stock-take in numbers, tasks in the order to build them.",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskAssessment"
+          }
+        },
+        "monthlyMinutes": {
+          "description": "Minutes a month of the tasks whose time is known.",
+          "type": "number",
+          "format": "double"
+        },
+        "savableMinutes": {
+          "description": "Minutes a month the ranked tasks could save.",
+          "type": "number",
+          "format": "double"
+        },
+        "first": {
+          "description": "The task to build first, when there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "incomplete": {
+          "description": "Tasks that still miss something to be placed.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tasks",
+        "monthlyMinutes",
+        "savableMinutes",
+        "incomplete"
+      ]
+    },
+    "TaskAssessment": {
+      "description": "The numbers of one task, from fixed formulas.",
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string"
+        },
+        "timesPerMonth": {
+          "description": "Times a month.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "monthlyMinutes": {
+          "description": "Minutes a month it takes everyone: times × minutes × people.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "savableMinutes": {
+          "description": "Minutes a month a flow could save: monthlyMinutes × manualShare.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "group": {
+          "$ref": "#/$defs/Group"
+        },
+        "rank": {
+          "description": "1 = the first to build. Only ranked groups (first, later, split).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "priority": {
+          "description": "For ordering: saved hours, weighted by ease and by what a mistake costs.",
+          "type": "number",
+          "format": "double"
+        },
+        "missing": {
+          "description": "What is still to ask before it can be placed or trusted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "taskId",
+        "group",
+        "priority",
+        "missing"
+      ]
+    },
+    "Group": {
+      "description": "Where a task stands, by the time it could save and how easy it is.",
+      "oneOf": [
+        {
+          "description": "Easy, and saves 5 hours a month or more: build these first.",
+          "type": "string",
+          "const": "first"
+        },
+        {
+          "description": "Easy, saves less: build once used to it.",
+          "type": "string",
+          "const": "later"
+        },
+        {
+          "description": "Saves a lot but hard: split it and start with a part.",
+          "type": "string",
+          "const": "split"
+        },
+        {
+          "description": "Not enough is known yet to place it.",
+          "type": "string",
+          "const": "unknown"
+        },
+        {
+          "description": "Does not suit automation now (its `notNow`, or little to save and hard).",
+          "type": "string",
+          "const": "notNow"
+        }
       ]
     }
   },

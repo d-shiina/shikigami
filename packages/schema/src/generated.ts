@@ -305,6 +305,35 @@ export type AiAction = "runFlow" | "testStep" | "deleteFlow";
  */
 export type ApprovalStatus = ("pending" | "approved" | "denied") | "used";
 /**
+ * Identifier of a stock-take of a person's work (業務の棚卸し).
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "InventoryId".
+ */
+export type InventoryId = string;
+/**
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "Period".
+ */
+export type Period = "day" | "week" | "month" | "quarter" | "year";
+/**
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "Level".
+ */
+export type Level = "high" | "medium" | "low";
+/**
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "InventoryStatus".
+ */
+export type InventoryStatus = "interviewing" | "done";
+/**
+ * Where a task stands, by the time it could save and how easy it is.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "Group".
+ */
+export type Group = "first" | "later" | "split" | "unknown" | "notNow";
+/**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "VarType".
  */
@@ -394,6 +423,10 @@ export interface SpellSheetApi {
   project_file: ProjectFile;
   config_file: ConfigFile;
   test_case: TestCase;
+  work_inventory: WorkInventory;
+  inventory_patch: InventoryPatch;
+  inventory_summary: InventorySummary;
+  assessment: Assessment;
 }
 /**
  * A flow: the unit that AI clients, Studio and the Runtime share.
@@ -2413,6 +2446,270 @@ export interface Expect {
    * The node the run should stop at, when `status` is `failed`.
    */
   errorStep?: string | null;
+}
+/**
+ * One stock-take: one person's (or one team's) work.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "WorkInventory".
+ */
+export interface WorkInventory {
+  id: InventoryId;
+  /**
+   * What is taken stock of, e.g. 「経理課 月次の締め」.
+   */
+  title: string;
+  /**
+   * Whose work: department and role, e.g. 「経理課 2 名、請求と支払」.
+   */
+  about?: string | null;
+  /**
+   * Systems and tools used every day (受注システム（Web）, 販売管理（Windows）, Excel, Outlook…).
+   */
+  systems?: string[];
+  status?: "interviewing" | "done";
+  /**
+   * Anything else worth keeping from the interview.
+   */
+  notes?: string | null;
+  tasks?: WorkTask[];
+  /**
+   * Who made it (the AI client, or Writer).
+   */
+  createdBy?: Actor | null;
+  createdAt: string;
+  updatedAt: string;
+}
+/**
+ * One piece of work.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "WorkTask".
+ */
+export interface WorkTask {
+  /**
+   * `t1`, `t2`… given when the task is added; stays the same.
+   */
+  id: string;
+  /**
+   * The work in the person's words, e.g. 「受注メールの Excel を販売管理に入力」.
+   */
+  name: string;
+  /**
+   * What is done, one or two sentences.
+   */
+  description?: string | null;
+  /**
+   * The order of the work, in business words.
+   */
+  steps?: string[];
+  frequency?: Frequency | null;
+  /**
+   * Minutes one time takes one person.
+   */
+  minutes?: number | null;
+  /**
+   * How many people do it (default 1).
+   */
+  people?: number | null;
+  /**
+   * Share of that time (percent, 0 to 100) that is hands-only work a flow
+   * can take over: copying, typing, downloading, checking against a list.
+   * Judging, phoning and talking stay with people.
+   */
+  manualShare?: number | null;
+  /**
+   * How easy it is to build with SpellSheet.
+   */
+  ease?: Level | null;
+  /**
+   * Why it is that easy or hard (input is data or paper, fixed steps,
+   * exceptions, kind of screen).
+   */
+  easeReasons?: string[];
+  /**
+   * What a mistake costs: high (money, customers, deadlines), medium, low.
+   */
+  errorImpact?: Level | null;
+  /**
+   * Systems and apps it uses.
+   */
+  systems?: string[];
+  /**
+   * What it reads: files, mails, forms, paper.
+   */
+  inputs?: string[];
+  /**
+   * What it makes or updates.
+   */
+  outputs?: string[];
+  /**
+   * The cases that do not follow the usual steps, and how often.
+   */
+  exceptions?: string | null;
+  /**
+   * SpellSheet node types a flow for it would use (from list_step_types).
+   */
+  stepTypes?: string[];
+  /**
+   * Plugins it needs, if any.
+   */
+  plugins?: string[];
+  /**
+   * Why it does not suit automation now (judgment at its core, once a
+   * year, a system about to be replaced). Set: the task is not ranked.
+   */
+  notNow?: string | null;
+  /**
+   * Flows made for it.
+   */
+  flowIds?: string[];
+  /**
+   * Anything else, e.g. which numbers are estimates.
+   */
+  note?: string | null;
+}
+/**
+ * How often: `times` per `per`, e.g. 3 per week.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "Frequency".
+ */
+export interface Frequency {
+  times: number;
+  per: Period;
+}
+/**
+ * A change to a stock-take: given fields replace what is there, the rest
+ * stays. Without `id` a new stock-take is made.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "InventoryPatch".
+ */
+export interface InventoryPatch {
+  /**
+   * The stock-take to change. Omit to start a new one (`title` needed).
+   */
+  id?: InventoryId | null;
+  title?: string | null;
+  about?: string | null;
+  systems?: string[] | null;
+  status?: InventoryStatus | null;
+  notes?: string | null;
+  /**
+   * Tasks to add (no `id`) or change (`id` of an existing one: only the
+   * fields given change; `null` clears one).
+   */
+  tasks?: TaskPatch[];
+  /**
+   * IDs of tasks to take out.
+   */
+  removeTasks?: string[];
+}
+/**
+ * A task to add or change. Fields as in [`WorkTask`]; `null` clears one.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "TaskPatch".
+ */
+export interface TaskPatch {
+  /**
+   * An existing task's ID (`t3`). Omit to add a task (`name` needed).
+   */
+  id?: string | null;
+  name?: string | null;
+  description?: string | null;
+  steps?: string[] | null;
+  frequency?: Frequency | null;
+  minutes?: number | null;
+  people?: number | null;
+  manualShare?: number | null;
+  ease?: Level | null;
+  easeReasons?: string[] | null;
+  errorImpact?: Level | null;
+  systems?: string[] | null;
+  inputs?: string[] | null;
+  outputs?: string[] | null;
+  exceptions?: string | null;
+  stepTypes?: string[] | null;
+  plugins?: string[] | null;
+  notNow?: string | null;
+  flowIds?: string[] | null;
+  note?: string | null;
+}
+/**
+ * A line for lists of stock-takes.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "InventorySummary".
+ */
+export interface InventorySummary {
+  id: InventoryId;
+  title: string;
+  about?: string | null;
+  status: InventoryStatus;
+  tasks: number;
+  savableMinutes: number;
+  updatedAt: string;
+}
+/**
+ * The whole stock-take in numbers, tasks in the order to build them.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "Assessment".
+ */
+export interface Assessment {
+  tasks: TaskAssessment[];
+  /**
+   * Minutes a month of the tasks whose time is known.
+   */
+  monthlyMinutes: number;
+  /**
+   * Minutes a month the ranked tasks could save.
+   */
+  savableMinutes: number;
+  /**
+   * The task to build first, when there is one.
+   */
+  first?: string | null;
+  /**
+   * Tasks that still miss something to be placed.
+   */
+  incomplete: number;
+}
+/**
+ * The numbers of one task, from fixed formulas.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "TaskAssessment".
+ */
+export interface TaskAssessment {
+  taskId: string;
+  /**
+   * Times a month.
+   */
+  timesPerMonth?: number | null;
+  /**
+   * Minutes a month it takes everyone: times × minutes × people.
+   */
+  monthlyMinutes?: number | null;
+  /**
+   * Minutes a month a flow could save: monthlyMinutes × manualShare.
+   */
+  savableMinutes?: number | null;
+  group: Group;
+  /**
+   * 1 = the first to build. Only ranked groups (first, later, split).
+   */
+  rank?: number | null;
+  /**
+   * For ordering: saved hours, weighted by ease and by what a mistake costs.
+   */
+  priority: number;
+  /**
+   * What is still to ask before it can be placed or trusted.
+   */
+  missing: string[];
 }
 /**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema

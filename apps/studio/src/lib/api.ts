@@ -1,6 +1,7 @@
 // Typed bridge to the Rust backend. Every call maps 1:1 to a Tauri command,
 // which in turn is a thin wrapper over FlowService / Runtime. The
 // frontend never edits flow documents itself; it only sends EditOps.
+import type { InventoryPatch, InventorySummary, InventoryView } from "./inventory";
 import type {
   ApprovalRequest,
   CaseResult,
@@ -330,6 +331,17 @@ export const manualApi = {
   saveMasks: (id: string, masks: Record<string, Mask>) => call<void>("save_manual_masks", { id, masks }),
   /** Writes the exported HTML to the Downloads folder; returns its path. */
   saveExport: (name: string, html: string) => call<string>("save_manual_export", { name, html }),
+};
+
+/** 業務の棚卸し (src-tauri/src/inventory.rs). */
+export const inventoryApi = {
+  list: () => call<InventorySummary[]>("list_inventories"),
+  get: (id: string) => call<InventoryView>("get_inventory", { id }),
+  /** A correction made on the sheet; returns the stock-take as it is now. */
+  change: (patch: InventoryPatch) => call<InventoryView>("change_inventory", { patch }),
+  remove: (id: string) => call<void>("delete_inventory", { id }),
+  /** Writes it as an Excel workbook to the Downloads folder; returns its path. */
+  exportXlsx: (id: string, english: boolean) => call<string>("export_inventory", { id, english }),
 };
 
 export const api = {

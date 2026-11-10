@@ -18,6 +18,7 @@ const PAGE_TITLE: Partial<Record<Place, () => string>> = {
   secrets: () => t.secrets,
   settings: () => t.shell.settings,
   extensions: () => t.extensions.place,
+  inventory: () => t.inventory.place,
 };
 
 export function TitleBar({ view, onView }: { view: View; onView: (view: View) => void }) {

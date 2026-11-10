@@ -34,7 +34,7 @@ use spellsheet_runtime::{
 };
 use spellsheet_secrets::{SecretInput, Vault};
 
-use cli::{Cli, Command, PluginCmd, PolicyCmd, SchemaCmd, WorkspaceCmd};
+use cli::{Cli, Command, InventoryCmd, PluginCmd, PolicyCmd, SchemaCmd, WorkspaceCmd};
 use flow_cmd::{approval_cmd, distribution_cmd, flow_cmd, version_cmd};
 use plugin_cmd::{builtin_names, plugin_command};
 use run_cmd::{parse_inputs, print_case, project_dirs, resolve, run, runnable};
@@ -133,6 +133,10 @@ fn real_main() -> Result<ExitCode> {
                     println!("wrote {}", path.display());
                 }
             }
+        }
+        Command::Inventory(cmd) => {
+            let svc = open_service()?;
+            inventory_cmd(&svc, cmd.clone())?;
         }
         Command::Approval(cmd) => {
             let svc = open_service()?;
@@ -428,6 +432,63 @@ fn core_err(e: spellsheet_core::CoreError) -> anyhow::Error {
         Some(hint) => anyhow::anyhow!("{e} ({})\nhint: {hint}", e.code()),
         None => anyhow::anyhow!("{e} ({})", e.code()),
     }
+}
+
+fn inventory_cmd(svc: &FlowService, cmd: InventoryCmd) -> Result<()> {
+    use spellsheet_core::inventory;
+    let root = svc.store().root();
+    match cmd {
+        InventoryCmd::List { json } => {
+            let list = inventory::list(root).map_err(core_err)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&list)?);
+            } else if list.is_empty() {
+                println!("No stock-takes yet. Ask an AI client: find_what_to_automate.");
+            } else {
+                for i in list {
+                    println!(
+                        "{}  {}  {} tasks, {:.1} h/month to save",
+                        i.id,
+                        i.title,
+                        i.tasks,
+                        i.savable_minutes / 60.0
+                    );
+                }
+            }
+        }
+        InventoryCmd::Show { id, json } => {
+            let found =
+                inventory::load(root, &spellsheet_core::InventoryId::new(id)).map_err(core_err)?;
+            let assessment = inventory::assess(&found);
+            if json {
+                let view = serde_json::json!({ "inventory": found, "assessment": assessment });
+                println!("{}", serde_json::to_string_pretty(&view)?);
+            } else {
+                println!("{}", found.title);
+                for scored in &assessment.tasks {
+                    let name = found
+                        .tasks
+                        .iter()
+                        .find(|t| t.id == scored.task_id)
+                        .map_or("", |t| t.name.as_str());
+                    let rank = scored.rank.map_or("-".to_owned(), |r| r.to_string());
+                    let saved = scored
+                        .savable_minutes
+                        .map_or("?".to_owned(), |m| format!("{:.1} h", m / 60.0));
+                    println!("{rank:>3}  {name}  ({saved}/month, {:?})", scored.group);
+                }
+            }
+        }
+        InventoryCmd::Export { id, path, english } => {
+            let found =
+                inventory::load(root, &spellsheet_core::InventoryId::new(id)).map_err(core_err)?;
+            let names = |id: &str| svc.get(&FlowId::new(id)).ok().map(|f| f.name);
+            spellsheet_excel::inventory::write(&path, &found, english, &names)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            println!("{}", path.display());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

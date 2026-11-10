@@ -1015,6 +1015,26 @@
       "class": "read"
     },
     {
+      "name": "get_work_inventory",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "class": "read"
+    },
+    {
       "name": "import_flow",
       "annotations": {
         "readOnlyHint": false,
@@ -1786,6 +1806,297 @@
           "name",
           "case"
         ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "save_work_inventory",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "InventoryId": {
+            "type": "string"
+          },
+          "InventoryStatus": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "interviewing"
+              },
+              {
+                "type": "string",
+                "const": "done"
+              }
+            ]
+          },
+          "TaskPatch": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "steps": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "frequency": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Frequency"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "minutes": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "people": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "manualShare": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "ease": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Level"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "easeReasons": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "errorImpact": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Level"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "systems": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "inputs": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "outputs": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "exceptions": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stepTypes": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "plugins": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notNow": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "flowIds": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "Frequency": {
+            "type": "object",
+            "properties": {
+              "times": {
+                "type": "number",
+                "format": "double"
+              },
+              "per": {
+                "$ref": "#/$defs/Period"
+              }
+            },
+            "required": [
+              "times",
+              "per"
+            ]
+          },
+          "Period": {
+            "type": "string",
+            "enum": [
+              "day",
+              "week",
+              "month",
+              "quarter",
+              "year"
+            ]
+          },
+          "Level": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        },
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InventoryId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "about": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "systems": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InventoryStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TaskPatch"
+            }
+          },
+          "removeTasks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "type": "object"
       },
       "class": "write"
     },

@@ -79,6 +79,7 @@ Each release also has `spellsheet.mcpb`, an [MCP Bundle](https://github.com/mode
 |  | `diff_versions` | Differences between versions, or a version and now (by node ID; by default "latest version → now") |
 |  | `export_flow` | The flow, its versions and the subflows it calls, as one bundle (without defaults of secret variables). With `path`, writes a `.spx` file to hand to another person or PC instead: the published version by default (`current` for the content now), `include_input` for files in `input/`; it never overwrites a file ([design](design/sharing-versioning.md)) |
 |  | `list_project_files` / `read_project_file` | The files in the flow's folder (input, config, templates, output, work, logs), and a text file's contents ([files.md](files.md#the-flows-folder)) |
+|  | `get_work_inventory` | 業務の棚卸し (work inventory): without `id` the inventories and the interview `guide`; with `id` one inventory and its `assessment` (the order to build, hours a month, hours to save, what is missing) ([inventory.md](inventory.md)) |
 |  | `list_secrets` | Names, sites and set fields of the secrets registered in Writer (never the values; see [secrets.md](secrets.md)) |
 |  | `get_policy` | The workspace's `policy.json`: the allowed sites and apps, and what the AI may do (allow / ask / deny). No tool changes it ([policy.md](policy.md)) |
 | write | `create_flow` | Create a flow (node IDs optional) |
@@ -92,6 +93,7 @@ Each release also has `spellsheet.mcpb`, an [MCP Bundle](https://github.com/mode
 |  | `extract_subflow` | Move consecutive nodes of one block into a new flow and replace them with a single `flow.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subflows.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the flow's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
 |  | `save_test_case` | Save a test case (`tests/<name>.json`: `description`, `inputs` and `expect`; `overwrite` to replace). Write `description` as a promise in business words: Writer's review shows the cases an AI saved as its promises, with their results. Unknown or secret inputs are refused ([testing.md](testing.md)) |
+|  | `save_work_inventory` | Record what the person said about their work as the interview goes (without `id` starts one); returns the inventory and its assessment, computed by SpellSheet ([inventory.md](inventory.md)) |
 |  | `request_secret` | Ask the person for login details. Writer shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Writer and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_flow` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_flow` | Cancel a run |
