@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SpellSheet｜AI が作り、AI なしで動く Windows の業務自動化</title>
+  <title>SpellSheet｜業務の棚卸しから実行結果まで、シートで残る Windows の業務自動化</title>
   <meta name="description" content="SpellSheet は、何を自動化するかを AI と業務の棚卸しで決め、お使いの AI に業務の自動化フローを組ませ、担当者が手順書で確かめ、PC の中で AI なしに動かす Windows 向けの RPA です。無料のオープンソース（Apache-2.0）。">
-  <meta property="og:title" content="SpellSheet｜AI が作り、AI なしで動く。">
+  <meta property="og:title" content="SpellSheet｜業務の棚卸しから実行結果まで、シートで残る。">
   <meta property="og:description" content="何を自動化するかの相談からフロー作りまで AI に依頼でき、できたフローは PC の中だけで AI なしに動く。日本の業務アプリ向けの無料 RPA。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="assets/writer-og.png">
@@ -22,6 +22,7 @@
     <div class="wrap">
       <a class="brand" href="./"><img src="assets/mark.png" alt="">SpellSheet</a>
       <nav class="nav" aria-label="ページ内">
+        <a class="hide-sm" href="#sheets">シート</a>
         <a class="hide-sm" href="#consult">業務の棚卸し</a>
         <a class="hide-sm" href="#points">特長</a>
         <a class="hide-sm" href="#how">使い方</a>
@@ -41,8 +42,8 @@
       <div class="shade"></div>
       <div class="wrap">
         <p class="eyebrow">Windows の業務自動化（RPA）・無料のオープンソース</p>
-        <h1><span>AI が作り、</span><span>AI なしで動く。</span></h1>
-        <p class="lead">何を自動化するかの相談から、フローを組むところまで AI に依頼できます。できたフローは担当者が手順書で確かめ、PC の中だけで毎日動きます。動かすときに AI もクラウドも使いません。</p>
+        <h1><span>業務の棚卸しから実行結果まで、</span><span>シートで残る。</span></h1>
+        <p class="lead">何を自動化するかは「業務の棚卸し」、どう動くかは「手順書」、何をしたかは「実行結果」。AI が作ったものは、どれも担当者が読めるシートになります。できたフローは PC の中だけで、AI なしで毎日動きます。</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="download.html"><svg class="i"><use href="assets/icons.svg#download"/></svg>無料でダウンロード</a>
           <a class="btn btn-lg" href="#how">使い方を見る</a>
@@ -54,6 +55,27 @@
       <div class="wrap">
         <div class="shot">
           <picture><source srcset="assets/writer-dark.webp" media="(prefers-color-scheme: dark)"><img src="assets/writer.webp" width="1440" height="900" alt="SpellSheet Writer でフローを開いた画面。左にプロジェクトのファイル、中央にフロー図、上に AI への依頼欄がある"></picture>
+        </div>
+      </div>
+    </section>
+
+    <section id="sheets">
+      <div class="wrap">
+        <h2>3 枚のシート</h2>
+        <p class="sub">自動化の前・途中・後を、それぞれ 1 枚のシートで確かめられます。印刷や Excel への書き出しもできます。</p>
+        <div class="sheets">
+          <figure class="sheet c-cyan">
+            <img src="assets/sheet-inventory.webp" width="900" height="821" alt="業務の棚卸しのシート。月にかかっている時間、減らせそうな時間、最初に作るとよい仕事が並ぶ" loading="lazy">
+            <figcaption><span class="num">前</span><strong>業務の棚卸し</strong>何を自動化するか。AI が業務を聞き取り、仕事ごとの時間と、どれから作るとよいかをまとめます。</figcaption>
+          </figure>
+          <figure class="sheet c-green">
+            <img src="assets/sheet-manual.webp" width="900" height="827" alt="業務手順書の表紙。版・更新日・使うもの・できあがるもの・目次が並ぶ" loading="lazy">
+            <figcaption><span class="num">途中</span><strong>手順書</strong>どう動くか。フローを A4 の業務手順書にし、1 手順ずつ説明と画面の写真を並べます。</figcaption>
+          </figure>
+          <figure class="sheet c-orange">
+            <img src="assets/sheet-result.webp" width="900" height="827" alt="フローの実行結果のシート。出力項目、最後の画面、操作の記録が並ぶ" loading="lazy">
+            <figcaption><span class="num">後</span><strong>実行結果</strong>何をしたか。できたファイル、最後の画面、書き込んだ・送ったものを、実行のたびに残します。</figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -92,8 +114,8 @@
           </div>
           <div class="point c-green">
             <div class="num"><svg class="i"><use href="assets/icons.svg#book-open"/></svg>02</div>
-            <h3>手順書で確かめて直せる</h3>
-            <p>フローは日本語の手順と画面の写真で読めます。AI の変更は、確かめてから使い始めます。</p>
+            <h3>すべてシートで残る</h3>
+            <p>業務の棚卸し・手順書・AI の変更の確認・実行結果。どれも担当者が読めて、印刷や書き出しができます。</p>
           </div>
           <div class="point c-orange">
             <div class="num"><svg class="i"><use href="assets/icons.svg#shield-check"/></svg>03</div>
@@ -129,7 +151,7 @@
 
         <div class="feature flip c-green">
           <div>
-            <p class="label">02　手順書で確かめて直せる</p>
+            <p class="label">02　すべてシートで残る</p>
             <h3>どのフローも、A4 の手順書になります</h3>
             <p>どのフローも、A4 の手順書として開けます。1 手順ずつ、日本語の説明と操作する直前の画面の写真が並びます。業務の担当者が「この順番で合っているか」を自分の目で確かめられます。</p>
             <p>AI がフローを変えたときは、何がどう変わったかを 1 枚のレポートで確かめ、よければ「変更を承諾」します。承諾して確定した版だけが、ほかの人の実行や自動実行に使われます。</p>
