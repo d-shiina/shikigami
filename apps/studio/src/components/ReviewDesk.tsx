@@ -671,8 +671,8 @@ export function ReviewFoot({ report }: { report: boolean }) {
 export function PaperSection({ id, n, title, note, aside, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; children: React.ReactNode }) {
   return (
     <section id={id} className="mt-9 scroll-mt-6">
-      <h2 className="flex items-baseline gap-2.5 text-[15px] font-bold">
-        {n !== undefined && <SheetNumber n={n} className="text-[13px] text-brand-600" />}
+      <h2 className="flex items-center gap-2 text-[15px] font-bold">
+        {n !== undefined && <SheetNumber n={n} />}
         {title}
         {aside && <span className="ml-auto text-[12px] font-normal text-slate-500">{aside}</span>}
       </h2>
