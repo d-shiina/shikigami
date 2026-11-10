@@ -337,13 +337,14 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
   );
   const [all, setAll] = useState(false);
   const changes = all ? result.changes : result.changes.slice(0, SHOWN_CHANGES);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   const aiName = chatAi(useAiWay((s) => s.chat)).name;
   // Asked again and again for the same fix: offer the node's settings instead.
   const stuck = useMemo(() => (latest ? stuckIssues(chat.items, result.flowId) : []), [latest, chat.items, result.flowId]);
   const fixByHand = async (stepId: string | null) => {
     if (!shown) await openFlow(result.flowId);
-    if (stepId) select({ kind: "step", stepId });
+    // goTo, not select: it also brings the chart up from the report or the manual.
+    if (stepId) goTo(stepId);
   };
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-sheet py-2.5 text-[12px]">
