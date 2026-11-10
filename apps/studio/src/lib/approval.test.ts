@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientName, fillTarget, inputRows, minutesLeft, readSubject } from "./approval";
+import { clientName, fillTarget, inputRows, minutesLeft, readSubject, unchangedRows } from "./approval";
 
 const flow = {
   variables: [
@@ -47,6 +47,7 @@ describe("readSubject", () => {
     expect(s.published).toBe(true);
     expect(s.inputs).toEqual({ a: 1 });
     expect(s.calledIds).toEqual(["scn_sub"]);
+    expect(readSubject({ subject: { revision: 4 } }).revision).toBe(4);
     expect(s.step).toBeNull();
   });
   it("reads test cases and a tested node", () => {
@@ -80,5 +81,26 @@ describe("minutesLeft", () => {
     expect(minutesLeft(at, Date.parse("2026-11-10T00:00:30Z"))).toBe(30);
     expect(minutesLeft(at, Date.parse("2026-11-10T00:29:10Z"))).toBe(1);
     expect(minutesLeft(at, Date.parse("2026-11-10T01:00:00Z"))).toBe(0);
+  });
+});
+
+describe("unchangedRows", () => {
+  const rows = inputRows(flow as never, {});
+  it("drops values a step changes before the run ends", () => {
+    const steps = [
+      { id: "s1", type: "variable.set", params: { name: "orderFile", expression: "'other.xlsx'" } },
+      { id: "s2", type: "file.delete", params: { path: "{{ orderFile }}" } },
+    ];
+    expect(unchangedRows(rows, steps as never, flow.variables as never).map((r) => r.name)).toEqual(["month"]);
+  });
+  it("finds writes inside blocks and saved results", () => {
+    const steps = [
+      { id: "g", type: "control.group", params: {}, blocks: { body: [{ id: "r", type: "excel.readRows", params: { path: "x" }, saveAs: "month" }] } },
+    ];
+    expect(unchangedRows(rows, steps as never, flow.variables as never).map((r) => r.name)).toEqual(["orderFile"]);
+  });
+  it("keeps the values of a tested node that only reads them", () => {
+    const given = inputRows(null, { p: "a.txt" });
+    expect(unchangedRows(given, [{ id: "d", type: "file.delete", params: { path: "{{ p }}" } }] as never)).toEqual(given);
   });
 });

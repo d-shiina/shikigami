@@ -3,9 +3,9 @@ import { ChevronDown, ChevronRight, CloudUpload, MonitorCog, ShieldCheck, Sparkl
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
-import { clientName, fillTarget, type InputRow, inputRows, minutesLeft, readSubject } from "../lib/approval";
+import { clientName, fillTarget, type InputRow, inputRows, minutesLeft, readSubject, unchangedRows } from "../lib/approval";
 import { relativeTime } from "../lib/changes";
-import { type Effect, effectOf, effects as flowEffects } from "../lib/effects";
+import { type Effect, effects as flowEffects } from "../lib/effects";
 import { stepLabel, t } from "../lib/i18n";
 import { flatten } from "../lib/review";
 import { calledName, sentence } from "../lib/sentence";
@@ -59,13 +59,18 @@ function Request({
 }) {
   const stepTypes = useStudio((s) => s.stepTypes);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
-  const flow = useFlow(request.flowId ?? null);
+  const loaded = useFlow(request.flowId ?? null);
   const subject = readSubject(request);
+  // A run covers one revision (the working copy, or the confirmed version's
+  // content). The loaded working copy shows its defaults and effects only
+  // when it is that same content; otherwise those details are withheld.
+  const flow = loaded && (request.action !== "runFlow" || subject.revision === null || loaded.revision === subject.revision) ? loaded : null;
+  const otherContent = request.action === "runFlow" && loaded !== null && flow === null;
   const [showRaw, setShowRaw] = useState(false);
   const now = useNow();
 
   const who = clientName(request.requestedBy.name) ?? "AI";
-  const flowName = request.flowName ?? flow?.name ?? t.approval.someFlow;
+  const flowName = request.flowName ?? loaded?.name ?? t.approval.someFlow;
   const step = subject.step;
   const def = step ? defs.get(step.type) : undefined;
   const title =
@@ -86,19 +91,18 @@ function Request({
           : t.approval.lead.working;
 
   const effectList: Effect[] = useMemo(() => {
-    if (request.action === "testStep") {
-      const e = step ? effectOf(step, def, "same") : null;
-      return e ? [e] : [];
-    }
+    // A tested control node runs the nodes inside it too.
+    if (request.action === "testStep") return step ? flowEffects([step], new Map(), [], defs) : [];
     return flow ? flowEffects(flow.steps ?? [], new Map(), [], defs) : [];
-  }, [request.action, step, def, flow, defs]);
+  }, [request.action, step, flow, defs]);
 
   // The values targets read, for a single run (a test run has several sets).
+  // Only values no step changes, so a target never shows a value it will not have.
   const runValues =
-    request.action === "runFlow" && subject.testCases.length === 0
-      ? inputRows(flow, subject.inputs)
-      : request.action === "testStep"
-        ? inputRows(null, subject.variables)
+    request.action === "runFlow" && subject.testCases.length === 0 && flow
+      ? unchangedRows(inputRows(flow, subject.inputs), flow.steps ?? [], flow.variables)
+      : request.action === "testStep" && step
+        ? unchangedRows(inputRows(null, subject.variables), [step])
         : [];
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => boxRef.current?.focus(), []);
@@ -198,7 +202,11 @@ function Request({
               title={request.action === "testStep" ? t.approval.nodeEffects : t.approval.effects}
               note={t.approval.effectsNote}
             >
-              <Effects effects={effectList} values={runValues} loading={request.action === "runFlow" && !flow && !!request.flowId} />
+              {otherContent ? (
+                <p className="text-sm text-slate-500">{t.approval.otherContent}</p>
+              ) : (
+                <Effects effects={effectList} values={runValues} loading={request.action === "runFlow" && !flow && !!request.flowId} />
+              )}
             </Section>
           )}
 

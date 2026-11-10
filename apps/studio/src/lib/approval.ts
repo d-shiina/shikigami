@@ -2,7 +2,8 @@
 // can judge: which values the run uses, which node is tested, which flows are
 // called. Display only: the MCP server compares the subject itself when the
 // approval is used, so nothing here decides what runs.
-import type { ApprovalRequest, Flow, Step } from "@spellsheet/schema";
+import type { ApprovalRequest, Flow, Step, VariableDef } from "@spellsheet/schema";
+import { variableUsage } from "./variableUsage";
 
 /** The AI clients' MCP names, as people know them. Unknown names show as given. */
 const CLIENTS: Record<string, string> = {
@@ -73,6 +74,8 @@ export type ApprovalSubject = {
   variables: unknown;
   /** The flows it calls. */
   calledIds: string[];
+  /** runFlow: the flow content's revision the approval covers. */
+  revision: number | null;
 };
 
 export function readSubject(request: Pick<ApprovalRequest, "subject">): ApprovalSubject {
@@ -86,6 +89,7 @@ export function readSubject(request: Pick<ApprovalRequest, "subject">): Approval
     testCases: cases.map((c) => record(c)).map((c) => ({ name: String(c.name ?? ""), inputs: c.inputs ?? {} })),
     step: typeof step.type === "string" ? (step as unknown as Step) : null,
     variables: s.variables ?? {},
+    revision: typeof s.revision === "number" ? s.revision : null,
     calledIds: flows.map((f) => record(f).id).filter((id): id is string => typeof id === "string"),
   };
 }
@@ -97,9 +101,21 @@ export function minutesLeft(requestedAt: string, now = Date.now(), keep = 30): n
 }
 
 /**
+ * The starting values that stay the same for the whole run: no step writes
+ * them (a set, a loop element, a saved result, a called flow's output), so
+ * every step that reads one sees the starting value.
+ */
+export function unchangedRows(rows: InputRow[], steps: Step[], variables?: VariableDef[]): InputRow[] {
+  const defs: VariableDef[] = variables ?? rows.map((r) => ({ name: r.name, type: "any" }) as VariableDef);
+  const written = new Set(variableUsage(steps, defs).filter((u) => u.writers.length > 0).map((u) => u.name));
+  return rows.filter((r) => !written.has(r.name));
+}
+
+/**
  * A step's target with plain `{{ name }}` references replaced by the values
  * the run starts with, so `{{ orderFile }}` reads as `input/orders.xlsx`.
- * Anything else (expressions, variables set during the run) stays as written.
+ * Pass only values no step changes (unchangedRows): anything else
+ * (expressions, variables set during the run) stays as written.
  */
 export function fillTarget(target: string, rows: InputRow[]): string {
   const values = new Map(rows.map((r) => [r.name, r.value] as const));

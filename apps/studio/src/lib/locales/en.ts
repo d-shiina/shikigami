@@ -484,6 +484,7 @@ export const en: Dict = {
     noEffects: "It does nothing to files or other systems",
     deleting: "Flow to delete",
     stepCount: (n: number) => `${n} node${n === 1 ? "" : "s"}`,
+    otherContent: "It runs a version that differs from the working copy, so its contents are not shown here. Values show only what the AI gave.",
     called: "Flows it calls",
     raw: "Show what the AI sent, as is",
     note: "Approving runs exactly this once. If the AI changes the values or the flow, it does not run.",
