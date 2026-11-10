@@ -25,13 +25,15 @@ import {
   ordered,
   type Period,
   plain,
+  consult,
   sendFresh,
+  PICK_KEY,
+  showInventory,
   type TaskAssessment,
   type WorkTask,
   WORTH_MINUTES,
 } from "../lib/inventory";
 
-const PICK_KEY = "spellsheet.studio.inventory";
 /** How often the open sheet looks for what the AI saved (it writes from another process). */
 const POLL_MS = 1500;
 const LEVELS: Level[] = ["high", "medium", "low"];
@@ -44,14 +46,7 @@ function remembered(): string | null {
     return null;
   }
 }
-function remember(id: string | null) {
-  try {
-    if (id) globalThis.localStorage?.setItem(PICK_KEY, id);
-    else globalThis.localStorage?.removeItem(PICK_KEY);
-  } catch {
-    // Only a remembered preference.
-  }
-}
+const remember = showInventory;
 
 /** The stock-takes and the one shown, kept fresh while the page is open. */
 function useInventories() {
@@ -113,7 +108,7 @@ export function InventoryPage() {
   const start = () => {
     // The next one the AI makes is the newest: show it as it comes.
     pick(null);
-    sendFresh(agent, t.inventory.startMessage);
+    void consult(agent);
   };
   const change = async (patch: Parameters<typeof inventoryApi.change>[0]) => {
     try {
@@ -134,7 +129,7 @@ export function InventoryPage() {
             <>
               <button
                 type="button"
-                onClick={() => sendFresh(agent, t.inventory.continueMessage(view.inventory.title))}
+                onClick={() => void consult(agent, view.inventory)}
                 className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-ink hover:bg-slate-50"
               >
                 <MessageSquareText size={14} strokeWidth={1.75} aria-hidden="true" />

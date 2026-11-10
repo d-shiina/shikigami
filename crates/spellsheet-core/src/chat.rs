@@ -639,6 +639,30 @@ fn find_json_as_is(text: &str) -> Result<Value, Vec<AnswerProblem>> {
     }
 }
 
+/// The JSON object in a pasted reply that `wanted` accepts: a ```json block
+/// first, then the whole text, then its outermost { … }. For answers other
+/// than flows (the stock-take); read as leniently as a flow answer.
+pub(crate) fn find_object(text: &str, wanted: impl Fn(&Value) -> bool) -> Option<Value> {
+    let text = if text.contains(['\u{00a0}', '\u{feff}']) {
+        std::borrow::Cow::Owned(text.replace('\u{00a0}', " ").replace('\u{feff}', ""))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    };
+    let (blocks, open) = fenced_blocks(&text);
+    let trimmed = text.trim();
+    let outer = match (trimmed.find('{'), trimmed.rfind('}')) {
+        (Some(start), Some(end)) if start < end => Some(trimmed[start..=end].to_owned()),
+        _ => None,
+    };
+    blocks
+        .into_iter()
+        .chain(open)
+        .chain(std::iter::once(trimmed.to_owned()))
+        .chain(outer)
+        .filter_map(|candidate| parse_lenient(&candidate).ok())
+        .find(|value| wanted(value))
+}
+
 fn is_answer(value: &Value) -> bool {
     value.get("format").and_then(Value::as_str) == Some(ANSWER_FORMAT) && looks_like_answer(value)
 }

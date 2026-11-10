@@ -77,7 +77,9 @@ export type HandoffResult =
   /** Taken in as a new flow or as the new content of the conversation's flow. */
   | { kind: "taken"; flowId: string; name: string; isNew: boolean; revision: number; changes: ChangeLine[]; forAi: ValidationIssue[]; checks: number; questions?: string[] }
   /** Not taken in: what the AI has to fix (nothing changed). */
-  | { kind: "problems"; problems: AnswerProblem[] };
+  | { kind: "problems"; problems: AnswerProblem[] }
+  /** A stock-take from an interview (Chat.interview), taken in. */
+  | { kind: "inventory"; id: string; title: string; tasks: number; first: string | null };
 
 /** What the paste way needs from Writer, given to the store (tests give their own). */
 export type PasteHelpers = {
@@ -111,6 +113,11 @@ export type Chat = {
   /** What the person is writing here and has not sent. */
   draft: string;
   updatedAt: number;
+  /**
+   * The paste way's 業務の棚卸し: the AI chat interviews the person, and what
+   * comes back is a stock-take (`inventoryId` once one is taken in), not a flow.
+   */
+  interview?: { inventoryId: string | null };
 };
 
 /** Signing the agent in from the pane. */
@@ -176,6 +183,13 @@ export type AgentState = {
   onEvent(event: AgentEvent): void;
   /** Copies `prompt` as it is for the AI chat (a request to fix, to go on), shown as `label`. */
   handOffAs(chatId: string, label: string, prompt: string, partial?: string): Promise<boolean>;
+  /**
+   * The paste way's 業務の棚卸し: a new conversation that copies `guide` (the
+   * interview) for the AI chat; its answers are stock-takes, into `inventoryId` when given.
+   */
+  interview(label: string, guide: string, inventoryId: string | null): Promise<boolean>;
+  /** The stock-take an interview's answers now go into. */
+  setInterview(chatId: string, inventoryId: string): void;
   /** Waits for an answer from an AI chat begun elsewhere. */
   expectAnswer(chatId: string): void;
   /** What became of the answer brought back for a request. */
@@ -212,7 +226,7 @@ const CHATS_KEY = "spellsheet.studio.agentChats";
 const OLD_SESSION_KEY = "spellsheet.studio.agentSession";
 const KEEP = 30;
 
-type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt"> & { items?: ChatItem[] };
+type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt" | "interview"> & { items?: ChatItem[] };
 /** Messages kept per conversation across restarts. */
 const KEEP_ITEMS = 60;
 
@@ -237,7 +251,7 @@ function save(chats: Chat[]) {
       .filter((c) => c.sessionId || c.items.some((i) => i.role === "ai" && i.handoff))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, KEEP)
-      .map(({ id, flowId, title, sessionId, agent, updatedAt, items }) => ({ id, flowId, title, sessionId, agent, updatedAt, items: items.slice(-KEEP_ITEMS) }));
+      .map(({ id, flowId, title, sessionId, agent, updatedAt, interview, items }) => ({ id, flowId, title, sessionId, agent, updatedAt, interview, items: items.slice(-KEEP_ITEMS) }));
     globalThis.localStorage?.setItem(CHATS_KEY, JSON.stringify(keep));
     globalThis.localStorage?.removeItem(OLD_SESSION_KEY);
   } catch {
@@ -377,7 +391,8 @@ export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<
     };
     // Sends the message already shown as the last person item and adds the reply.
     const dispatch = async (chatId: string, text: string, flow: AgentRequest["flow"] | null): Promise<boolean> => {
-      if (paste?.active()) return handOff(chatId, text, flow);
+      // An interview's messages go as they are: they are answers, not flow requests.
+      if (paste?.active()) return handOff(chatId, text, flow, Boolean(chat(chatId)?.interview));
       // The reply shows at once, so the person sees the message was taken
       // while the agent starts (which can take a while: a dev build first
       // rebuilds the MCP server). It has no turn until the agent is running.
@@ -593,6 +608,17 @@ export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<
         const person: ChatItem = { role: "person", id: nextId("item"), text: label, context: null, flow: null };
         update(chatId, (c) => ({ ...c, items: [...c.items, person] }));
         return handOff(chatId, prompt, null, true, partial);
+      },
+
+      async interview(label, guide, inventoryId) {
+        const fresh: Chat = { ...blank(null), title: label, interview: { inventoryId } };
+        show(fresh.id, [fresh, ...get().chats]);
+        return get().handOffAs(fresh.id, label, guide);
+      },
+
+      setInterview(chatId, inventoryId) {
+        update(chatId, (c) => ({ ...c, interview: { inventoryId } }));
+        save(get().chats);
       },
 
       expectAnswer(chatId) {

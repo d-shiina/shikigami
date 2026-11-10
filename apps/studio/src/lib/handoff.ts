@@ -52,7 +52,7 @@ export const isOwnRequest = (text: string) => text.trimStart().startsWith(t.aiCh
 /** Whether the clipboard looks like an AI's answer worth offering to take in. */
 export function looksLikeAnswer(text: string): boolean {
   if (!text.trim() || isOwnRequest(text)) return false;
-  return text.includes("spellsheet.answer") || /"steps"\s*:\s*\[/.test(text);
+  return text.includes("spellsheet.answer") || text.includes("spellsheet.inventory") || /"steps"\s*:\s*\[/.test(text);
 }
 
 /**

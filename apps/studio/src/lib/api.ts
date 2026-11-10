@@ -344,6 +344,10 @@ export const inventoryApi = {
   /** A correction made on the sheet; returns the stock-take as it is now. */
   change: (patch: InventoryPatch) => call<InventoryView>("change_inventory", { patch }),
   remove: (id: string) => call<void>("delete_inventory", { id }),
+  /** The interview to paste into an AI chat that cannot reach SpellSheet. */
+  chatGuide: () => call<string>("inventory_chat_guide"),
+  /** The record such a chat wrote: a new stock-take, or into `id` (tasks matched by name). */
+  pasteAnswer: (text: string, id: string | null) => call<InventoryView>("paste_inventory_answer", { text, id }),
   /** Writes it as an Excel workbook to the Downloads folder; returns its path. */
   exportXlsx: (id: string, english: boolean) => call<string>("export_inventory", { id, english }),
 };

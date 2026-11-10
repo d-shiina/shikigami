@@ -5,6 +5,8 @@
 import type { StoreApi } from "zustand";
 import { type AgentState, openAsk } from "../agent";
 import type { Assessment, Frequency, TaskAssessment, WorkInventory, WorkTask } from "@spellsheet/schema";
+import { pasteWay } from "./aiWay";
+import { inventoryApi } from "./api";
 import { t } from "./i18n";
 
 export type { Assessment, Frequency, Group, InventoryPatch, InventorySummary, Level, Period, TaskAssessment, WorkInventory, WorkTask } from "@spellsheet/schema";
@@ -67,6 +69,40 @@ export function sendFresh(agent: StoreApi<AgentState>, message: string) {
   if (!a.info?.available) return;
   a.setDraft(a.current, "");
   void a.sendIn(a.current, message, null).then((sent) => !sent && a.setDraft(a.current, message));
+}
+
+/** The stock-take 業務の棚卸し shows when it next opens (InventoryPage). */
+export function showInventory(id: string | null) {
+  try {
+    if (id) globalThis.localStorage?.setItem(PICK_KEY, id);
+    else globalThis.localStorage?.removeItem(PICK_KEY);
+  } catch {
+    // Only a remembered preference.
+  }
+}
+
+/** Where the stock-take last looked at is kept. */
+export const PICK_KEY = "spellsheet.studio.inventory";
+
+/**
+ * Starts (or, given one, continues) the interview about the person's work.
+ * An AI Writer runs gets the message; for an AI chat reached by the
+ * clipboard (the paste way), the interview itself is copied, with the record
+ * so far when continuing, and the record it writes comes back as a stock-take.
+ */
+export async function consult(agent: StoreApi<AgentState>, existing?: WorkInventory) {
+  if (!pasteWay()) {
+    sendFresh(agent, existing ? t.inventory.continueMessage(existing.title) : t.inventory.startMessage);
+    return;
+  }
+  const p = t.inventory.paste;
+  let guide = await inventoryApi.chatGuide();
+  if (existing) {
+    const { id: _id, createdBy: _by, createdAt: _at, updatedAt: _up, ...record } = existing as WorkInventory & Record<string, unknown>;
+    const tasks = (existing.tasks ?? []).map(({ id: _t, flowIds: _f, ...task }) => task);
+    guide += `\n## ${p.continueHead}\n\n\`\`\`json\n${JSON.stringify({ format: "spellsheet.inventory", ...record, tasks }, null, 2)}\n\`\`\`\n`;
+  }
+  await agent.getState().interview(existing ? p.continueLabel(existing.title) : p.label, guide, existing?.id ?? null);
 }
 
 /** Where a task sits on the chart: x by ease, y by the time it could save (0 to 1 each). */

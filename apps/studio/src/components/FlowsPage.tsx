@@ -16,7 +16,7 @@ import { describeWhen } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { deleteFlowsAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
-import { sendFresh } from "../lib/inventory";
+import { consult } from "../lib/inventory";
 import { projectApi } from "../project";
 import { fileToFlowFile } from "./HandOff";
 
@@ -98,7 +98,7 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
   // Not sure what to automate: the AI asks about the work, and its sheet fills in beside the chat.
   const onConsult = () => {
     setPlace("inventory");
-    sendFresh(agentStore, t.inventory.startMessage);
+    void consult(agentStore);
   };
   const [text, setText] = useState("");
   // Which AI the person uses is settled here, before anything is asked (the
