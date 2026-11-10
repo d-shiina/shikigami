@@ -34,5 +34,9 @@ describe("what comes back", () => {
     const before = '```json\n{"steps": [{"type": "log.mes';
     const more = 'つづきです。\n```json\nsage"}]}\n```\n以上です。';
     expect(joinParts(before, more)).toBe('```json\n{"steps": [{"type": "log.message"}]}\n\n```\n');
+    // Cut short again: still open, so a third part joins it too.
+    const second = joinParts(before, '```json\nsage"}, {"type": "log.');
+    expect(second).toBe('```json\n{"steps": [{"type": "log.message"}, {"type": "log.');
+    expect(joinParts(second, '```json\nmessage"}]}\n```')).toBe('```json\n{"steps": [{"type": "log.message"}, {"type": "log.message"}]}\n\n```\n');
   });
 });

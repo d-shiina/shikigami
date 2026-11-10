@@ -574,9 +574,17 @@ fn shape_problems(flow: &Value) -> Vec<AnswerProblem> {
 /// The JSON in a pasted reply: the ```json block that holds a flow, or the
 /// whole text, or the outermost { … }.
 fn find_json(text: &str) -> Result<Value, Vec<AnswerProblem>> {
+    let found = find_json_as_is(text);
+    if found.is_ok() || !text.contains(['\u{00a0}', '\u{feff}']) {
+        return found;
+    }
     // Chat windows show the answer with typographic marks; copied, a few of
-    // them stand where JSON needs plain ones.
-    let text = &text.replace('\u{00a0}', " ").replace('\u{feff}', "");
+    // them stand where JSON needs plain ones. Only when the text as it is
+    // cannot be read: inside strings they may be meant (a file name).
+    find_json_as_is(&text.replace('\u{00a0}', " ").replace('\u{feff}', ""))
+}
+
+fn find_json_as_is(text: &str) -> Result<Value, Vec<AnswerProblem>> {
     let (blocks, open) = fenced_blocks(text);
     let mut first_error = None;
     // The answer is the block that says so; the AI may show other JSON first.
@@ -882,6 +890,14 @@ mod tests {
         let answer = read_answer(reply).unwrap();
         assert_eq!(answer.summary.as_deref(), Some("挨拶 // そのまま"));
         assert_eq!(answer.flow.steps.len(), 1);
+    }
+
+    #[test]
+    fn keeps_non_breaking_spaces_inside_strings() {
+        let kept = "{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"a\u{00a0}b\", \"steps\": [] } }";
+        assert_eq!(read_answer(kept).unwrap().flow.name, "a\u{00a0}b");
+        let copied = "{\u{00a0}\"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"c\", \"steps\": [] } }";
+        assert_eq!(read_answer(copied).unwrap().flow.name, "c");
     }
 
     #[test]

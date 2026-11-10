@@ -63,5 +63,6 @@ export function joinParts(before: string, more: string): string {
   const start = more.indexOf("\n", open);
   const body = start < 0 ? "" : more.slice(start + 1);
   const close = body.indexOf("```");
-  return before + (close < 0 ? body : body.slice(0, close)) + "\n```\n";
+  // Still cut short: left open, so the next part goes on from it.
+  return before + (close < 0 ? body : body.slice(0, close) + "\n```\n");
 }
