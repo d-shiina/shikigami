@@ -33,7 +33,7 @@ pnpm -r test             # TypeScript のテスト
 pnpm schema:generate     # Rust の型を変えたら JSON Schema と TypeScript の型を作り直す
 ```
 
-CI では `cargo fmt --check`、`cargo clippy -- -D warnings`、テスト、生成物のズレの確認を行います。
+CI では `cargo fmt --check`、`cargo clippy -- -D warnings`、テスト、生成物のズレの確認を行います。Pull Request がサイト・マニュアル・docs（`docs/ai/` と `docs/expressions.md` を除く）・Writer の画面（`apps/studio/src/`）だけを変えるときは Rust のジョブを省きます。main に入ったあとはすべて回します。
 
 ## 脆弱性の報告
 
