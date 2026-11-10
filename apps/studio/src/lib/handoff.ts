@@ -2,6 +2,7 @@
 // it reads what the person brings back from it.
 import type { Flow } from "@spellsheet/schema";
 import { t } from "./i18n";
+import { type Screen, screensSection } from "./screenParts";
 import { flowForChat } from "./todos";
 
 const fence = (json: string) => "```json\n" + json + "\n```";
@@ -11,7 +12,7 @@ const fence = (json: string) => "```json\n" + json + "\n```";
  * and remembers nothing, so the instructions and the flow as it is now go
  * along every time (the person may have changed it meanwhile).
  */
-export function composeRequest(message: string, instructions: string, flow: Flow | null, stepId: string | null = null): string {
+export function composeRequest(message: string, instructions: string, flow: Flow | null, stepId: string | null = null, screens: Screen[] = []): string {
   const c = t.aiChat.request;
   const step = flow && stepId ? findStep(flow.steps ?? [], stepId) : null;
   return [
@@ -24,6 +25,7 @@ export function composeRequest(message: string, instructions: string, flow: Flow
     `===== ${flow ? c.flow : c.newFlow} =====`,
     flow ? fence(flowForChat(flow)) : c.noFlow,
     "",
+    ...screensSection(screens),
     `===== ${c.request} =====`,
     message.trim(),
     ...(step ? ["", c.selected(step.id ?? "", step.name ?? step.type)] : []),

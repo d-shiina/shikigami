@@ -10,8 +10,10 @@ import { HandoffCard } from "./ChatHandoff";
 import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { useScreens } from "../lib/screenParts";
 import { plainLine } from "../lib/markdown";
 import { Markdown } from "./Markdown";
+import { AttachedScreens, ScreenAttach } from "./ScreenAttach";
 import { ApiKeyBox } from "./AgentApiKey";
 import { headline, summarize, purpose } from "../lib/review";
 import { useReviewView } from "../lib/reviewView";
@@ -27,6 +29,7 @@ export function AgentPane({ width }: { width: number }) {
   const chat = useAgent(currentChat);
   const blockedElsewhere = useAgent((s) => flowBusy(s, currentChat(s).flowId, s.current));
   const sendIn = useAgent((s) => s.sendIn);
+  const clearScreens = useScreens((s) => s.clear);
   const stop = useAgent((s) => s.stop);
   const newChat = useAgent((s) => s.newChat);
   const flow = useStudio((s) => s.flow);
@@ -77,6 +80,8 @@ export function AgentPane({ width }: { width: number }) {
     const text = draft;
     setDraftOf(id, () => "");
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
+    // The screens went with that request; the next one adds its own.
+    else if (paste) clearScreens(id);
   };
   // Only the last reply's card can still be answered, and not while the AI works.
   const canChoose = !busy && !blockedElsewhere && available && !paste;
@@ -167,7 +172,7 @@ export function AgentPane({ width }: { width: number }) {
         <div ref={end} />
       </div>
       <div className="border-t border-slate-200 p-3">
-        <div className="mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
+        <div className="relative mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
           {chat.flowId === null ? (
             <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
           ) : here ? (
@@ -184,7 +189,9 @@ export function AgentPane({ width }: { width: number }) {
             </button>
           )}
           {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
+          {paste && <ScreenAttach chatId={chat.id} />}
         </div>
+        {paste && <AttachedScreens chatId={chat.id} />}
         <textarea
           data-agent-input
           value={draft}
