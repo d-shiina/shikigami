@@ -175,6 +175,8 @@ export const ja = {
   newFlow: "新規作成",
   newFlowPrompt: "フロー名",
   defaultFlowName: "新しいフロー",
+  duplicateFlowName: (name: string) =>
+    `「${name}」という名前のフローがもうあります。フローごとのフォルダーに名前を使うので、別の名前にしてください`,
   duplicate: "複製",
   copiedNodes: (n: number) => `${n} 個のノードをコピーしました。Ctrl+V で貼り付けます`,
   nothingToPaste: "クリップボードにノードがありません。ノードを選んで Ctrl+C でコピーしてください",

@@ -58,11 +58,18 @@ fn change(root: &Path, path: &Path) -> Option<Change> {
             let id = first.strip_suffix(".json")?;
             Some(Change::Flow(id.to_owned()))
         }
-        ["flow.json"] => Some(Change::Flow(first.to_owned())),
+        ["flow.json"] => Some(Change::Flow(flow_id(root, first)?)),
         // Temporary files of atomic writes and Office lock files.
         [.., name] if name.starts_with('.') || name.starts_with("~$") => None,
-        _ => Some(Change::Files(first.to_owned())),
+        _ => Some(Change::Files(flow_id(root, first)?)),
     }
+}
+
+/// The ID of the flow in `flows/<folder>` (folders are named after the
+/// flows). Nothing once the folder is gone (renamed or deleted): the
+/// event for its new place carries the ID.
+fn flow_id(root: &Path, folder: &str) -> Option<String> {
+    spellsheet_core::flow_folders::flow_id_of(&root.join(folder)).map(|id| id.as_str().to_owned())
 }
 
 fn watch(app: &AppHandle, dir: &Path) -> notify::Result<()> {
@@ -240,17 +247,26 @@ mod tests {
 
     #[test]
     fn changes_are_told_apart() {
-        let root = Path::new("/w/flows");
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("請求書/input")).unwrap();
+        std::fs::write(
+            root.join("請求書/flow.json"),
+            r#"{"id":"scn_1","name":"請求書"}"#,
+        )
+        .unwrap();
         let at = |p: &str| change(root, &root.join(p));
         assert_eq!(at("scn_1.json"), Some(Change::Flow("scn_1".into())));
-        assert_eq!(at("scn_1/flow.json"), Some(Change::Flow("scn_1".into())));
+        assert_eq!(at("請求書/flow.json"), Some(Change::Flow("scn_1".into())));
         assert_eq!(
-            at("scn_1/input/a.xlsx"),
+            at("請求書/input/a.xlsx"),
             Some(Change::Files("scn_1".into()))
         );
-        assert_eq!(at("scn_1/input"), Some(Change::Files("scn_1".into())));
-        assert_eq!(at("scn_1/.tmpAbc"), None);
-        assert_eq!(at("scn_1/input/~$a.xlsx"), None);
+        assert_eq!(at("請求書/input"), Some(Change::Files("scn_1".into())));
+        assert_eq!(at("請求書/.tmpAbc"), None);
+        assert_eq!(at("請求書/input/~$a.xlsx"), None);
         assert_eq!(at("notes.txt"), None);
+        // Gone (renamed or deleted): the new place's events carry the ID.
+        assert_eq!(at("消えた/flow.json"), None);
     }
 }

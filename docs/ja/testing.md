@@ -9,7 +9,7 @@
 フローのフォルダーの `tests/` に、1 ケース 1 ファイルで置きます。ファイル名（`.json` を除いた部分）がケースの名前です。
 
 ```text
-flows/<フローの ID>/
+flows/<フロー名>/
   flow.json
   input/
   tests/

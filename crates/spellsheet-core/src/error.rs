@@ -23,6 +23,9 @@ pub enum CoreError {
     #[error("invalid flow id: {0:?}")]
     InvalidFlowId(String),
 
+    #[error("a flow named {0:?} already exists; choose another name")]
+    DuplicateFlowName(String),
+
     #[error("step not found: {0}")]
     StepNotFound(StepId),
 
@@ -94,6 +97,7 @@ impl CoreError {
             Self::FlowNotFound(_) => "FLOW_NOT_FOUND",
             Self::FlowAlreadyExists(_) => "FLOW_ALREADY_EXISTS",
             Self::InvalidFlowId(_) => "INVALID_FLOW_ID",
+            Self::DuplicateFlowName(_) => "DUPLICATE_FLOW_NAME",
             Self::StepNotFound(_) => "STEP_NOT_FOUND",
             Self::DuplicateStepId(_) => "DUPLICATE_STEP_ID",
             Self::RevisionConflict { .. } => "REVISION_CONFLICT",
@@ -163,6 +167,10 @@ impl CoreError {
             Self::ProjectFileExists { path } => Some(serde_json::json!({
                 "path": path,
                 "hint": "Pass overwrite: true to replace it, or choose another name.",
+            })),
+            Self::DuplicateFlowName(name) => Some(serde_json::json!({
+                "name": name,
+                "hint": "Flow names are unique in a workspace (each flow's folder is named after it; case does not count). list_flows shows the names in use.",
             })),
             Self::FlowNotFound(id) | Self::FlowAlreadyExists(id) => {
                 Some(serde_json::json!({ "flow_id": id }))

@@ -36,4 +36,4 @@ Excel is `excel.*` (`crates/spellsheet-excel`), which reads and writes xlsx dire
 
 ## Adapters that call Windows APIs
 
-The workspace forbids `unsafe`. A crate that calls Windows APIs carries its own `[lints]` in Cargo.toml (`unsafe_code = "deny"`) and allows `#![allow(unsafe_code)]` in the single module that calls the API (e.g. `uia.rs` in `spellsheet-desktop`). Off Windows that module is left out with `#[cfg(windows)]` and the nodes return `PLATFORM_UNSUPPORTED`, so definitions, validation and tests still run in Linux CI.
+The workspace forbids `unsafe`. A crate that calls Windows APIs carries its own `[lints]` in Cargo.toml (`unsafe_code = "deny"`) and allows `#![allow(unsafe_code)]` in the single module that calls the API (e.g. the `uia` module in `spellsheet-desktop`). Off Windows that module is left out with `#[cfg(windows)]` and the nodes return `PLATFORM_UNSUPPORTED`, so definitions, validation and tests still run in Linux CI.
