@@ -28,16 +28,19 @@ pub enum AgentKind {
     Gemini,
     /// GitHub Copilot CLI.
     Copilot,
+    /// Cursor's Agent CLI (`cursor-agent`).
+    Cursor,
     /// Any other program: the message on stdin, stdout lines as the reply.
     Command,
 }
 
 /// The ones Studio knows how to run, in the order the pane offers them.
-pub(crate) const KNOWN: [AgentKind; 4] = [
+pub(crate) const KNOWN: [AgentKind; 5] = [
     AgentKind::ClaudeCode,
     AgentKind::Codex,
     AgentKind::Gemini,
     AgentKind::Copilot,
+    AgentKind::Cursor,
 ];
 
 /// Built-in Gemini CLI tools, all turned off: only SpellSheet's tools remain.
@@ -74,6 +77,7 @@ impl AgentKind {
             Self::Codex => "Codex",
             Self::Gemini => "Gemini CLI",
             Self::Copilot => "GitHub Copilot",
+            Self::Cursor => "Cursor",
             Self::Command => "AI",
         }
     }
@@ -85,6 +89,7 @@ impl AgentKind {
             Self::Codex => "OpenAI",
             Self::Gemini => "Google",
             Self::Copilot => "GitHub",
+            Self::Cursor => "Cursor",
             Self::Command => "",
         }
     }
@@ -95,6 +100,7 @@ impl AgentKind {
             Self::Codex => Some("codex"),
             Self::Gemini => Some("gemini"),
             Self::Copilot => Some("copilot"),
+            Self::Cursor => Some("cursor-agent"),
             Self::Command => None,
         }
     }
@@ -105,7 +111,30 @@ impl AgentKind {
             Self::Codex => Some("@openai/codex"),
             Self::Gemini => Some("@google/gemini-cli"),
             Self::Copilot => Some("@github/copilot"),
-            Self::ClaudeCode | Self::Command => None,
+            Self::ClaudeCode | Self::Cursor | Self::Command => None,
+        }
+    }
+
+    /// Whether the message goes on the command line (`cursor-agent -p
+    /// <prompt>`) rather than stdin.
+    pub(crate) fn prompt_as_argument(self) -> bool {
+        self == Self::Cursor
+    }
+
+    /// Arguments that come before the rest when `program` is not the tool
+    /// itself: Cursor's Windows launcher (`agent.cmd` → PowerShell 5.1)
+    /// drops `"` and `!` from arguments and cannot pass a line break, so on
+    /// Windows its own Node.js runs its script directly, as Cursor advises.
+    pub(crate) fn leading_args(self, program: &Path) -> Vec<String> {
+        let is_node = program
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.eq_ignore_ascii_case("node.exe"));
+        match program.parent() {
+            Some(dir) if self == Self::Cursor && is_node => {
+                vec![dir.join("index.js").display().to_string()]
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -118,6 +147,11 @@ impl AgentKind {
     /// it (a GUI app's PATH is the one from when it started, so a tool just
     /// installed is not on it yet).
     pub(crate) fn find(self) -> Option<PathBuf> {
+        if self == Self::Cursor
+            && let Some(node) = cursor_windows_node()
+        {
+            return Some(node);
+        }
         let name = self.program()?;
         let names: Vec<String> = if cfg!(windows) {
             vec![format!("{name}.exe"), format!("{name}.cmd")]
@@ -144,6 +178,7 @@ impl AgentKind {
             ],
             Self::Codex => &["https://auth.openai.com/", "https://chatgpt.com/"],
             Self::Copilot => &["https://github.com/login/"],
+            Self::Cursor => &["https://cursor.com/"],
             Self::Gemini | Self::Command => &[],
         }
     }
@@ -155,9 +190,33 @@ impl AgentKind {
             Self::ClaudeCode => Some(&["auth", "login"]),
             Self::Codex => Some(&["login"]),
             Self::Copilot => Some(&["login", "--web-flow"]),
+            Self::Cursor => Some(&["login"]),
             Self::Gemini | Self::Command => None,
         }
     }
+}
+
+/// Cursor's Agent CLI on Windows: the newest version its installer put in
+/// `%LOCALAPPDATA%\cursor-agent\versions\<version>\` (`node.exe` and
+/// `index.js`). Versions are named by date (`2026.10.15-…`), so the
+/// greatest name is the newest.
+fn cursor_windows_node() -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let versions = PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
+        .join("cursor-agent")
+        .join("versions");
+    newest_cursor_version(&versions).map(|dir| dir.join("node.exe"))
+}
+
+fn newest_cursor_version(versions: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(versions)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|dir| dir.join("node.exe").is_file() && dir.join("index.js").is_file())
+        .max_by(|a, b| a.file_name().cmp(&b.file_name()))
 }
 
 /// Where installers put these tools besides PATH.
@@ -313,6 +372,38 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
             write_if_changed(&mcp, &server.to_string())?;
             copilot_args(&mcp, session)
         }
+        AgentKind::Cursor => {
+            // Cursor reads AGENTS.md and .cursor/ in its workspace (this folder).
+            write_if_changed(&turn.dir.join("AGENTS.md"), turn.system_prompt)?;
+            let folder = turn.dir.join(".cursor");
+            std::fs::create_dir_all(&folder)?;
+            // Shared by every turn: the inbox comes from a variable set for each.
+            let mut args = server_args.clone();
+            if own.is_some() {
+                args.push("--inbox".to_owned());
+                args.push(format!("${{env:{INBOX_VAR}}}"));
+            }
+            let mcp = json!({ "mcpServers": { SERVER: { "command": turn.cli, "args": args } } });
+            write_if_changed(
+                &folder.join("mcp.json"),
+                &serde_json::to_string_pretty(&mcp).unwrap_or_default(),
+            )?;
+            // No shell, files or web: only SpellSheet's tools, which run without asking.
+            let permissions = json!({ "permissions": {
+                "allow": [format!("Mcp({SERVER}:*)")],
+                "deny": CURSOR_DENIED,
+            }});
+            write_if_changed(
+                &folder.join("cli.json"),
+                &serde_json::to_string_pretty(&permissions).unwrap_or_default(),
+            )?;
+            if let Some(own) = own {
+                env.push((INBOX_VAR, own.join(INBOX).display().to_string()));
+            }
+            // What its launcher sets when its Node.js runs it directly.
+            env.push(("CURSOR_INVOKED_AS", "agent".to_owned()));
+            cursor_args(turn.dir, session)
+        }
     };
     Ok((args, env))
 }
@@ -418,6 +509,26 @@ fn gemini_args(session: Option<&str>) -> Vec<String> {
     ]
     .map(str::to_owned)
     .into();
+    if let Some(session) = session {
+        args.push("--resume".to_owned());
+        args.push(session.to_owned());
+    }
+    args
+}
+
+/// What Cursor's agent may not do in Studio's folder (deny wins over
+/// `--force`, which lets SpellSheet's tools run without asking).
+const CURSOR_DENIED: &[&str] = &["Shell(*)", "Read(**)", "Write(**)", "WebFetch(*)"];
+
+/// `cursor-agent -p … <message>`: the message is added last by the caller
+/// ([`AgentKind::prompt_as_argument`]).
+fn cursor_args(dir: &Path, session: Option<&str>) -> Vec<String> {
+    let mut args: Vec<String> = ["-p", "--output-format", "stream-json", "--workspace"]
+        .map(str::to_owned)
+        .into();
+    args.push(dir.display().to_string());
+    // Studio's own folder; its MCP server (SpellSheet) without asking.
+    args.extend(["--trust", "--approve-mcps", "--force"].map(str::to_owned));
     if let Some(session) = session {
         args.push("--resume".to_owned());
         args.push(session.to_owned());
@@ -739,6 +850,125 @@ impl CopilotStream {
     }
 }
 
+/// Reads `cursor-agent -p --output-format stream-json`: like Claude Code's,
+/// with its tool calls as `tool_call` events (`mcpToolCall` for MCP tools).
+#[derive(Default)]
+pub(crate) struct CursorStream {
+    session: bool,
+}
+
+impl CursorStream {
+    pub(crate) fn line(&mut self, line: &str) -> Vec<AgentEvent> {
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            return Vec::new();
+        };
+        match v.get("type").and_then(Value::as_str) {
+            Some("system") if !self.session => {
+                self.session = true;
+                str_of(&v, "session_id")
+                    .map(|session_id| vec![AgentEvent::Session { session_id }])
+                    .unwrap_or_default()
+            }
+            Some("assistant") => {
+                let text = content_text(v.pointer("/message/content"));
+                if text.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    vec![AgentEvent::Text { text }]
+                }
+            }
+            Some("tool_call") => {
+                let Some(call) = v.pointer("/tool_call/mcpToolCall") else {
+                    return Vec::new();
+                };
+                let args = call.get("args").cloned().unwrap_or(Value::Null);
+                let name = str_of(&args, "toolName")
+                    .filter(|_| str_of(&args, "providerIdentifier").as_deref() == Some(SERVER))
+                    .or_else(|| str_of(&args, "name").and_then(|n| tool_name(&n)));
+                let Some(name) = name else {
+                    return Vec::new();
+                };
+                match v.get("subtype").and_then(Value::as_str) {
+                    Some("started") => vec![AgentEvent::tool(name, args.get("args"))],
+                    Some("completed") => {
+                        let result = call.get("result").cloned().unwrap_or(Value::Null);
+                        if let Some(success) = result.get("success") {
+                            let text = cursor_result_text(success);
+                            if success.get("isError").and_then(Value::as_bool) == Some(true) {
+                                return vec![AgentEvent::ToolFailed {
+                                    message: truncate(&text, TOOL_ERROR_LEN),
+                                }];
+                            }
+                            if name == "create_flow" {
+                                return created(&text).into_iter().collect();
+                            }
+                            return Vec::new();
+                        }
+                        let message = ["rejected", "error", "failure"]
+                            .iter()
+                            .find_map(|k| result.get(*k))
+                            .map(|r| {
+                                ["reason", "message", "error"]
+                                    .iter()
+                                    .find_map(|k| str_of(r, k))
+                                    .unwrap_or_else(|| r.to_string())
+                            })
+                            .unwrap_or_default();
+                        if message.is_empty() {
+                            Vec::new()
+                        } else {
+                            vec![AgentEvent::ToolFailed {
+                                message: truncate(&message, TOOL_ERROR_LEN),
+                            }]
+                        }
+                    }
+                    _ => Vec::new(),
+                }
+            }
+            Some("result") => {
+                let mut out = Vec::new();
+                if !self.session
+                    && let Some(session_id) = str_of(&v, "session_id")
+                {
+                    self.session = true;
+                    out.push(AgentEvent::Session { session_id });
+                }
+                let ok = v.get("is_error").and_then(Value::as_bool) != Some(true)
+                    && str_of(&v, "subtype")
+                        .as_deref()
+                        .is_none_or(|s| s == "success");
+                let message = (!ok).then(|| {
+                    str_of(&v, "result")
+                        .filter(|r| !r.trim().is_empty())
+                        .unwrap_or_else(|| "AI が途中で終了しました".to_owned())
+                });
+                out.push(AgentEvent::done(ok, message, None));
+                out
+            }
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// The text of a Cursor MCP result: `content` as MCP gives it, where a text
+/// part may hold its text directly or under `text.text`.
+fn cursor_result_text(success: &Value) -> String {
+    match success.get("content") {
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|p| {
+                p.get("text").and_then(|t| {
+                    t.as_str()
+                        .map(str::to_owned)
+                        .or_else(|| t.get("text").and_then(Value::as_str).map(str::to_owned))
+                })
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        other => content_text(other),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1048,6 +1278,135 @@ mod tests {
         assert_eq!(
             failed[1],
             AgentEvent::done(false, Some("Could not connect".into()), None)
+        );
+    }
+
+    #[test]
+    fn cursor_gets_only_spellsheet() {
+        let dir = tempfile::tempdir().unwrap();
+        let own = dir.path().join("turns").join("turn_1");
+        std::fs::create_dir_all(&own).unwrap();
+        let with_own = Turn {
+            own: Some(&own),
+            ..turn(dir.path(), Some("chat-1"))
+        };
+        let (args, env) = prepare(AgentKind::Cursor, &with_own).unwrap();
+        let joined = args.join(" ");
+        assert!(joined.starts_with("-p --output-format stream-json --workspace "));
+        assert!(joined.contains("--trust --approve-mcps --force"));
+        assert!(joined.ends_with("--resume chat-1"));
+        assert!(AgentKind::Cursor.prompt_as_argument());
+        assert!(env.contains(&(INBOX_VAR, own.join(INBOX).display().to_string())));
+        assert!(dir.path().join("AGENTS.md").is_file());
+        let read = |name: &str| -> Value {
+            serde_json::from_str(
+                &std::fs::read_to_string(dir.path().join(".cursor").join(name)).unwrap(),
+            )
+            .unwrap()
+        };
+        let mcp = read("mcp.json");
+        let servers = mcp.get("mcpServers").unwrap().as_object().unwrap();
+        assert_eq!(servers.keys().collect::<Vec<_>>(), ["spellsheet"]);
+        assert_eq!(
+            mcp.pointer("/mcpServers/spellsheet/args")
+                .unwrap()
+                .as_array()
+                .unwrap()[4..],
+            [json!("--inbox"), json!("${env:SPELLSHEET_CHAT_INBOX}")]
+        );
+        let cli = read("cli.json");
+        assert_eq!(
+            cli.pointer("/permissions/allow"),
+            Some(&json!(["Mcp(spellsheet:*)"]))
+        );
+        assert!(
+            cli.pointer("/permissions/deny")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .contains(&json!("Shell(*)"))
+        );
+    }
+
+    #[test]
+    fn cursor_runs_its_own_node_on_windows() {
+        let dir = tempfile::tempdir().unwrap();
+        let versions = dir.path().join("versions");
+        for (name, complete) in [
+            ("2026.09.01-a", true),
+            ("2026.10.15-b", true),
+            ("2026.11.01-c", false),
+        ] {
+            let v = versions.join(name);
+            std::fs::create_dir_all(&v).unwrap();
+            std::fs::write(v.join("node.exe"), "").unwrap();
+            if complete {
+                std::fs::write(v.join("index.js"), "").unwrap();
+            }
+        }
+        let newest = newest_cursor_version(&versions).unwrap();
+        assert_eq!(newest, versions.join("2026.10.15-b"));
+        assert_eq!(
+            AgentKind::Cursor.leading_args(&newest.join("node.exe")),
+            [newest.join("index.js").display().to_string()]
+        );
+        assert!(
+            AgentKind::Cursor
+                .leading_args(Path::new("/usr/local/bin/cursor-agent"))
+                .is_empty()
+        );
+        assert!(
+            AgentKind::Codex
+                .leading_args(&newest.join("node.exe"))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn reads_cursor() {
+        let mut s = CursorStream::default();
+        let lines = [
+            r#"{"type":"system","subtype":"init","apiKeySource":"login","cwd":"D:\\work","session_id":"chat-1","model":"Auto","permissionMode":"default"}"#,
+            r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"作って"}]},"session_id":"chat-1"}"#,
+            r#"{"type":"tool_call","subtype":"started","call_id":"t1","tool_call":{"mcpToolCall":{"args":{"name":"spellsheet-create_flow","args":{"name":"請求書"},"toolCallId":"t1","providerIdentifier":"spellsheet","toolName":"create_flow"}}},"session_id":"chat-1"}"#,
+            r#"{"type":"tool_call","subtype":"completed","call_id":"t1","tool_call":{"mcpToolCall":{"args":{"name":"spellsheet-create_flow","args":{"name":"請求書"},"toolCallId":"t1","providerIdentifier":"spellsheet","toolName":"create_flow"},"result":{"success":{"content":[{"text":{"text":"{\"flow\":{\"id\":\"f1\",\"name\":\"請求書\"}}"}}],"isError":false}}}},"session_id":"chat-1"}"#,
+            r#"{"type":"tool_call","subtype":"started","call_id":"t2","tool_call":{"readToolCall":{"args":{"path":"a.txt"}}},"session_id":"chat-1"}"#,
+            r#"{"type":"tool_call","subtype":"completed","call_id":"t3","tool_call":{"mcpToolCall":{"args":{"name":"spellsheet-run_flow","args":{},"providerIdentifier":"spellsheet","toolName":"run_flow"},"result":{"rejected":{"reason":"not allowed"}}}},"session_id":"chat-1"}"#,
+            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"フローを作りました。"}]},"session_id":"chat-1"}"#,
+            r#"{"type":"result","subtype":"success","duration_ms":1200,"is_error":false,"result":"フローを作りました。","session_id":"chat-1"}"#,
+        ];
+        let events: Vec<AgentEvent> = lines.iter().flat_map(|l| s.line(l)).collect();
+        assert_eq!(
+            events,
+            [
+                AgentEvent::Session {
+                    session_id: "chat-1".into()
+                },
+                AgentEvent::tool("create_flow".into(), Some(&json!({"name":"請求書"}))),
+                AgentEvent::Created {
+                    flow_id: "f1".into(),
+                    name: "請求書".into()
+                },
+                AgentEvent::ToolFailed {
+                    message: "not allowed".into()
+                },
+                AgentEvent::Text {
+                    text: "フローを作りました。".into()
+                },
+                AgentEvent::done(true, None, None),
+            ]
+        );
+        let failed = CursorStream::default().line(
+            r#"{"type":"result","subtype":"error","is_error":true,"result":"Rate limited","session_id":"chat-2"}"#,
+        );
+        assert_eq!(
+            failed,
+            [
+                AgentEvent::Session {
+                    session_id: "chat-2".into()
+                },
+                AgentEvent::done(false, Some("Rate limited".into()), None),
+            ]
         );
     }
 }

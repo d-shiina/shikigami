@@ -820,6 +820,7 @@ export const en: Dict = {
         codex: "OpenAI's AI. It runs on your ChatGPT account (Plus, Pro, Business…) and bills that account.",
         gemini: "Google's AI. It runs on your Google account (with a free allowance).",
         copilot: "GitHub's AI. It runs on a GitHub account with a GitHub Copilot plan — for teams that use Copilot at work.",
+        cursor: "Cursor's AI. It runs on a Cursor account — for people who already use Cursor.",
       },
       notInstalled: "not installed",
       install: (name: string) => `Install ${name}`,

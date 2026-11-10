@@ -820,6 +820,7 @@ export const ja = {
         codex: "OpenAI の AI です。あなたの ChatGPT アカウント（Plus・Pro・Business など）で動き、料金もそのアカウントにかかります。",
         gemini: "Google の AI です。あなたの Google アカウントで動きます（無料で使える回数があります）。",
         copilot: "GitHub の AI です。GitHub Copilot を契約している GitHub アカウントで動きます。会社で Copilot を使っている人向けです。",
+        cursor: "Cursor の AI です。Cursor のアカウントで動きます。ふだん Cursor を使っている人向けです。",
       },
       notInstalled: "未インストール",
       install: (name: string) => `${name} をインストールする`,
