@@ -18,7 +18,7 @@ spellsheet worker run         # run it in this window instead (Ctrl+C stops)
 spellsheet worker uninstall
 ```
 
-`worker install` registers the Task Scheduler task `SpellSheet\Worker` for your user ("at log on"), so the worker runs in your signed-in desktop session, where it can use the mouse and keyboard. A second worker for the same workspace refuses to start.
+`worker install` registers the Task Scheduler task `SpellSheet\Worker` for your user ("at log on" of your user only, with no time limit; no administrator rights needed), so the worker runs in your signed-in desktop session, where it can use the mouse and keyboard. Where Task Scheduler refuses the task (some PCs let only administrators add tasks), it is registered under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` as `SpellSheet Worker` instead; `worker uninstall` removes either. A second worker for the same workspace refuses to start.
 
 - Runs the worker starts are **unattended runs**: they execute the published version (and `flows.<id>.unattended: false` in `policy.json` refuses them), exactly as `spellsheet run <id>`. A flow that is not published fails with `NOT_PUBLISHED`.
 - They are recorded like any run, with `origin.trigger: "schedule"`, `origin.requestedBy` the schedule's name and `origin.jobId` its ID.

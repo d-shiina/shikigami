@@ -18,7 +18,7 @@ spellsheet worker run         # このウィンドウで動かす（Ctrl+C で�
 spellsheet worker uninstall
 ```
 
-`worker install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Worker`（ログオン時）を登録します。Worker はサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースの Worker は 2 つ目を起動できません。
+`worker install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Worker`（自分のユーザーのログオン時、時間制限なし。管理者権限は不要）を登録します。タスク スケジューラーが登録を断る PC（管理者だけがタスクを追加できる設定）では、代わりに `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` に `SpellSheet Worker` として登録します。`worker uninstall` はどちらも削除します。Worker はサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースの Worker は 2 つ目を起動できません。
 
 - Worker が始める実行は**無人実行**です。`spellsheet run <id>` と同じく確定版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。確定していないフローは `NOT_PUBLISHED` で失敗します。
 - ほかの実行と同じく記録に残り、`origin.trigger` は `"schedule"`、`origin.requestedBy` はスケジュールの名前、`origin.jobId` はその ID です。

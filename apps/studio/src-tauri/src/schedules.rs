@@ -243,8 +243,12 @@ pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentSt
             .await
             .map_err(|e| err("AGENT_START_FAILED", e.to_string()))?;
         if !out.status.success() {
+            // The command writes UTF-8; what Windows said is inside it,
+            // already read in the console's code page.
             let text = String::from_utf8_lossy(&out.stderr).trim().to_owned();
-            return Err(err("AGENT_START_FAILED", text));
+            let mut payload = err("AGENT_START_FAILED", text.clone());
+            payload.details = Some(serde_json::json!({ "reason": windows_said(&text) }));
+            return Err(payload);
         }
     } else {
         command
@@ -262,9 +266,35 @@ pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentSt
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     Err(err(
-        "AGENT_START_FAILED",
+        "AGENT_NO_ANSWER",
         "the worker did not answer within 5 seconds (see `spellsheet worker run` in a terminal)",
     ))
+}
+
+/// What Windows said in an error of `spellsheet worker install`
+/// (`… Windows said "アクセスが拒否されました。"`), for Writer to show in the
+/// person's words; none when it did not say.
+fn windows_said(text: &str) -> Option<&str> {
+    const MARK: &str = "Windows said \"";
+    let start = text.rfind(MARK)? + MARK.len();
+    let said = text[start..].trim_end().strip_suffix('"')?.trim();
+    (!said.is_empty()).then_some(said)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::windows_said;
+
+    #[test]
+    fn what_windows_said_is_taken_from_the_error() {
+        assert_eq!(
+            windows_said(
+                "error: could not register the worker to start at sign-in: Windows said \"エラー: アクセスが拒否されました。\""
+            ),
+            Some("エラー: アクセスが拒否されました。")
+        );
+        assert_eq!(windows_said("error: cannot start the worker"), None);
+    }
 }
 
 /// Stops the agent; runs in progress are cancelled. Registered with
