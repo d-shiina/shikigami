@@ -30,6 +30,7 @@ import {
   pagesOf,
   type Rect,
   type Scene,
+  overviewRows,
 } from "../lib/manual";
 import { burnShot, manualHtml, operated, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
 import { describeWhen } from "../lib/schedule";
@@ -421,12 +422,7 @@ function ToolButton({ icon: Icon, label, title, disabled, onClick }: { icon: typ
 }
 
 function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
-  const rows: [string, string[], string | null][] = [
-    [t.manual.uses, doc.uses, null],
-    [t.manual.inputs, doc.inputs, "var(--color-role-input)"],
-    [t.manual.outputs, doc.outputs, "var(--color-role-output)"],
-    [t.manual.runsWhen, [...when, t.manual.byHand], null],
-  ];
+  const rows = overviewRows(doc, when).map((r) => [r.label, r.values, r.role ? `var(--color-role-${r.role})` : null] as const);
   return (
     <table className="w-full border-collapse text-[13px]">
       <tbody>
@@ -434,7 +430,7 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
           <tr key={k}>
             <th
               scope="row"
-              className="w-[118px] border border-slate-200 bg-paper px-2.5 py-1.5 text-left font-normal text-slate-500"
+              className="w-[150px] border border-slate-200 bg-paper px-2.5 py-1.5 text-left font-normal text-slate-500"
               style={colour ? { boxShadow: `inset 3px 0 ${colour}` } : undefined}
             >
               {k}
@@ -567,7 +563,7 @@ function Cover({
           <p className="text-[14px] leading-[1.85] text-slate-700">{doc.description}</p>
         </>
       )}
-      <CoverHeading>{t.manual.usesAndValues}</CoverHeading>
+      <CoverHeading>{t.manual.overview}</CoverHeading>
       <Facts doc={doc} when={when} />
       {showMissing && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
       {made && doc.drafts > 0 && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}

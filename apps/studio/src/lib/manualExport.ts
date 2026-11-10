@@ -18,6 +18,7 @@ import {
   pagesOf,
   type Rect,
   type Scene,
+  overviewRows,
 } from "./manual";
 import type { Part } from "./sentence";
 
@@ -261,7 +262,7 @@ h3:before{content:"";width:4px;height:14px;background:var(--navy)}
 .lead{margin:0;color:#3a3e45;line-height:1.85}
 table{width:100%;border-collapse:collapse}
 .facts{font-size:13px}
-.facts th{width:118px;text-align:left;font-weight:400;color:var(--sub);background:#f5f6f8;padding:6px 10px;border:1px solid var(--line)}
+.facts th{width:150px;text-align:left;font-weight:400;color:var(--sub);background:#f5f6f8;padding:6px 10px;border:1px solid var(--line)}
 .facts td{padding:6px 10px;border:1px solid var(--line)}
 .facts tr.in th{box-shadow:inset 3px 0 var(--teal)}
 .facts tr.out th{box-shadow:inset 3px 0 var(--orange)}
@@ -325,12 +326,7 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
   const pages = pagesOf(doc, !options.noPictures);
   const total = pages.length;
   const { edition } = options;
-  const facts: [string, string[], string][] = [
-    [t.manual.uses, doc.uses, ""],
-    [t.manual.inputs, doc.inputs, "in"],
-    [t.manual.outputs, doc.outputs, "out"],
-    [t.manual.runsWhen, [...options.when, t.manual.byHand], ""],
-  ];
+  const facts = overviewRows(doc, options.when).map((r) => [r.label, r.values, r.role === "input" ? "in" : r.role === "output" ? "out" : ""] as const);
   const rows = facts
     .map(([k, v, cls]) => `<tr${cls ? ` class="${cls}"` : ""}><th>${esc(k)}</th><td>${v.length > 0 ? v.map(esc).join("、") : esc(t.manual.none)}</td></tr>`)
     .join("");
@@ -363,7 +359,7 @@ ${STRIPE}<div class="mast"><p class="kind">${esc(t.manual.kind)}</p><h1>${esc(do
         edition.changedSince !== null ? `<p class="since">${esc(t.manual.changedSince(edition.changedSince))}</p>` : ""
       }</div>
 ${doc.description ? `<h3>${esc(t.manual.about)}</h3><p class="lead">${esc(doc.description)}</p>` : ""}
-<h3>${esc(t.manual.usesAndValues)}</h3><table class="facts">${rows}</table>
+<h3>${esc(t.manual.overview)}</h3><table class="facts">${rows}</table>
 <h3>${esc(t.manual.contents)}</h3><ol class="toc">${toc}</ol>
 ${revisions}
 <p class="hint">${icon("pencil")}<span>${esc(t.manual.checkHint)}</span></p>

@@ -109,7 +109,7 @@ export type Chapter = {
 export type ManualDoc = {
   title: string;
   description: string;
-  uses: string[];
+  uses: Uses;
   inputs: string[];
   outputs: string[];
   chapters: Chapter[];
@@ -464,11 +464,22 @@ function chapterTitle(steps: Step[], ctx: Ctx): string {
   return main ? label(main, ctx) : "";
 }
 
-/** What the flow works with: sites and apps, files, logins (names only). */
-function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>): string[] {
-  const found: string[] = [];
-  const add = (text: string) => {
-    if (text && !found.includes(text)) found.push(text);
+/** What the flow works with, by kind (names only). */
+export type Uses = {
+  /** Sites, windows, mail. */
+  apps: string[];
+  /** Saved logins and other secrets, by name. */
+  logins: string[];
+  /** Files it only reads. */
+  inputFiles: string[];
+  /** Files it writes or changes. */
+  outputFiles: string[];
+};
+
+function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>, defs: ReadonlyMap<string, StepTypeDef>): Uses {
+  const found: Uses = { apps: [], logins: [], inputFiles: [], outputFiles: [] };
+  const add = (list: string[], text: string) => {
+    if (text && !list.includes(text)) list.push(text);
   };
   const literal = (v: unknown) => (typeof v === "string" && v && !v.includes("{{") ? v : null);
   const walk = (steps: Step[], seen: Set<string>) => {
@@ -484,25 +495,27 @@ function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>): string[] {
         } catch {
           host = null;
         }
-        add(host ? t.manual.usesSite(host) : t.manual.usesBrowser);
-        if (typeof p.session === "string") add(t.manual.usesLogin(p.session));
+        add(found.apps, host ? t.manual.usesSite(host) : t.manual.usesBrowser);
+        if (typeof p.session === "string") add(found.logins, p.session);
       }
       if (adapter === "desktop") {
         const target = p.target as Record<string, unknown> | undefined;
         const win = target?.window as Record<string, unknown> | undefined;
         const name = literal(win?.title) ?? literal(win?.process);
-        if (name) add(t.manual.usesApp(name));
+        if (name) add(found.apps, name);
       }
       for (const key of ["path", "file", "workbook", "document", "source"]) {
         const value = literal(p[key]);
         if (value && /\.(xlsx|xlsm|xls|csv|docx|doc|pdf|txt)$/i.test(value) && (adapter === "excel" || adapter === "word" || adapter === "file" || adapter === "pdf")) {
-          add(t.manual.usesFile(value.split(/[\\/]/).pop() ?? value));
+          // A node that only reads (risk "safe") takes the file in; any other writes or changes it.
+          const reads = defs.get(step.type)?.risk === "safe";
+          add(reads ? found.inputFiles : found.outputFiles, value.split(/[\\/]/).pop() ?? value);
         }
       }
-      if (adapter === "mail") add(t.manual.usesMail);
+      if (adapter === "mail") add(found.apps, t.manual.usesMail);
       for (const value of Object.values(p)) {
         const secret = secretName(value);
-        if (secret) add(t.manual.usesLogin(secret));
+        if (secret) add(found.logins, secret);
       }
       if (step.type === CALL) {
         const id = String(p.flow ?? "");
@@ -514,6 +527,20 @@ function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>): string[] {
   };
   walk(flow.steps ?? [], new Set([flow.id]));
   return found;
+}
+
+/** The cover's overview table: label, values, and which colour marks the row. Rows with nothing to say about files or logins are left out. */
+export function overviewRows(doc: ManualDoc, when: string[]): { label: string; values: string[]; role: "input" | "output" | null }[] {
+  const rows: { label: string; values: string[]; role: "input" | "output" | null; optional?: boolean }[] = [
+    { label: t.manual.apps, values: doc.uses.apps, role: null },
+    { label: t.manual.logins, values: doc.uses.logins, role: null, optional: true },
+    { label: t.manual.inputFiles, values: doc.uses.inputFiles, role: "input", optional: true },
+    { label: t.manual.inputs, values: doc.inputs, role: "input" },
+    { label: t.manual.outputFiles, values: doc.uses.outputFiles, role: "output", optional: true },
+    { label: t.manual.outputs, values: doc.outputs, role: "output" },
+    { label: t.manual.runsWhen, values: [...when, t.manual.byHand], role: null },
+  ];
+  return rows.filter((r) => !r.optional || r.values.length > 0).map(({ label, values, role }) => ({ label, values, role }));
 }
 
 const varText = (v: VariableDef) => v.description?.trim() || v.name;
@@ -573,7 +600,7 @@ export function buildManual(
   return {
     title: flow.name,
     description: flow.description ?? "",
-    uses: uses(flow, subflows),
+    uses: uses(flow, subflows, defs),
     inputs: vars.filter((v) => v.direction === "input" || v.direction === "inOut").map(varText),
     outputs: vars.filter((v) => v.direction === "output" || v.direction === "inOut").map(varText),
     chapters,
