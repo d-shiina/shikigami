@@ -503,6 +503,7 @@ const FALLBACK_CHOICES: AgentChoice[] = [
   { kind: "codex", name: "Codex", maker: "OpenAI", installed: false, selected: false },
   { kind: "gemini", name: "Gemini CLI", maker: "Google", installed: false, selected: false },
   { kind: "copilot", name: "GitHub Copilot", maker: "GitHub", installed: false, selected: false },
+  { kind: "cursor", name: "Cursor", maker: "Cursor", installed: false, selected: false },
 ];
 
 /** Picks which AI Studio uses, marking the ones on this PC. */
@@ -581,7 +582,7 @@ function SetupCard() {
             <Download size={13} strokeWidth={2} aria-hidden="true" />
             {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(name)}
           </button>
-          <div className="text-[11px] leading-relaxed text-slate-500">{kind === "claudeCode" ? t.agent.setup.whatHappens : t.agent.setup.whatHappensNpm}</div>
+          <div className="text-[11px] leading-relaxed text-slate-500">{kind === "claudeCode" || kind === "cursor" ? t.agent.setup.whatHappens : t.agent.setup.whatHappensNpm}</div>
         </>
       )}
     </div>

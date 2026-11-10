@@ -609,7 +609,7 @@ export type ChoiceOption = { label: string; description: string | null };
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
 /** Which AI to set up; the installer is chosen by this. */
-export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "command";
+export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "cursor" | "command";
 /** An agent Studio knows how to run. */
 export type AgentChoice = { kind: AgentKind; name: string; maker: string; installed: boolean; selected: boolean };
 export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean } | { kind: "cancelled" };

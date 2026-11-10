@@ -27,7 +27,7 @@ function message(e: unknown): string {
 }
 
 /** The AI clients the MCP registration can be shown for. */
-export type McpClient = Exclude<AgentKind, "command"> | "cursor";
+export type McpClient = Exclude<AgentKind, "command">;
 export const MCP_CLIENTS: { kind: McpClient; name: string }[] = [
   { kind: "claudeCode", name: "Claude Code" },
   { kind: "codex", name: "Codex" },

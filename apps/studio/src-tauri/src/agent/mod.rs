@@ -1,5 +1,5 @@
 //! The AI pane: runs the person's own coding agent (Claude Code, Codex,
-//! Gemini CLI or GitHub Copilot) in the background with SpellSheet's MCP
+//! Gemini CLI, GitHub Copilot or Cursor) in the background with SpellSheet's MCP
 //! server, one process per message. What differs between them is in
 //! `providers`.
 //!
@@ -26,7 +26,9 @@ use crate::AppState;
 
 mod providers;
 pub use providers::AgentKind;
-use providers::{CodexStream, CopilotStream, GeminiStream, INBOX, KNOWN, Turn, child_path};
+use providers::{
+    CodexStream, CopilotStream, CursorStream, GeminiStream, INBOX, KNOWN, Turn, child_path,
+};
 
 pub(crate) const AGENT_EVENT: &str = "agent-event";
 
@@ -359,7 +361,8 @@ fn choice_of(input: &Value) -> Option<AgentEvent> {
 /// An agent's wording when it cannot use the account, e.g. Claude Code's
 /// "Failed to authenticate: OAuth session expired" or "Not logged in · Please
 /// run /login", Codex's "401 Unauthorized", Gemini CLI's "API key not valid",
-/// Copilot's "No authentication information found".
+/// Copilot's "No authentication information found", Cursor's "Please run
+/// `agent login`".
 fn is_login_error(message: &str) -> bool {
     let m = message.to_lowercase();
     [
@@ -375,6 +378,8 @@ fn is_login_error(message: &str) -> bool {
         "auth method",
         "no authentication",
         "not authenticated",
+        "agent login",
+        "authentication required",
     ]
     .iter()
     .any(|k| m.contains(k))
@@ -657,6 +662,14 @@ pub async fn agent_install(
 
 /// The installer for `kind`, run by PowerShell on Windows and `sh` elsewhere.
 fn install_script(kind: AgentKind) -> String {
+    if kind == AgentKind::Cursor {
+        // Cursor's own installer (no Node.js needed; it brings its own).
+        return if cfg!(windows) {
+            "irm 'https://cursor.com/install?win32=true' | iex".to_owned()
+        } else {
+            "curl https://cursor.com/install -fsS | bash".to_owned()
+        };
+    }
     let Some(package) = kind.npm_package() else {
         return if cfg!(windows) {
             "irm https://claude.ai/install.ps1 | iex".to_owned()
@@ -799,8 +812,15 @@ pub async fn agent_send(
             })
             .collect();
     }
+    let prompt = with_context(message, input.flow.as_ref());
+    if config.kind.prompt_as_argument() {
+        args.push(prompt.clone());
+    }
     let mut command = Command::new(&program);
-    command.args(&args).envs(env);
+    command
+        .args(config.kind.leading_args(&program))
+        .args(&args)
+        .envs(env);
     if let Some(path) = child_path() {
         command.env("PATH", path);
     }
@@ -829,7 +849,6 @@ pub async fn agent_send(
     if let Some(own) = own {
         lock(&turns.inboxes).insert(turn_id.clone(), TurnInbox::new(own));
     }
-    let prompt = with_context(message, input.flow.as_ref());
     let kind = config.kind;
     let id = turn_id.clone();
     tauri::async_runtime::spawn(async move {
@@ -844,6 +863,7 @@ pub async fn agent_send(
         };
         // Dropping stdin afterwards ends the prompt.
         if let Some(mut stdin) = child.stdin.take()
+            && !kind.prompt_as_argument()
             && let Err(e) = stdin.write_all(prompt.as_bytes()).await
         {
             tracing::warn!(error = %e, "cannot write to the agent");
@@ -990,6 +1010,7 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
         command.env("PATH", path);
     }
     command
+        .args(kind.leading_args(&program))
         .args(login_args)
         .env_remove("CLAUDECODE")
         .stdin(Stdio::piped())
@@ -1356,6 +1377,7 @@ pub(crate) enum Stream {
     Codex(CodexStream),
     Gemini(GeminiStream),
     Copilot(CopilotStream),
+    Cursor(CursorStream),
     /// Each line is the reply.
     Plain,
 }
@@ -1367,6 +1389,7 @@ impl Stream {
             AgentKind::Codex => Self::Codex(CodexStream),
             AgentKind::Gemini => Self::Gemini(GeminiStream::default()),
             AgentKind::Copilot => Self::Copilot(CopilotStream::default()),
+            AgentKind::Cursor => Self::Cursor(CursorStream::default()),
             AgentKind::Command => Self::Plain,
         }
     }
@@ -1377,6 +1400,7 @@ impl Stream {
             Self::Codex(s) => s.line(line),
             Self::Gemini(s) => s.line(line),
             Self::Copilot(s) => s.line(line),
+            Self::Cursor(s) => s.line(line),
             Self::Plain => vec![AgentEvent::Text {
                 text: format!("{line}\n"),
             }],
