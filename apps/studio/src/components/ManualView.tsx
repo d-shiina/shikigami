@@ -38,6 +38,7 @@ import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
 import { Sentence, StoryView } from "./StoryView";
 import { CanvasDock } from "./Toolbar";
+import { Highlight } from "./Highlight";
 import { SheetNumber } from "./SheetNumber";
 
 type View = "flow" | "story" | "variables";
@@ -622,7 +623,7 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
         <>
           <h2 className="mb-1.5 flex items-center gap-3 border-b-2 border-[var(--manual-navy)] pb-2 text-[19px] font-semibold text-[var(--manual-navy)]">
             <SheetNumber n={chapter.number} className="size-[26px] text-[14px]" />
-            {chapter.title}
+            <Highlight>{chapter.title}</Highlight>
           </h2>
           <p className="mb-4 min-h-[1px] text-[12.5px] text-slate-500">{chapter.alongside.length > 0 ? t.manual.alongsideNote(chapter.alongside) : ""}</p>
         </>

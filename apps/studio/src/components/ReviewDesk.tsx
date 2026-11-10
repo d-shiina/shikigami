@@ -27,6 +27,7 @@ import { flatten } from "../lib/review";
 import { Masthead, Stripe } from "./Masthead";
 import { FlowAtAGlance } from "./ReviewFlow";
 import { FileBox, OutputValues, UsedTable } from "./ReviewResult";
+import { Highlight } from "./Highlight";
 import { SheetNumber } from "./SheetNumber";
 
 export type InboxItem = {
@@ -673,7 +674,7 @@ export function PaperSection({ id, n, title, note, aside, children }: { id?: str
     <section id={id} className="mt-9 scroll-mt-6">
       <h2 className="flex items-center gap-2 text-[15px] font-bold">
         {n !== undefined && <SheetNumber n={n} />}
-        {title}
+        <Highlight>{title}</Highlight>
         {aside && <span className="ml-auto text-[12px] font-normal text-slate-500">{aside}</span>}
       </h2>
       {note && <p className="mt-0.5 mb-3 ml-7 text-[12px] text-slate-500">{note}</p>}
