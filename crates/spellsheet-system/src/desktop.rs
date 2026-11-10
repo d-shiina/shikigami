@@ -97,9 +97,13 @@ async fn powershell(mode: &str, env: &[(&str, String)]) -> Result<Option<String>
                 .to_owned(),
         )),
         Some(3) => Ok(None),
+        // PowerShell's own errors (before the script sets UTF-8) come in the
+        // console's code page.
         _ => Err(StepError::permanent(
             "DIALOG_FAILED",
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            spellsheet_files::encoding::console_text(&output.stderr)
+                .trim()
+                .to_owned(),
         )),
     }
 }

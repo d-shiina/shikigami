@@ -6,6 +6,7 @@ import { CalendarClock, CirclePause, CirclePlay, Pencil, Play, Square, Trash2, T
 import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen, type ScreenLock } from "../lib/api";
+import { agentErrorText } from "../lib/agentError";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
@@ -410,7 +411,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
 
 function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | undefined; onChange: (s: AgentStatus | null) => void; idle: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; raw: string } | null>(null);
   const r = t.runs;
   const act = async (f: () => Promise<AgentStatus | null>) => {
     setBusy(true);
@@ -418,7 +419,7 @@ function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | un
     try {
       onChange(await f());
     } catch (e) {
-      setError(message(e));
+      setError({ text: agentErrorText(e), raw: message(e) });
     } finally {
       setBusy(false);
     }
@@ -472,7 +473,11 @@ function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | un
           ))}
         </ul>
       )}
-      {error && <p className="mt-2 text-xs text-shu-600">{error}</p>}
+      {error && (
+        <p className="mt-2 text-xs text-shu-600" title={error.raw}>
+          {error.text}
+        </p>
+      )}
     </div>
   );
 }

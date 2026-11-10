@@ -27,9 +27,9 @@ pub enum AgentCmd {
     /// Stop the running worker (runs in progress are cancelled; `finally` runs).
     Stop,
     /// Start the worker whenever you sign in to Windows (a Task Scheduler
-    /// task for your user), and start it now.
+    /// task for your user, else the Run key of your user), and start it now.
     Install,
-    /// Remove the task `worker install` made (and stop the worker).
+    /// Remove what `worker install` registered (and stop the worker).
     Uninstall,
     /// Connect this PC to a management server with the one-time code it
     /// gave you. Jobs are taken only when policy.json has `remote.enabled`,
@@ -277,6 +277,11 @@ pub fn agent_cmd(
     let local_root = svc.store().local_root().to_path_buf();
     match cmd {
         AgentCmd::Run => {
+            // Started at sign-in by the task or the Run key, it has a console
+            // window of its own: closing it would stop the worker.
+            if spellsheet_desktop::console::leave_own_console() {
+                tracing::debug!("left the console Windows opened for the worker");
+            }
             let runtime = runtime.clone().for_workspace(
                 svc.store().root(),
                 Arc::new(Vault::open(svc.store().root())),
@@ -455,45 +460,182 @@ fn legacy_task_names() -> [String; 2] {
     ]
 }
 
+/// Where the worker is registered when Task Scheduler refuses the task
+/// (some PCs let only administrators make tasks): the per-user Run key,
+/// which every user may write.
+#[cfg(windows)]
+const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg(windows)]
+const RUN_VALUE: &str = "SpellSheet Worker";
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Runs a console program (schtasks, reg) without a window and without
+/// passing its output on: whether it succeeded, and what it said, read in
+/// the console's code page (a pipe gets CP932 on Japanese Windows, not
+/// UTF-8).
+#[cfg(windows)]
+fn quiet<I, S>(program: &str, args: I) -> (bool, String)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    use std::os::windows::process::CommandExt as _;
+    let out = std::process::Command::new(program)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    match out {
+        Ok(out) => {
+            let mut said = spellsheet_files::encoding::console_text(&out.stderr);
+            if said.trim().is_empty() {
+                said = spellsheet_files::encoding::console_text(&out.stdout);
+            }
+            (out.status.success(), said.trim().to_owned())
+        }
+        Err(e) => (false, format!("cannot start {program}: {e}")),
+    }
+}
+
+/// How the worker was registered to start at sign-in.
+#[cfg(windows)]
+enum Registered {
+    Task,
+    RunKey,
+}
+
+/// Registers `"<exe>" <arguments>` to start whenever this user signs in:
+/// the task `TASK_NAME`, else the Run key. The error is what Windows said.
+#[cfg(windows)]
+fn register_at_sign_in(exe: &Path, arguments: &str) -> Result<Registered> {
+    let task = create_task(exe, arguments);
+    match task {
+        Ok(()) => {
+            // One registration only: two would start two workers.
+            let _ = quiet("reg", ["delete", RUN_KEY, "/v", RUN_VALUE, "/f"]);
+            Ok(Registered::Task)
+        }
+        Err(task_said) => {
+            tracing::warn!(said = %task_said, "Task Scheduler refused the task; using the Run key");
+            let command = format!("\"{}\" {arguments}", exe.display());
+            let (ok, reg_said) = quiet(
+                "reg",
+                [
+                    "add", RUN_KEY, "/v", RUN_VALUE, "/t", "REG_SZ", "/d", &command, "/f",
+                ],
+            );
+            if ok {
+                Ok(Registered::RunKey)
+            } else {
+                bail!(
+                    "could not register the worker to start at sign-in: Windows said \"{}\"",
+                    if reg_said.is_empty() {
+                        task_said
+                    } else {
+                        reg_said
+                    }
+                )
+            }
+        }
+    }
+}
+
+/// Makes the task from XML: a logon trigger for this user only, which needs
+/// no administrator (`schtasks /SC ONLOGON` makes one for every user, which
+/// does: "Access is denied"), with no time limit (`/SC` stops a task after
+/// 72 hours) and on battery too.
+#[cfg(windows)]
+fn create_task(exe: &Path, arguments: &str) -> Result<(), String> {
+    let user = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
+        (Ok(domain), Ok(name)) if !domain.is_empty() => format!(r"{domain}\{name}"),
+        (_, Ok(name)) => name,
+        _ => return Err("USERNAME is not set".into()),
+    };
+    let xml = task_xml(&user, &exe.display().to_string(), arguments);
+    // schtasks reads UTF-16 with a BOM.
+    let bytes: Vec<u8> = std::iter::once(0xFEFF_u16)
+        .chain(xml.encode_utf16())
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let file = tempfile::Builder::new()
+        .prefix("spellsheet-task-")
+        .suffix(".xml")
+        .tempfile()
+        .map_err(|e| e.to_string())?;
+    std::fs::write(file.path(), bytes).map_err(|e| e.to_string())?;
+    let (ok, said) = quiet(
+        "schtasks",
+        [
+            std::ffi::OsStr::new("/Create"),
+            "/F".as_ref(),
+            "/TN".as_ref(),
+            TASK_NAME.as_ref(),
+            "/XML".as_ref(),
+            file.path().as_os_str(),
+        ],
+    );
+    if ok { Ok(()) } else { Err(said) }
+}
+
+/// Starts the worker now, apart from this process (it outlives it, and its
+/// output does not hold the pipes of whoever ran `worker install`).
+#[cfg(windows)]
+fn start_now(exe: &Path, workspace: &Path) -> Result<()> {
+    use std::os::windows::process::CommandExt as _;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    std::process::Command::new(exe)
+        .args(["worker", "run", "--workspace"])
+        .arg(workspace)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        .spawn()
+        .context("cannot start the worker")?;
+    Ok(())
+}
+
 #[cfg(windows)]
 fn install(workspace: &Path) -> Result<()> {
     let exe = std::env::current_exe()?;
-    let command = format!(
-        "\"{}\" worker run --workspace \"{}\"",
-        exe.display(),
-        workspace.display()
-    );
+    let arguments = format!("worker run --workspace \"{}\"", workspace.display());
     // Two tasks would start two workers for the same workspace.
     remove_legacy_task();
-    let status = std::process::Command::new("schtasks")
-        .args([
-            "/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED", "/TN", TASK_NAME, "/TR",
-        ])
-        .arg(&command)
-        .status()?;
-    if !status.success() {
-        bail!("schtasks could not create the task {TASK_NAME}");
+    match register_at_sign_in(&exe, &arguments)? {
+        Registered::Task => {
+            if !quiet("schtasks", ["/Run", "/TN", TASK_NAME]).0 {
+                start_now(&exe, workspace)?;
+            }
+            println!(
+                "the worker starts when you sign in to Windows (task {TASK_NAME}), and was started now"
+            );
+        }
+        Registered::RunKey => {
+            start_now(&exe, workspace)?;
+            println!(
+                "the worker starts when you sign in to Windows ({RUN_KEY}, value \"{RUN_VALUE}\": Task Scheduler refused the task), and was started now"
+            );
+        }
     }
-    let _ = std::process::Command::new("schtasks")
-        .args(["/Run", "/TN", TASK_NAME])
-        .status();
-    println!(
-        "the worker starts when you sign in to Windows (task {TASK_NAME}), and was started now"
-    );
     Ok(())
 }
 
 #[cfg(windows)]
 fn uninstall() -> Result<()> {
     let legacy = remove_legacy_task();
-    let status = std::process::Command::new("schtasks")
-        .args(["/Delete", "/F", "/TN", TASK_NAME])
-        .stderr(std::process::Stdio::null())
-        .status()?;
-    if status.success() {
+    let task = quiet("schtasks", ["/Delete", "/F", "/TN", TASK_NAME]).0;
+    if task {
         println!("removed the task {TASK_NAME}");
-    } else if !legacy {
-        bail!("schtasks could not delete the task {TASK_NAME}");
+    }
+    let run = quiet("reg", ["delete", RUN_KEY, "/v", RUN_VALUE, "/f"]).0;
+    if run {
+        println!("removed \"{RUN_VALUE}\" from {RUN_KEY}");
+    }
+    if !(task || run || legacy) {
+        bail!("the worker was not registered to start at sign-in");
     }
     Ok(())
 }
@@ -504,18 +646,67 @@ fn uninstall() -> Result<()> {
 fn remove_legacy_task() -> bool {
     let mut any = false;
     for name in legacy_task_names() {
-        let removed = std::process::Command::new("schtasks")
-            .args(["/Delete", "/F", "/TN", &name])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if removed {
+        if quiet("schtasks", ["/Delete", "/F", "/TN", &name]).0 {
             println!("removed the task {name} (its name before)");
             any = true;
         }
     }
     any
+}
+
+/// The task `worker install` makes, as Task Scheduler XML: started at
+/// `user`'s sign-in, as that user, without administrator rights, with no
+/// time limit.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn task_xml(user: &str, command: &str, arguments: &str) -> String {
+    let user = escape_xml(user);
+    let command = escape_xml(command);
+    let arguments = escape_xml(arguments);
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>SpellSheet Worker: runs the schedules of SpellSheet</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{user}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{command}</Command>
+      <Arguments>{arguments}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"#
+    )
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 /// The task (`schtasks /Query /XML`) starts the old command, or has an old
@@ -560,15 +751,18 @@ fn unescape_xml(text: &str) -> String {
 
 #[cfg(windows)]
 fn migrate() -> Result<()> {
+    use std::os::windows::process::CommandExt as _;
     let query = |name: &str| {
         let out = std::process::Command::new("schtasks")
             .args(["/Query", "/XML", "ONE", "/TN", name])
+            .stdin(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .ok()?;
         out.status
             .success()
-            .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+            .then(|| spellsheet_files::encoding::console_text(&out.stdout))
     };
     let mut found = None;
     if let Some(xml) = query(TASK_NAME) {
@@ -585,19 +779,11 @@ fn migrate() -> Result<()> {
     let Some(arguments) = found else {
         return Ok(());
     };
-    let command = format!("\"{}\" {arguments}", std::env::current_exe()?.display());
+    let exe = std::env::current_exe()?;
     // Not started now: a worker of the old command may still be running.
-    let status = std::process::Command::new("schtasks")
-        .args([
-            "/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED", "/TN", TASK_NAME, "/TR",
-        ])
-        .arg(&command)
-        .status()?;
-    if !status.success() {
-        bail!("schtasks could not create the task {TASK_NAME}");
-    }
+    register_at_sign_in(&exe, &arguments)?;
     remove_legacy_task();
-    println!("the task {TASK_NAME} now starts {command}");
+    println!("the worker now starts \"{}\" {arguments}", exe.display());
     Ok(())
 }
 
@@ -741,6 +927,26 @@ mod migrate_tests {
         assert_eq!(legacy_task_arguments("t", &task, false), None);
         // Under an old task name it is moved all the same.
         assert!(legacy_task_arguments("t", &task, true).is_some());
+    }
+
+    #[test]
+    fn the_task_starts_at_this_users_sign_in_only() {
+        let task = super::task_xml(
+            r"PC\山田",
+            r"C:\Program Files\SpellSheet\spellsheet.exe",
+            "worker run --workspace \"D:\\R&D <業務>\"",
+        );
+        // A logon trigger without a user needs an administrator.
+        assert!(task.contains(
+            "<LogonTrigger>\n      <Enabled>true</Enabled>\n      <UserId>PC\\山田</UserId>"
+        ));
+        assert!(task.contains("<RunLevel>LeastPrivilege</RunLevel>"));
+        assert!(task.contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>"));
+        // Read back the way `worker migrate` reads a task.
+        assert_eq!(
+            legacy_task_arguments("t", &task, true).as_deref(),
+            Some("worker run --workspace \"D:\\R&D <業務>\"")
+        );
     }
 }
 

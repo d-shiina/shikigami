@@ -42,6 +42,7 @@ pub mod bitmap;
 mod bridge;
 #[cfg(windows)]
 mod capture;
+pub mod console;
 pub mod engine;
 pub mod hover;
 #[cfg(windows)]
