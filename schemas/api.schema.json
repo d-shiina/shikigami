@@ -4015,6 +4015,17 @@
           "items": {
             "$ref": "#/$defs/NeededFile"
           }
+        },
+        "cloud": {
+          "description": "`config/cloud.json`: cloud storage a whole run fetches `input/` from\nand sends `output/` to (see [`crate::cloud`]). With an input place,\nfiles missing from `input/` are fetched then, so none are `needed`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -4072,6 +4083,91 @@
       "required": [
         "path",
         "stepIds"
+      ]
+    },
+    "CloudFile": {
+      "description": "`config/cloud.json`.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "description": "Always `spellsheet.cloud`.",
+          "type": "string"
+        },
+        "input": {
+          "description": "Fetched into `input/` before the run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudPlace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output": {
+          "description": "Where the files the run writes to `output/` are sent after it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudPlace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "format"
+      ]
+    },
+    "CloudPlace": {
+      "description": "A folder in cloud storage, and how to reach it.",
+      "type": "object",
+      "properties": {
+        "service": {
+          "description": "The plugin that reaches the storage (`box`, `googledrive`,\n`onedrive`): its `<service>.downloadFolder` and `<service>.upload`\ndo the work.",
+          "type": "string"
+        },
+        "label": {
+          "description": "The storage's name in the run's log (`Box`). Defaults to `service`.",
+          "type": "string"
+        },
+        "secret": {
+          "description": "The OAuth secret the plugin signs in with (its access token is\npassed as `{ \"secret\": …, \"field\": \"accessToken\" }`).",
+          "type": "string"
+        },
+        "signIn": {
+          "description": "`oauth.signIn` params besides `secret` (`authorizeUrl`, `tokenUrl`,\n`redirectUrl`, `scope`, `authorizeParams`): the run signs in first,\nasking a person only when there is no sign-in to refresh yet.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "folder": {
+          "description": "The folder: a path from the storage's top (`経理/受注`), its ID or a\nlink to it, as the plugin takes them.",
+          "type": "string"
+        },
+        "folderName": {
+          "description": "The folder as people know it (`経理/受注`), for the log and Writer,\nwhen `folder` is an ID or a link. Defaults to `folder`.",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "Input only: fetch the files whose names match (`*.xlsx`). Empty:\nevery file directly in the folder.",
+          "type": "string"
+        },
+        "files": {
+          "description": "Input only: fetch just these files of the folder, by name; a missing\none fails the run. Empty: every file (that matches `pattern`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "service",
+        "secret",
+        "folder"
       ]
     },
     "ConfigFile": {

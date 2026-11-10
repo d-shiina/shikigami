@@ -99,9 +99,9 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
     Ok(keep(&ext, &root, staged))
 }
 
-/// The custom nodes the installer ships in `plugins\` next to Writer (from
+/// The plugins the installer ships in `plugins\` next to Writer (from
 /// `examples/plugins`, staged by `scripts/bundle-node.mjs`), so a feature
-/// that needs one (reading a file from Box) can offer it on a PC that
+/// that needs one can offer it on a PC that
 /// cannot reach a registry. A development build reads the repository's
 /// `examples/plugins`.
 fn shipped_extension(name: &str) -> Option<PathBuf> {
@@ -128,7 +128,7 @@ pub async fn stage_shipped_extension(ext: State<'_, Extensions>, name: String) -
     let dir = shipped_extension(&name).ok_or_else(|| {
         err(
             "EXTENSION_NOT_SHIPPED",
-            format!("カスタム ノード「{name}」は Writer に入っていません"),
+            format!("プラグイン「{name}」は Writer に入っていません"),
         )
     })?;
     let names = builtin_names();

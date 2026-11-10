@@ -1,22 +1,22 @@
-# カスタム ノード
+# プラグイン
 
 [English](../extensions.md) | 日本語
 
-カスタム ノードは、SpellSheet に後からノードを追加する仕組みです。クラウド型 AI-OCR、社内システム、業務 SaaS の API など、使う人が限られる連携を、本体を作り直さずに追加できます。VS Code の拡張機能のように、入れたものだけがパレットに並び、要らなくなれば無効にしたり削除したりできます。
+プラグインは、SpellSheet に後から機能やノードを追加する仕組みです。クラウド型 AI-OCR、社内システム、業務 SaaS の API など、使う人が限られる連携を、本体を作り直さずに追加できます。VS Code の拡張機能のように、入れたものだけがパレットに並び、要らなくなれば無効にしたり削除したりできます。
 
-- カスタム ノードは **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Writer や実行は落ちず、そのノードがエラーになるだけです。
-- 追加したノードは組込のノードと同じく、パレットに並び、設定欄はカスタム ノードが宣言した内容から作られ、検証・再試行・タイムアウト・シークレットの伏せ字も同じように扱われます。
-- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema`、Writer の「仕様書を保存」にカスタム ノードが載ります。
+- プラグインは **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Writer や実行は落ちず、そのノードがエラーになるだけです。
+- 追加したノードは組込のノードと同じく、パレットに並び、設定欄はプラグインが宣言した内容から作られ、検証・再試行・タイムアウト・シークレットの伏せ字も同じように扱われます。
+- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema`、Writer の「仕様書を保存」にプラグインが載ります。
 
 仕組みの設計は [design/plugins.md](design/plugins.md) にあります（コード上の名前は「plugin」です）。
 
 ## 使う
 
-### Writer の「カスタム ノード」画面
+### Writer の「プラグイン」画面
 
-設定の「カスタム ノード」の「管理」、またはノードを探すパレットの左下「カスタム ノードを追加」で開きます。インストール済みの一覧（有効・無効、更新の確認、アンインストール）と、「一覧」タブ（下のレジストリ）を扱います。「インストール」で入手先を指定すると、内容（追加されるノード・外部へ送信するデータ・必要なシークレット・起動するプログラム）を表示し、確認してからインストールします。変更は Writer の再起動後に反映されます（画面の「再起動」）。
+サイドバーの「プラグイン」、またはノードを探すパレットの左下「プラグインを追加」で開きます。インストール済みの一覧（有効・無効、更新の確認、アンインストール）と、「一覧」タブ（下のレジストリ）を扱います。「インストール」で入手先を指定すると、内容（追加されるノード・外部へ送信するデータ・必要なシークレット・起動するプログラム）を表示し、確認してからインストールします。変更は Writer の再起動後に反映されます（画面の「再起動」）。
 
-カスタム ノードは、パレットにその名前の分類で並び、ノード名の前に札（例「AI-OCR」）が付きます。設定欄はマニフェストの JSON Schema から作られます。
+プラグインは、パレットにその名前の分類で並び、ノード名の前に札（例「AI-OCR」）が付きます。設定欄はマニフェストの JSON Schema から作られます。
 
 ### インストール
 
@@ -33,7 +33,7 @@ spellsheet plugin install https://github.com/<owner>/<repo>        # 中身を�
 spellsheet plugin install https://github.com/<owner>/<repo> --yes  # インストールする
 ```
 
-インストールの前に、カスタム ノードの名前・発行元・追加されるノード・**外部へ送るデータ**・必要なシークレット・起動するプログラムを表示します。カスタム ノードはこの PC でプログラムとして動くため、発行元を信頼できるものだけをインストールしてください。
+インストールの前に、プラグインの名前・発行元・追加されるノード・**外部へ送るデータ**・必要なシークレット・起動するプログラムを表示します。プラグインはこの PC でプログラムとして動くため、発行元を信頼できるものだけをインストールしてください。
 
 インストール先は `%LOCALAPPDATA%\SpellSheet\plugins\<名前>\` です。ワークスペースのフォルダーには置きません（共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動かないようにするため）。インストール・更新・無効化のあとは、Writer と AI クライアントを再起動すると反映されます。
 
@@ -47,14 +47,14 @@ spellsheet plugin update azureocr   # インストールした入手先から新
 spellsheet plugin remove azureocr
 ```
 
-無効にしたカスタム ノードを使うフローは、インストールされていないときと同じく、実行前の検証で `PLUGIN_NOT_INSTALLED` になります（フローの中身はそのまま残ります）。フローは使っているカスタム ノードと版を `requires`（`{ "plugin:azureocr": "^0.1.0" }`）に記録するので、別の PC で足りないカスタム ノードが分かります。
+無効にしたプラグインを使うフローは、インストールされていないときと同じく、実行前の検証で `PLUGIN_NOT_INSTALLED` になります（フローの中身はそのまま残ります）。フローは使っているプラグインと版を `requires`（`{ "plugin:azureocr": "^0.1.0" }`）に記録するので、別の PC で足りないプラグインが分かります。
 
 ### 一覧（レジストリ）
 
-Writer の「一覧」タブには、一覧（JSON の索引ファイル）に載っているカスタム ノードが並びます。初期値は **SpellSheet 公式の一覧**（`https://spellsheet.github.io/plugins/index.json`、リポジトリ [spellsheet/plugins](https://github.com/spellsheet/plugins)）です。組織やコミュニティの一覧を足したり、公式の一覧を外したりできます。同じ名前が複数の一覧にあるときは、上の一覧のものを使います。サーバーは不要で、Git リポジトリに置いたファイルや GitHub Pages で配れます。
+Writer の「一覧」タブには、一覧（JSON の索引ファイル）に載っているプラグインが並びます。初期値は **SpellSheet 公式の一覧**（`https://spellsheet.github.io/plugins/index.json`、リポジトリ [spellsheet/plugins](https://github.com/spellsheet/plugins)）です。組織やコミュニティの一覧を足したり、公式の一覧を外したりできます。同じ名前が複数の一覧にあるときは、上の一覧のものを使います。サーバーは不要で、Git リポジトリに置いたファイルや GitHub Pages で配れます。
 
 ```powershell
-spellsheet plugin registry                                   # 一覧の場所と、載っているカスタム ノード
+spellsheet plugin registry                                   # 一覧の場所と、載っているプラグイン
 spellsheet plugin registry --set https://spellsheet.github.io/plugins/index.json https://example.com/index.json
 spellsheet plugin registry --set                             # 一覧を使わない
 spellsheet plugin registry --reset                           # 公式の一覧だけに戻す
@@ -87,7 +87,7 @@ spellsheet plugin install azureocr --yes                     # 一覧に載っ�
 | `withdrawn` | 取り下げた理由。インストール・更新はできなくなり、入っている PC の Writer には「無効にするかアンインストールしてください」と出ます |
 | `description` / `publisher` / `homepage` | 一覧に出す説明・発行元・紹介ページ |
 
-一覧からインストールしたカスタム ノードは、更新のときも一覧を読み直し、一覧に載っている版だけを入れます。一覧の場所はユーザーの設定ファイル（`%APPDATA%\SpellSheet\config.json` の `extensions.registries`）に保存します。以前の版の `extensions.registry`（1 つだけの URL）は、公式の一覧の次に並べて引き継ぎます。
+一覧からインストールしたプラグインは、更新のときも一覧を読み直し、一覧に載っている版だけを入れます。一覧の場所はユーザーの設定ファイル（`%APPDATA%\SpellSheet\config.json` の `extensions.registries`）に保存します。以前の版の `extensions.registry`（1 つだけの URL）は、公式の一覧の次に並べて引き継ぎます。
 
 公式の一覧に載せたいときは、自分のリポジトリでリリースを作り、spellsheet/plugins に 1 行足す Pull Request を送ってください。載せる前に、自動の検査（`spellsheet plugin check`、ハッシュ、名前の重複）と人の確認を通します。一覧に載っていることは「安全を保証する」ではなく、「名前と中身が載せたときのままで、外へ送る先が書いてある」という意味です。
 
@@ -97,14 +97,14 @@ spellsheet plugin install azureocr --yes                     # 一覧に載っ�
 
 - Writer の確認パネル（確定の前）の「外への影響」に「Azure AI Document Intelligence へ送信：読み取るファイル（画像・PDF）」のように表示します。
 - 送り先のアドレスを持つ設定（`targets` に `site` として宣言したもの）は、ワークスペースの `policy.json` の `sites` で検査します。`sites` に `https://<リソース名>.cognitiveservices.azure.com` だけを書けば、それ以外へは送れません（[policy.md](policy.md)）。
-- カスタム ノードの `risk` は、AI がそのノードを動かすときの承認（`policy.json` の `ai.runFlow` / `ai.testStep`）に使います。外部へファイルを送るノードは `interactive` 以上にして、AI が人の承認なしに試せないようにしてください。
+- プラグインの `risk` は、AI がそのノードを動かすときの承認（`policy.json` の `ai.runFlow` / `ai.testStep`）に使います。外部へファイルを送るノードは `interactive` 以上にして、AI が人の承認なしに試せないようにしてください。
 
 ### シークレット
 
 API キーなどは Writer の「シークレット」に登録し、ノードの設定では名前で選びます。値はフローに書かれず、AI にも渡りません。
 
-- カスタム ノードが受け取れるのは `secretParams` に挙げた設定だけです。
-- シークレットの「使ってよい先」に `plugin:<名前>`（例 `plugin:azureocr`）を登録したものだけが、そのカスタム ノードに渡ります。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED` で止まります。
+- プラグインが受け取れるのは `secretParams` に挙げた設定だけです。
+- シークレットの「使ってよい先」に `plugin:<名前>`（例 `plugin:azureocr`）を登録したものだけが、そのプラグインに渡ります。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED` で止まります。
 - マニフェストの `credentials` に種類（`login` / `apiKey` / `oauth`）を書くと、Writer はその種類のシークレットを選択肢に出し、新規登録の画面もその種類で開きます。
 - 種類 `oauth` の設定には、`oauth.signIn` で取ったアクセストークン（`{ "secret": "Box", "field": "accessToken" }`）を渡せます。SpellSheet が期限の 2 分前から取り直してから渡すので、拡張機能はリフレッシュを気にしなくてよく、クライアント シークレットもリフレッシュ トークンも受け取りません。シークレットの使ってよい先に `plugin:<名前>` が要るのは同じです。
 
@@ -126,7 +126,6 @@ azureocr/
 | 見本 | 内容 |
 |---|---|
 | [examples/plugins/azure-ocr](../../examples/plugins/azure-ocr) | クラウド型 AI-OCR（Azure AI Document Intelligence）。外部送信・API キー・ファイルの設定・設定欄の名前の付け方の例 |
-| [examples/plugins/box](../../examples/plugins/box) | Box のフォルダーの一覧・ダウンロード・アップロード。OAuth のアクセストークンを受け取る例。Writer に入っていて（`plugins\box\`）、「クラウドストレージから読む」からその場で入れられます |
 | [examples/plugins/hello](../../examples/plugins/hello) | 最小の例。ファイルの排他（`resources`） |
 
 ### マニフェスト
@@ -156,11 +155,11 @@ azureocr/
 | `name` | ○ | ノードの種類の接頭辞（`azureocr` → `azureocr.readDocument`）。英小文字で始まる英小文字・数字、32 文字まで。組込の名前（`browser`・`excel`・`http` など）は使えません |
 | `version` | ○ | semver（`0.1.0`）。設定の形を互換でなく変えたらメジャー版（0.x ならマイナー版）を上げる |
 | `label` | ○ | 表示名。パレットの分類名にもなります |
-| `description` | - | カスタム ノードの一覧に出す説明 |
+| `description` | - | プラグインの一覧に出す説明 |
 | `publisher` / `homepage` | - | 発行元と説明のページ（https） |
 | `tag` | - | ノード名の前に出す「どこで」の札（例 `AI-OCR` →「［AI-OCR］AI-OCR の読み取り」）。省略時は `label` |
 | `icon` | - | ノードのアイコン。[Lucide](https://lucide.dev/icons) の名前（`scan-text`・`file-search`・`cloud` など）。知らない名前はパズルのアイコン |
-| `command.program` / `args` | ○ / - | 起動するプログラム。`./bin/x.exe` のように区切りを含むとカスタム ノードのフォルダーからの相対、`node` は SpellSheet に同梱の Node.js を使います（利用者の PC に Node.js がなくても動く） |
+| `command.program` / `args` | ○ / - | 起動するプログラム。`./bin/x.exe` のように区切りを含むとプラグインのフォルダーからの相対、`node` は SpellSheet に同梱の Node.js を使います（利用者の PC に Node.js がなくても動く） |
 | `credentials` | - | 受け取るシークレットの種類：`kind`（`login` / `apiKey` / `oauth`）・`label`（登録するもの）・`description`・`params`（受け取る `secretParams`） |
 | `inspect` | - | `true` なら AI の単体実行のあとに `inspect` を呼び、アプリの状態を AI に返す |
 | `steps` | ○ | ノードの宣言（下の表） |
@@ -174,14 +173,14 @@ azureocr/
 | `description` | ○ | AI が読む説明（英語でよい）。何を受け取り、何を返すかを書く |
 | `summary` | - | 人が読む一文。Writer のパレットと設定画面でノード名の下に出る（省略時は `description` の最初の一文） |
 | `params` | ○ | 設定の JSON Schema（`"type": "object"`）。Writer の設定欄はここから作られます |
-| `examples` | ○ | そのまま使えるノードの記述例（1 つ以上）。読み込み時に検証し、通らなければカスタム ノードごと読み込みません |
+| `examples` | ○ | そのまま使えるノードの記述例（1 つ以上）。読み込み時に検証し、通らなければプラグインごと読み込みません |
 | `hasOutput` | - | 結果を返すか（`saveAs` で受け取れる） |
 | `risk` | - | `safe`（影響なし）/ `interactive`（既定）/ `dangerous`（外部に影響する操作）。AI の承認に使う |
 | `secretParams` | - | 登録済みのシークレットを受け取れる設定 |
-| `pathParams` | - | ファイル・フォルダーの設定。相対パスはフローのフォルダーから解決し、カスタム ノードには絶対パスで渡す |
+| `pathParams` | - | ファイル・フォルダーの設定。相対パスはフローのフォルダーから解決し、プラグインには絶対パスで渡す |
 | `targets` | - | サイト・プログラムを指す設定（`[{ "kind": "site", "param": "endpoint" }]`）。`policy.json` の `sites` / `apps` で検査 |
 | `external` | - | 外部へ送るデータ：`service`（送り先のサービス）・`data`（送るもの）・`param`（送り先のアドレスの設定） |
-| `resources` | - | 排他する資源（ファイル・ウィンドウ・マウスとキーボード・カスタム ノード全体） |
+| `resources` | - | 排他する資源（ファイル・ウィンドウ・マウスとキーボード・プラグイン全体） |
 | `defaultTimeoutMs` | - | 時間制限の既定値 |
 | `deprecated` | - | 使うのをやめてほしいノード：`{ "note", "replacement" }` |
 
@@ -232,7 +231,7 @@ spellsheet step-types                                  # azureocr.readDocument �
 node --test examples\plugins\azure-ocr\test.mjs      # Azure の代わりのサーバーで動作を確認
 ```
 
-`SPELLSHEET_PLUGINS` で読み込んだカスタム ノードは一覧に出ますが、無効化・更新・削除はできません（開発中のフォルダーを壊さないため）。
+`SPELLSHEET_PLUGINS` で読み込んだプラグインは一覧に出ますが、無効化・更新・削除はできません（開発中のフォルダーを壊さないため）。
 
 ## 見本：Azure AI-OCR
 

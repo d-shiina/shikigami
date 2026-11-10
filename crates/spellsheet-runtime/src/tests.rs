@@ -2894,3 +2894,191 @@ async fn a_started_step_says_how_long_it_waits_and_when_it_gives_up() {
         ]
     );
 }
+
+/// A stand-in for a cloud storage plugin: `downloadFolder` writes
+/// 受注.csv into `to`, `upload` records what it was sent.
+struct FakeStorage {
+    calls: Arc<Mutex<Vec<(String, Value)>>>,
+}
+impl ActionHandler for FakeStorage {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((input.step_type.clone(), input.params.clone()));
+            if input.step_type == "store.downloadFolder" {
+                let to = std::path::PathBuf::from(input.params["to"].as_str().unwrap_or_default());
+                std::fs::create_dir_all(&to).map_err(|e| StepError::new("IO", e.to_string()))?;
+                std::fs::write(to.join("受注.csv"), "a,b")
+                    .map_err(|e| StepError::new("IO", e.to_string()))?;
+                return Ok(json!({ "files": [{ "name": "受注.csv" }] }));
+            }
+            if input.params["path"]
+                .as_str()
+                .is_some_and(|p| p.ends_with("bad.txt"))
+            {
+                return Err(StepError::permanent("STORE_FULL", "the storage is full"));
+            }
+            Ok(json!({ "id": "1" }))
+        })
+    }
+}
+
+fn storage_runtime(calls: &Arc<Mutex<Vec<(String, Value)>>>) -> Runtime {
+    let def = |step_type: &str, path: &str| StepTypeDef {
+        step_type: step_type.into(),
+        label: step_type.into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: true,
+        resources: vec![],
+        secret_params: vec![],
+        path_params: vec![path.into()],
+        default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        ..flaky_def()
+    };
+    let write = StepTypeDef {
+        step_type: "test.writeFile".into(),
+        label: "ファイルに書く".into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: true,
+        resources: vec![],
+        secret_params: vec![],
+        path_params: vec!["path".into()],
+        default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        ..flaky_def()
+    };
+    Runtime::builder()
+        .register(
+            def("store.downloadFolder", "to"),
+            FakeStorage {
+                calls: calls.clone(),
+            },
+        )
+        .register(
+            def("store.upload", "path"),
+            FakeStorage {
+                calls: calls.clone(),
+            },
+        )
+        .register(write, WriteFile)
+        .build()
+}
+
+#[tokio::test]
+async fn a_folder_set_to_cloud_storage_fetches_input_first_and_sends_what_the_run_wrote() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::create_dir_all(dir.path().join("output")).unwrap();
+    std::fs::write(dir.path().join("output").join("old.txt"), "earlier run").unwrap();
+    std::fs::write(
+        dir.path().join("config").join("cloud.json"),
+        r#"{"format":"spellsheet.cloud",
+            "input":{"service":"store","label":"Store","secret":"S","folder":"経理/受注","pattern":"*.csv"},
+            "output":{"service":"store","label":"Store","secret":"S","folder":"経理/結果"}}"#,
+    )
+    .unwrap();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let runtime = storage_runtime(&calls);
+    let s = flow(vec![
+        Step::new("test.writeFile")
+            .with_param("path", "output/結果.txt")
+            .with_param("text", "done"),
+    ]);
+    let options = || RunOptions {
+        project_dir: Some(dir.path().to_path_buf()),
+        full_run: true,
+        ..RunOptions::default()
+    };
+    let (report, events) = run_project(&runtime, s, options()).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("input").join("受注.csv")).unwrap(),
+        "a,b"
+    );
+    let calls_made = calls.lock().unwrap().clone();
+    assert_eq!(calls_made.len(), 2, "{calls_made:?}");
+    assert_eq!(calls_made[0].0, "store.downloadFolder");
+    assert_eq!(calls_made[0].1["folder"], "経理/受注");
+    assert_eq!(calls_made[0].1["pattern"], "*.csv");
+    assert_eq!(
+        calls_made[0].1["account"],
+        json!({ "secret": "S", "field": "accessToken" })
+    );
+    // Only the file this run wrote is sent, not the earlier run's.
+    assert_eq!(calls_made[1].0, "store.upload");
+    assert!(
+        calls_made[1].1["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("結果.txt")
+    );
+    assert_eq!(calls_made[1].1["folder"], "経理/結果");
+    let logs: Vec<String> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::Log { message, .. } => Some(message.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        logs.iter()
+            .any(|m| m.contains("Store の 経理/受注 から input/ に 1 ファイルを取得しました")),
+        "{logs:?}"
+    );
+    assert!(
+        logs.iter()
+            .any(|m| m.contains("output/ の 1 ファイルを Store の 経理/結果 に送りました")),
+        "{logs:?}"
+    );
+
+    // A failed upload fails the run, named as the transfer.
+    std::fs::write(dir.path().join("output").join("bad.txt"), "x").unwrap();
+    let bad = flow(vec![
+        Step::new("test.writeFile")
+            .with_param("path", "output/bad.txt")
+            .with_param("text", "changed"),
+    ]);
+    let (report, _) = run_project(&runtime, bad, options()).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "STORE_FULL");
+    assert_eq!(
+        error.step_label.as_deref(),
+        Some("output/ のファイルを Store の 経理/結果 に送信")
+    );
+}
+
+#[tokio::test]
+async fn a_folder_set_to_a_storage_without_its_custom_node_fails_before_the_first_node() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(
+        dir.path().join("config").join("cloud.json"),
+        r#"{"format":"spellsheet.cloud","input":{"service":"box","label":"Box","secret":"Box","folder":"経理"}}"#,
+    )
+    .unwrap();
+    let runtime = write_file_runtime();
+    let s = flow(vec![
+        Step::new("test.writeFile")
+            .with_param("path", "output/a.txt")
+            .with_param("text", "x"),
+    ]);
+    let (report, _) = run_project(
+        &runtime,
+        s,
+        RunOptions {
+            project_dir: Some(dir.path().to_path_buf()),
+            full_run: true,
+            ..RunOptions::default()
+        },
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Failed);
+    assert_eq!(report.error.unwrap().code, "CLOUD_NODE_MISSING");
+    assert!(!dir.path().join("output").join("a.txt").exists());
+}
