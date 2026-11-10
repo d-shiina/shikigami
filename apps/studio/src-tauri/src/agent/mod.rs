@@ -1120,10 +1120,17 @@ fn agent_open_any(url: &str) -> CmdResult<()> {
 }
 
 /// Hands an address built by Studio itself to Windows (browser or protocol handler).
+///
+/// On Windows through `rundll32 url.dll,FileProtocolHandler`, which hands
+/// the address to ShellExecute as 「ファイル名を指定して実行」 does (this crate
+/// forbids `unsafe`, so not ShellExecuteW itself). Not `explorer <url>`:
+/// Explorer reads its argument as a path, and an address longer than a path
+/// may be (Cursor's "add MCP server" link carries the whole server setting)
+/// opens a folder window instead.
 pub(crate) fn open_external(url: &str) -> CmdResult<()> {
     let mut command = if cfg!(windows) {
-        let mut c = std::process::Command::new("explorer");
-        c.arg(url);
+        let mut c = std::process::Command::new("rundll32");
+        c.args(["url.dll,FileProtocolHandler", url]);
         c
     } else {
         let mut c = std::process::Command::new("xdg-open");
