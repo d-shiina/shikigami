@@ -55,7 +55,7 @@ claude mcp add --scope user spellsheet -- "<SpellSheet の場所>\spellsheet.exe
 コマンドには、この PC に入っている SpellSheet の場所が入った状態で表示されます。
 
 :::tip[Claude Code のプラグイン]
-Claude Code では、MCP の設定とフローの作り方を教えるスキルをまとめたプラグインも使えます。Claude Code で `/plugin install spellsheet --marketplace spellsheet/spellsheet` を実行します。
+Claude Code では、MCP の設定とフローの作り方を教えるスキルをまとめた Claude Code のプラグインも使えます（Writer のプラグインとは別のものです）。Claude Code で `/plugin install spellsheet --marketplace spellsheet/spellsheet` を実行します。
 :::
 
 AI ツールがあなたの PC で SpellSheet を操作するとき、何をしたかは監査の記録に残ります。
@@ -71,7 +71,7 @@ PC に AI を入れられないときでも、Microsoft Copilot などのチャ�
 
 AI は画面を見られないので、ボタンや入力欄は名前と場所の説明だけを書きます。取り込んだあと、Writer の「要対応」で「画面から選ぶ」を済ませてください。問題があると取り込めず、AI に返す文面をコピーできます。
 
-SpellSheet を更新したときやカスタム ノードを入れたときは、仕様書を保存し直して AI のファイルを入れ替えてください。
+SpellSheet を更新したときやプラグインを入れたときは、仕様書を保存し直して AI のファイルを入れ替えてください。
 
 ## 実行の許可
 

@@ -301,6 +301,7 @@ mod tests {
                 })
                 .collect(),
             needed: Vec::new(),
+            cloud: None,
         }
     }
 

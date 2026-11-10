@@ -51,7 +51,7 @@ Writer の画面は日本語と英語に対応しています（左上の「Spel
 | [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・確定・実行したか（`spellsheet audit`）と保存期間 |
 | [docs/remote.md](docs/ja/remote.md) | 管理サーバー：PC の登録、空いた PC へのジョブの振り分け、プロトコル v1 と参考実装のサーバー |
 | [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
-| [docs/ja/extensions.md](docs/ja/extensions.md) | カスタム ノード：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
+| [docs/ja/extensions.md](docs/ja/extensions.md) | プラグイン：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのノードを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) | Writer の画面の決まり：ボタンをどこに置き、どう見せるか、その理由 |
 | [docs/ja/compatibility.md](docs/ja/compatibility.md) | 互換性の方針：フロー形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |
@@ -85,7 +85,7 @@ packages/schema         Rust の型から生成した TypeScript 型
 packages/browser-adapter  ブラウザ操作のプロセス（Playwright）
 plugins/spellsheet      Claude Code プラグイン（MCP 設定＋スキル）
 schemas/                生成された JSON Schema（公開している約束）
-examples/               サンプルフロー（CI が最後まで実行して確かめる）、カスタム ノードの例
+examples/               サンプルフロー（CI が最後まで実行して確かめる）、プラグインの例
 ```
 
 `spellsheet-core` はワークスペース内のどのクレートにも依存せず、入口（Writer・CLI・MCP サーバー・Worker）はすべてこれを通してフローを編集します。`unsafe` は Windows API を呼ぶモジュールだけに許し、それ以外はワークスペースの lint で禁止しています。設計の全体は [docs/architecture.md](docs/ja/architecture.md) を参照してください。
@@ -153,7 +153,7 @@ Writer を開いたまま CLI でフローを編集すると、変更が Writer 
 
 ## AI から使う（MCP）
 
-Claude Code ならプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
+Claude Code なら Claude Code のプラグインを入れるだけです（`spellsheet` コマンドに PATH が通っている必要があります）。
 
 ```text
 /plugin install spellsheet --marketplace spellsheet/spellsheet

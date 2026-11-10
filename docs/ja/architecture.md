@@ -539,7 +539,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ### 未実装（後続フェーズ）
 
-- Windows 操作の SAP GUI Scripting・Java Access Bridge・画像認識、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
+- Windows 操作の Java Access Bridge・画像認識（SAP GUI Scripting は SAP のプラグイン）、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
 - SQLite、クライアント別のツール権限設定、ファイル操作の許可フォルダ、資格情報ストア連携、MCP の Streamable HTTP
 

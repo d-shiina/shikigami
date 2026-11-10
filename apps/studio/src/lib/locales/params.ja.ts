@@ -230,7 +230,6 @@ export const paramsJa = {
     "mail.forward": { to: "転送先", body: "転送の本文", via: "メールボックス" },
     "mail.sendDraft": { id: "下書き", via: "メールボックス" },
     "process.run": { args: "引数" },
-    "sap.runTransaction": { code: "トランザクションコード" },
     "flow.delay": { ms: "待ち時間（ミリ秒）" },
   } as Record<string, Record<string, string>>,
   /** A choice's words, by the setting it belongs to. */

@@ -359,29 +359,30 @@ pub fn window_choices(windows: &[WindowInfo], window: usize) -> Vec<Value> {
     out
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ElementQuery {
-    /// AutomationId (UIA); the component ID in SAP GUI.
-    #[serde(default)]
+    /// AutomationId (UIA); what a plugin's bridge uses as the id (the
+    /// component ID in SAP GUI).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub class_name: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub exact: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nth: Option<usize>,
     /// Look only inside this element (a group, pane or row that tells
     /// same-named elements apart), itself found like `element`.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub within: Option<Box<ElementQuery>>,
     /// The first match after this element in the window's order, e.g. the
     /// text box that follows the label 「氏名」 (`nth` counts from there).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<Box<ElementQuery>>,
 }
 

@@ -2,16 +2,18 @@
 // folder. The input part of the files panel lists the files the flow reads
 // that are not there yet, and offers three ways: put the file in the
 // folder, read it from a file server, or read it from cloud storage
-// (through its API: CloudPlace.tsx; or a sync app's folder). The output/ part of the files panel offers the same for where
-// files are written. A place outside is kept as a folder setting
-// (lib/filePlaces.ts), so the flow can be handed over and the receiver
-// only changes the setting.
-import type { NeededFile } from "@spellsheet/schema";
-import { CircleAlert, Cloud, FileInput, FolderOutput, Server } from "lucide-react";
+// (through its API, fetched into input/ before each run: CloudPlace.tsx; or a
+// sync app's folder). The output/ part of the files panel offers the same
+// for where files are written. A place outside is kept as a folder setting
+// (lib/filePlaces.ts, config/cloud.json), so the flow can be handed over and
+// the receiver only changes the setting.
+import type { CloudPlace, NeededFile } from "@spellsheet/schema";
+import { Blocks, CircleAlert, Cloud, FileInput, FolderOutput, Server } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useContext, useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { chooseAsk } from "../lib/ask";
+import { type CloudSide, folderNameOf, serviceOf } from "../lib/cloudPlaces";
 import { placeChange, placeName, portable } from "../lib/filePlaces";
 import { t } from "../lib/i18n";
 import { ProjectContext, projectApi, useProjectMaybe } from "../project";
@@ -25,8 +27,7 @@ interface SyncFolders {
   folders: { name: string; path: string }[];
 }
 
-const pick = (kind: "file" | "folder", start: string | null) =>
-  invoke<string | null>("runner_pick", { kind, start }).catch(() => null);
+const pick = (kind: "file" | "folder", start: string | null) => invoke<string | null>("runner_pick", { kind, start }).catch(() => null);
 
 const syncFolders = () => invoke<SyncFolders>("sync_folders").catch((): SyncFolders => ({ profile: null, folders: [] }));
 
@@ -170,7 +171,7 @@ export function NeededFiles() {
       ))}
       {cloud && (
         <CloudPlaceDialog
-          file={cloud}
+          side="input"
           onClose={() => setCloud(null)}
           onSynced={() => {
             setCloud(null);
@@ -242,7 +243,7 @@ export function OutputPlaceMenu() {
       )}
       {cloud && (
         <CloudPlaceDialog
-          file={null}
+          side="output"
           onClose={() => setCloud(false)}
           onSynced={() => {
             setCloud(false);
@@ -251,6 +252,43 @@ export function OutputPlaceMenu() {
         />
       )}
     </span>
+  );
+}
+
+const NO_PLACE: CloudPlace | null = null;
+
+/**
+ * At the top of the input or output part of the files panel: the cloud
+ * storage folder each run fetches from or sends to, with a button to change it.
+ */
+export function CloudPlaceLine({ side }: { side: CloudSide }) {
+  const place = useProjectMaybe((s) => s.files?.cloud?.[side] ?? NO_PLACE, NO_PLACE);
+  const types = useStudio((s) => s.stepTypes);
+  const [open, setOpen] = useState(false);
+  if (!place) return null;
+  const c = t.places.cloudDialog;
+  const service = serviceOf(place);
+  const label = place.label || (service ? c.services[service.id]?.label : undefined) || place.service;
+  const folder = folderNameOf(place);
+  const text = side === "input" ? c.readPlace(label, folder) : c.writePlace(label, folder);
+  // The plugin that does the work was removed (or the flow came from another PC).
+  const missing = !types.some((x) => x.type === `${place.service}.${side === "input" ? "downloadFolder" : "upload"}`);
+  return (
+    <div data-cloud-place={side} className="mx-1 mb-1 flex items-start gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-[11.5px] text-slate-600">
+      <Cloud size={13} strokeWidth={1.75} className="mt-px shrink-0 text-brand-500" aria-hidden="true" />
+      <span className="min-w-0 flex-1 leading-snug break-words">
+        {text}
+        {side === "input" && (place.files?.length ?? 0) > 0 && <span className="block text-slate-500">{place.files!.join("、")}</span>}
+        <span className={`mt-0.5 flex items-center gap-1 ${missing ? "text-shu-600" : "text-slate-400"}`}>
+          <Blocks size={11} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+          {missing ? c.pluginMissing(label) : c.usesPlugin(label)}
+        </span>
+      </span>
+      <button type="button" onClick={() => setOpen(true)} className="shrink-0 text-brand-500 hover:underline">
+        {c.change}
+      </button>
+      {open && <CloudPlaceDialog side={side} onClose={() => setOpen(false)} />}
+    </div>
   );
 }
 

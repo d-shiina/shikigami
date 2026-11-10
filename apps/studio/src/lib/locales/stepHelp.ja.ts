@@ -98,7 +98,6 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "desktop.check": { summary: "アプリのチェックボックスのチェックを付ける・外す（何度流しても同じ状態になる）", words: "チェック チェックボックス オン オフ 付ける 外す" },
   "desktop.closeWindow": { summary: "アプリのウィンドウを閉じる", words: "終了 閉じる ウィンドウを閉じる" },
   "desktop.getTable": { summary: "アプリの一覧や表をまとめて読む", words: "表 一覧 グリッド 行 読む 取得 表を読み取る" },
-  "sap.runTransaction": { summary: "SAP GUI でトランザクション（VA03 など）を開く", words: "sap トランザクション tコード 基幹 SAP のトランザクションを開始" },
   "desktop.selectMenu": { summary: "アプリのメニューを選ぶ（メニューバー・右クリック）", words: "メニュー 右クリック コンテキスト ファイル メニューを選ぶ" },
   "desktop.scroll": { summary: "一覧をスクロールする・部品が見えるまで動かす（マウスを動かさない）", words: "スクロール ページ 下へ 一覧" },
   "desktop.mouseScroll": { summary: "アプリの上でマウスのホイールを回す", words: "ホイール スクロール マウス マウスでスクロール" },
