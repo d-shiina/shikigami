@@ -38,6 +38,8 @@ import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
 import { Sentence, StoryView } from "./StoryView";
 import { CanvasDock } from "./Toolbar";
+import { Highlight } from "./Highlight";
+import { SheetNumber } from "./SheetNumber";
 
 type View = "flow" | "story" | "variables";
 
@@ -571,7 +573,7 @@ function Cover({
       <ol aria-label={t.manual.contents}>
         {doc.chapters.map((c) => (
           <li key={c.number} className="flex items-baseline gap-2.5 py-1 text-[13.5px]">
-            <span className="w-[18px] shrink-0 font-bold text-[var(--manual-navy)]">{c.number}</span>
+            <SheetNumber n={c.number} className="size-[18px] self-center text-[11px]" />
             <span className="min-w-0">
               {c.title}
               {c.alongside.length > 0 && <span className="ml-2 text-[12px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
@@ -620,8 +622,8 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
       {page.first ? (
         <>
           <h2 className="mb-1.5 flex items-center gap-3 border-b-2 border-[var(--manual-navy)] pb-2 text-[19px] font-semibold text-[var(--manual-navy)]">
-            <span className="rounded-[4px] bg-[var(--manual-navy)] px-2 py-0.5 text-[12px] text-sheet">{chapter.number}</span>
-            {chapter.title}
+            <SheetNumber n={chapter.number} className="size-[26px] text-[14px]" />
+            <Highlight>{chapter.title}</Highlight>
           </h2>
           <p className="mb-4 min-h-[1px] text-[12.5px] text-slate-500">{chapter.alongside.length > 0 ? t.manual.alongsideNote(chapter.alongside) : ""}</p>
         </>
