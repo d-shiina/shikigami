@@ -25,6 +25,7 @@
         <a class="hide-sm" href="#sheets">シート</a>
         <a class="hide-sm" href="#consult">業務の棚卸し</a>
         <a class="hide-sm" href="#points">特長</a>
+        <a class="hide-sm" href="#ai">使える AI</a>
         <a class="hide-sm" href="#how">使い方</a>
         <a class="hide-sm" href="#compare">違い</a>
         <a class="hide-sm" href="#faq">よくある質問</a>
@@ -110,7 +111,7 @@
           <div class="point c-cyan">
             <div class="num"><svg class="i"><use href="assets/icons.svg#sparkles"/></svg>01</div>
             <h3>お使いの AI で作れる</h3>
-            <p>Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor。会社ですでに使っている AI がそのまま使えます。</p>
+            <p>Claude Code・Codex・GitHub Copilot・Cursor など MCP に対応した AI はもちろん、Microsoft Copilot や ChatGPT のチャットでも、コピーと貼り付けで作れます。</p>
           </div>
           <div class="point c-green">
             <div class="num"><svg class="i"><use href="assets/icons.svg#book-open"/></svg>02</div>
@@ -140,8 +141,9 @@
             <p>「毎朝、受注メールの Excel を開いて、1 行ずつ販売管理システムに入力する」のように書いて送ると、AI が実際の画面を調べ、操作を試して、通った操作だけをフローに残します。組み上がっていく様子は、そのままフロー図で見えます。</p>
             <p>AI は Writer の中から選んで導入とサインインができます。会社が許可している AI をそのまま使えるので、新しい AI サービスの契約や稟議は要りません。</p>
             <ul class="ai-list" aria-label="使える AI">
-              <li>Claude Code</li><li>OpenAI Codex</li><li>Gemini CLI</li><li>GitHub Copilot</li><li>Cursor</li>
+              <li>Claude Code</li><li>OpenAI Codex</li><li>Gemini CLI</li><li>Antigravity</li><li>GitHub Copilot</li><li>Cursor</li>
             </ul>
+            <p class="more">MCP に対応していない Microsoft Copilot や ChatGPT のチャットでも作れます（<a href="#ai">違いはこちら</a>）。</p>
           </div>
           <figure class="figure" style="margin:0">
             <picture><source srcset="assets/ai-building-dark.webp" media="(prefers-color-scheme: dark)"><img src="assets/ai-building.webp" width="1440" height="900" alt="右の AI チャットで依頼すると、中央のフロー図にノードが増えていく画面"></picture>
@@ -214,6 +216,111 @@
             <div class="app"><svg class="i"><use href="assets/icons.svg#database"/></svg><div><b>データベース・Web API</b><span>ODBC で社内のデータベース、HTTP で各種サービス</span></div></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="ai" class="soft">
+      <div class="wrap">
+        <h2>MCP に対応した AI でも、していない AI でも作れます</h2>
+        <p class="sub">MCP は、AI が SpellSheet を直接操作するための仕組みです。MCP に対応した AI なら、Writer の中で頼むだけで、AI が実際の画面を調べて試しながらフローを組みます。会社で使える AI が Microsoft Copilot やブラウザーの ChatGPT だけでも、依頼と答えをコピーして貼り付ければ、同じフローが作れます。</p>
+        <div class="ways">
+          <div class="way c-cyan">
+            <div class="way-head">
+              <svg class="i"><use href="assets/icons.svg#plug"/></svg>
+              <div><b>MCP に対応した AI</b><span>Writer の中で頼むだけ</span></div>
+              <em class="tag">いちばん手軽</em>
+            </div>
+            <ul class="ai-list" aria-label="MCP に対応した AI">
+              <li>Claude Code</li><li>OpenAI Codex</li><li>Gemini CLI</li><li>Antigravity</li><li>GitHub Copilot</li><li>Cursor</li>
+            </ul>
+            <ol class="way-steps">
+              <li>Writer の AI チャットに、やりたいことをふだんの言葉で書いて送ります</li>
+              <li>AI が実際の画面を調べて操作を試し、通った操作だけをフローに残します</li>
+              <li>組み上がっていく様子が、そのままフロー図に出ます。迷ったところはチャットのカードで聞いてきます</li>
+              <li>できたら変更を読んで承諾します</li>
+            </ol>
+            <ul class="ticks">
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>ボタンや入力欄は、AI が画面から見つけて指定します</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>業務の棚卸しは、聞き取りに答えるそばから紙が埋まります</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>作業中に送った文も、作業を止めずに AI に届きます</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>ノードや変更の確認から、そのまま AI に直しを依頼できます</li>
+            </ul>
+          </div>
+          <div class="way c-green">
+            <div class="way-head">
+              <svg class="i"><use href="assets/icons.svg#copy"/></svg>
+              <div><b>MCP に対応していない AI</b><span>コピーと貼り付けで</span></div>
+              <em class="tag">いつものチャットのまま</em>
+            </div>
+            <ul class="ai-list" aria-label="MCP に対応していない AI">
+              <li>Microsoft Copilot</li><li>ChatGPT</li><li>Gemini</li><li>Claude</li><li>ほかの AI のチャット</li>
+            </ul>
+            <ol class="way-steps">
+              <li>依頼を書いて「コピーして ○○ を開く」を押すと、答え方の指示・今のフロー・依頼をまとめてコピーし、AI のチャットが開きます</li>
+              <li>チャットに貼り付けて送ります</li>
+              <li>AI の答えをコピーして Writer に戻ると「クリップボードから取り込む」が出ます</li>
+              <li>変わったところと、あなたの作業を確かめ、「試し実行」で動かします</li>
+            </ol>
+            <ul class="ticks">
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>「画面を添える」で、画面のボタンや入力欄の名前と種類を依頼に入れられます。入力された値や画面の文章は入れません</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>試し実行で止まったら、止まったところと画面の様子を入れた修正の依頼をボタン 1 つでコピーします</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>AI からの確認事項は、カードで「そのとおり／違う」を選んでまとめて返せます</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>業務の棚卸しも、聞き取りの手引きをコピーし、AI のまとめを取り込むと紙に載ります</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>AI は何も実行せず、画面やパスワードを見ることもありません</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3">できることの違い</h3>
+        <p class="sub cmp-sub">どちらで作っても、できあがるフローは同じです。違うのは、作るときの手間です。</p>
+        <div class="cmp-scroll" tabindex="0" role="region" aria-label="MCP に対応した AI と、していない AI の違い">
+          <table class="cmp cmp-2 cmp-wrap">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col" class="me">MCP に対応した AI</th>
+                <th scope="col">MCP に対応していない AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">頼み方</th>
+                <td class="me">Writer の AI チャットで送るだけ</td>
+                <td>依頼をコピーして AI のチャットに貼り、答えをコピーして Writer に戻す</td>
+              </tr>
+              <tr>
+                <th scope="row">ボタン・入力欄</th>
+                <td class="me">AI が実際の画面を調べて指定する</td>
+                <td>「画面を添える」で部品の名前を AI に渡す。足りないところは「画面から選ぶ」でクリックして指定</td>
+              </tr>
+              <tr>
+                <th scope="row">動くかの確認</th>
+                <td class="me">AI が操作を 1 つずつ試し、通ったものだけを残す</td>
+                <td>取り込んだあとに「試し実行」。止まったら修正の依頼をコピーして AI に送る</td>
+              </tr>
+              <tr>
+                <th scope="row">組み上がる様子</th>
+                <td class="me">フロー図にその場で出る</td>
+                <td>取り込んだときに、変わったところを一覧で出す</td>
+              </tr>
+              <tr>
+                <th scope="row">業務の棚卸し</th>
+                <td class="me">聞き取りに答えるそばから紙が埋まる</td>
+                <td>AI の聞き取りのまとめを取り込むと、紙に載る</td>
+              </tr>
+              <tr>
+                <th scope="row">AI の契約</th>
+                <td class="me">それぞれの AI の契約（Antigravity は無料の Google アカウントでも使える）</td>
+                <td>会社ですでに使っている AI のチャットのまま。新しい契約は要らない</td>
+              </tr>
+              <tr>
+                <th scope="row">動かすとき</th>
+                <td colspan="2">どちらも同じ。確定したフローは PC の中だけで、AI なしで動く</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cmp-note">AI は Writer が最初に「ふだん使っている AI」を聞いて決め、MCP に対応しているかどうかは Writer が判断します。あとから設定 → AI の「AI とのつなぎ方」で変えられるので、コピーと貼り付けで始めて、MCP に対応した AI が使えるようになったら切り替えることもできます。</p>
       </div>
     </section>
 
@@ -294,7 +401,7 @@
               </tr>
               <tr>
                 <th scope="row">AI に頼んで作る</th>
-                <td class="me">Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor から、日本語で頼める。AI が画面を調べながら組む</td>
+                <td class="me">Claude Code・Codex・Gemini CLI・Antigravity・GitHub Copilot・Cursor から、日本語で頼める。AI が画面を調べながら組む。MCP に対応していない Microsoft Copilot や ChatGPT のチャットでも、コピーと貼り付けで作れる</td>
                 <td>製品に組み込まれた AI 機能で作る。地域・言語・プランが限られるものもある</td>
               </tr>
               <tr>
@@ -381,7 +488,11 @@
           </details>
           <details>
             <summary>AI の契約は必要ですか？</summary>
-            <p>AI に作ってもらうときは、Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor のどれかが使える契約が必要です。作ったフローを動かすだけなら、AI は要りません。MCP に対応していない AI チャット（Microsoft Copilot など）でも、仕様書を渡して答えを貼り付ける方法でフローを作れます。</p>
+            <p>新しい契約は要りません。会社ですでに使っている AI で作れます。Claude Code・Codex・Gemini CLI・Antigravity・GitHub Copilot・Cursor なら Writer の中で頼むだけで、Microsoft Copilot やブラウザーの ChatGPT・Gemini・Claude のチャットなら、依頼と答えをコピーして貼り付けて作ります（<a href="#ai">違いはこちら</a>）。作ったフローを動かすだけなら、AI は要りません。</p>
+          </details>
+          <details>
+            <summary>MCP とは何ですか？</summary>
+            <p>AI が外のソフトを直接操作するための、共通の仕組み（Model Context Protocol）です。SpellSheet は MCP サーバーを同梱していて、MCP に対応した AI は画面を調べる・操作を試す・フローを書く・実行するまでを自分で行えます。MCP に対応していない AI でもフローは作れますが、画面を調べたり試したりはできないため、Writer が依頼をまとめてコピーし、答えを取り込んで確かめる形になります。</p>
           </details>
           <details>
             <summary>業務の画面やデータは外に出ますか？</summary>
