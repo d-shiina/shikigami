@@ -34,11 +34,12 @@ fn examples_validate() {
             );
         }
     }
-    // Only the steps that send are approved like other outside effects.
+    // The steps that send, and the one that deletes, are approved like
+    // other outside effects.
     for def in &defs {
         assert_eq!(
             def.risk == RiskLevel::Dangerous,
-            def.step_type == types::SEND || def.step_type == types::SEND_DRAFT,
+            [types::SEND, types::SEND_DRAFT, types::DELETE].contains(&def.step_type.as_str()),
             "{}",
             def.step_type
         );

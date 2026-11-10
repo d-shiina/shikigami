@@ -19,6 +19,8 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 <img src="docs/assets/demo-ja.gif" alt="SpellSheet Writer の AI チャットで Claude Code に取引先ごとの請求書づくりを頼むと、中央のフロー図にノードが 1 つずつ増え、そのあと「実行」を押すと AI なしで各ノードが順に光りながら動く">
 
+<sub>この動画は、用意したフローを Writer の実際の画面で再生したものです。AI との実際のやり取りの録画ではなく、速さも AI の速さではありません。</sub>
+
 ## 使い始める
 
 1. [最新のリリース](https://github.com/spellsheet/spellsheet/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。

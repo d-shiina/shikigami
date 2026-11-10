@@ -73,7 +73,7 @@ pub(crate) enum Command {
     /// Write the guide for an AI that has no MCP (Microsoft Copilot, a chat
     /// window): short instructions for an agent's instruction box and a
     /// reference of every step type and function, to attach as knowledge.
-    /// The AI answers with JSON that Studio takes in (AI の答えを貼り付け).
+    /// The AI answers with JSON that Writer takes in (AI の答えを貼り付け).
     AiGuide {
         /// Folder to write the files to.
         #[arg(long, default_value = ".")]
@@ -117,7 +117,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Manager(agent_cmd::ManagerCmd),
     /// This PC's audit trail: who changed, published and ran which flow,
-    /// from Studio, the CLI, an AI, a schedule or a management server.
+    /// from Writer, the CLI, an AI, a schedule or a management server.
     Audit {
         /// Only from this day or time on (2026-11-01 or RFC 3339).
         #[arg(long)]
@@ -353,7 +353,7 @@ pub(crate) enum WorkspaceCmd {
         #[arg(long)]
         shared: bool,
     },
-    /// Make DIR the default workspace for Studio, the CLI and the MCP server.
+    /// Make DIR the default workspace for Writer, the CLI and the MCP server.
     Use { dir: PathBuf },
 }
 

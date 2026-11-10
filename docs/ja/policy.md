@@ -82,7 +82,7 @@
 | `notify` | 空 | 無人実行（Worker のスケジュールと `spellsheet run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
 | `desktop.waitUnlockedMinutes` | なし（すぐ止まる） | 画面ロック中、マウス・キーボードを使うノードは、だれかがロックを解くまでこの分数まで待ち、それでも解かれなければ `DESKTOP_UNAVAILABLE` で止まります。待ち始めたことを実行のログに一度書きます。人のいる PC 向けです（[schedules.md](schedules.md)） |
 
-`allow`＝承認なしで許可、`ask`＝承認が必要（人が Writer で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
+`allow`＝承認なしで許可、`ask`＝承認が必要（人が Writer で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイル・シート・メールの削除、メールの送信、外部への HTTP、プログラムの実行など。全体は `list_step_types` が返す各ステップ型の `risk`）。登録されていないステップ型は `dangerous` 扱いです。
 
 壊れた `policy.json`（JSON の誤り、知らない項目、オリジンでない `sites`）は「全部許可」にはせず、実行を `POLICY_INVALID` で止めます。設定は実行の開始時に読むので、変更は次の実行から効きます。
 

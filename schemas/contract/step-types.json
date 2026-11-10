@@ -13634,7 +13634,7 @@
       },
       "blocks": [],
       "hasOutput": false,
-      "risk": "interactive",
+      "risk": "dangerous",
       "expressionParams": [],
       "bindsVariables": [],
       "secretParams": [],
@@ -15209,7 +15209,7 @@
       },
       "blocks": [],
       "hasOutput": true,
-      "risk": "interactive",
+      "risk": "dangerous",
       "expressionParams": [],
       "bindsVariables": [],
       "secretParams": [

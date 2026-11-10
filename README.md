@@ -21,6 +21,8 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 
 <img src="docs/assets/demo-en.gif" alt="In SpellSheet Writer, Claude Code is asked in the AI chat to make invoices per customer; the flow grows node by node in the middle, and pressing Run then runs it without AI, lighting up each node in turn">
 
+<sub>The clip shows Writer's real screens replayed with a prepared flow; it is not a recording of a live AI session, and the speed is not the AI's.</sub>
+
 ## Getting started
 
 1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
