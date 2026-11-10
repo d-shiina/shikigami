@@ -8,7 +8,7 @@ The AI never runs anything and never sees your screen or your passwords. What it
 
 ## 0. Say which AI you use
 
-The first time you open Writer's AI chat with no AI on the PC that Writer can run (such as Claude Code), Writer asks which AI you use. You pick it by name; Writer decides whether it can use MCP.
+With no AI on the PC that Writer can run (such as Claude Code), Writer first asks which AI you use: on the flows page under "What do you want to automate?" while there are no flows yet, or else the first time you open the AI chat. You pick it by name; Writer decides whether it can use MCP.
 
 - **Microsoft Copilot**: work account (Microsoft 365 Copilot) or personal account. Both are used by copying into the chat.
 - **ChatGPT, Gemini, Claude**: the chat in the browser or app, or the version installed on the PC (Codex, Antigravity, Claude Code). With the installed version, Writer runs the AI, which looks at the screen and tests as it builds the flow.
