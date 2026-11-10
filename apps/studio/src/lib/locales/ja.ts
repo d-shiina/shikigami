@@ -1704,6 +1704,13 @@ export const ja = {
   },
   desk: {
     reportView: "確認",
+    flowTitle: "このフローの流れ",
+    flowNote: "AI が作った新しいフローです。何から始めて、何をして、何を返すかを上から順に見てください。行を押すとフロー図でそのノードを開きます",
+    startsFrom: "使う値（既定値）",
+    givesBack: "結果として返す値",
+    steps: (n: number) => `流れ（${n} ノード）`,
+    formula: "計算式",
+    none: "なし",
     reportOf: "AI の変更の確認",
     explanationLead: "AI からの説明",
     backToReport: "確認に戻る",
@@ -1717,7 +1724,8 @@ export const ja = {
     tileNoPromises: "期待する結果はまだありません",
     tileNoPromisesSub: "AI に書いてもらえます",
     tileAsk: (n: number) => `答えてほしいこと ${n} 件`,
-    tileAskSub: (promises: number, checks: number) => [promises > 0 && `期待する結果 ${promises}`, checks > 0 && `AI からの質問 ${checks}`].filter(Boolean).join(" ・ "),
+    tileAskSub: (promises: number, checks: number) =>
+      [promises > 0 && `期待する結果 ${promises} 件が正しいか`, checks > 0 && `AI からの質問 ${checks} 件`].filter(Boolean).join("・"),
     tileAnswered: "答えることはありません",
     tileAnsweredSub: "すべて答えました",
     tileEffects: (n: number) => `このフローが変えるもの ${n} 件`,

@@ -1705,6 +1705,13 @@ export const en: Dict = {
   },
   desk: {
     reportView: "Review",
+    flowTitle: "How this flow runs",
+    flowNote: "A new flow the AI made. Read what it starts from, what it does and what it gives back, top to bottom. Click a line to open that node in the flow chart",
+    startsFrom: "Values it uses (defaults)",
+    givesBack: "Values it gives back",
+    steps: (n: number) => `Steps (${n} node${n === 1 ? "" : "s"})`,
+    formula: "formula",
+    none: "None",
     reportOf: "Review of the AI's change",
     explanationLead: "What the AI says",
     backToReport: "Back to review",
@@ -1718,7 +1725,8 @@ export const en: Dict = {
     tileNoPromises: "No expected results yet",
     tileNoPromisesSub: "Ask the AI to write them",
     tileAsk: (n: number) => `${n} to answer`,
-    tileAskSub: (promises: number, checks: number) => [promises > 0 && `${promises} expected results`, checks > 0 && `${checks} questions from the AI`].filter(Boolean).join(" · "),
+    tileAskSub: (promises: number, checks: number) =>
+      [promises > 0 && `Are ${promises} expected result${promises === 1 ? "" : "s"} right?`, checks > 0 && `${checks} question${checks === 1 ? "" : "s"} from the AI`].filter(Boolean).join(" · "),
     tileAnswered: "Nothing to answer",
     tileAnsweredSub: "All answered",
     tileEffects: (n: number) => `${n} things this flow changes`,

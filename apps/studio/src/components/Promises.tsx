@@ -171,7 +171,12 @@ function PromiseRow({
   onWrong?: () => void;
 }) {
   const goTo = useStudio((s) => s.goTo);
-  const terms = promiseTerms(promise.testCase);
+  const variables = useStudio((s) => s.flow?.variables);
+  const labels = useMemo(
+    () => new Map((variables ?? []).flatMap((v) => (v.description?.trim() ? [[v.name, v.description.trim()] as const] : []))),
+    [variables],
+  );
+  const terms = promiseTerms(promise.testCase, labels);
   const kept = promise.kept;
   const state = !kept ? "unchecked" : kept.passed ? "kept" : "broken";
   const word = { kept: t.promises.kept, broken: t.promises.broken, unchecked: t.promises.unchecked }[state];

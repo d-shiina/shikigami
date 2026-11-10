@@ -19,6 +19,8 @@ import { Promises, usePromises } from "./Promises";
 import { promiseCounts } from "../lib/promises";
 import { stepLabel, t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
+import { fillTarget, type InputRow, inputRows, unchangedRows } from "../lib/approval";
+import { FlowAtAGlance } from "./ReviewFlow";
 
 export type InboxItem = {
   flowId: string;
@@ -319,6 +321,8 @@ export function ReviewReport() {
     const newestFirst = [...oldestFirst].reverse();
     return effectsOf(flow?.steps ?? [], summary.steps, summary.removed, defs, (step) => stepBefore(step, newestFirst));
   }, [oldestFirst, flow, summary, defs]);
+  // Targets read with the starting values no node changes: `{{ outFile }}` as output/売上まとめ.xlsx.
+  const values = useMemo(() => (flow ? unchangedRows(inputRows(flow, {}), flow.steps ?? [], flow.variables) : []), [flow]);
   if (!newest || !oldest) {
     return (
       <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24">
@@ -342,7 +346,13 @@ export function ReviewReport() {
   const changesFirst = r.freshPromises.length === 0 && r.checks.length === 0;
   let n = changesFirst ? 1 : 0;
   const sectionCount = 1 + (r.checks.length > 0 ? 1 : 0) + 2;
-  const changesSection = (
+  const changesSection =
+    summary.created && flow ? (
+      // A new flow has no "before": read it whole, in order, instead of a card per node.
+      <PaperSection n={changesFirst ? 1 : sectionCount} title={t.desk.flowTitle} note={t.desk.flowNote}>
+        <FlowAtAGlance flow={flow} defs={defs} />
+      </PaperSection>
+    ) : (
     <PaperSection n={changesFirst ? 1 : sectionCount} title={t.desk.changes} aside={headline(summary)}>
             <div className="space-y-3">
               {cards.map((card) => (
@@ -363,7 +373,7 @@ export function ReviewReport() {
               </div>
             )}
           </PaperSection>
-  );
+    );
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="canvas-bg min-h-0 flex-1 overflow-y-auto px-6 pt-8 pb-12">
@@ -396,7 +406,7 @@ export function ReviewReport() {
               <FeedbackBox feedback={r.feedback} fixedAfter={newest.revision > r.feedback.revision} />
             </div>
           )}
-          <Tiles review={r} effects={effects} />
+          <Tiles review={r} effects={effects} values={values} created={summary.created} />
 
           {changesFirst && changesSection}
           <PaperSection id="review-promises" n={++n} title={t.promises.title} note={t.desk.promisesNote} aside={r.freshPromises.length > 0 ? t.promises.fromAi(r.freshPromises.length) : undefined}>
@@ -425,7 +435,7 @@ export function ReviewReport() {
           )}
 
           <PaperSection id="review-effects" n={++n} title={t.desk.effects} note={t.desk.effectsNote}>
-            <EffectList effects={effects} />
+            <EffectList effects={effects} values={values} created={summary.created} />
           </PaperSection>
 
           {!changesFirst && changesSection}
@@ -491,7 +501,7 @@ export function ReviewFoot({ report }: { report: boolean }) {
 }
 
 /** The three things to decide, at a glance: whether the promises hold, what waits for an answer, and what changes outside. Each leads to its section. */
-function Tiles({ review: r, effects }: { review: ReturnType<typeof useReview>; effects: Effect[] }) {
+function Tiles({ review: r, effects, values, created }: { review: ReturnType<typeof useReview>; effects: Effect[]; values: InputRow[]; created: boolean }) {
   const counts = promiseCounts(r.promises);
   const changed = effects.filter((e) => e.status !== "same");
   const danger = changed.some((e) => e.risk === "dangerous" && e.status !== "removed");
@@ -515,7 +525,7 @@ function Tiles({ review: r, effects }: { review: ReturnType<typeof useReview>; e
       ? {
           tone: danger ? "bad" : "plain",
           big: t.desk.tileEffects(changed.length),
-          small: first ? `${t.desk.effect[first.status]}：${first.action}${first.target ? ` ${first.target}` : ""}` : "",
+          small: first ? `${created ? "" : `${t.desk.effect[first.status]}：`}${first.action}${first.target ? ` ${fillTarget(first.target, values)}` : ""}` : "",
         }
       : { tone: "plain", big: t.desk.tileNoEffects, small: t.desk.tileNoEffectsSub };
   const tone = {
@@ -694,7 +704,7 @@ function Marked({ parts, marks, other, tone }: { parts: Part[]; marks?: boolean[
 }
 
 /** What the flow touches outside, with what this review changes on top. */
-function EffectList({ effects }: { effects: Effect[] }) {
+function EffectList({ effects, values, created }: { effects: Effect[]; values: InputRow[]; created: boolean }) {
   const [showSame, setShowSame] = useState(false);
   const changed = effects.filter((e) => e.status !== "same");
   const same = effects.filter((e) => e.status === "same");
@@ -703,7 +713,7 @@ function EffectList({ effects }: { effects: Effect[] }) {
     <div className="space-y-1">
       {changed.length === 0 && <p className="text-[12px] text-slate-600">{t.desk.noEffectChange}</p>}
       {changed.map((e) => (
-        <EffectRow key={`${e.status}${e.action}${e.target}`} effect={e} />
+        <EffectRow key={`${e.status}${e.action}${e.target}`} effect={e} values={values} plain={created} />
       ))}
       {same.length > 0 && (
         <>
@@ -711,7 +721,7 @@ function EffectList({ effects }: { effects: Effect[] }) {
             {showSame ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
             {t.desk.sameEffects(same.length)}
           </button>
-          {showSame && same.map((e) => <EffectRow key={`same${e.action}${e.target}`} effect={e} />)}
+          {showSame && same.map((e) => <EffectRow key={`same${e.action}${e.target}`} effect={e} values={values} plain={created} />)}
         </>
       )}
     </div>
@@ -725,7 +735,7 @@ const EFFECT_TAG: Record<Effect["status"], string> = {
   same: "",
 };
 
-function EffectRow({ effect }: { effect: Effect }) {
+function EffectRow({ effect, values, plain }: { effect: Effect; values: InputRow[]; plain: boolean }) {
   const goTo = useStudio((s) => s.goTo);
   const danger = effect.risk === "dangerous";
   return (
@@ -734,8 +744,8 @@ function EffectRow({ effect }: { effect: Effect }) {
       onClick={() => effect.status !== "removed" && effect.stepId && goTo(effect.stepId)}
       className="flex w-full items-start gap-1.5 rounded-md px-1 py-0.5 text-left text-[12.5px] leading-relaxed hover:bg-slate-100"
     >
-      {effect.status === "same" ? (
-        <span className="w-[3.2em] shrink-0 text-center text-slate-400">・</span>
+      {effect.status === "same" || plain ? (
+        <span className={`${plain ? "w-4" : "w-[3.2em]"} shrink-0 text-center text-slate-400`}>・</span>
       ) : (
         <span className={`mt-0.5 w-[3.2em] shrink-0 rounded-md text-center text-[10px] leading-4 font-bold ${EFFECT_TAG[effect.status]}`}>
           {t.desk.effect[effect.status]}
@@ -743,7 +753,11 @@ function EffectRow({ effect }: { effect: Effect }) {
       )}
       <span className={`min-w-0 ${effect.status === "same" ? "text-slate-500" : ""} ${effect.status === "removed" ? "line-through" : ""}`}>
         <span className={danger ? "font-semibold text-shu-600" : effect.reads ? "" : "font-semibold"}>{effect.action}</span>
-        {effect.target && <span className="ml-1 font-mono text-[12px] break-all">{effect.target}</span>}
+        {effect.target && (
+          <span className="ml-1 font-mono text-[12px] break-all" title={effect.target}>
+            {fillTarget(effect.target, values)}
+          </span>
+        )}
         {effect.external && (
           <span className="mt-0.5 flex items-center gap-1 text-[11.5px] text-amber-700">
             <CloudUpload size={12} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />

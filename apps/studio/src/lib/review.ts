@@ -41,6 +41,14 @@ export function summarize(entries: HistoryEntry[], current: Step[] = []): Review
       if (added) {
         steps.set(added, "added");
         removed.delete(added);
+        // The nodes inside an added loop or branch are added too (the editor counts them the same way).
+        if (op.op === "addStep")
+          for (const child of flatten(Object.values(op.step.blocks ?? {}).flat())) {
+            if (child.id) {
+              steps.set(child.id, "added");
+              removed.delete(child.id);
+            }
+          }
       } else if (op.op === "updateStep" || op.op === "moveStep") {
         if (!steps.has(op.stepId)) steps.set(op.stepId, "changed");
       } else if (op.op === "removeStep") {

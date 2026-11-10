@@ -4,6 +4,7 @@
 import type { EditOp, HistoryEntry, Flow, StepPatch, StepTypeDef } from "@spellsheet/schema";
 import { findStep } from "../store";
 import { stepLabel, t } from "./i18n";
+import { clientName } from "./approval";
 
 export type FieldDiff = { field: string; before: unknown; after: unknown };
 
@@ -111,7 +112,7 @@ export function describe(
 
 /** Who made a change, for the avatar and the line header. */
 export function actorLabel(entry: HistoryEntry): string {
-  if (entry.actor.kind === "mcp" && entry.actor.name) return entry.actor.name;
+  if (entry.actor.kind === "mcp" && entry.actor.name) return clientName(entry.actor.name) ?? entry.actor.name;
   return t.actor[entry.actor.kind];
 }
 
