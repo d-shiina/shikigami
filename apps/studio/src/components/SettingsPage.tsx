@@ -9,6 +9,7 @@ import { useAgent } from "../agent";
 import { type BandSettings, loadBandSettings, saveBandSettings } from "../lib/bandSettings";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
+import { ApiKeyBox } from "./AgentApiKey";
 import { AboutSection, McpSetupRow } from "./AppMenu";
 import { DistributionSettings } from "./Distribution";
 import { PolicySection } from "./PolicySection";
@@ -101,6 +102,11 @@ function AgentSection() {
           </button>
         )}
       </SettingsRow>
+      {info?.usesApiKey && (
+        <SettingsRow label={t.shell.agentApiKey} align="start">
+          <ApiKeyBox inSettings />
+        </SettingsRow>
+      )}
       {info?.command && (
         <SettingsRow label={t.shell.agentCommand}>
           <code className="block truncate font-mono text-[12px] text-slate-600" title={info.command}>

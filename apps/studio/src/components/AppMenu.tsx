@@ -32,6 +32,7 @@ export const MCP_CLIENTS: { kind: McpClient; name: string }[] = [
   { kind: "claudeCode", name: "Claude Code" },
   { kind: "codex", name: "Codex" },
   { kind: "cursor", name: "Cursor" },
+  { kind: "antigravity", name: "Antigravity" },
   { kind: "gemini", name: "Gemini CLI" },
   { kind: "copilot", name: "GitHub Copilot" },
 ];
@@ -46,7 +47,9 @@ export function mcpCommand(kind: McpClient, cliPath: string): string {
     case "copilot":
       return `copilot mcp add spellsheet -- "${cliPath}" mcp`;
     case "cursor":
-      // What goes in ~/.cursor/mcp.json when the "add" link cannot be used.
+    case "antigravity":
+      // What goes in ~/.cursor/mcp.json when the "add" link cannot be used,
+      // or in Antigravity's ~/.gemini/config/mcp_config.json (it has no add command).
       return JSON.stringify({ mcpServers: { spellsheet: { command: cliPath, args: ["mcp"] } } }, null, 2);
     default:
       return `claude mcp add --scope user spellsheet -- "${cliPath}" mcp`;
@@ -117,7 +120,7 @@ function McpSetup({ cliPath, initial }: { cliPath: string; initial: McpClient })
         </div>
       )}
       {problem && <p className="mb-2 text-xs text-shu-600">{problem}</p>}
-      <p className="mb-1 text-[11.5px] text-slate-500">{kind === "cursor" ? t.mcpCursorFile : t.mcpRunOnce}</p>
+      <p className="mb-1 text-[11.5px] text-slate-500">{kind === "cursor" ? t.mcpCursorFile : kind === "antigravity" ? t.mcpAntigravityFile : t.mcpRunOnce}</p>
       <div className="flex items-start gap-2">
         <code className="block min-w-0 flex-1 rounded-md bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all whitespace-pre-wrap">{text}</code>
         <button type="button" onClick={() => void copy()} className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">

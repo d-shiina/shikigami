@@ -6,6 +6,11 @@
 
 ## 未リリース
 
+### 主な変更
+
+- Writer の AI チャットで使う AI に Antigravity（Google の Antigravity CLI、Gemini CLI の後継）を足しました。無料の Google アカウントでも使えます（無料の回数は週ごとで、Google が決めます）。設定 → AI の「使う AI」で選ぶと、インストールから画面で行え、サインインは Antigravity の画面からブラウザーで行います。Antigravity には SpellSheet のツールだけを許可し（`~/.gemini/antigravity-cli/settings.json` の `permissions.allow` に `mcp(spellsheet/*)` を足します）、コマンドの実行やファイルの書き込みは許可しません
+- Gemini CLI は Google AI Studio の API キーで動かすようにしました。Google が個人の Google アカウントでのサインインを受け付けなくなったためです。AI チャットと設定 → AI に API キーの欄があり、キーは Windows 資格情報マネージャーに保存して、Gemini CLI を起動するときだけ渡します（無料の枠は 1 日 250 回まで）
+
 ## [0.1.24] - 2026-11-10
 
 ### 主な変更
