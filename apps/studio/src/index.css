@@ -37,8 +37,9 @@
   --manual-desk: #e6e8ec;
   /* The 手順書's colours: the swirl's navy for headings, its colours for what a note says. */
   --manual-navy: #0f3a66;
-  /* The highlighter drawn under a sheet's headings (Highlight). */
-  --sheet-marker: rgb(255 224 102 / 0.75);
+  /* The highlighter drawn under a sheet's headings (Highlight): as usual, and where the person has to answer. */
+  --sheet-marker: rgb(125 185 232 / 0.38);
+  --sheet-marker-check: rgb(251 182 206 / 0.65);
   --manual-check: #3f9a5a;
   --manual-check-bg: #eef8f1;
   --manual-caution: #e8501f;
@@ -132,7 +133,8 @@
   --color-desk: #0e0f11;
   --manual-desk: #0a0b0d;
   --manual-navy: #9cc3ea;
-  --sheet-marker: rgb(184 134 11 / 0.5);
+  --sheet-marker: rgb(74 168 224 / 0.32);
+  --sheet-marker-check: rgb(244 114 182 / 0.26);
   --manual-check: #5cc27e;
   --manual-check-bg: #16241a;
   --manual-caution: #f07a52;
