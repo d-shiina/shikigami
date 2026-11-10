@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, agent } from "../lib/api";
@@ -61,7 +61,7 @@ export function AgentPane({ width }: { width: number }) {
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
   };
   // Only the last reply's card can still be answered, and not while the AI works.
-  const canChoose = !busy && !blockedElsewhere && !chat.interrupting && !!info?.available;
+  const canChoose = !busy && !blockedElsewhere && !!info?.available;
   return (
     <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col bg-sheet">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-3 pl-2">
@@ -165,10 +165,10 @@ export function AgentPane({ width }: { width: number }) {
           className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.interruptHint : undefined}>
-            {blockedElsewhere ? t.agent.busyElsewhere : chat.interrupting ? t.agent.interrupting : busy ? t.agent.interruptHint : t.agent.sendHint}
+          <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.noteHint : undefined}>
+            {blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}
           </span>
-          {chat.turnId && !chat.interrupting && (
+          {chat.turnId && (
             <button
               type="button"
               onClick={() => void stop(chat.id)}
@@ -179,12 +179,12 @@ export function AgentPane({ width }: { width: number }) {
           )}
           <button
             type="button"
-            disabled={!info?.available || chat.interrupting !== null || blockedElsewhere || draft.trim() === ""}
+            disabled={!info?.available || blockedElsewhere || draft.trim() === ""}
             onClick={() => void submit()}
-            title={busy ? t.agent.interruptHint : undefined}
-            className={`${chat.turnId && !chat.interrupting ? "" : "ml-auto "}h-8 shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400`}
+            title={busy ? t.agent.noteHint : undefined}
+            className={`${chat.turnId ? "" : "ml-auto "}h-8 shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400`}
           >
-            {busy ? t.agent.interrupt : t.agent.send}
+            {t.agent.send}
           </button>
         </div>
       </div>
@@ -366,6 +366,13 @@ function Item({ item, onChoose }: { item: ChatItem; onChoose: ((answer: string) 
       <div className="ml-8">
         {item.context && <div className="mb-0.5 truncate text-right text-[10px] text-slate-400">{item.context}</div>}
         <div className="rounded-lg rounded-tr-sm bg-slate-100 px-3 py-2 text-[13px] whitespace-pre-wrap text-ink">{item.text}</div>
+        {item.note && (
+          <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10.5px] ${item.note === "heard" ? "text-slate-500" : "text-brand-700"}`}>
+            {item.note === "heard" ? <Check size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />}
+            {item.note === "heard" ? t.agent.noteHeard : t.agent.noteWaiting}
+          </div>
+        )}
+        {item.refused && <div className="mt-0.5 text-right text-[10.5px] text-shu-600">{item.refused}</div>}
       </div>
     );
   }

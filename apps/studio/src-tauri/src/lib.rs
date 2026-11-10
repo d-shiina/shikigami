@@ -281,6 +281,8 @@ pub fn run() {
             agent::agent_select,
             agent::agent_send,
             agent::agent_stop,
+            agent::agent_note,
+            agent::agent_take_notes,
             agent::agent_login,
             agent::agent_login_code,
             agent::agent_login_cancel,

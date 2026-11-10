@@ -68,7 +68,6 @@ const chat = (over: Partial<Chat>): Chat => ({
   turnId: null,
   sending: false,
   unread: false,
-  interrupting: null,
   draft: "",
   updatedAt: 0,
   ...over,

@@ -1531,6 +1531,14 @@
             "true",
             "false"
           ]
+        },
+        {
+          "id": "inbox",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "inbox"
         }
       ]
     }

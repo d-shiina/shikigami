@@ -546,6 +546,8 @@ export type AgentEvent = { turnId: string } & (
   /** The agent asks the person to choose (ask_user_to_choose); the answer is the next message. */
   | { kind: "choice"; question: string; options: ChoiceOption[]; recommended: number | null; reason: string | null }
   | { kind: "created"; flowId: string; name: string }
+  /** The AI read these messages, sent while it worked, with a tool result. */
+  | { kind: "heard"; ids: string[] }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
 
@@ -555,6 +557,10 @@ export const agent = {
   /** Returns the turn id; progress arrives through `onEvent`. */
   send: (input: AgentRequest) => call<string>("agent_send", { input }),
   stop: (turnId: string) => call<void>("agent_stop", { turnId }),
+  /** A message written while the turn runs; the AI reads it with its next tool call. Fails with TURN_ENDED once the turn is over. */
+  note: (turnId: string, id: string, message: string) => call<void>("agent_note", { turnId, id, message }),
+  /** After a turn: takes back the messages the AI never read and returns their ids. */
+  takeNotes: (turnId: string) => call<string[]>("agent_take_notes", { turnId }),
   /** Starts Claude Code's sign-in; progress arrives through `onLogin`. */
   login: () => call<void>("agent_login"),
   /** The code the sign-in page shows when it cannot return by itself. */
