@@ -27,8 +27,8 @@ import { flatten } from "../lib/review";
 import { Masthead, Stripe } from "./Masthead";
 import { FlowAtAGlance } from "./ReviewFlow";
 import { FileBox, OutputValues, UsedTable } from "./ReviewResult";
-import { Highlight } from "./Highlight";
-import { SheetNumber } from "./SheetNumber";
+import type { HighlightTone } from "./Highlight";
+import { SheetHeading } from "./SheetHeading";
 
 export type InboxItem = {
   flowId: string;
@@ -461,6 +461,7 @@ export function ReviewReport() {
           <PaperSection
             id="review-result"
             n={++n}
+            tone="check"
             title={t.desk.result}
             note={t.desk.resultNote}
             aside={latest ? `${t.desk.factRun} ・ ${relativeTime(latest.finishedAt)}` : undefined}
@@ -526,6 +527,7 @@ export function ReviewReport() {
             <PaperSection
               id="review-checks"
               n={++n}
+              tone="check"
               title={t.desk.judgements}
               note={t.desk.judgementsNote}
               aside={t.desk.answeredOf(r.checks.filter((q) => answers[`${markKey}:${q}`]).length, r.checks.length)}
@@ -674,13 +676,13 @@ export function ReviewFoot({ report }: { report: boolean }) {
   );
 }
 
-export function PaperSection({ id, n, title, note, aside, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; children: React.ReactNode }) {
+export function PaperSection({ id, n, title, note, aside, tone, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; tone?: HighlightTone; children: React.ReactNode }) {
   return (
     <section id={id} className="mt-9 scroll-mt-6">
-      <h2 className="flex items-center gap-2 text-[15px] font-bold">
-        {n !== undefined && <SheetNumber n={n} />}
-        <Highlight>{title}</Highlight>
-        {aside && <span className="ml-auto text-[12px] font-normal text-slate-500">{aside}</span>}
+      <h2>
+        <SheetHeading n={n} tone={tone} aside={aside}>
+          {title}
+        </SheetHeading>
       </h2>
       {note && <p className="mt-0.5 mb-3 ml-7 text-[12px] text-slate-500">{note}</p>}
       <div className={note ? "" : "mt-3"}>{children}</div>

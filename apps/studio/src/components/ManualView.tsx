@@ -38,7 +38,7 @@ import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
 import { Sentence, StoryView } from "./StoryView";
 import { CanvasDock } from "./Toolbar";
-import { Highlight } from "./Highlight";
+import { SheetHeading, SheetSubheading } from "./SheetHeading";
 import { SheetNumber } from "./SheetNumber";
 
 type View = "flow" | "story" | "variables";
@@ -524,9 +524,8 @@ function Sheet({ page, total, title, edition, children }: { page: Page; total: n
 
 function CoverHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-6 mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-[var(--manual-navy)]">
-      <span className="h-3.5 w-1 bg-[var(--manual-navy)]" />
-      {children}
+    <h2 className="mt-6 mb-2">
+      <SheetSubheading>{children}</SheetSubheading>
     </h2>
   );
 }
@@ -621,9 +620,10 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
     <>
       {page.first ? (
         <>
-          <h2 className="mb-1.5 flex items-center gap-3 border-b-2 border-[var(--manual-navy)] pb-2 text-[19px] font-semibold text-[var(--manual-navy)]">
-            <SheetNumber n={chapter.number} className="size-[26px] text-[14px]" />
-            <Highlight>{chapter.title}</Highlight>
+          <h2 className="mb-1.5 border-b-2 border-[var(--manual-navy)] pb-2">
+            <SheetHeading n={chapter.number} size="chapter">
+              {chapter.title}
+            </SheetHeading>
           </h2>
           <p className="mb-4 min-h-[1px] text-[12.5px] text-slate-500">{chapter.alongside.length > 0 ? t.manual.alongsideNote(chapter.alongside) : ""}</p>
         </>
