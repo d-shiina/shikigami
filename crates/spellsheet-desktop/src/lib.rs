@@ -1096,6 +1096,7 @@ fn text(input: &ActionInput, key: &str) -> Result<Text, StepError> {
         return Ok(Text {
             value: string(&input.params, key)?,
             allowed_apps: None,
+            allowed_plugins: Vec::new(),
         });
     };
     let apps: Vec<String> = secret
@@ -1114,9 +1115,20 @@ fn text(input: &ActionInput, key: &str) -> Result<Text, StepError> {
             "hint": "Call request_secret with this name and the app, written as app:<exe name> (e.g. app:billing.exe): Writer then asks the user to add it to this secret's sites."
         })));
     }
+    let allowed_plugins = secret
+        .sites
+        .iter()
+        .filter_map(|s| {
+            let (prefix, name) = s.split_at_checked(plugin_bridge::PLUGIN_SITE_PREFIX.len())?;
+            prefix
+                .eq_ignore_ascii_case(plugin_bridge::PLUGIN_SITE_PREFIX)
+                .then(|| name.to_ascii_lowercase())
+        })
+        .collect();
     Ok(Text {
         value: secret.value,
         allowed_apps: Some(apps),
+        allowed_plugins,
     })
 }
 

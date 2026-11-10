@@ -13,13 +13,14 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::OnceLock;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use spellsheet_runtime::StepError;
 
+use crate::backend::Text;
 use crate::target::process_key;
 
 /// A window a plugin reaches: every field given must match.
@@ -76,6 +77,10 @@ pub fn for_window(class_name: &str, process: &str) -> Option<&'static BridgeSpec
         .find(|b| b.windows.iter().any(|w| w.matches(class_name, process)))
 }
 
+/// The prefix of the secret site that lets a plugin receive the secret
+/// (`plugin:sap`), as for plugin steps.
+pub const PLUGIN_SITE_PREFIX: &str = "plugin:";
+
 /// How long one call may take before the plugin is given up on.
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -85,6 +90,9 @@ pub struct Connection {
     child: Child,
     stdin: ChildStdin,
     lines: Receiver<String>,
+    /// Secret values handed to the process; masked in its stderr lines.
+    masked: Arc<Mutex<Vec<String>>>,
+    timeout: Duration,
     next_id: u64,
 }
 
@@ -102,7 +110,7 @@ impl Connection {
             .current_dir(&spec.dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| {
                 StepError::permanent(
@@ -114,7 +122,9 @@ impl Connection {
                 )
                 .with_details(json!({ "hint": format!("Check that `{}` can be started and that the plugin folder {} is complete.", spec.program.display(), spec.dir.display()) }))
             })?;
-        let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
+        let (Some(stdin), Some(stdout), Some(stderr)) =
+            (child.stdin.take(), child.stdout.take(), child.stderr.take())
+        else {
             return Err(StepError::permanent(
                 "PLUGIN_UNAVAILABLE",
                 "the plugin's input and output could not be opened",
@@ -129,11 +139,25 @@ impl Connection {
                 }
             }
         });
+        // Diagnostics go to the log, with the secrets it was handed masked.
+        let masked: Arc<Mutex<Vec<String>>> = Arc::default();
+        let (to_mask, plugin) = (masked.clone(), spec.plugin.clone());
+        std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let Ok(mut line) = line else { break };
+                for value in lock(&to_mask).iter() {
+                    line = line.replace(value.as_str(), "***");
+                }
+                tracing::debug!(target: "spellsheet::adapter", adapter = %plugin, "{line}");
+            }
+        });
         Ok(Self {
             spec,
             child,
             stdin,
             lines,
+            masked,
+            timeout: CALL_TIMEOUT,
             next_id: 1,
         })
     }
@@ -142,7 +166,18 @@ impl Connection {
         self.spec
     }
 
-    /// Calls `method` and waits for its answer.
+    /// Masks `value` in what the process writes to stderr from now on.
+    pub fn mask(&self, value: &str) {
+        if !value.is_empty() {
+            let mut masked = lock(&self.masked);
+            if !masked.iter().any(|v| v == value) {
+                masked.push(value.to_owned());
+            }
+        }
+    }
+
+    /// Calls `method` and waits for its answer, [`CALL_TIMEOUT`] at most
+    /// however much else the process writes meanwhile.
     pub fn call(&mut self, method: &str, params: Value) -> Result<Value, StepError> {
         let id = self.next_id;
         self.next_id += 1;
@@ -156,8 +191,10 @@ impl Connection {
         writeln!(self.stdin, "{request}")
             .and_then(|()| self.stdin.flush())
             .map_err(|_| gone("stopped"))?;
+        let deadline = Instant::now() + self.timeout;
         loop {
-            let line = match self.lines.recv_timeout(CALL_TIMEOUT) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let line = match self.lines.recv_timeout(left) {
                 Ok(line) => line,
                 Err(RecvTimeoutError::Timeout) => {
                     return Err(StepError::new(
@@ -165,7 +202,7 @@ impl Connection {
                         format!(
                             "the plugin '{}' did not answer {method} in {} s",
                             self.spec.plugin,
-                            CALL_TIMEOUT.as_secs()
+                            self.timeout.as_secs()
                         ),
                     ));
                 }
@@ -184,6 +221,10 @@ impl Connection {
             };
         }
     }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// A JSON-RPC error as a step error, the same way plugin steps report them:
@@ -213,6 +254,28 @@ fn step_error(error: &Value) -> StepError {
         e = e.with_details(details.clone());
     }
     e
+}
+
+/// Whether `text` may be handed to the plugin `plugin`: plain text always,
+/// a secret only when its sites list `plugin:<name>` (the app it is typed
+/// into was checked by the caller; this is about who gets to see it).
+pub fn secret_allowed(text: &Text, plugin: &str) -> Result<(), StepError> {
+    if text.allowed_apps.is_none()
+        || text
+            .allowed_plugins
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(plugin))
+    {
+        return Ok(());
+    }
+    let site = format!("{PLUGIN_SITE_PREFIX}{plugin}");
+    Err(StepError::permanent(
+        "SECRET_PLUGIN_NOT_ALLOWED",
+        format!("this secret may not be passed to the {plugin} plugin, which reaches this window"),
+    )
+    .with_details(json!({
+        "hint": format!("Ask the user to add {site} to this secret's sites in Writer (シークレット) if this plugin may use it, or type it with desktop.type, which uses the real keyboard.")
+    })))
 }
 
 #[cfg(windows)]
@@ -258,7 +321,17 @@ mod app {
             Ok(this)
         }
 
-        fn call(&self, method: &str, mut params: Value) -> Result<Value, StepError> {
+        fn call(&self, method: &str, params: Value) -> Result<Value, StepError> {
+            self.call_with(method, params, None)
+        }
+
+        /// `secret`: a value in `params` to mask in the plugin's diagnostics.
+        fn call_with(
+            &self,
+            method: &str,
+            mut params: Value,
+            secret: Option<&str>,
+        ) -> Result<Value, StepError> {
             params["hwnd"] = json!(self.hwnd);
             RUNNING.with(|running| {
                 let mut running = running.borrow_mut();
@@ -271,6 +344,9 @@ mod app {
                         "the plugin is not running",
                     ));
                 };
+                if let Some(secret) = secret {
+                    connection.mask(secret);
+                }
                 let result = connection.call(method, params);
                 if result
                     .as_ref()
@@ -314,9 +390,12 @@ mod app {
         }
 
         fn set_value(&self, element: &ElementQuery, value: &Text) -> Result<Value, StepError> {
-            self.call(
+            super::secret_allowed(value, &self.spec.plugin)?;
+            let secret = value.allowed_apps.is_some();
+            self.call_with(
                 "bridge.setValue",
-                json!({ "element": Self::element(element), "value": value.value, "secret": value.allowed_apps.is_some() }),
+                json!({ "element": Self::element(element), "value": value.value, "secret": secret }),
+                secret.then_some(value.value.as_str()),
             )
         }
 
@@ -451,6 +530,60 @@ rl.on("line", (line) => {
         assert_eq!(e.code, "NOPE");
         let r = c.call("bridge.click", json!({ "hwnd": 1 })).unwrap();
         assert_eq!(r["method"], "bridge.click");
+    }
+
+    #[test]
+    fn a_secret_reaches_only_a_plugin_it_lists() {
+        let plain = Text {
+            value: "x".into(),
+            allowed_apps: None,
+            allowed_plugins: vec![],
+        };
+        assert!(secret_allowed(&plain, "sap").is_ok());
+        let mut secret = Text {
+            value: "pw".into(),
+            allowed_apps: Some(vec!["app:saplogon.exe".into()]),
+            allowed_plugins: vec![],
+        };
+        let e = secret_allowed(&secret, "sap").unwrap_err();
+        assert_eq!(e.code, "SECRET_PLUGIN_NOT_ALLOWED");
+        assert!(
+            e.details.unwrap()["hint"]
+                .as_str()
+                .unwrap()
+                .contains("plugin:sap")
+        );
+        secret.allowed_plugins = vec!["sap".into()];
+        assert!(secret_allowed(&secret, "sap").is_ok());
+        assert!(secret_allowed(&secret, "other").is_err());
+    }
+
+    #[test]
+    fn a_chatty_bridge_still_times_out() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("bridge.mjs"),
+            "setInterval(() => console.log('still here'), 50);\n",
+        )
+        .unwrap();
+        let Ok(node) = which_node() else {
+            eprintln!("node not found: skipped");
+            return;
+        };
+        let spec: &'static BridgeSpec = Box::leak(Box::new(BridgeSpec {
+            plugin: "chatty".into(),
+            app: "chatty".into(),
+            windows: vec![],
+            program: node,
+            args: vec!["bridge.mjs".into()],
+            dir: dir.path().to_path_buf(),
+        }));
+        let mut c = Connection::start(spec).unwrap();
+        c.timeout = Duration::from_millis(400);
+        let started = Instant::now();
+        let e = c.call("bridge.inspect", json!({})).unwrap_err();
+        assert_eq!(e.code, "TIMEOUT");
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     fn which_node() -> Result<PathBuf, ()> {

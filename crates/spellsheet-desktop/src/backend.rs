@@ -107,6 +107,10 @@ pub enum ScrollUnit {
 pub struct Text {
     pub value: String,
     pub allowed_apps: Option<Vec<String>>,
+    /// The plugins a secret may be passed to (its `plugin:<name>` sites,
+    /// without the prefix). A plugin's bridge gets the value only when it
+    /// is listed.
+    pub allowed_plugins: Vec<String>,
 }
 
 impl std::fmt::Debug for Text {
