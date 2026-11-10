@@ -1,6 +1,6 @@
 # Contributing / 貢献のしかた
 
-SpellSheet は [Apache License 2.0](LICENSE) で公開している OSS です。Issue・Pull Request を歓迎します。
+SpellSheet は [Apache License 2.0](LICENSE) で公開している OSS です。Issue・Pull Request を歓迎します。参加にあたっては [行動規範](CODE_OF_CONDUCT.md) を守ってください。
 
 *English summary: SpellSheet is licensed under Apache-2.0. Contributions are accepted under the same license, and every commit must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`). Read [docs/compatibility.md](docs/compatibility.md) before changing a public contract, and add an entry to [CHANGELOG.md](CHANGELOG.md) for user-visible changes.*
 

@@ -131,7 +131,8 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 ## 確認済みの事項と制約
 
 - **確認済み**：rmcp のクライアントを使った自動 E2E（作成 → 追加 → 検証 → 実行 → ログ取得 → 別プロセスからの参照 → Undo/Redo、リビジョン競合、実行の停止、権限による公開ツールの制限、全ツールのスキーマ）。Claude Code CLI 2.1 から `claude mcp add` で登録し、接続（ヘルスチェック）が成功することを確認。Writer を開いたまま MCP で編集すると Writer に反映され、Writer の「元に戻す」が履歴に Writer として記録されることを確認。
-- **未確認**：Claude Code に実際にツールを使わせてフローを作らせる対話の確認、Codex / Cursor からの接続、Windows 実機での動作。
+- **開発中に使っているが、体系的には未確認**：Writer の AI チャットから、Claude Code がこれらのツールでフローを組むこと（メンテナーの Windows PC）。
+- **未確認**：ほかの AI クライアント（Codex・Cursor・Gemini CLI・GitHub Copilot）での通しの動作、メンテナー以外の PC での動作。
 - MCP サーバーから開始した実行はサーバープロセス（＝ AI クライアントのセッション）が終わると止まります。長時間・無人の実行は `spellsheet run` を使います。
 - ツール権限のクライアント別設定は未実装です（`--allow` によるサーバー単位の制限と、ワークスペース全体の `policy.json`）。
 - 監査ログは JSONL です。SQLite への索引化は未実装です。

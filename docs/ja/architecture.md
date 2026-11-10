@@ -525,29 +525,31 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ## 13. 実装状況と制約
 
+何があり、何ができないと分かっているかを書きます。ノードやツールの数は書きません。一覧は生成物の [schemas/contract/step-types.json](../../schemas/contract/step-types.json) と [mcp.md](mcp.md) にあります。
+
 ### 実装済み（テストあり）
 
-- Rust ワークスペース、pnpm ワークスペース、CI（Linux / Windows で fmt・clippy・test、TS の型チェック・テスト・生成物ズレ検出）
-- Flow Core：モデル、JSON Schema 出力、検証（全件報告・JSON Pointer）、式言語、EditOp（全種の逆操作）、Undo/Redo（永続・プロセス間共有）、変更ジャーナル、ファイルストア（ロック・アトミック書き込み・リビジョン競合検出）、スキーマバージョン移行の枠組み
-- Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態（スナップショット）
-- CLI：`flow list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
-- Studio（Tauri 2 + React）：フロー一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ノード追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ノード状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
-- MCP サーバー（Phase 2）：`spellsheet mcp`（stdio）、フロー・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
-- デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
-- Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
-- Claude Code プラグイン：`plugins/spellsheet`（MCP 設定＋スキル `spellsheet-flows`）とマーケットプレイス定義。`claude plugin validate` 合格
+- Rust ワークスペース、pnpm ワークスペース、CI（Linux と Windows で fmt・clippy・テスト、TS の型チェック・テスト・生成物のずれの検出、見本のフローを最後まで実行）
+- Flow Core：モデル、JSON Schema 出力、検証（全件報告・JSON Pointer）、式言語、EditOp（全種の逆操作）、Undo/Redo（永続・プロセス間共有）、変更ジャーナル、ファイルストア（ロック・アトミック書き込み・リビジョン競合検出）、スキーマバージョンの移行、名前付きの版と確定、フローのフォルダー（`input/`・`config/`・`templates/`・`output/`・`work/`・`logs/`・`tests/`）、バンドル（`.spx`）、監査ログ
+- Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態、ブレークポイントと一時停止、途中のノードからの実行、テストケース
+- CLI：フロー、版、実行、テスト、検証、シークレット、ポリシーと承認、プラグイン、スケジュール、Worker、監査ログ（`spellsheet --help`）
+- Writer と Runner（Tauri 2 + React）：フロー図（自動レイアウト）、スキーマから生成するノードの設定、画面から要素を選ぶ、AI の変更の確認、手順書、実行ログとノードの状態、AI チャット、外部（MCP / CLI）の変更の即時反映、日本語 / 英語の画面
+- MCP サーバー：`spellsheet mcp`（stdio）。フロー・ノード・検証・履歴・版・実行・テスト・ファイル・シークレットの名前・画面の調査のツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、`policy.json` による承認、監査ログ。rmcp クライアントによる自動 E2E（[mcp.md](mcp.md)）
+- 組み込みのノード：ブラウザ（[browser.md](browser.md)）、UI Automation・Java Access Bridge・画像検索・OCR による Windows アプリ（[desktop.md](desktop.md)）、Excel / Word / メール（[office.md](office.md)）、ファイル（[files.md](files.md)）、PDF（[pdf.md](pdf.md)）、データベース（[database.md](database.md)）、HTTP / プログラム / クリップボード / ダイアログ（[system.md](system.md)）
+- Worker：スケジュール、ファイルトリガー、管理サーバーからのジョブ（[schedules.md](schedules.md)、[remote.md](remote.md)）
+- ノードのプラグインと Claude Code プラグイン（[extensions.md](extensions.md)、`plugins/spellsheet`）
 
-### 未実装（後続フェーズ）
+### 未実装
 
-- Windows 操作の Java Access Bridge・画像認識（SAP GUI Scripting は SAP のプラグイン）、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
-- Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
-- SQLite、クライアント別のツール権限設定、ファイル操作の許可フォルダ、資格情報ストア連携、MCP の Streamable HTTP
+- プロセスが終わった実行の途中からの再開
+- MCP のクライアント別のツール権限、MCP の Streamable HTTP
+- Writer でのノード位置の保存と自由な配置（フロー図は自動レイアウト）
+- 多数の PC をまとめる管理ツール（[remote.md](remote.md) の参照用サーバーだけ）
 
 ### 既知の制約
 
-- Undo/Redo はフロー単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
+- Undo/Redo はフロー単位で **全クライアント共通の 1 本のスタック**（AI の変更を Writer から戻せる反面、ユーザーごとの Undo ではない）。
 - 変数スコープはフラット（ループ変数もフロー全体で 1 つ）。多くの RPA 製品と同じ挙動。
 - 実行を取り消しても `control.try` の `finally` は実行する（最長 60 秒。もう一度取り消すとすぐ打ち切る）。実行は `cancelled` で終わる。後片付けに応答しないアダプターも実行を終わらせない（1 つあたり最長 15 秒）。
 - 実行の途中再開（プロセス再起動後のレジューム）は未対応。プロセスが先に終わった実行（クラッシュ・シャットダウン・強制終了）は、次にどれかの SpellSheet が実行を始めたときに `failed`・`RUN_INTERRUPTED` で閉じる。もう一度実行する。
-- Studio のフローチャートは表示用の自動レイアウトで、ノード位置は保存しない。
-- 開発中の確認として Linux 上で Studio を Xvfb 起動し、編集・実行・外部変更の反映を確認済み（Linux は製品対象外）。**Windows 実機での Studio 起動は未確認**（CI でビルドとテストのみ確認）。
+- **実際の PC で確かめた範囲は小さい。** CI は Windows でビルドとテストを行い、小さなテスト用の画面（WinForms・Swing）を操作します。実際の PC では、開発中にメンテナーが使っただけです。実際の業務アプリでの確認（[design/real-app-checks.md](../design/real-app-checks.md)）はまだ行っておらず、各ノードの説明の「確認済みの事項と制約」に未確認のものを書いています。インストーラーにはまだコード署名がありません（[コード署名ポリシー](../../CODE_SIGNING_POLICY.md)）。

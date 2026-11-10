@@ -1034,7 +1034,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 has_output: d.has_output,
                 expression_params: vec![],
                 binds_variables: vec![],
-                risk: if d.excel_app {
+                // Deleting a sheet loses everything on it, like deleting a file.
+                risk: if d.excel_app || d.step_type == DELETE_SHEET {
                     RiskLevel::Dangerous
                 } else if d.writes {
                     RiskLevel::Interactive

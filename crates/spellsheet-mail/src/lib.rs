@@ -639,7 +639,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             "メールの削除",
             "Moves the message `id` (from mail.list) to Deleted Items (it can still be taken back from there). Output: null.",
             schema(mailbox(json!({ "id": id.clone() })), &["id"]),
-            RiskLevel::Interactive,
+            RiskLevel::Dangerous,
             vec![json!({ "type": DELETE, "params": { "id": "{{ mail.id }}" } })],
         ),
         (
