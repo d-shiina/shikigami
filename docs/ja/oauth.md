@@ -8,7 +8,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 |---|---|---|
 | `oauth.signIn` | シークレットのサインインを使える状態にする。保存済みのトークンを使うか更新し、なければブラウザで人にサインインしてもらう | `{ secret, signedIn, via, expiresAt, scope }`（トークンそのものは出さない） |
 | `http.request` に `auth: { "secret": "<名前>", "field": "accessToken" }` | アクセストークンで API を呼ぶ。期限が近ければ先に更新する | いつもどおり（[system.md](system.md)） |
-| プラグインの種類 `oauth` の設定に `{ "secret": "<名前>", "field": "accessToken" }` | 同じく更新してからノードに渡す（例：[Google ドライブ](../../examples/plugins/googledrive)）。使ってよい先に `plugin:<名前>` が要る | ノードによる |
+| プラグインの種類 `oauth` の設定に `{ "secret": "<名前>", "field": "accessToken" }` | 同じく更新してからノードに渡す。使ってよい先に `plugin:<名前>` が要る | ノードによる |
 
 ## リダイレクト URL はどんな固定 URL でもよい
 

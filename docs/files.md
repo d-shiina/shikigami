@@ -111,7 +111,7 @@ The setting is `config/cloud.json`:
 
 Input and output may use different services or accounts (secrets). The run signs in with `oauth.signIn` first: the first run opens the sign-in page, later runs stay signed in ([oauth.md](oauth.md)). The run's log says what was moved (`Fetched 2 files from Accounting/Orders in Box into input/ (orders.xlsx, prices.xlsx)`); when a transfer fails the run fails, named as the transfer. 「ここから実行」 (run from a node) keeps `input/` as it is. The token is never in the setting, so the flow can be handed over: the receiver signs in with their own account and changes the folder if needed.
 
-The work is done by the plugin of the service (`box`, `googledrive`, `onedrive`): `<name>.downloadFolder` and `<name>.upload`. The Google Drive and OneDrive / SharePoint plugins come with Writer; when one is not installed yet, the dialog installs it and Writer restarts. The Box plugin does not come with Writer: add the one you received on the **Plugins** page. Their nodes (`googledrive.list`, `googledrive.download`, `googledrive.downloadFolder`, `googledrive.upload`, …) can also be used in a flow.
+The work is done by the plugin of the service (`box`, `googledrive`, `onedrive`): `<name>.downloadFolder` and `<name>.upload`. These plugins do not come with Writer and are offered separately: add the one you received on the **Plugins** page and restart Writer. Their nodes (`googledrive.list`, `googledrive.download`, `googledrive.downloadFolder`, `googledrive.upload`, …) can also be used in a flow.
 
 Keep `work/` in the flow's folder: it is emptied at every run, and in a synced folder the sync lags behind (locked files) and others see half-made files.
 

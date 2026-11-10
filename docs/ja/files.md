@@ -111,7 +111,7 @@ Writer では次のようにできます。
 
 入力と出力で別のサービスや別のアカウント（シークレット）も使えます。実行はまず `oauth.signIn` でサインインします。最初の実行でサインイン画面が開き、2 回目からはサインインしたまま続きます（[oauth.md](oauth.md)）。実行のログには何をやり取りしたかが出ます（「Box の 経理/受注 から input/ に 2 ファイルを取得しました（受注.xlsx、単価.xlsx）」）。やり取りに失敗すると、その実行は失敗になり、どのやり取りかがエラーに出ます。「ここから実行」では `input/` をそのまま使います。トークンは設定に入らないので、フローはそのまま人に渡せます。受け取った人は自分のアカウントでサインインし、必要ならフォルダーを変えます。
 
-やり取りはサービスのプラグイン（`box`・`googledrive`・`onedrive`）の `<名前>.downloadFolder` と `<名前>.upload` が行います。Google ドライブと OneDrive・SharePoint のプラグインは Writer に入っています。まだ入れていなければ、ダイアログから入れて Writer を再起動します。Box のプラグインは Writer に入っていないので、受け取ったものをサイドバーの「プラグイン」で追加します。プラグインのノード（`googledrive.list`・`googledrive.download`・`googledrive.downloadFolder`・`googledrive.upload` など）はフローの中でも使えます。
+やり取りはサービスのプラグイン（`box`・`googledrive`・`onedrive`）の `<名前>.downloadFolder` と `<名前>.upload` が行います。これらのプラグインは Writer に入っておらず、別に提供します。受け取ったものをサイドバーの「プラグイン」で追加し、Writer を再起動します。プラグインのノード（`googledrive.list`・`googledrive.download`・`googledrive.downloadFolder`・`googledrive.upload` など）はフローの中でも使えます。
 
 `work/` はフローのフォルダーのまま使ってください。実行のたびに空にする作業用なので、同期フォルダーに置くと同期が追いつかずにロックがかかったり、途中のファイルが他の人に見えたりします。
 

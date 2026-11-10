@@ -68,7 +68,7 @@ jobs:
           # The db.* tests run SQL through the SQLite ODBC driver installed above.
           SPELLSHEET_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Example extensions work against a stand-in service
-        run: node --test examples/plugins/azure-ocr/test.mjs examples/plugins/googledrive/test.mjs examples/plugins/onedrive/test.mjs
+        run: node --test examples/plugins/azure-ocr/test.mjs
       - name: Tutorial examples run, and their bundles are current
         shell: bash
         run: |

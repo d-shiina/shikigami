@@ -59,7 +59,7 @@ export const GOOGLE_DRIVE: CloudService = {
   sites: ["https://oauth2.googleapis.com", "https://www.googleapis.com", "plugin:googledrive"],
   console: "https://console.cloud.google.com/apis/credentials",
   target: (text) => googleTarget(text),
-  shipped: true,
+  shipped: false,
 };
 
 export const ONE_DRIVE: CloudService = {
@@ -74,7 +74,7 @@ export const ONE_DRIVE: CloudService = {
   console: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
   // A link (sharing link, SharePoint address) is kept whole: Graph finds the item from it.
   target: (text) => (/^https?:\/\//i.test(text.trim()) ? text.trim() : pathTarget(text)),
-  shipped: true,
+  shipped: false,
 };
 
 export const CLOUD_SERVICES: CloudService[] = [BOX, GOOGLE_DRIVE, ONE_DRIVE];

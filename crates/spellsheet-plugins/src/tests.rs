@@ -532,25 +532,32 @@ fn plugins_from_before_the_rename_load_from_a_read_only_folder() {
 }
 
 #[test]
-fn the_google_drive_example_takes_an_oauth_access_token() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/googledrive");
-    let plugin = Plugin::load(&dir, &[]).unwrap();
-    let types: Vec<_> = plugin
-        .step_defs()
-        .iter()
-        .map(|d| d.step_type.clone())
-        .collect();
-    assert_eq!(
-        types,
-        [
-            "googledrive.list",
-            "googledrive.download",
-            "googledrive.downloadFolder",
-            "googledrive.upload"
-        ]
+fn an_oauth_setting_takes_an_access_token() {
+    let mut m = manifest(
+        "store",
+        json!([{
+            "action": "download",
+            "label": "ダウンロード",
+            "description": "Downloads a file to `to`.",
+            "params": {
+                "type": "object",
+                "properties": {
+                    "account": { "type": "string" },
+                    "to": { "type": "string" }
+                },
+                "required": ["account", "to"],
+                "additionalProperties": false
+            },
+            "secretParams": ["account"],
+            "pathParams": ["to"],
+            "examples": [{ "type": "store.download", "params": { "account": "Store", "to": "input/a.xlsx" } }]
+        }]),
     );
-    let download = &plugin.step_defs()[1];
-    assert_eq!(download.path_params, ["to"]);
+    m["credentials"] =
+        json!([{ "kind": "oauth", "label": "アプリ（OAuth）", "params": ["account"] }]);
+    let dir = plugin_dir(m, "");
+    let plugin = Plugin::load(dir.path(), &[]).unwrap();
+    let download = &plugin.step_defs()[0];
     assert_eq!(
         download.plugin.as_ref().unwrap().credentials[0].kind,
         spellsheet_core::secret::SecretKind::Oauth

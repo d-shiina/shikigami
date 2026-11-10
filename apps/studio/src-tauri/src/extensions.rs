@@ -101,7 +101,7 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
 
 /// The plugins the installer ships in `plugins\` next to Writer (from
 /// `examples/plugins`, staged by `scripts/bundle-node.mjs`), so a feature
-/// that needs one (reading a file from Google Drive) can offer it on a PC that
+/// that needs one can offer it on a PC that
 /// cannot reach a registry. A development build reads the repository's
 /// `examples/plugins`.
 fn shipped_extension(name: &str) -> Option<PathBuf> {
