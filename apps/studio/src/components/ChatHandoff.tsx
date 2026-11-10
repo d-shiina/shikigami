@@ -3,7 +3,7 @@
 // The card says what to do in the chat, finds the answer on the clipboard
 // when the person returns, takes it in, and then shows what changed, what is
 // left for the person, and what goes back to the AI, as one more request.
-import { Check, ChevronDown, ChevronRight, ClipboardCheck, ClipboardCopy, ExternalLink, FileDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ClipboardCheck, ClipboardCopy, ExternalLink, FileDown, Loader2, Pencil, Play, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Chat, type ChatItem, type Handoff, useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
@@ -12,12 +12,15 @@ import { agent, api, type AnswerProblem } from "../lib/api";
 import { describe } from "../lib/changes";
 import { readClipboardText } from "../lib/clipboard";
 import { joinParts, looksLikeAnswer } from "../lib/handoff";
+import { answersText, stuckIssues } from "../lib/handoffFollow";
+import { readCheck } from "../lib/reviewFiles";
 import { t } from "../lib/i18n";
 import { answerProblemText } from "../lib/problemText";
 import { authorIssues, personTodos, returnText } from "../lib/todos";
 import { issueText } from "../lib/issueText";
 import { useProjectMaybe } from "../project";
 import { TodoList, Written } from "./IssuesPanel";
+import { useMarks } from "./ReviewDesk";
 import { Lines } from "./Timeline";
 
 type AiItem = Extract<ChatItem, { role: "ai" }> & { handoff: Handoff };
@@ -267,6 +270,7 @@ function useTakeIn(chat: Chat, item: AiItem) {
           changes,
           forAi: authorIssues(validation),
           checks: entry?.checks?.length ?? 0,
+          questions: entry?.checks ?? [],
         },
       });
       if (!into) adopt(chat.id, { id: flow.id, name: flow.name });
@@ -288,7 +292,7 @@ function Problems({ chat, problems, partial, latest }: { chat: Chat; problems: A
       ? void handOffAs(chat.id, t.aiChat.goOnLabel, returnText(problems), partial)
       : void handOffAs(chat.id, t.aiChat.fixLabel, returnText(problems));
   return (
-    <section role="alert" className="rounded-lg border border-shu-200 bg-shu-50/60 px-3 py-2.5 text-[12px]">
+    <section role="alert" className="rounded-lg border border-shu-100 bg-shu-50/60 px-3 py-2.5 text-[12px]">
       <h3 className="text-[13px] font-semibold text-shu-600">{cut ? t.aiChat.cutTitle : t.aiChat.problemsTitle}</h3>
       <p className="mt-0.5 leading-relaxed text-slate-700">{cut ? t.aiChat.cutLead : t.aiChat.problemsLead}</p>
       {!cut && (
@@ -333,6 +337,14 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
   );
   const [all, setAll] = useState(false);
   const changes = all ? result.changes : result.changes.slice(0, SHOWN_CHANGES);
+  const select = useStudio((s) => s.select);
+  const aiName = chatAi(useAiWay((s) => s.chat)).name;
+  // Asked again and again for the same fix: offer the node's settings instead.
+  const stuck = useMemo(() => (latest ? stuckIssues(chat.items, result.flowId) : []), [latest, chat.items, result.flowId]);
+  const fixByHand = async (stepId: string | null) => {
+    if (!shown) await openFlow(result.flowId);
+    if (stepId) select({ kind: "step", stepId });
+  };
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-sheet py-2.5 text-[12px]">
       <div className="px-3">
@@ -341,12 +353,13 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
           <span className="min-w-0">{result.isNew ? t.aiChat.takenNew(result.name) : t.aiChat.taken(result.name)}</span>
         </div>
         <p className="mt-0.5 leading-relaxed text-slate-600">{t.aiChat.takenLead}</p>
-        {result.checks > 0 && <p className="mt-1 text-ink">{t.aiChat.checks(result.checks)}</p>}
+        {result.checks > 0 && !result.questions?.length && <p className="mt-1 text-ink">{t.aiChat.checks(result.checks)}</p>}
         {!shown && (
           <button type="button" onClick={() => void openFlow(result.flowId)} className={`mt-1.5 ${button}`}>
             {t.aiChat.openFlow}
           </button>
         )}
+        {shown && latest && <TryRun agentName={aiName} />}
       </div>
       {result.changes.length > 0 && (
         <section className="px-3">
@@ -368,7 +381,7 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
         </section>
       )}
       {result.forAi.length > 0 && (
-        <section className="mx-3 rounded-lg border border-shu-200 bg-shu-50/60 px-3 py-2.5">
+        <section className="mx-3 rounded-lg border border-shu-100 bg-shu-50/60 px-3 py-2.5">
           <h3 className="font-semibold text-shu-600">{t.aiChat.forAi}</h3>
           <p className="mt-0.5 text-slate-700">{t.aiChat.forAiLead}</p>
           <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-ink">
@@ -378,6 +391,15 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
               </li>
             ))}
           </ol>
+          {latest && stuck.length > 0 && (
+            <div className="mt-2 rounded-md border border-shu-100 bg-sheet px-2.5 py-2">
+              <p className="text-slate-700">{t.aiChat.byHandLead(Math.min(...stuck.map((s) => s.times)))}</p>
+              <button type="button" onClick={() => void fixByHand(stuck.find((s) => s.issue.stepId)?.issue.stepId ?? null)} className={`mt-1.5 ${button}`}>
+                <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
+                {t.aiChat.byHand}
+              </button>
+            </div>
+          )}
           {latest && (
             <button
               type="button"
@@ -390,6 +412,94 @@ function Taken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullab
           )}
         </section>
       )}
+      {(result.questions?.length ?? 0) > 0 && (
+        <Questions chat={chat} flowId={result.flowId} revision={result.revision} questions={result.questions ?? []} latest={latest} />
+      )}
     </div>
+  );
+}
+
+/** Runs the flow just taken in; a run that stops offers the fix request on the pause band. */
+function TryRun({ agentName }: { agentName: string }) {
+  const startRun = useStudio((s) => s.startRun);
+  const run = useStudio((s) => s.run);
+  const running = run?.status === "running" || run?.status === "paused";
+  return (
+    <div className="mt-2">
+      <button type="button" disabled={running} onClick={() => void startRun()} className={button}>
+        <Play size={12} strokeWidth={1.75} aria-hidden="true" />
+        {t.aiChat.tryRun}
+      </button>
+      <p className="mt-1 leading-relaxed text-slate-500">{t.aiChat.tryRunLead(agentName)}</p>
+    </div>
+  );
+}
+
+/**
+ * What the AI decided for itself and wants the person to confirm. The answers
+ * are the same ones as on the review report; "No" takes what is right, and
+ * the answers go to the AI as the next request.
+ */
+function Questions({ chat, flowId, revision, questions, latest }: { chat: Chat; flowId: string; revision: number; questions: string[]; latest: boolean }) {
+  const marks = useMarks((m) => m.answers);
+  const answer = useMarks((m) => m.answer);
+  const handOffAs = useAgent((s) => s.handOffAs);
+  const [right, setRight] = useState<Record<string, string>>({});
+  const keyOf = (q: string) => `${flowId}@${revision}:${q}`;
+  const answers = Object.fromEntries(questions.map((q) => [q, marks[keyOf(q)]] as const));
+  const text = answersText(questions, answers, right);
+  const allYes = questions.every((q) => answers[q] === "ok");
+  const chip = (on: boolean, tone: string) =>
+    `inline-flex items-center gap-1 rounded-md border px-2 text-[11.5px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+  return (
+    <section className="px-3">
+      <h3 className="font-semibold text-ink">{t.aiChat.questions}</h3>
+      <p className="mt-0.5 text-slate-600">{t.aiChat.questionsLead}</p>
+      <ul className="mt-1.5 divide-y divide-slate-100 border-y border-slate-200">
+        {questions.map((q) => {
+          const value = answers[q];
+          const pick = (v: "ok" | "no") => answer(keyOf(q), value === v ? null : v);
+          const { rule, example } = readCheck(q);
+          return (
+            <li key={q} className="py-2">
+              <p className="leading-relaxed text-ink">
+                {rule}
+                {example && <span className="mt-0.5 block whitespace-pre-wrap text-slate-500">{example}</span>}
+              </p>
+              <div className="mt-1 flex gap-1.5">
+                <button type="button" disabled={!latest} onClick={() => pick("ok")} className={chip(value === "ok", "border-moegi-500 text-moegi-600")} aria-pressed={value === "ok"}>
+                  <Check size={11} strokeWidth={2.25} aria-hidden="true" />
+                  {t.aiChat.yes}
+                </button>
+                <button type="button" disabled={!latest} onClick={() => pick("no")} className={chip(value === "no", "border-shu-500 text-shu-600")} aria-pressed={value === "no"}>
+                  <X size={11} strokeWidth={2.25} aria-hidden="true" />
+                  {t.aiChat.no}
+                </button>
+              </div>
+              {value === "no" && latest && (
+                <label className="mt-1.5 flex items-center gap-1.5">
+                  <span className="shrink-0 text-slate-600">{t.aiChat.rightAnswer}</span>
+                  <input
+                    type="text"
+                    value={right[q] ?? ""}
+                    onChange={(e) => setRight((now) => ({ ...now, [q]: e.target.value }))}
+                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-[12px] focus:border-brand-500 focus:outline-none"
+                  />
+                </label>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {latest &&
+        (allYes ? (
+          <p className="mt-1.5 text-moegi-600">{t.aiChat.allYes}</p>
+        ) : (
+          <button type="button" disabled={!text} onClick={() => text && void handOffAs(chat.id, t.aiChat.answersLabel, text)} className={`mt-2 ${primary}`}>
+            <Send size={12} strokeWidth={1.75} aria-hidden="true" />
+            {t.aiChat.sendAnswers}
+          </button>
+        ))}
+    </section>
   );
 }

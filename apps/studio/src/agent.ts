@@ -75,7 +75,7 @@ export type Handoff = {
 
 export type HandoffResult =
   /** Taken in as a new flow or as the new content of the conversation's flow. */
-  | { kind: "taken"; flowId: string; name: string; isNew: boolean; revision: number; changes: ChangeLine[]; forAi: ValidationIssue[]; checks: number }
+  | { kind: "taken"; flowId: string; name: string; isNew: boolean; revision: number; changes: ChangeLine[]; forAi: ValidationIssue[]; checks: number; questions?: string[] }
   /** Not taken in: what the AI has to fix (nothing changed). */
   | { kind: "problems"; problems: AnswerProblem[] };
 

@@ -36,11 +36,15 @@ Copy the AI's answer and come back to Writer: when the answer is on the clipboar
 - **Taken in**: the flow opens, and the card shows three things.
   - **Changes**: the nodes added, changed and removed.
   - **Your part**: what only you can do, each with its button: pick the element on the screen, register a login (the form opens with the name filled in), put a file in the flow's folder. Done items leave the list.
-  - **For the AI to fix**: mistakes in how the flow is written (a required parameter missing, a node that does not exist). **Copy fix request**, paste it into the chat, and take in the new answer.
+  - **For the AI to fix**: mistakes in how the flow is written (a required parameter missing, a node that does not exist). **Copy fix request**, paste it into the chat, and take in the new answer. When the same mistake is still there after three answers in a row, **Fix by hand** appears and opens that node's settings.
+  - **Questions from the AI**: what the AI decided on its own (a closing date, who gets the mail). Pick **Right** or **Wrong** for each, write what is right for the wrong ones, and **Send the answers to the AI** copies a request with your answers. These are the same answers as in **Review**.
+  - **Try a run**: runs the flow just taken in. If it stops, **Ask <AI> to fix** on the band below copies a request with where it stopped and what the screen looked like.
 - **Not readable** (broken JSON, unknown fields): nothing changes. **Copy fix request** sends it back to the chat.
 - **Cut off** (the chat stopped a long answer midway): **Copy request to continue**, paste it into the chat, and take in what comes back; Writer reads it together with the first part.
 
 The AI's summary and questions go to **Review**, just like changes from an AI connected through MCP. Answer the questions, try the flow, then publish.
+
+A try run never starts by itself: a flow really works on files and apps, so you start it.
 
 To take in an answer from a chat begun elsewhere, use **Paste AI answer** at the top of the AI chat, beside **New** on the flows page, or in the flow chart's right-click menu.
 

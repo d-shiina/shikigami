@@ -174,7 +174,8 @@ type Marks = {
   see(key: string): void;
   answer(key: string, value: "ok" | "no" | null): void;
 };
-const useMarks = create<Marks>((set) => ({
+/** What the person has seen and answered on the report; the AI chat answers the same questions (ChatHandoff). */
+export const useMarks = create<Marks>((set) => ({
   seen: {},
   answers: {},
   sendBackWith: undefined,
