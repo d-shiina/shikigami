@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    spellsheet_studio_lib::run();
+    spellsheet_writer_lib::run();
 }

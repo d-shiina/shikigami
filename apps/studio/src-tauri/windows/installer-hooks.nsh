@@ -33,6 +33,10 @@
 
 !define LEGACY_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_PRODUCTNAME}"
 
+; Writer's program file was named after its crate ("spellsheet-studio.exe")
+; up to 0.1.21; from 0.1.22 it carries the product's name (mainBinaryName).
+!define OLD_MAINBINARYNAME "spellsheet-studio"
+
 ; Tauri's SetLnkAppUserModelId (utils.nsh), with the ID to give.
 !macro SetLnkAppUserModelIdTo shortcut appid
   !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 ""
@@ -135,6 +139,23 @@ Var LegacyInstallDir
     DeleteRegKey SHCTX "${LEGACY_MANUKEY}\${LEGACY_PRODUCTNAME}"
     DeleteRegKey SHCTX "${LEGACY_MANUKEY}\${PRODUCTNAME}"
     DeleteRegKey /ifempty SHCTX "${LEGACY_MANUKEY}"
+  ${EndIf}
+
+  ; An update writes the program file under its new name beside the old one
+  ; and does not make the shortcuts again, so the shortcuts would still open
+  ; a file that is no longer there: remove it and point them at the new one.
+  ${If} ${FileExists} "$INSTDIR\${OLD_MAINBINARYNAME}.exe"
+    Delete "$INSTDIR\${OLD_MAINBINARYNAME}.exe"
+    ${If} ${FileExists} "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+      !insertmacro UnpinShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+      Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    ${EndIf}
+    CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${If} ${FileExists} "$DESKTOP\${PRODUCTNAME}.lnk"
+      !insertmacro UnpinShortcut "$DESKTOP\${PRODUCTNAME}.lnk"
+      Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+      CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${EndIf}
   ${EndIf}
 
   ; The app's identifier (its notifications' sender) changed with the name,
