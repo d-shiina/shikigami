@@ -60,8 +60,9 @@ describe("promisesOf with a rewritten case", () => {
 
 describe("promiseTerms", () => {
   it("says the input and the expected result in one line each", () => {
-    expect(promiseTerms(cases[0]!.case)).toEqual({ given: "folder ＝ 「tests/3支店」", then: "grandTotal ＝ 73050" });
-    expect(promiseTerms(cases[2]!.case).then).toBe("エラーで止まる");
+    expect(promiseTerms(cases[0]!.case)).toEqual({ given: "folder ＝ 「tests/3支店」", then: "grandTotal ＝ 73,050" });
+    expect(promiseTerms(cases[0]!.case, new Map([["grandTotal", "売上合計"]])).then).toBe("売上合計 ＝ 73,050");
+    expect(promiseTerms(cases[2]!.case).then).toBe("エラーで中断");
     expect(promiseTerms({}).given).toBeNull();
   });
 });

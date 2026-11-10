@@ -95,7 +95,7 @@ spellsheet plugin install azureocr --yes                     # 一覧に載っ�
 
 クラウドのサービスへデータを送るノードは、マニフェストの `external` にその旨を宣言します。
 
-- Writer の確認パネル（確定の前）の「このフローが変えるもの」に「Azure AI Document Intelligence へ送信：読み取るファイル（画像・PDF）」のように表示します。
+- Writer の確認のレポート（確定の前）の「使用するファイルとシステム」に「Azure AI Document Intelligence へ送信：読み取るファイル（画像・PDF）」のように表示します。
 - 送り先のアドレスを持つ設定（`targets` に `site` として宣言したもの）は、ワークスペースの `policy.json` の `sites` で検査します。`sites` に `https://<リソース名>.cognitiveservices.azure.com` だけを書けば、それ以外へは送れません（[policy.md](policy.md)）。
 - プラグインの `risk` は、AI がそのノードを動かすときの承認（`policy.json` の `ai.runFlow` / `ai.testStep`）に使います。外部へファイルを送るノードは `interactive` 以上にして、AI が人の承認なしに試せないようにしてください。
 

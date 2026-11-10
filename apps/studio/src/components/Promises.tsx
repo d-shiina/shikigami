@@ -39,6 +39,7 @@ export function Promises({
   flowId,
   revision,
   promises,
+  answering = true,
   answers,
   onAnswer,
   onWrong,
@@ -47,6 +48,8 @@ export function Promises({
   flowId: string;
   revision: number;
   promises: Promised[];
+  /** false: the rows only show; the report asks about the result as a whole instead. */
+  answering?: boolean;
   answers: Record<string, "ok" | "no">;
   onAnswer: (name: string, value: "ok" | "no" | null) => void;
   onWrong: (p: Promised) => void;
@@ -88,10 +91,14 @@ export function Promises({
     <div className="space-y-3">
       {fresh.length > 0 && (
         <div>
-          <PromiseHead answering />
-          {fresh.map((p) => (
-            <PromiseRow key={p.name} promise={p} answer={answers[p.name]} onAnswer={(v) => onAnswer(p.name, v)} onWrong={() => onWrong(p)} />
-          ))}
+          <PromiseHead answering={answering} />
+          {fresh.map((p) =>
+            answering ? (
+              <PromiseRow key={p.name} promise={p} answer={answers[p.name]} onAnswer={(v) => onAnswer(p.name, v)} onWrong={() => onWrong(p)} />
+            ) : (
+              <PromiseRow key={p.name} promise={p} />
+            ),
+          )}
         </div>
       )}
       {fresh.length === 0 && (
@@ -171,7 +178,12 @@ function PromiseRow({
   onWrong?: () => void;
 }) {
   const goTo = useStudio((s) => s.goTo);
-  const terms = promiseTerms(promise.testCase);
+  const variables = useStudio((s) => s.flow?.variables);
+  const labels = useMemo(
+    () => new Map((variables ?? []).flatMap((v) => (v.description?.trim() ? [[v.name, v.description.trim()] as const] : []))),
+    [variables],
+  );
+  const terms = promiseTerms(promise.testCase, labels);
   const kept = promise.kept;
   const state = !kept ? "unchecked" : kept.passed ? "kept" : "broken";
   const word = { kept: t.promises.kept, broken: t.promises.broken, unchecked: t.promises.unchecked }[state];

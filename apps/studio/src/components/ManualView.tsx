@@ -1,6 +1,7 @@
 // The 手順書: the open flow read as a procedure, with the screens of the last
 // run from Studio (docs/design/manual.md). 「編集する」 switches to the
 // editable outline (StoryView).
+import { Masthead, Stripe } from "./Masthead";
 import type { Flow, PublishedState, Step, VersionSummary } from "@spellsheet/schema";
 import { AppWindow, Clock, Download, EyeOff, Lightbulb, Maximize2, MessageSquareText, Pencil, Play, Repeat, RotateCw, Split, TriangleAlert, Workflow, X } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -29,6 +30,7 @@ import {
   pagesOf,
   type Rect,
   type Scene,
+  overviewRows,
 } from "../lib/manual";
 import { burnShot, manualHtml, operated, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
 import { describeWhen } from "../lib/schedule";
@@ -420,12 +422,7 @@ function ToolButton({ icon: Icon, label, title, disabled, onClick }: { icon: typ
 }
 
 function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
-  const rows: [string, string[], string | null][] = [
-    [t.manual.uses, doc.uses, null],
-    [t.manual.inputs, doc.inputs, "var(--color-role-input)"],
-    [t.manual.outputs, doc.outputs, "var(--color-role-output)"],
-    [t.manual.runsWhen, [...when, t.manual.byHand], null],
-  ];
+  const rows = overviewRows(doc, when).map((r) => [r.label, r.values, r.role ? `var(--color-role-${r.role})` : null] as const);
   return (
     <table className="w-full border-collapse text-[13px]">
       <tbody>
@@ -433,7 +430,7 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
           <tr key={k}>
             <th
               scope="row"
-              className="w-[118px] border border-slate-200 bg-paper px-2.5 py-1.5 text-left font-normal text-slate-500"
+              className="w-[150px] border border-slate-200 bg-paper px-2.5 py-1.5 text-left font-normal text-slate-500"
               style={colour ? { boxShadow: `inset 3px 0 ${colour}` } : undefined}
             >
               {k}
@@ -498,28 +495,16 @@ function shortTitle(title: string): string {
   return parts.length > 1 ? (parts.at(-1) ?? title) : title;
 }
 
-/** The four colours of the swirl as a thin band: across the cover's title and the top of each sheet. */
-function Stripe({ className }: { className: string }) {
-  return (
-    <span aria-hidden className={`absolute inset-x-0 flex ${className}`}>
-      <i className="flex-1 bg-[var(--color-role-input)]" />
-      <i className="flex-1 bg-[var(--color-role-config)]" />
-      <i className="flex-1 bg-[var(--color-role-templates)]" />
-      <i className="flex-1 bg-[var(--color-role-output)]" />
-    </span>
-  );
-}
-
 /** One A4 sheet on the desk: the flow's name and version above, the page number below. */
 function Sheet({ page, total, title, edition, children }: { page: Page; total: number; title: string; edition: Edition; children: React.ReactNode }) {
   return (
     <section
       data-page={page.number}
-      className={`relative mx-auto mb-7 flex min-h-[1123px] w-[794px] scroll-mt-14 flex-col overflow-hidden bg-sheet px-12 pb-16 shadow-[0_1px_2px_rgb(20_30_50/0.08),0_8px_24px_rgb(20_30_50/0.08)] ${page.kind === "cover" ? "" : "pt-11"}`}
+      className={`relative mx-auto mb-7 flex min-h-[1123px] w-[794px] scroll-mt-14 flex-col overflow-hidden bg-sheet px-12 pb-16 shadow-[0_1px_2px_rgb(20_30_50/0.08),0_8px_24px_rgb(20_30_50/0.08)] pt-11`}
     >
+      <Stripe className="top-0 h-1" />
       {page.kind === "body" && (
         <>
-          <Stripe className="top-0 h-1" />
           <header className="mb-5 flex items-baseline justify-between gap-4 border-b border-[var(--manual-navy)] pb-1.5 text-[11.5px] text-slate-500">
             <b className="truncate font-semibold text-[var(--manual-navy)]">{title}</b>
             <span className="shrink-0">{[edition.label, edition.updated].filter(Boolean).join("　")}</span>
@@ -569,27 +554,16 @@ function Cover({
   ];
   return (
     <>
-      <div className="relative -mx-12 mb-6 bg-[var(--manual-band)] px-12 pt-14 pb-10 text-white">
-        <p className="text-[12.5px] tracking-wider text-[#a9c4de]">{t.manual.kind}</p>
-        <h1 className="mt-3 mb-4 text-[27px] leading-snug font-semibold">{doc.title}</h1>
-        <dl className="flex flex-wrap gap-x-7 gap-y-1 border-t border-white/35 pt-2.5 text-[12px] text-[#a9c4de]">
-          {info.map(([k, v]) => (
-            <div key={k}>
-              <dt>{k}</dt>
-              <dd className="text-[13px] font-semibold text-white">{v}</dd>
-            </div>
-          ))}
-        </dl>
-        {edition.changedSince !== null && <p className="mt-2 text-[12px] text-[#d6e3f0]">{t.manual.changedSince(edition.changedSince)}</p>}
-        <Stripe className="-bottom-1.5 h-1.5" />
-      </div>
+      <Masthead kind={t.manual.kind} title={doc.title} facts={info.map(([label, value]) => ({ label, value }))}>
+        {edition.changedSince !== null && <p className="mt-2 text-[12px] text-slate-500">{t.manual.changedSince(edition.changedSince)}</p>}
+      </Masthead>
       {doc.description && (
         <>
           <CoverHeading>{t.manual.about}</CoverHeading>
           <p className="text-[14px] leading-[1.85] text-slate-700">{doc.description}</p>
         </>
       )}
-      <CoverHeading>{t.manual.usesAndValues}</CoverHeading>
+      <CoverHeading>{t.manual.overview}</CoverHeading>
       <Facts doc={doc} when={when} />
       {showMissing && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
       {made && doc.drafts > 0 && <p className="mt-2 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}

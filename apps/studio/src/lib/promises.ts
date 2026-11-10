@@ -5,7 +5,7 @@
 import type { CaseResult, Evidence, Mismatch, TestCase } from "@spellsheet/schema";
 import { create } from "zustand";
 import { shortValue } from "./testCases";
-import { t } from "./i18n";
+import { locale, t } from "./i18n";
 
 export type Kept = {
   passed: boolean;
@@ -82,12 +82,17 @@ export function promisesOf(
 }
 
 /** 「入力」 and 「結果」 of a promise in one line each, for the person to check the numbers. */
-export function promiseTerms(testCase: TestCase): { given: string | null; then: string } {
+export function promiseTerms(
+  testCase: TestCase,
+  /** What each variable is, by name (its description): a person reads "読んだ支店の数", not "branchCount". */
+  labels: ReadonlyMap<string, string> = new Map(),
+): { given: string | null; then: string } {
+  const term = ([k, v]: [string, unknown]) => `${labels.get(k) ?? k} ＝ ${typeof v === "number" ? v.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") : shortValue(v, 40)}`;
   const inputs = Object.entries(testCase.inputs ?? {});
-  const given = inputs.length > 0 ? inputs.map(([k, v]) => `${k} ＝ ${shortValue(v, 40)}`).join("、") : null;
+  const given = inputs.length > 0 ? inputs.map(term).join("、") : null;
   const expect = testCase.expect ?? {};
   const status = expect.status ?? "succeeded";
-  const outputs = Object.entries(expect.outputs ?? {}).map(([k, v]) => `${k} ＝ ${shortValue(v, 40)}`);
+  const outputs = Object.entries(expect.outputs ?? {}).map(term);
   let then: string;
   if (status === "failed") then = t.promises.stops;
   else if (status === "cancelled") then = t.promises.cancelled;

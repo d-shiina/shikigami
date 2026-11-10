@@ -30,6 +30,11 @@ describe("summarize", () => {
     expect(s.removed).toEqual([old]);
     expect(headline(s)).toBe("1ノード追加・1ノード変更・1ノード削除");
   });
+  it("counts the nodes inside an added loop as added", () => {
+    const loop = { id: "l", type: "control.forEach", params: {}, blocks: { body: [{ id: "c1", type: "log.message" }, { id: "c2", type: "log.message" }] } };
+    const s = summarize([entry(2, [{ op: "addStep", step: loop }])]);
+    expect(headline(s)).toBe("3ノード追加");
+  });
 });
 
 import { groupRevertBlocker } from "../store";

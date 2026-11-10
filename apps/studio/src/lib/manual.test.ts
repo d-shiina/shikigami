@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Flow, StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { operated } from "./manualExport";
-import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
+import { blurRegions, buildManual, type Chapter, frameTree, cropOf, humanize, overviewRows, type ManualItem, type ManualManifest, maskStale, pagesOf, type Scene } from "./manual";
 
 const flow = JSON.parse(readFileSync(new URL("../../../../examples/browser-demo.json", import.meta.url), "utf8")) as Flow;
 const contract = JSON.parse(readFileSync(new URL("../../../../schemas/contract/step-types.json", import.meta.url), "utf8")) as {
@@ -94,7 +94,8 @@ describe("the 手順書 of a flow", () => {
   });
 
   it("lists what the flow uses, takes and produces in words", () => {
-    expect(doc.uses).toEqual(["ブラウザ", "ログイン情報「デモ受注システム」"]);
+    expect(doc.uses).toEqual({ apps: ["ブラウザ"], logins: ["デモ受注システム"], inputFiles: [], outputFiles: [] });
+    expect(overviewRows(doc, []).map((r) => r.label)).toEqual(["利用アプリケーション", "ログイン情報", "入力項目", "出力項目", "実行方法"]);
     expect(doc.inputs).toEqual(["デモサイトの URL"]);
     expect(doc.outputs).toEqual(["出荷した注文番号", "出荷した金額の合計（円）", "在庫切れの商品"]);
     expect(doc.pictures).toBe(1);

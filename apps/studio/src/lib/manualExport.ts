@@ -18,6 +18,7 @@ import {
   pagesOf,
   type Rect,
   type Scene,
+  overviewRows,
 } from "./manual";
 import type { Part } from "./sentence";
 
@@ -249,20 +250,19 @@ body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;backgrou
 .sheet>header b{color:var(--navy);overflow:hidden;text-overflow:ellipsis}
 .sheet>footer{position:absolute;left:16mm;right:16mm;bottom:9mm;display:flex;justify-content:space-between;font-size:10.5px;color:#8a8f98;border-top:1px solid var(--line);padding-top:5px}
 .sheet>footer span:first-child{color:var(--navy)}
-#p1{padding-top:0}
-.band{position:relative;margin:0 -16mm 22px;padding:12mm 16mm 9mm;background:var(--navy);color:#fff}
-.band .stripe{top:auto;bottom:-6px;height:6px}
-.kind{font-size:12.5px;color:#a9c4de;letter-spacing:.08em;margin:0}
-h1{font-size:26px;line-height:1.4;margin:10px 0 14px}
-.docinfo{display:flex;flex-wrap:wrap;gap:4px 28px;font-size:12px;color:#a9c4de;padding-top:10px;border-top:1px solid rgba(255,255,255,.35)}
-.docinfo b{display:block;color:#fff;font-size:13px;font-weight:600}
-.since{margin:8px 0 0;font-size:12px;color:#d6e3f0}
+.kind{font-size:12px;font-weight:700;color:var(--navy);letter-spacing:.14em;margin:0}
+h1{font-size:25px;line-height:1.4;margin:8px 0 14px;text-wrap:balance}
+.docinfo{display:flex;flex-wrap:wrap;row-gap:8px;font-size:11px;color:#8a8f98;padding:8px 0;border-top:2px solid var(--navy);border-bottom:1px solid var(--line)}
+.docinfo div{padding:0 20px;border-left:1px solid var(--line)}.docinfo div:first-child{padding-left:0;border-left:0}
+.docinfo b{display:block;color:var(--ink);font-size:13px;font-weight:600}
+.since{margin:8px 0 0;font-size:12px;color:var(--sub)}
+.mast{margin-bottom:22px}
 h3{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--navy);margin:18px 0 6px}
 h3:before{content:"";width:4px;height:14px;background:var(--navy)}
 .lead{margin:0;color:#3a3e45;line-height:1.85}
 table{width:100%;border-collapse:collapse}
 .facts{font-size:13px}
-.facts th{width:118px;text-align:left;font-weight:400;color:var(--sub);background:#f5f6f8;padding:6px 10px;border:1px solid var(--line)}
+.facts th{width:150px;text-align:left;font-weight:400;color:var(--sub);background:#f5f6f8;padding:6px 10px;border:1px solid var(--line)}
 .facts td{padding:6px 10px;border:1px solid var(--line)}
 .facts tr.in th{box-shadow:inset 3px 0 var(--teal)}
 .facts tr.out th{box-shadow:inset 3px 0 var(--orange)}
@@ -326,12 +326,7 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
   const pages = pagesOf(doc, !options.noPictures);
   const total = pages.length;
   const { edition } = options;
-  const facts: [string, string[], string][] = [
-    [t.manual.uses, doc.uses, ""],
-    [t.manual.inputs, doc.inputs, "in"],
-    [t.manual.outputs, doc.outputs, "out"],
-    [t.manual.runsWhen, [...options.when, t.manual.byHand], ""],
-  ];
+  const facts = overviewRows(doc, options.when).map((r) => [r.label, r.values, r.role === "input" ? "in" : r.role === "output" ? "out" : ""] as const);
   const rows = facts
     .map(([k, v, cls]) => `<tr${cls ? ` class="${cls}"` : ""}><th>${esc(k)}</th><td>${v.length > 0 ? v.map(esc).join("、") : esc(t.manual.none)}</td></tr>`)
     .join("");
@@ -360,11 +355,11 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
   const sheets = pages.map((page) => {
     if (page.kind === "cover") {
       return `<section class="sheet" id="p1">
-<div class="band"><p class="kind">${esc(t.manual.kind)}</p><h1>${esc(doc.title)}</h1><div class="docinfo">${info}</div>${
+${STRIPE}<div class="mast"><p class="kind">${esc(t.manual.kind)}</p><h1>${esc(doc.title)}</h1><div class="docinfo">${info}</div>${
         edition.changedSince !== null ? `<p class="since">${esc(t.manual.changedSince(edition.changedSince))}</p>` : ""
-      }${STRIPE}</div>
+      }</div>
 ${doc.description ? `<h3>${esc(t.manual.about)}</h3><p class="lead">${esc(doc.description)}</p>` : ""}
-<h3>${esc(t.manual.usesAndValues)}</h3><table class="facts">${rows}</table>
+<h3>${esc(t.manual.overview)}</h3><table class="facts">${rows}</table>
 <h3>${esc(t.manual.contents)}</h3><ol class="toc">${toc}</ol>
 ${revisions}
 <p class="hint">${icon("pencil")}<span>${esc(t.manual.checkHint)}</span></p>
