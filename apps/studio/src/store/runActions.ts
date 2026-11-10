@@ -31,8 +31,13 @@ import {
 import { secretFixOf } from "./secrets";
 import { findStep } from "./steps";
 
-export const runActions = ({ api, set, get }: StoreContext) =>
-  ({
+export const runActions = ({ api, set, get }: StoreContext) => {
+  /** Turns the editor to the 実行結果 of a whole run that ended well. `seq` counts these, so a second run of the same flow turns it again. */
+  const showResult = (flowId: string, runId: string) => {
+    if (get().resultFor?.runId === runId) return;
+    set({ resultFor: { flowId, runId, seq: (get().resultFor?.seq ?? 0) + 1 } });
+  };
+  return {
     async testStep(stepId, values) {
       const flow = get().flow;
       if (!flow || get().stepTest?.running || (get().run && isActive(get().run))) return;
@@ -96,9 +101,11 @@ export const runActions = ({ api, set, get }: StoreContext) =>
           band: loadBandSettings(),
           ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
         });
+        // Not a run up to, from or step by step through a node: its end shows the 実行結果.
+        const whole = !options?.step && !options?.stopAt && !options?.startAt;
         set((s) => ({
           // Events may have arrived before the command returned.
-          run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
+          run: { ...(s.run?.runId === runId ? s.run : newRun(runId, flow.id)), whole },
           // A new run's result replaces what a node run alone gave.
           stepTest: null,
           // Values tested alone before this run are older than what it reads.
@@ -108,6 +115,9 @@ export const runActions = ({ api, set, get }: StoreContext) =>
           // A run's log opens under the chart.
           bottom: "log",
         }));
+        // A quick run may have ended before the command returned, before it was known as whole.
+        const ended = get().run;
+        if (whole && ended?.runId === runId && ended.status === "succeeded") showResult(flow.id, runId);
       } catch (e) {
         set({ error: message(e) });
       }
@@ -431,6 +441,10 @@ export const runActions = ({ api, set, get }: StoreContext) =>
         set({ trying: null });
         void get().debug({ action: "stepOver" });
       } else if (trying && env.type === "runFinished") set({ trying: null });
+      const ended = get().run;
+      if (env.type === "runFinished" && env.status === "succeeded" && ended?.runId === env.runId && ended.whole && ended.flowId) {
+        showResult(ended.flowId, env.runId);
+      }
     },
 
     hideTrail() {
@@ -444,4 +458,5 @@ export const runActions = ({ api, set, get }: StoreContext) =>
     dismiss() {
       set({ notice: null, error: null });
     },
-  }) satisfies Partial<StudioState>;
+  } satisfies Partial<StudioState>;
+};

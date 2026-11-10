@@ -126,6 +126,7 @@ impl SpellSheetMcp {
                 project_dir,
                 full_run: true,
                 origin: RunOrigin::new(RunTrigger::Mcp),
+                last_screen: record::last_screen_path(root, &id),
                 ..RunOptions::default()
             },
         ) {

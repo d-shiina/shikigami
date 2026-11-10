@@ -429,6 +429,8 @@ mod tests {
             subflows: Vec::new(),
             origin,
             secrets_used: vec!["受注システム".into()],
+            touched: Vec::new(),
+            last_screen: None,
         };
         record::RunRecorder::create(&local, &run)
             .unwrap()

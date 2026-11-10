@@ -2114,6 +2114,7 @@ fn write_file_runtime() -> Runtime {
         default_timeout_ms: None,
         deprecated: None,
         plugin: None,
+        risk: RiskLevel::Interactive,
         ..flaky_def()
     };
     Runtime::builder().register(def, WriteFile).build()
@@ -2167,6 +2168,64 @@ async fn relative_paths_are_resolved_from_each_flows_folder() {
     assert!(sub_dir.path().join("output").join("from-sub.txt").is_file());
     // Not a full run: no log.
     assert!(!main_dir.path().join("logs").exists());
+}
+
+#[tokio::test]
+async fn the_report_names_the_files_a_run_wrote_with_their_stamp() {
+    let main_dir = tempfile::tempdir().unwrap();
+    let sub_dir = tempfile::tempdir().unwrap();
+    let runtime = write_file_runtime();
+    let write = |path: &str| {
+        Step::new("test.writeFile")
+            .with_param("path", path)
+            .with_param("text", "abc")
+    };
+    let mut sub = flow(vec![write("output/from-sub.txt")]);
+    sub.id = "scn_sub".into();
+    let call = Step::new("flow.call").with_param("flow", "scn_sub");
+    let s = flow(vec![
+        write("output/a.txt"),
+        write("output/a.txt"),
+        // Logging stays inside the run.
+        Step::new("log.message").with_param("message", "done"),
+        call,
+    ]);
+    let (report, _) = run_project(
+        &runtime,
+        s,
+        RunOptions {
+            project_dir: Some(main_dir.path().to_path_buf()),
+            subflows: vec![Subflow {
+                flow: sub,
+                version: None,
+                project_dir: Some(sub_dir.path().to_path_buf()),
+            }],
+            ..RunOptions::default()
+        },
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.touched.len(), 2, "{:#?}", report.touched);
+    let main = &report.touched[0];
+    assert_eq!(
+        std::path::Path::new(&main.target),
+        main_dir.path().join("output").join("a.txt")
+    );
+    assert_eq!(main.count, 2);
+    assert!(!main.reads);
+    assert_eq!(main.step_types, vec!["test.writeFile"]);
+    let stamp = main.file.as_ref().expect("stamped");
+    assert_eq!(stamp.size, 3);
+    assert_eq!(
+        stamp.sha256.as_deref(),
+        Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    );
+    let inner = &report.touched[1];
+    assert!(inner.target.ends_with("from-sub.txt"));
+    // flow() numbers the steps: the call is the fourth.
+    assert_eq!(inner.call_path, vec![StepId::new("s4")]);
+    // Without a browser there is no last page.
+    assert!(report.last_screen.is_none());
 }
 
 #[tokio::test]

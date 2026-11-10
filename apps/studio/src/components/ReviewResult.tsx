@@ -28,7 +28,25 @@ function useFile(flowId: string | undefined, path: string, sheet: string | undef
 const NUMBER = /^-?[\d,]+(\.\d+)?$/;
 
 /** A file's content as it is on disk now: the first rows of each sheet, the start of a text, or a picture. */
-export function FileBox({ flowId, path, label, stamp, quiet = false }: { flowId: string | undefined; path: string; label: string; stamp: string; quiet?: boolean }) {
+export function FileBox({
+  flowId,
+  path,
+  label,
+  stamp,
+  quiet = false,
+  openLabel,
+  note,
+}: {
+  flowId: string | undefined;
+  path: string;
+  label: string;
+  stamp: string;
+  quiet?: boolean;
+  /** The open button's words, e.g. 「Excel で開く」 (default 「アプリで開く」). */
+  openLabel?: string;
+  /** A line under the head, e.g. whether the file is still as a run left it. */
+  note?: React.ReactNode;
+}) {
   const [sheet, setSheet] = useState<string | undefined>(undefined);
   const loaded = useFile(flowId, path, sheet, stamp);
   const preview = loaded?.preview;
@@ -48,10 +66,11 @@ export function FileBox({ flowId, path, label, stamp, quiet = false }: { flowId:
             className="ml-auto flex shrink-0 items-center gap-1 text-[12.5px] text-brand-600 hover:underline"
           >
             <ExternalLink size={13} aria-hidden="true" />
-            {t.desk.openFile}
+            {openLabel ?? t.desk.openFile}
           </button>
         )}
       </div>
+      {note}
       {sheets.length > 1 && (
         <div className="flex gap-1 border-b border-slate-200 px-2.5 pt-1.5 text-[12px]" role="tablist">
           {sheets.map((name) => (

@@ -3170,6 +3170,17 @@ export interface RunReport {
    * logins, OAuth tokens), never their values.
    */
   secretsUsed?: string[];
+  /**
+   * What the run worked on outside itself: files and folders it read,
+   * wrote or deleted, sites and programs it opened, addresses it sent
+   * to, in the order it first did (see [`crate::touched`]).
+   */
+  touched?: Touched[];
+  /**
+   * The picture of the last page a browser step worked on, as the run
+   * left it (`RunOptions::last_screen`).
+   */
+  lastScreen?: string | null;
 }
 /**
  * A called flow's content as used by a run.
@@ -3205,6 +3216,70 @@ export interface RunOrigin1 {
    * Runtime when not given.
    */
   machine?: string | null;
+}
+/**
+ * One place a run worked on.
+ *
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
+ * via the `definition` "Touched".
+ */
+export interface Touched {
+  /**
+   * The file, folder, URL, program or address, as the step ran with it.
+   */
+  target: string;
+  /**
+   * The step types that worked on it, in the order they first did.
+   */
+  stepTypes: string[];
+  /**
+   * Identifier of a step. Unique within a flow and stable across edits.
+   */
+  stepId: string;
+  /**
+   * The `flow.call` steps that step ran inside (outermost first).
+   */
+  callPath?: StepId[];
+  /**
+   * Nothing was changed: every step on it only read.
+   */
+  reads?: boolean;
+  /**
+   * An element on a page or window that steps acted on (clicked,
+   * typed into, chose from): `target` is the step's target as JSON,
+   * e.g. `{"role":"button","name":"出荷"}`. What was typed is not kept.
+   */
+  screen?: boolean;
+  /**
+   * How many times steps worked on it.
+   */
+  count: number;
+  /**
+   * When a step first worked on it.
+   */
+  at: string;
+  /**
+   * A file the run changed, as it was when the run ended.
+   */
+  file?: FileStamp | null;
+  /**
+   * The run changed it and it was not there when the run ended
+   * (deleted or moved).
+   */
+  gone?: boolean;
+}
+/**
+ * A file as it was when the run ended.
+ *
+ * This interface was referenced by `SpellSheetRunApi`'s JSON-Schema
+ * via the `definition` "FileStamp".
+ */
+export interface FileStamp {
+  size: number;
+  /**
+   * Lower-case hex; absent for files too large to read through.
+   */
+  sha256?: string | null;
 }
 /**
  * Live state of a run, for `get_run_status` while it is executing.

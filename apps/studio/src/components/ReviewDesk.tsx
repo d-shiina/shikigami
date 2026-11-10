@@ -666,7 +666,7 @@ export function ReviewFoot({ report }: { report: boolean }) {
   );
 }
 
-function PaperSection({ id, n, title, note, aside, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; children: React.ReactNode }) {
+export function PaperSection({ id, n, title, note, aside, children }: { id?: string; n?: number; title: string; note?: string; aside?: string; children: React.ReactNode }) {
   return (
     <section id={id} className="mt-9 scroll-mt-6">
       <h2 className="flex items-center gap-2 text-[15px] font-bold">

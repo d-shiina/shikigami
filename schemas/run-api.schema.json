@@ -801,6 +801,20 @@
           "items": {
             "type": "string"
           }
+        },
+        "touched": {
+          "description": "What the run worked on outside itself: files and folders it read,\nwrote or deleted, sites and programs it opened, addresses it sent\nto, in the order it first did (see [`crate::touched`]).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Touched"
+          }
+        },
+        "lastScreen": {
+          "description": "The picture of the last page a browser step worked on, as the run\nleft it (`RunOptions::last_screen`).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -843,6 +857,95 @@
         "flowId",
         "flowName",
         "revision"
+      ]
+    },
+    "Touched": {
+      "description": "One place a run worked on.",
+      "type": "object",
+      "properties": {
+        "target": {
+          "description": "The file, folder, URL, program or address, as the step ran with it.",
+          "type": "string"
+        },
+        "stepTypes": {
+          "description": "The step types that worked on it, in the order they first did.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stepId": {
+          "description": "The first step that worked on it.",
+          "$ref": "#/$defs/StepId"
+        },
+        "callPath": {
+          "description": "The `flow.call` steps that step ran inside (outermost first).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepId"
+          }
+        },
+        "reads": {
+          "description": "Nothing was changed: every step on it only read.",
+          "type": "boolean"
+        },
+        "screen": {
+          "description": "An element on a page or window that steps acted on (clicked,\ntyped into, chose from): `target` is the step's target as JSON,\ne.g. `{\"role\":\"button\",\"name\":\"出荷\"}`. What was typed is not kept.",
+          "type": "boolean"
+        },
+        "count": {
+          "description": "How many times steps worked on it.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at": {
+          "description": "When a step first worked on it.",
+          "type": "string"
+        },
+        "file": {
+          "description": "A file the run changed, as it was when the run ended.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileStamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gone": {
+          "description": "The run changed it and it was not there when the run ended\n(deleted or moved).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target",
+        "stepTypes",
+        "stepId",
+        "count",
+        "at"
+      ]
+    },
+    "FileStamp": {
+      "description": "A file as it was when the run ended.",
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sha256": {
+          "description": "Lower-case hex; absent for files too large to read through.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "size"
       ]
     },
     "RunSnapshot": {

@@ -768,6 +768,9 @@ pub fn open_project_file(
 ) -> CmdResult<()> {
     let target = if path.is_empty() {
         state.service.project_dir(&id)?
+    } else if std::path::Path::new(&path).is_absolute() {
+        // A file a run wrote outside the flow's folder (its 実行結果).
+        std::path::PathBuf::from(&path)
     } else {
         state.service.project_path(&id, &path)?
     };
@@ -1016,6 +1019,111 @@ pub fn run_record(state: State<'_, AppState>, run_id: RunId) -> CmdResult<RunRec
     })
 }
 
+/// Most runs `flow_runs` lists.
+const MAX_FLOW_RUNS: usize = 300;
+/// Most run records `flow_runs` looks through.
+const FLOW_RUNS_SCAN: usize = 5_000;
+
+/// One finished run of a flow, for the list beside its 実行結果.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowRun {
+    run_id: RunId,
+    status: spellsheet_runtime::RunStatus,
+    #[serde(with = "time::serde::rfc3339")]
+    started_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    finished_at: time::OffsetDateTime,
+    origin: spellsheet_runtime::RunOrigin,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
+    revision: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_code: Option<String>,
+}
+
+/// The flow's finished runs, newest first, from wherever they were started
+/// (Writer, Runner, a schedule, an AI, the command line): the records kept
+/// under `runs/` for `records.keepDays`.
+#[tauri::command]
+pub async fn flow_runs(state: State<'_, AppState>, id: FlowId) -> CmdResult<Vec<FlowRun>> {
+    let root = state.service.store().local_root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        let ids = spellsheet_runtime::record::list_runs(&root)
+            .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+        Ok(ids
+            .iter()
+            .take(FLOW_RUNS_SCAN)
+            .filter_map(|run| {
+                spellsheet_runtime::record::read_report(&root, run)
+                    .ok()
+                    .flatten()
+            })
+            .filter(|r| r.flow_id == id)
+            .take(MAX_FLOW_RUNS)
+            .map(|r| FlowRun {
+                error_code: r.error.as_ref().map(|e| e.code.clone()),
+                run_id: r.run_id,
+                status: r.status,
+                started_at: r.started_at,
+                finished_at: r.finished_at,
+                origin: r.origin,
+                version: r.version,
+                revision: r.revision,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| err("INTERNAL", e.to_string()))?
+}
+
+/// The picture of the last page a run's browser showed (kept with its
+/// record), as a data URL. `None` when the run kept none.
+#[tauri::command]
+pub fn run_last_screen(state: State<'_, AppState>, run_id: RunId) -> CmdResult<Option<String>> {
+    use base64::Engine as _;
+    let Some(path) =
+        spellsheet_runtime::record::last_screen_path(state.service.store().local_root(), &run_id)
+    else {
+        return Ok(None);
+    };
+    let Ok(bytes) = std::fs::read(&path) else {
+        return Ok(None);
+    };
+    if bytes.len() > 16 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG") {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    )))
+}
+
+/// A file's size and SHA-256 now, to tell whether it is still as a run
+/// left it. A relative path is in the flow's folder. `None` when it is
+/// not a file.
+#[tauri::command]
+pub async fn file_stamp(
+    state: State<'_, AppState>,
+    id: FlowId,
+    path: String,
+) -> CmdResult<Option<spellsheet_runtime::touched::FileStamp>> {
+    let full = std::path::Path::new(&path);
+    let full = if full.is_absolute() {
+        full.to_path_buf()
+    } else {
+        state.service.project_dir(&id)?.join(full)
+    };
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || {
+            spellsheet_runtime::touched::stamp_file(&full)
+        })
+        .await
+        .ok()
+        .flatten(),
+    )
+}
+
 /// How a Studio run pauses (see `spellsheet_runtime::debug`).
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1079,6 +1187,10 @@ pub async fn run_flow(
                 inputs: inputs.unwrap_or_default(),
                 run_id: Some(run_id.clone()),
                 screens_dir,
+                last_screen: spellsheet_runtime::record::last_screen_path(
+                    state.service.store().local_root(),
+                    &run_id,
+                ),
                 version,
                 debug: Some(DebugOptions {
                     pause_on_error: true,
