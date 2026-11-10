@@ -441,15 +441,26 @@ footer a { color: var(--fg-muted); }
 .way-head span { color: var(--fg-muted); font-size: 14px; }
 .way-head .tag { font-style: normal; font-size: 12px; font-weight: 600; color: var(--c, var(--accent)); background: var(--c-soft, var(--accent-soft)); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
 .way .ai-list { margin: 14px 0 0; }
-.way-steps { counter-reset: way; list-style: none; margin: 20px 0 0; padding: 0; }
-.way-steps li { position: relative; padding: 0 0 12px 36px; font-size: 15px; }
-.way-steps li::before {
-  counter-increment: way; content: counter(way);
-  position: absolute; left: 0; top: 2px;
-  width: 24px; height: 24px; border-radius: 50%;
-  display: grid; place-items: center;
-  background: var(--c-soft, var(--accent-soft)); color: var(--c, var(--accent)); font-weight: 700; font-size: 13px;
+.way-flow { list-style: none; margin: 20px 0 0; padding: 0; }
+.way-flow li {
+  --who: var(--accent); --who-soft: var(--accent-soft);
+  position: relative; display: grid; grid-template-columns: 6em 1fr; gap: 10px; align-items: center;
+  border: 1px solid color-mix(in srgb, var(--who) 30%, var(--line)); border-left: 4px solid var(--who);
+  background: var(--who-soft); border-radius: 6px; padding: 10px 14px; font-size: 15px; line-height: 1.6;
 }
+.way-flow li + li { margin-top: 26px; }
+.way-flow li + li::before {
+  content: ""; position: absolute; left: 50%; top: -22px; width: 2px; height: 14px; background: var(--fg-muted);
+}
+.way-flow li + li::after {
+  content: ""; position: absolute; left: calc(50% - 5px); top: -10px;
+  border: 6px solid transparent; border-top-color: var(--fg-muted); border-bottom: 0;
+}
+.way-flow .who { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; color: var(--who); white-space: nowrap; }
+.way-flow .who-you { --who: var(--orange); --who-soft: var(--orange-soft); }
+.way-flow .who-ai { --who: var(--cyan); --who-soft: var(--cyan-soft); }
+.way-flow .who-writer { --who: var(--accent); --who-soft: var(--accent-soft); }
+.way-count { margin: 14px 0 0; font-size: 14px; color: var(--fg-muted); }
 .way .ticks { border-top: 1px solid var(--line); padding-top: 12px; font-size: 15px; color: var(--fg-muted); }
 .feature .more { font-size: 14px; margin-top: 12px; }
 .cmp-wrap thead th { white-space: normal; }

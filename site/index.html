@@ -233,12 +233,13 @@
             <ul class="ai-list" aria-label="MCP に対応した AI">
               <li>Claude Code</li><li>OpenAI Codex</li><li>Gemini CLI</li><li>Antigravity</li><li>GitHub Copilot</li><li>Cursor</li>
             </ul>
-            <ol class="way-steps">
-              <li>Writer の AI チャットに、やりたいことをふだんの言葉で書いて送ります</li>
-              <li>AI が実際の画面を調べて操作を試し、通った操作だけをフローに残します</li>
-              <li>組み上がっていく様子が、そのままフロー図に出ます。迷ったところはチャットのカードで聞いてきます</li>
-              <li>できたら変更を読んで承諾します</li>
+            <ol class="way-flow" aria-label="MCP に対応した AI で作る流れ">
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">Writer の AI チャットに、やりたいことを書いて送る</span></li>
+              <li class="who-ai"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#sparkles"/></svg>AI</span><span class="what">実際の画面を調べ、操作を試し、通った操作だけをフローに残す。迷ったところはカードで聞く</span></li>
+              <li class="who-writer"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#pencil"/></svg>Writer</span><span class="what">組み上がっていく様子を、その場でフロー図に出す</span></li>
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">変更を読んで承諾する</span></li>
             </ol>
+            <p class="way-count">あなたの手が動くのは、最初と最後の 2 回だけです</p>
             <ul class="ticks">
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>ボタンや入力欄は、AI が画面から見つけて指定します</li>
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>業務の棚卸しは、聞き取りに答えるそばから紙が埋まります</li>
@@ -255,12 +256,16 @@
             <ul class="ai-list" aria-label="MCP に対応していない AI">
               <li>Microsoft Copilot</li><li>ChatGPT</li><li>Gemini</li><li>Claude</li><li>ほかの AI のチャット</li>
             </ul>
-            <ol class="way-steps">
-              <li>依頼を書いて「コピーして ○○ を開く」を押すと、答え方の指示・今のフロー・依頼をまとめてコピーし、AI のチャットが開きます</li>
-              <li>チャットに貼り付けて送ります</li>
-              <li>AI の答えをコピーして Writer に戻ると「クリップボードから取り込む」が出ます</li>
-              <li>変わったところと、あなたの作業を確かめ、「試し実行」で動かします</li>
+            <ol class="way-flow" aria-label="MCP に対応していない AI で作る流れ">
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">依頼を書いて「コピーして ○○ を開く」を押す</span></li>
+              <li class="who-writer"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#pencil"/></svg>Writer</span><span class="what">答え方の指示・今のフロー・依頼をまとめてコピーし、AI のチャットを開く</span></li>
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">チャットに貼り付けて送る</span></li>
+              <li class="who-ai"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#sparkles"/></svg>AI</span><span class="what">フローを書いて答える</span></li>
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">答えをコピーして Writer に戻る</span></li>
+              <li class="who-writer"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#pencil"/></svg>Writer</span><span class="what">「クリップボードから取り込む」で取り込み、変わったところとあなたの作業を出す</span></li>
+              <li class="who-you"><span class="who"><svg class="i i-sm"><use href="assets/icons.svg#user"/></svg>あなた</span><span class="what">「試し実行」で動かし、よければ承諾する</span></li>
             </ol>
+            <p class="way-count">コピーと貼り付けの往復が入るぶん、手間は増えますが、いつもの AI のチャットのまま作れます</p>
             <ul class="ticks">
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>「画面を添える」で、画面のボタンや入力欄の名前と種類を依頼に入れられます。入力された値や画面の文章は入れません</li>
               <li><svg class="i"><use href="assets/icons.svg#check"/></svg>試し実行で止まったら、止まったところと画面の様子を入れた修正の依頼をボタン 1 つでコピーします</li>
