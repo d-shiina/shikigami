@@ -9,7 +9,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentChoice, AgentEvent, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentChoice, AgentEvent, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, InstallStep, LoginEvent } from "./lib/api";
 import { ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 
@@ -88,7 +88,8 @@ export type LoginState =
 /** Installing the agent from the pane. */
 export type InstallState =
   | { phase: "idle" }
-  | { phase: "running"; lines: string[] }
+  /** `step` is null until the installer names its first stage; `lastAt` is when it last printed. */
+  | { phase: "running"; step: InstallStep | null; lines: string[]; startedAt: number; lastAt: number }
   /** Asked to stop; the button is back once the installer is gone. */
   | { phase: "stopping" }
   | { phase: "failed"; message: string };
@@ -567,7 +568,8 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       },
 
       async startInstall(kind) {
-        set({ install: { phase: "running", lines: [] } });
+        const now = Date.now();
+        set({ install: { phase: "running", step: null, lines: [], startedAt: now, lastAt: now } });
         try {
           await api.install(kind);
         } catch (e) {
@@ -588,8 +590,12 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           return;
         }
         if (install.phase !== "running") return;
+        if (event.kind === "step") {
+          set({ install: { ...install, step: event.step, lastAt: Date.now() } });
+          return;
+        }
         if (event.kind === "progress") {
-          set({ install: { phase: "running", lines: [...install.lines.slice(-19), event.line] } });
+          set({ install: { ...install, lines: [...install.lines.slice(-19), event.line], lastAt: Date.now() } });
           return;
         }
         if (!event.ok) {

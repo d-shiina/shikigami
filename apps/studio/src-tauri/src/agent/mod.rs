@@ -565,6 +565,8 @@ pub(crate) const INSTALL_EVENT: &str = "agent-install";
     rename_all_fields = "camelCase"
 )]
 pub enum InstallEvent {
+    /// What the installer is doing now, so the pane can say it in words.
+    Step { step: InstallStep },
     /// A line the installer printed (downloading, done…).
     Progress { line: String },
     Done {
@@ -575,6 +577,40 @@ pub enum InstallEvent {
     },
     /// Stopped on request, and the installer is gone: another can start.
     Cancelled,
+}
+
+/// The stages of an install. npm prints nothing for minutes while it
+/// unpacks (a virus scanner reads every file), so the pane names the stage
+/// and how long it has taken instead of looking stuck.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InstallStep {
+    /// Installing Node.js with winget (Windows may ask for permission).
+    Node,
+    /// `npm install --global`: downloading and unpacking the package.
+    Package,
+    /// The tool's own installer (Claude Code, Cursor).
+    Installer,
+    /// The installer ended; checking the tool is there and signed in.
+    Check,
+}
+
+impl InstallStep {
+    fn marker(self) -> &'static str {
+        match self {
+            Self::Node => "::spellsheet-step::node",
+            Self::Package => "::spellsheet-step::package",
+            Self::Installer => "::spellsheet-step::installer",
+            Self::Check => "::spellsheet-step::check",
+        }
+    }
+
+    /// The step a line of the script announces, if it is a marker.
+    fn from_marker(line: &str) -> Option<Self> {
+        [Self::Node, Self::Package, Self::Installer, Self::Check]
+            .into_iter()
+            .find(|s| s.marker() == line)
+    }
 }
 
 /// The installer in flight, so the pane can stop it.
@@ -647,47 +683,50 @@ pub async fn agent_install(
         let emit = |event: InstallEvent| {
             let _ = app.emit(INSTALL_EVENT, event);
         };
-        let mut stderr = child.stderr.take();
-        let stderr_task = tauri::async_runtime::spawn(async move {
-            let mut buf = Vec::new();
-            if let Some(s) = stderr.as_mut() {
-                let _ = s.read_to_end(&mut buf).await;
-            }
-            String::from_utf8_lossy(&buf).into_owned()
-        });
+        // Both streams, line by line as they come: npm and winget write
+        // their progress to stderr, and winget redraws it with `\r`.
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        if let Some(out) = child.stdout.take() {
+            tauri::async_runtime::spawn(forward_lines(out, tx.clone()));
+        }
+        if let Some(err) = child.stderr.take() {
+            tauri::async_runtime::spawn(forward_lines(err, tx.clone()));
+        }
+        drop(tx);
+        let mut output = InstallOutput::default();
         let mut stopped = false;
-        if let Some(stdout) = child.stdout.take() {
-            let mut lines = BufReader::new(stdout).lines();
-            loop {
-                tokio::select! {
-                    () = cancel.cancelled() => {
-                        kill_tree(&mut child);
-                        stopped = true;
-                        break;
-                    }
-                    line = lines.next_line() => match line {
-                        Ok(Some(line)) => {
-                            let line = strip_ansi(line.trim());
-                            if !line.is_empty() {
-                                emit(InstallEvent::Progress { line });
-                            }
+        loop {
+            tokio::select! {
+                () = cancel.cancelled() => {
+                    kill_tree(&mut child);
+                    stopped = true;
+                    break;
+                }
+                line = rx.recv() => match line {
+                    Some(line) => {
+                        if let Some(step) = InstallStep::from_marker(&line) {
+                            emit(InstallEvent::Step { step });
+                        } else if let Some(line) = output.push(&line) {
+                            emit(InstallEvent::Progress { line });
                         }
-                        Ok(None) | Err(_) => break,
                     }
+                    None => break,
                 }
             }
         }
         let status = child.wait().await;
-        let stderr = stderr_task.await.unwrap_or_default();
         // The next installer may start once this one is gone.
         *lock(&app.state::<AgentInstall>().cancel) = None;
         if stopped {
             emit(InstallEvent::Cancelled);
             return;
         }
+        emit(InstallEvent::Step {
+            step: InstallStep::Check,
+        });
         let installed = kind.find();
-        let ok =
-            status.as_ref().is_ok_and(std::process::ExitStatus::success) && installed.is_some();
+        let exited_ok = status.as_ref().is_ok_and(std::process::ExitStatus::success);
+        let ok = exited_ok && installed.is_some();
         if ok && let Err(e) = AgentConfig::select(kind) {
             tracing::warn!(error = %e.message, "cannot switch to the installed agent");
         }
@@ -695,14 +734,10 @@ pub async fn agent_install(
             Some(program) if ok => !logged_in(kind, program).await,
             _ => false,
         };
-        let message = (!ok).then(|| {
-            let tail = tail(strip_ansi(stderr.trim()).trim(), STDERR_TAIL);
-            if tail.is_empty() {
-                "インストールできませんでした".to_owned()
-            } else {
-                tail
-            }
-        });
+        let message = (!ok).then(|| output.failure(kind, exited_ok));
+        if let Some(message) = &message {
+            tracing::warn!(?kind, %message, "agent install failed");
+        }
         emit(InstallEvent::Done {
             ok,
             message,
@@ -712,48 +747,161 @@ pub async fn agent_install(
     Ok(())
 }
 
+/// Sends each line `stream` prints, split at `\n` or `\r`, without colours.
+async fn forward_lines(
+    mut stream: impl tokio::io::AsyncRead + Unpin,
+    tx: tokio::sync::mpsc::UnboundedSender<String>,
+) {
+    let mut pending: Vec<u8> = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        let n = match stream.read(&mut buf).await {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        for &b in &buf[..n] {
+            if b == b'\n' || b == b'\r' {
+                send_line(&mut pending, &tx);
+            } else {
+                pending.push(b);
+            }
+        }
+    }
+    send_line(&mut pending, &tx);
+}
+
+fn send_line(pending: &mut Vec<u8>, tx: &tokio::sync::mpsc::UnboundedSender<String>) {
+    let line = strip_ansi(String::from_utf8_lossy(pending).trim());
+    pending.clear();
+    let line = line.trim();
+    if !line.is_empty() {
+        let _ = tx.send(line.to_owned());
+    }
+}
+
+/// What the installer printed, kept to say why it failed.
+#[derive(Default)]
+struct InstallOutput {
+    lines: Vec<String>,
+    errors: Vec<String>,
+}
+
+impl InstallOutput {
+    const KEEP: usize = 40;
+
+    /// Keeps `line` and returns it when it is worth showing: not a spinner
+    /// frame (winget's `-\|/`) or a bare progress bar.
+    fn push(&mut self, line: &str) -> Option<String> {
+        if !line.chars().any(char::is_alphanumeric) {
+            return None;
+        }
+        let lower = line.to_lowercase();
+        if lower.starts_with("npm error")
+            || lower.starts_with("npm err!")
+            || lower.contains("error:")
+            || lower.starts_with("error ")
+        {
+            self.errors.push(line.to_owned());
+            if self.errors.len() > Self::KEEP {
+                self.errors.remove(0);
+            }
+        }
+        if self.lines.last().map(String::as_str) == Some(line) {
+            return None;
+        }
+        self.lines.push(line.to_owned());
+        if self.lines.len() > Self::KEEP {
+            self.lines.remove(0);
+        }
+        Some(line.to_owned())
+    }
+
+    /// Why the install failed, in the installer's own words when it gave them.
+    fn failure(&self, kind: AgentKind, exited_ok: bool) -> String {
+        if exited_ok {
+            // The installer said it worked but the tool is not where it is looked for.
+            let name = kind.program().unwrap_or("AI");
+            return format!(
+                "インストーラーは終わりましたが、{name} が見つかりません。Writer を開き直してから、もう一度お試しください"
+            );
+        }
+        let words = if self.errors.is_empty() {
+            &self.lines
+        } else {
+            &self.errors
+        };
+        let text = tail(words.join("\n").trim(), STDERR_TAIL);
+        if text.is_empty() {
+            "インストールできませんでした".to_owned()
+        } else {
+            text
+        }
+    }
+}
+
 /// The installer for `kind`, run by PowerShell on Windows and `sh` elsewhere.
+/// Each stage starts by printing its marker (`InstallStep::marker`).
 fn install_script(kind: AgentKind) -> String {
+    let installer = InstallStep::Installer.marker();
     if kind == AgentKind::Cursor {
         // Cursor's own installer (no Node.js needed; it brings its own).
         return if cfg!(windows) {
-            "irm 'https://cursor.com/install?win32=true' | iex".to_owned()
+            format!(
+                "{WINDOWS_PRELUDE} Write-Output '{installer}'; irm 'https://cursor.com/install?win32=true' | iex"
+            )
         } else {
-            "curl https://cursor.com/install -fsS | bash".to_owned()
+            format!("echo '{installer}'; curl https://cursor.com/install -fsS | bash")
         };
     }
     if kind == AgentKind::Antigravity {
         // Google's own installer (a single program; no Node.js needed).
         return if cfg!(windows) {
-            "irm https://antigravity.google/cli/install.ps1 | iex".to_owned()
+            format!(
+                "{WINDOWS_PRELUDE} Write-Output '{installer}'; irm https://antigravity.google/cli/install.ps1 | iex"
+            )
         } else {
-            "curl -fsSL https://antigravity.google/cli/install.sh | bash".to_owned()
+            format!(
+                "echo '{installer}'; curl -fsSL https://antigravity.google/cli/install.sh | bash"
+            )
         };
     }
     let Some(package) = kind.npm_package() else {
         return if cfg!(windows) {
-            "irm https://claude.ai/install.ps1 | iex".to_owned()
+            format!(
+                "{WINDOWS_PRELUDE} Write-Output '{installer}'; irm https://claude.ai/install.ps1 | iex"
+            )
         } else {
-            "curl -fsSL https://claude.ai/install.sh | bash".to_owned()
+            format!("echo '{installer}'; curl -fsSL https://claude.ai/install.sh | bash")
         };
     };
+    let node = InstallStep::Node.marker();
+    let step = InstallStep::Package.marker();
+    // `--loglevel http` prints each download, so the pane shows it moving;
+    // audit and funding notices only cost time here.
+    let npm = format!("npm install --global --no-audit --no-fund --loglevel http {package}");
     if cfg!(windows) {
         // Node.js first when npm is missing (winget asks for permission
         // itself); then npm from where that installer put it.
         format!(
-            "$ErrorActionPreference = 'Stop'; \
+            "{WINDOWS_PRELUDE} $ErrorActionPreference = 'Stop'; \
              if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {{ \
-               Write-Output 'Node.js をインストールしています…'; \
-               winget install --exact --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements; \
+               Write-Output '{node}'; \
+               winget install --exact --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements --disable-interactivity; \
                $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') \
              }}; \
-             npm install --global {package}; \
+             Write-Output '{step}'; \
+             {npm}; \
              if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}"
         )
     } else {
-        format!("npm install --global {package}")
+        format!("echo '{step}'; {npm}")
     }
 }
+
+/// Reads and writes UTF-8, so the installers' words reach the pane intact
+/// (Windows PowerShell otherwise uses the console's code page, 932 in Japan).
+const WINDOWS_PRELUDE: &str =
+    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $OutputEncoding = [Text.Encoding]::UTF8;";
 
 /// Asks the installer to stop; `agent-install` says `cancelled` once it is gone.
 #[tauri::command]
@@ -2082,5 +2230,108 @@ mod tests {
         let c: AgentConfig = serde_json::from_value(json!({ "kind": "codex" })).unwrap();
         assert_eq!(c.kind, AgentKind::Codex);
         assert_eq!(c.name(), "Codex");
+    }
+
+    /// npm prints nothing for minutes while it unpacks; each stage of the
+    /// script announces itself so the pane can say what it is doing.
+    #[test]
+    fn every_installer_announces_its_stage() {
+        for kind in [AgentKind::Codex, AgentKind::Gemini, AgentKind::Copilot] {
+            let script = install_script(kind);
+            assert!(script.contains(InstallStep::Package.marker()), "{kind:?}");
+            assert!(script.contains("--loglevel http"), "{kind:?}");
+            assert!(
+                !script.contains("インストール"),
+                "the script is ASCII; the pane words it"
+            );
+        }
+        for kind in [
+            AgentKind::ClaudeCode,
+            AgentKind::Cursor,
+            AgentKind::Antigravity,
+        ] {
+            assert!(
+                install_script(kind).contains(InstallStep::Installer.marker()),
+                "{kind:?}"
+            );
+        }
+        for step in [
+            InstallStep::Node,
+            InstallStep::Package,
+            InstallStep::Installer,
+            InstallStep::Check,
+        ] {
+            assert_eq!(InstallStep::from_marker(step.marker()), Some(step));
+        }
+        assert_eq!(InstallStep::from_marker("added 1 package"), None);
+    }
+
+    #[test]
+    fn install_steps_reach_the_pane_by_name() {
+        let event = InstallEvent::Step {
+            step: InstallStep::Package,
+        };
+        assert_eq!(
+            serde_json::to_value(&event).unwrap(),
+            json!({ "kind": "step", "step": "package" })
+        );
+    }
+
+    /// winget redraws its progress with `\r`; npm writes to stderr.
+    #[tokio::test]
+    async fn splits_progress_at_carriage_returns_too() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let input: &[u8] = b"  - \r  \\ \r\x1b[32mDownloading 10%\x1b[0m\rDownloading 50%\r\nnpm http fetch GET 200 x\nlast";
+        forward_lines(input, tx).await;
+        let mut lines = Vec::new();
+        while let Some(l) = rx.recv().await {
+            lines.push(l);
+        }
+        assert_eq!(
+            lines,
+            [
+                "-",
+                "\\",
+                "Downloading 10%",
+                "Downloading 50%",
+                "npm http fetch GET 200 x",
+                "last"
+            ]
+        );
+    }
+
+    #[test]
+    fn says_why_the_install_failed_in_npms_words() {
+        let mut out = InstallOutput::default();
+        assert_eq!(out.push("-"), None, "a spinner frame is not shown");
+        assert_eq!(
+            out.push("npm http fetch GET 200 https://registry.npmjs.org/x 10ms")
+                .as_deref(),
+            Some("npm http fetch GET 200 https://registry.npmjs.org/x 10ms")
+        );
+        out.push("npm error code ECONNRESET");
+        out.push("npm error network aborted");
+        out.push("npm error A complete log of this run can be found in: x.log");
+        assert_eq!(
+            out.failure(AgentKind::Gemini, false),
+            "npm error code ECONNRESET\nnpm error network aborted\nnpm error A complete log of this run can be found in: x.log"
+        );
+        // No error lines: the last of what it printed.
+        let mut quiet = InstallOutput::default();
+        quiet.push("Downloading Claude Code");
+        assert_eq!(
+            quiet.failure(AgentKind::ClaudeCode, false),
+            "Downloading Claude Code"
+        );
+        assert_eq!(
+            InstallOutput::default().failure(AgentKind::Codex, false),
+            "インストールできませんでした"
+        );
+        // It said it worked, but the tool is not there.
+        assert!(
+            InstallOutput::default()
+                .failure(AgentKind::Gemini, true)
+                .contains("gemini が見つかりません")
+        );
     }
 }

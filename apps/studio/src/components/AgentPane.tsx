@@ -4,7 +4,7 @@
 import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
-import { type AgentChoice, type AgentKind, agent } from "../lib/api";
+import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { plainLine } from "../lib/markdown";
@@ -568,10 +568,11 @@ function SetupCard() {
       <div className="leading-relaxed text-slate-600">{t.agent.setup.note[kind === "command" ? "claudeCode" : kind]}</div>
       {busy ? (
         <>
-          <div className="flex items-center gap-1.5 text-slate-700">
-            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-            {install.phase === "stopping" ? t.agent.setup.stopping : t.agent.setup.installing}
+          <div className="flex items-start gap-1.5 text-slate-700" role="status">
+            <Loader2 size={13} className="mt-0.5 shrink-0 animate-spin" aria-hidden="true" />
+            <span className="leading-relaxed">{install.phase === "stopping" ? t.agent.setup.stopping : installStepText(install.step, name)}</span>
           </div>
+          {install.phase === "running" && <InstallClock startedAt={install.startedAt} lastAt={install.lastAt} />}
           {install.phase === "running" && install.lines.length > 0 && (
             <pre className="max-h-24 overflow-y-auto rounded-md bg-sheet px-2 py-1 font-mono text-[10.5px] leading-snug whitespace-pre-wrap text-slate-600">{install.lines.slice(-6).join("\n")}</pre>
           )}
@@ -581,7 +582,12 @@ function SetupCard() {
         </>
       ) : (
         <>
-          {install.phase === "failed" && <div className="whitespace-pre-wrap text-shu-600">{install.message}</div>}
+          {install.phase === "failed" && (
+            <div className="space-y-0.5 text-shu-600" role="alert">
+              <div className="font-semibold">{t.agent.installFailed}</div>
+              {install.message !== t.agent.installFailed && <div className="font-mono text-[11px] leading-snug whitespace-pre-wrap break-all">{install.message}</div>}
+            </div>
+          )}
           <button type="button" onClick={() => void start(kind)} className={primary}>
             <Download size={13} strokeWidth={2} aria-hidden="true" />
             {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(name)}
@@ -592,6 +598,42 @@ function SetupCard() {
     </div>
   );
 }
+
+/** What the installer is doing now, in words. */
+function installStepText(step: InstallStep | null, name: string): string {
+  const steps = t.agent.setup.steps;
+  switch (step) {
+    case null:
+      return t.agent.setup.installing;
+    case "node":
+      return steps.node;
+    case "package":
+      return steps.package(name);
+    case "installer":
+      return steps.installer(name);
+    case "check":
+      return steps.check;
+  }
+}
+
+/** How long the install has taken, and a word when it has gone quiet: npm prints nothing for minutes while it unpacks. */
+function InstallClock({ startedAt, lastAt }: { startedAt: number; lastAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const quiet = now - lastAt >= QUIET_MS;
+  return (
+    <div className="space-y-1 text-[11px] leading-relaxed text-slate-500">
+      <div className="tabular-nums">{t.agent.setup.elapsed(Math.max(0, Math.floor((now - startedAt) / 1000)))}</div>
+      {quiet && <div>{t.agent.setup.quiet}</div>}
+    </div>
+  );
+}
+
+/** No new line for this long, and the pane says it has not stopped. */
+const QUIET_MS = 60_000;
 
 /** Signs the agent in without leaving the pane, after a turn failed on an expired login. */
 function LoginBox({ name }: { name: string }) {
