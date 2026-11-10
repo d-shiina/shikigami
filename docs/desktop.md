@@ -91,6 +91,7 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
 ```
 
 - `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the flow
+- `ask_user_to_pick` with `app: "desktop"`: when the AI cannot tell which part the person means (two 「編集」 buttons, an icon without a name, words that do not settle it), it asks instead of guessing. Writer minimizes itself, a banner over the apps shows the AI's question, and the person clicks the part in the app, framed as in **Pick on screen** (the click never reaches the app; Esc or a right click declines). The part comes back as a desktop target with `label`, `window` and `windowChoices`, and the picked window is kept as what the change is based on (`observationId`). Writer shows 「AI がアプリ画面の部品の指定を求めています」 meanwhile and can decline it; it comes back when the person has clicked. The AI chat keeps what the AI asked. Windows only; not tried on a real PC yet
 - The contents of password fields appear neither in the list nor in `desktop.getValue`
 
 ## Logins (secrets)

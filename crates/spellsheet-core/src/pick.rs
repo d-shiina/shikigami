@@ -4,9 +4,11 @@
 //!
 //! When an AI cannot tell which element a step should touch (two 「編集」
 //! buttons, an icon without a name), it asks the person to click it in the
-//! browser window (MCP `ask_user_to_pick`). The browser itself shows the
-//! banner and catches the click; this store only lets Studio know that a
-//! request is waiting, so Studio can say so and offer to cancel it.
+//! browser window or in the Windows app (MCP `ask_user_to_pick`). The
+//! browser, or the frame drawn over the app, shows the question and catches
+//! the click; this store only lets Studio know that a request is waiting,
+//! so Studio can say so, offer to cancel it, and step aside (minimise) while
+//! the person points at an app.
 //!
 //! A request is one file in the per-PC part of the workspace (`picks/`),
 //! written when the AI starts waiting and removed when it stops. Studio
@@ -35,6 +37,23 @@ const UNTOUCHED_SECS: u64 = 20;
 const TOUCH_EVERY_SECS: u64 = 5;
 const MAX_MESSAGE_CHARS: usize = 300;
 
+/// Where the person points.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PickApp {
+    /// In the browser window the page is open in.
+    #[default]
+    Browser,
+    /// In a Windows app, anywhere on the screen.
+    Desktop,
+}
+
+impl PickApp {
+    fn is_browser(&self) -> bool {
+        *self == Self::Browser
+    }
+}
+
 /// What the AI waits for.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +80,9 @@ pub struct PickRequest {
     pub candidates: usize,
     #[serde(default)]
     pub kind: PickKind,
+    /// Where to point: in the browser, or in a Windows app.
+    #[serde(default, skip_serializing_if = "PickApp::is_browser")]
+    pub app: PickApp,
     /// The person said in Studio they finished (a wait by hand).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub done: bool,
@@ -161,13 +183,18 @@ impl PickRequestStore {
         url: Option<String>,
         candidates: usize,
     ) -> CoreResult<PickWait> {
-        self.file(message, url, candidates, PickKind::Pick)
+        self.file(message, url, candidates, PickKind::Pick, PickApp::Browser)
+    }
+
+    /// Files a request to point at something in a Windows app.
+    pub fn open_desktop(&self, message: &str) -> CoreResult<PickWait> {
+        self.file(message, None, 0, PickKind::Pick, PickApp::Desktop)
     }
 
     /// Files a wait for the person to finish something by hand in the
     /// browser; Studio offers 「終わりました」 and 「待つのをやめる」.
     pub fn open_human(&self, message: &str) -> CoreResult<PickWait> {
-        self.file(message, None, 0, PickKind::Human)
+        self.file(message, None, 0, PickKind::Human, PickApp::Browser)
     }
 
     fn file(
@@ -176,6 +203,7 @@ impl PickRequestStore {
         url: Option<String>,
         candidates: usize,
         kind: PickKind,
+        app: PickApp,
     ) -> CoreResult<PickWait> {
         let request = PickRequest {
             id: PickId::generate(),
@@ -183,6 +211,7 @@ impl PickRequestStore {
             url,
             candidates,
             kind,
+            app,
             done: false,
             requested_at: OffsetDateTime::now_utc(),
         };
@@ -268,6 +297,35 @@ fn untouched(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_request_says_when_it_is_for_an_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = PickRequestStore::new(dir.path());
+        let in_browser = store
+            .open("編集ボタンをクリックしてください", None, 0)
+            .unwrap();
+        let file = fs::read_to_string(
+            dir.path()
+                .join("picks")
+                .join(format!("{}.json", in_browser.request.id)),
+        )
+        .unwrap();
+        assert!(
+            !file.contains("\"app\""),
+            "a browser request stays as before: {file}"
+        );
+        drop(in_browser);
+        let in_app = store
+            .open_desktop("検索ボタンをクリックしてください")
+            .unwrap();
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].app, PickApp::Desktop);
+        assert_eq!(pending[0].kind, PickKind::Pick);
+        drop(in_app);
+        assert!(store.pending().unwrap().is_empty());
+    }
 
     #[test]
     fn a_request_lives_as_long_as_its_guard() {

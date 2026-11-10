@@ -194,7 +194,8 @@ impl Adapter for DesktopAdapter {
     /// Without `window`: the open windows. With it: that window's element
     /// tree (`element` narrows it to one part, `maxNodes` caps its size).
     /// `action: "pick"` lets the user point at an element on screen and
-    /// returns its target; `action: "snip"` lets the user cut a picture out
+    /// returns its target (`hint`: a second line under `message`), and
+    /// `action: "cancelPick"` ends a pick that waits, as Esc would; `action: "snip"` lets the user cut a picture out
     /// of the screen (`Op::Snip`); `action: "highlight"` frames `target` on screen;
     /// `action: "record"` writes down what the user does until they click
     /// the banner (`Op::Record`).
@@ -215,12 +216,18 @@ impl Adapter for DesktopAdapter {
                         .get("timeoutMs")
                         .and_then(Value::as_u64)
                         .map_or(PICK_TIMEOUT_MS, |ms| ms.clamp(1_000, 600_000));
+                    let hint = params
+                        .get("hint")
+                        .and_then(Value::as_str)
+                        .filter(|h| !h.trim().is_empty())
+                        .map(str::to_owned);
                     let labels = params.get("labels").cloned().unwrap_or(Value::Null);
                     let window_only = params.get("scope").and_then(Value::as_str) == Some("window");
                     return self
                         .backend
                         .call(Op::Pick {
                             message,
+                            hint,
                             timeout_ms,
                             labels,
                             window_only,
@@ -291,6 +298,13 @@ impl Adapter for DesktopAdapter {
                         .and_then(Value::as_u64)
                         .map_or(HIGHLIGHT_MS, |ms| ms.clamp(200, 10_000));
                     return self.backend.call(Op::Highlight { target, ms }).await;
+                }
+                // Ends a pick waiting for a click, as Esc would. Not through
+                // the backend: its thread is the one waiting in the pick.
+                Some("cancelPick") => {
+                    #[cfg(windows)]
+                    overlay::cancel_pick();
+                    return Ok(json!({ "cancelled": true }));
                 }
                 Some(other) => {
                     return Err(StepError::invalid_params(format!(

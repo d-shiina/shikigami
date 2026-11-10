@@ -63,6 +63,18 @@ impl SpellSheetMcp {
                 "message is required: say what to point at, e.g. 「出荷するときに押すボタンをクリックしてください」",
             ));
         }
+        match p.app.as_deref() {
+            None | Some("browser") => {}
+            Some("desktop") => return self.ask_user_to_pick_in_app(peer, p).await,
+            Some(other) => {
+                return Err(err(
+                    "INVALID_PARAMS",
+                    format!(
+                        "app {other:?} is not known: use \"browser\" (a web page) or \"desktop\" (a Windows app)"
+                    ),
+                ));
+            }
+        }
         let wait = self
             .inner
             .picks
@@ -143,6 +155,94 @@ impl SpellSheetMcp {
                 );
             }
         }
+        Ok(picked)
+    }
+
+    /// ask_user_to_pick in a Windows app: the person clicks the part on
+    /// screen, under a frame and a banner with the AI's question; the click
+    /// never reaches the app. Writer steps aside (minimises) while the
+    /// request is on file, and can decline it.
+    async fn ask_user_to_pick_in_app(
+        &self,
+        peer: &Peer<RoleServer>,
+        p: AskUserToPickParams,
+    ) -> Outcome {
+        let wait = self
+            .inner
+            .picks
+            .open_desktop(&p.message)
+            .map_err(ErrorPayload::from)?;
+        let timeout = p
+            .wait_ms
+            .unwrap_or(DEFAULT_PICK_WAIT_MS)
+            .clamp(1_000, MAX_WAIT_MS);
+        // Writer sees the request and minimises: let the windows under it
+        // show before the frame follows the mouse.
+        tokio::time::sleep(STEP_ASIDE).await;
+        let params = json!({
+            "action": "pick",
+            "message": p.message,
+            "hint": APP_PICK_HINT,
+            "labels": window_tag_labels(),
+            "timeoutMs": timeout,
+        });
+        let pick = self.inspect("desktop", params);
+        tokio::pin!(pick);
+        let mut cancelled_in_studio = false;
+        let result = loop {
+            tokio::select! {
+                r = &mut pick => break r,
+                () = tokio::time::sleep(PICK_POLL) => {
+                    wait.touch();
+                    if !cancelled_in_studio && !wait.is_open() {
+                        // Declined in Writer: end the pick as Esc would.
+                        cancelled_in_studio = true;
+                        let _ = self.inspect("desktop", json!({ "action": "cancelPick" })).await;
+                    }
+                }
+            }
+        };
+        drop(wait);
+        let mut picked = result?;
+        let Some(target) = picked.get("target").filter(|t| t.is_object()).cloned() else {
+            return Ok(json!({
+                "status": "cancelled",
+                "hint": "The user did not point at anything (pressed Esc, right-clicked, or declined in Writer). Ask them in chat what the step should do instead of guessing.",
+            }));
+        };
+        picked["status"] = json!("picked");
+        if let Some(obj) = picked.as_object_mut() {
+            // Places on this screen: of no use to the AI.
+            obj.remove("rect");
+        }
+        // The window as the AI would have seen it with inspect_ui, kept as
+        // what the change is based on.
+        if let Some(window) = target.get("window").filter(|w| w.is_object()) {
+            let shot = ScreenshotFile::new(true);
+            let mut look = json!({ "window": window, "maxNodes": PICKED_WINDOW_NODES });
+            if let Some(path) = shot.path() {
+                look["screenshotPath"] = json!(path);
+            }
+            if let Ok(ui) = self.inspect("desktop", look.clone()).await
+                && ui.get("snapshot").is_some()
+            {
+                if let Some(o) = look.as_object_mut() {
+                    o.remove("screenshotPath");
+                }
+                if let Some(id) =
+                    self.observe(peer, ObservationSource::InspectUi, look, &ui, shot.take())
+                {
+                    picked["observationId"] = json!(id);
+                }
+            }
+        }
+        picked["hint"] = json!(
+            if picked.get("how").and_then(Value::as_str) == Some("point") {
+                "Use `target` as is in the desktop.* step (it is a place in the window, see `note`), name observationId in the edit's observations, and tell the user in one line what they pointed at (`label`)."
+            } else {
+                "Use `target` as is in the desktop.* step (or as a part when several nodes use it), name observationId in the edit's observations, and tell the user in one line what they pointed at (`label`). `windowChoices` are other ways to find the window if its title changes (e.g. a date in it)."
+            }
+        );
         Ok(picked)
     }
 
@@ -412,6 +512,26 @@ pub(super) fn check_choices(p: &AskUserToChooseParams) -> Result<(), ErrorPayloa
     Ok(())
 }
 
+/// How long Writer has to minimise before the frame is put over the apps.
+const STEP_ASIDE: Duration = Duration::from_millis(400);
+/// The second line of the banner over the apps, under the AI's question.
+const APP_PICK_HINT: &str =
+    "クリックで答える ・ Esc または右クリックでわからない（アプリには押したことが伝わりません）";
+/// How the tag at the window's frame says the window will be found, in
+/// the words Writer's own picker uses (the AI asks in Japanese).
+fn window_tag_labels() -> Value {
+    json!({
+        "any": "{app}（どのウィンドウでも）",
+        "contains": "{app} ・ タイトルに「{title}」を含む",
+        "exact": "{app} ・「{title}」だけ",
+        "prefix": "{app} ・ タイトルが「{title}」で始まる",
+        "suffix": "{app} ・ タイトルが「{title}」で終わる",
+        "pattern": "{app} ・ タイトルがパターン {title} に合う",
+        "nth": "・{n} 番目",
+    })
+}
+/// The picked window's tree kept as the observation: enough to see it.
+const PICKED_WINDOW_NODES: u64 = 400;
 /// How long ask_user_to_pick waits for a click by default.
 pub(super) const DEFAULT_PICK_WAIT_MS: u64 = 120_000;
 /// How often ask_user_to_pick looks whether Studio cancelled the request.

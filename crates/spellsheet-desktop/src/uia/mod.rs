@@ -391,10 +391,11 @@ impl Uia {
             Op::Menu { target, path } => self.menu(&target, &path),
             Op::Pick {
                 message,
+                hint,
                 timeout_ms,
                 labels,
                 window_only,
-            } => self.pick(message, timeout_ms, &labels, window_only),
+            } => self.pick(message, hint, timeout_ms, &labels, window_only),
             Op::Snip {
                 message,
                 timeout_ms,

@@ -53,6 +53,11 @@ describe("writerAsk", () => {
     const ask = writerAsk({ ...base, pickRequests: [{ id: "pck_1", kind: "human", message: "GitHub にログインしてください" }] });
     expect(ask).toEqual({ tag: "ai:pick:pck_1", title: "AI が Writer での操作を待っています", body: "GitHub にログインしてください" });
   });
+
+  it("leaves pointing at an app to the question shown over the apps", () => {
+    // Writer minimises itself for it: a notification would only pull it back.
+    expect(writerAsk({ ...base, pickRequests: [{ id: "pck_2", app: "desktop", message: "検索ボタンは？" }] })).toBeNull();
+  });
 });
 
 describe("useAttention", () => {

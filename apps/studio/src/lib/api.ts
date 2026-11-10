@@ -198,6 +198,8 @@ export type PickRequest = {
   /** How many elements the AI outlined with numbers on the page. */
   candidates: number;
   kind?: "pick" | "human";
+  /** Where to point: in the browser (left out), or in a Windows app (Writer minimises meanwhile). */
+  app?: "desktop";
   /** The person already pressed 「終わりました」. */
   done?: boolean;
   requestedAt: string;

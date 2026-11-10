@@ -107,14 +107,19 @@ impl SpellSheetMcp {
         self.finish("ask_user_to_choose", &peer, None, outcome)
     }
 
-    /// Ask the user to point at an element on the open web page when you cannot tell which one a
-    /// step should touch: several elements fit (two 「編集」 buttons, one per row), an icon has no
-    /// name, or the words in inspect_page do not say which one the user means. Do not guess with
-    /// `nth`. The browser window comes to the front with your `message` in a banner; `candidates`
-    /// are outlined with numbers. The user's click is caught before the page sees it (nothing is
-    /// pressed) and returned as a step target (with `frame` when it is inside an iframe, nested
-    /// and cross-site frames included). Also say in your reply (shown in Writer, not in the browser) that they should switch to the browser window and click it. status: `picked` (`target`, `matches`, `row`, `candidate`, `alternatives`,
-    /// observationId) or `cancelled` (ask in chat). The page must be open (inspect_page `url`).
+    /// Ask the user to point at an element when you cannot tell which one a step should touch:
+    /// several fit (two 「編集」 buttons, one per row), an icon has no name, or the words in
+    /// inspect_page / inspect_ui do not say which one the user means. Do not guess with `nth`.
+    /// Web page (default): the browser window comes to the front with your `message` in a
+    /// banner; `candidates` are outlined with numbers; the answer is a browser target (with
+    /// `frame` inside an iframe). Also say in your reply (shown in Writer, not in the browser)
+    /// that they should switch to the browser window and click it. Windows app (`app:
+    /// "desktop"`): Writer steps aside and a banner over the apps shows your `message`; the user
+    /// clicks the part in any app and the answer is a desktop.* target (`label` names it,
+    /// `windowChoices` are other ways to find the window). Either way the click is caught before
+    /// the page or app sees it (nothing is pressed). status: `picked` (`target`, observationId,
+    /// and for the web `matches`, `row`, `candidate`, `alternatives`) or `cancelled` (ask in
+    /// chat). A web page must be open (inspect_page `url`); an app must be open on screen.
     #[tool(annotations(read_only_hint = true, open_world_hint = true))]
     async fn ask_user_to_pick(
         &self,

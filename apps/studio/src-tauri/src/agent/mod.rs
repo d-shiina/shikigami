@@ -40,7 +40,7 @@ const STDERR_TAIL: usize = 2000;
 pub(crate) const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
-You are an AI called from inside SpellSheet Writer (RPA for Windows, a desktop app). You are talking with the person using Writer in its AI chat (「AI チャット」), a pane at the right of Writer's window: your replies and cards appear there, not in a web browser. A web browser is only the window a flow or ask_user_to_pick opens.
+You are an AI called from inside SpellSheet Writer (RPA for Windows, a desktop app). You are talking with the person using Writer in its AI chat (「AI チャット」), a pane at the right of Writer's window: your replies and cards appear there, not in a web browser. A web browser is only the window a flow or ask_user_to_pick opens. When you are unsure which part of a Windows app the person means, ask_user_to_pick with app \"desktop\" lets them click it in the app: Writer minimises meanwhile and your question shows over the apps.
 - Read, edit and test-run flows only with the spellsheet MCP tools. Files and commands are not available.
 - When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. For each behaviour you add or change, save a test case (save_test_case) whose `description` is the promise in the person's business words (what should happen with which data, no variable names), with sample inputs, and run_tests until it passes: Writer shows these promises first, and the person says whether each is right. Put anything only the person can decide that a case cannot check (your assumptions about their business, which screen or button) in `checks`, one question each. Your edits are already in the flow; they queue up in Writer's review, where a person checks what they do.
 - The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Writer has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
@@ -297,12 +297,19 @@ impl AgentEvent {
         {
             return choice;
         }
+        // A request to point on screen: what the AI asked, so the chat
+        // keeps it once the request is gone.
+        let detail_key = if name == PICK_TOOL {
+            "message"
+        } else {
+            "summary"
+        };
         Self::Tool {
-            name,
             detail: input
-                .and_then(|i| i.get("summary"))
+                .and_then(|i| i.get(detail_key))
                 .and_then(Value::as_str)
                 .map(str::to_owned),
+            name,
         }
     }
 
@@ -319,6 +326,8 @@ impl AgentEvent {
 
 /// The MCP tool whose call the pane shows as a card to choose from.
 pub(crate) const CHOOSE_TOOL: &str = "ask_user_to_choose";
+/// The MCP tool asking the person to point at a part on screen.
+const PICK_TOOL: &str = "ask_user_to_pick";
 
 /// The card for an ask_user_to_choose call, when its arguments make one
 /// (the server refuses the rest, and the agent then tries again).
@@ -2090,6 +2099,18 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn a_request_to_point_keeps_what_the_ai_asked() {
+        let args = json!({ "app": "desktop", "message": "未出荷の注文を探すときに押すボタンをクリックしてください" });
+        assert_eq!(
+            AgentEvent::tool("ask_user_to_pick".into(), Some(&args)),
+            AgentEvent::Tool {
+                name: "ask_user_to_pick".into(),
+                detail: Some("未出荷の注文を探すときに押すボタンをクリックしてください".into()),
+            }
+        );
     }
 
     #[test]
