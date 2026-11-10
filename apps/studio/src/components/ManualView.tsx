@@ -572,7 +572,7 @@ function Cover({
       <ol aria-label={t.manual.contents}>
         {doc.chapters.map((c) => (
           <li key={c.number} className="flex items-baseline gap-2.5 py-1 text-[13.5px]">
-            <SheetNumber n={c.number} className="size-[18px] self-center text-[11px]" color="var(--manual-navy)" />
+            <SheetNumber n={c.number} className="size-[18px] self-center text-[11px]" />
             <span className="min-w-0">
               {c.title}
               {c.alongside.length > 0 && <span className="ml-2 text-[12px] text-slate-500">（{t.manual.alongsideNote(c.alongside).replace(/。$/, "")}）</span>}
@@ -621,7 +621,7 @@ function BodyPage({ page, ctx }: { page: Extract<Page, { kind: "body" }>; ctx: C
       {page.first ? (
         <>
           <h2 className="mb-1.5 flex items-center gap-3 border-b-2 border-[var(--manual-navy)] pb-2 text-[19px] font-semibold text-[var(--manual-navy)]">
-            <SheetNumber n={chapter.number} className="size-[26px] text-[14px]" color="var(--manual-navy)" />
+            <SheetNumber n={chapter.number} className="size-[26px] text-[14px]" />
             {chapter.title}
           </h2>
           <p className="mb-4 min-h-[1px] text-[12.5px] text-slate-500">{chapter.alongside.length > 0 ? t.manual.alongsideNote(chapter.alongside) : ""}</p>
