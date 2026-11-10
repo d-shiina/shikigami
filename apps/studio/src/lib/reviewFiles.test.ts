@@ -51,6 +51,8 @@ describe("isQuestion", () => {
     expect(isQuestion("見出しだけですか？それとも記事本文も含めますか？")).toBe(true);
     expect(isQuestion("何件まで取りますか？")).toBe(true);
     expect(isQuestion("Which site should it read?")).toBe(true);
+    expect(isQuestion("出力先のフォルダー名は？")).toBe(true);
+    expect(isQuestion("保存形式は CSV ですか、Excel ですか？")).toBe(true);
     expect(isQuestion("検索するのは注文番号でよいですか？")).toBe(false);
     expect(isQuestion("失敗したら処理を止めますか？")).toBe(false);
     expect(isQuestion("Is it the order number?")).toBe(false);

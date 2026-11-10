@@ -88,6 +88,8 @@ export function usedRows(effects: Effect[], values: InputRow[]): UsedRow[] {
 export function isQuestion(text: string): boolean {
   const rule = readCheck(text).rule;
   if (!/[？?]/.test(rule)) return false;
+  // A choice between options ("CSV ですか、Excel ですか？") or a bare noun ("出力先のフォルダー名は？").
+  if (/か[、,]/.test(rule) || /[はをが][？?]/.test(rule)) return true;
   return /(どこ|どれ|どの|どちら|どっち|どう|どんな|どのよう|何|なに|なん[でのに]|いつ|誰|だれ|いくつ|いくら|それとも|または.*[？?]|\b(which|what|where|when|who|whom|how|or)\b)/i.test(rule);
 }
 
