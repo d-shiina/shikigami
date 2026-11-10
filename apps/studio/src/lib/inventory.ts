@@ -71,8 +71,12 @@ export function sendFresh(agent: StoreApi<AgentState>, message: string) {
   void a.sendIn(a.current, message, null).then((sent) => !sent && a.setDraft(a.current, message));
 }
 
-/** The stock-take 業務の棚卸し shows when it next opens (InventoryPage). */
+/** Told to an open 業務の棚卸し page: show this stock-take now. */
+export const SHOW_EVENT = "spellsheet:show-inventory";
+
+/** The stock-take 業務の棚卸し shows (now, if it is open; else when it next opens: InventoryPage). */
 export function showInventory(id: string | null) {
+  globalThis.dispatchEvent?.(new CustomEvent(SHOW_EVENT, { detail: id }));
   try {
     if (id) globalThis.localStorage?.setItem(PICK_KEY, id);
     else globalThis.localStorage?.removeItem(PICK_KEY);

@@ -28,6 +28,7 @@ import {
   consult,
   sendFresh,
   PICK_KEY,
+  SHOW_EVENT,
   showInventory,
   type TaskAssessment,
   type WorkTask,
@@ -52,6 +53,12 @@ const remember = showInventory;
 function useInventories() {
   const [list, setList] = useState<InventorySummary[] | null>(null);
   const [picked, setPicked] = useState<string | null>(remembered);
+  // Another place (a stock-take just taken in from the chat) asks for one while the page is open.
+  useEffect(() => {
+    const show = (e: Event) => setPicked((e as CustomEvent<string | null>).detail);
+    globalThis.addEventListener?.(SHOW_EVENT, show);
+    return () => globalThis.removeEventListener?.(SHOW_EVENT, show);
+  }, []);
   const [view, setView] = useState<InventoryView | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The one shown: the one picked while it exists, else the latest changed

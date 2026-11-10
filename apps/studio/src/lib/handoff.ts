@@ -46,8 +46,14 @@ function findStep(steps: Step[], id: string): Step | null {
   return null;
 }
 
-/** What Writer itself copied (a request), not an answer to take in. */
-export const isOwnRequest = (text: string) => text.trimStart().startsWith(t.aiChat.request.head);
+/** How the interview about the person's work (業務の棚卸し, core's inventory::CHAT_GUIDE) begins. */
+export const INTERVIEW_HEAD = "# Take stock of my work (業務の棚卸し)";
+
+/** What Writer itself copied (a request or the interview), not an answer to take in. */
+export const isOwnRequest = (text: string) => {
+  const head = text.trimStart();
+  return head.startsWith(t.aiChat.request.head) || head.startsWith(INTERVIEW_HEAD);
+};
 
 /** Whether the clipboard looks like an AI's answer worth offering to take in. */
 export function looksLikeAnswer(text: string): boolean {
