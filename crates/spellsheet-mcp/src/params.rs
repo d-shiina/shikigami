@@ -51,7 +51,7 @@ pub struct CreateFlowParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -83,7 +83,7 @@ pub struct UpdateFlowParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -116,7 +116,7 @@ pub struct AddStepParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -147,7 +147,7 @@ pub struct UpdateStepParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -177,7 +177,7 @@ pub struct RemoveStepParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -208,7 +208,7 @@ pub struct MoveStepParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -242,7 +242,7 @@ pub struct ExtractSubflowParams {
     pub summary: Option<String>,
     /// The decisions you made that the person did not ask for, for them to
     /// confirm: one each, at most 10, stated as the rule you applied (e.g.
-    /// "「一部入金」も要確認に含める"), then on a second line what it meant in
+    /// "「一部入金」も要確認に含める", not a question), then on a second line what it meant in
     /// your run ("今回の例：3 件が要確認になりました"). Leave it out when you
     /// decided nothing yourself. Writer shows each with はい／いいえ.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

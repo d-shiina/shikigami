@@ -1,7 +1,7 @@
 import type { ValidationIssue } from "@spellsheet/schema";
 import type { ChatItem } from "../agent";
 import { t } from "./i18n";
-import { readCheck } from "./reviewFiles";
+import { isQuestion, readCheck } from "./reviewFiles";
 
 /** How many times in a row the AI was asked to fix the same thing before Writer offers to fix it by hand. */
 export const BY_HAND_AFTER = 3;
@@ -15,6 +15,7 @@ export function answersText(questions: string[], answers: Record<string, "ok" | 
     const rule = readCheck(q).rule;
     const answer = answers[q];
     if (answer === "ok") return [t.aiChat.answerYes(rule)];
+    if (answer === "no" && isQuestion(q)) return [`- ${t.desk.questionAnswer(rule, (right[q] ?? "").trim())}`];
     if (answer === "no") return [t.aiChat.answerNo(rule, (right[q] ?? "").trim())];
     return [];
   });

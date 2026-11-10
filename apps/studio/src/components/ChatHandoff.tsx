@@ -14,7 +14,7 @@ import { describe } from "../lib/changes";
 import { readClipboardText } from "../lib/clipboard";
 import { joinParts, looksLikeAnswer } from "../lib/handoff";
 import { answersText, stuckIssues } from "../lib/handoffFollow";
-import { readCheck } from "../lib/reviewFiles";
+import { isQuestion, readCheck } from "../lib/reviewFiles";
 import { t } from "../lib/i18n";
 import { answerProblemText } from "../lib/problemText";
 import { authorIssues, personTodos, returnText } from "../lib/todos";
@@ -462,8 +462,10 @@ function Questions({ chat, flowId, revision, questions, latest }: { chat: Chat; 
   const marks = useMarks((m) => m.answers);
   const answer = useMarks((m) => m.answer);
   const handOffAs = useAgent((s) => s.handOffAs);
-  const [right, setRight] = useState<Record<string, string>>({});
+  const notes = useMarks((m) => m.notes);
+  const note = useMarks((m) => m.note);
   const keyOf = (q: string) => `${flowId}@${revision}:${q}`;
+  const right = Object.fromEntries(questions.map((q) => [q, notes[keyOf(q)]] as const));
   const answers = Object.fromEntries(questions.map((q) => [q, marks[keyOf(q)]] as const));
   const text = answersText(questions, answers, right);
   const allYes = questions.every((q) => answers[q] === "ok");
@@ -478,12 +480,30 @@ function Questions({ chat, flowId, revision, questions, latest }: { chat: Chat; 
           const value = answers[q];
           const pick = (v: "ok" | "no") => answer(keyOf(q), value === v ? null : v);
           const { rule, example } = readCheck(q);
+          const asked = isQuestion(q);
           return (
             <li key={q} className="py-2">
               <p className="leading-relaxed text-ink">
                 {rule}
                 {example && <span className="mt-0.5 block whitespace-pre-wrap text-slate-500">{example}</span>}
               </p>
+              {asked ? (
+                latest && (
+                  <label className="mt-1.5 flex items-center gap-1.5">
+                    <span className="shrink-0 text-slate-600">{t.desk.yourAnswer}</span>
+                    <input
+                      type="text"
+                      value={right[q] ?? ""}
+                      placeholder={t.desk.yourAnswerHint}
+                      onChange={(e) => {
+                        note(keyOf(q), e.target.value);
+                        answer(keyOf(q), e.target.value.trim() ? "no" : null);
+                      }}
+                      className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-[12px] focus:border-brand-500 focus:outline-none"
+                    />
+                  </label>
+                )
+              ) : (
               <div className="mt-1 flex gap-1.5">
                 <button type="button" disabled={!latest} onClick={() => pick("ok")} className={chip(value === "ok", "border-moegi-500 text-moegi-600")} aria-pressed={value === "ok"}>
                   <Check size={11} strokeWidth={2.25} aria-hidden="true" />
@@ -494,13 +514,14 @@ function Questions({ chat, flowId, revision, questions, latest }: { chat: Chat; 
                   {t.aiChat.no}
                 </button>
               </div>
-              {value === "no" && latest && (
+              )}
+              {!asked && value === "no" && latest && (
                 <label className="mt-1.5 flex items-center gap-1.5">
                   <span className="shrink-0 text-slate-600">{t.aiChat.rightAnswer}</span>
                   <input
                     type="text"
                     value={right[q] ?? ""}
-                    onChange={(e) => setRight((now) => ({ ...now, [q]: e.target.value }))}
+                    onChange={(e) => note(keyOf(q), e.target.value)}
                     className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-[12px] focus:border-brand-500 focus:outline-none"
                   />
                 </label>
