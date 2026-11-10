@@ -52,6 +52,48 @@ fn utf8(bytes: &[u8], path: &str) -> Result<String, StepError> {
     })
 }
 
+/// What a console program (schtasks, reg, tasklist, …) wrote to a pipe.
+/// Windows programs write in the console's code page, not UTF-8 (CP932 on
+/// Japanese Windows): UTF-8 is taken as it is, anything else is read in the
+/// console's output code page, else the OEM code page.
+pub fn console_text(bytes: &[u8]) -> String {
+    if let Some(rest) = bytes.strip_prefix(BOM) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_owned();
+    }
+    #[cfg(windows)]
+    if let Some(text) = windows_code_page(bytes) {
+        return text;
+    }
+    SHIFT_JIS.decode_without_bom_handling(bytes).0.into_owned()
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn windows_code_page(bytes: &[u8]) -> Option<String> {
+    use windows::Win32::Globalization::{
+        GetOEMCP, MULTI_BYTE_TO_WIDE_CHAR_FLAGS, MultiByteToWideChar,
+    };
+    use windows::Win32::System::Console::GetConsoleOutputCP;
+    // SAFETY: plain queries without arguments.
+    let console = unsafe { GetConsoleOutputCP() };
+    let page = if console == 0 {
+        unsafe { GetOEMCP() }
+    } else {
+        console
+    };
+    let flags = MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0);
+    // SAFETY: the slices are valid for the calls; the second writes at most
+    // the length the first returned.
+    let len = unsafe { MultiByteToWideChar(page, flags, bytes, None) };
+    let mut wide = vec![0u16; usize::try_from(len).ok().filter(|&n| n > 0)?];
+    let written = unsafe { MultiByteToWideChar(page, flags, bytes, Some(&mut wide)) };
+    wide.truncate(usize::try_from(written).ok()?);
+    Some(String::from_utf16_lossy(&wide))
+}
+
 /// Encodes text for a file. `with_bom` is false when appending to a file
 /// that already has content.
 pub fn encode(text: &str, encoding: &str, with_bom: bool) -> Result<Vec<u8>, StepError> {
@@ -98,5 +140,18 @@ mod tests {
         let err = encode("髙橋🍣", "shift_jis", true).unwrap_err();
         assert_eq!(err.code, "UNENCODABLE_TEXT");
         assert!(err.message.contains('🍣'));
+    }
+
+    #[test]
+    fn console_text_reads_the_console_code_page() {
+        // What schtasks says on Japanese Windows, in CP932 (the code page
+        // of a Windows runner is not, so only off Windows).
+        #[cfg(not(windows))]
+        {
+            let sjis = encode("エラー: アクセスが拒否されました。", "shift_jis", true).unwrap();
+            assert_eq!(console_text(&sjis), "エラー: アクセスが拒否されました。");
+        }
+        assert_eq!(console_text("成功".as_bytes()), "成功");
+        assert_eq!(console_text(b""), "");
     }
 }

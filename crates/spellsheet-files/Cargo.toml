@@ -22,5 +22,16 @@ zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 
-[lints]
-workspace = true
+# The workspace forbids unsafe code; reading console output in the console's
+# code page calls Windows APIs, so it is allowed only in
+# `encoding::windows_code_page`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62.2", features = ["Win32_Globalization", "Win32_System_Console"] }
