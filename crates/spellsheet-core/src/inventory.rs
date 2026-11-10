@@ -707,9 +707,34 @@ pub fn save(workspace: &Path, inventory: &WorkInventory) -> CoreResult<()> {
     write_atomic(&path, &json)
 }
 
+/// Holds the stock-takes' folder for one read-modify-write, across
+/// processes (Writer and an AI client can save the same one at once);
+/// released on drop.
+struct FolderLock(fs::File);
+
+impl Drop for FolderLock {
+    fn drop(&mut self) {
+        // The OS releases the lock when the handle closes anyway.
+        let _ = self.0.unlock();
+    }
+}
+
+fn lock_folder(workspace: &Path) -> CoreResult<FolderLock> {
+    fs::create_dir_all(folder(workspace))?;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(folder(workspace).join(".lock"))?;
+    file.lock()?;
+    Ok(FolderLock(file))
+}
+
 /// Applies a change and saves it: to the stock-take `patch.id`, or to a
-/// new one when it has none.
+/// new one when it has none. Concurrent changes to the same one are
+/// applied one after the other, so neither is lost.
 pub fn change(workspace: &Path, patch: &InventoryPatch, actor: Actor) -> CoreResult<WorkInventory> {
+    let _lock = lock_folder(workspace)?;
     let mut inventory = match &patch.id {
         Some(id) => load(workspace, id)?,
         None => {
@@ -727,6 +752,7 @@ pub fn change(workspace: &Path, patch: &InventoryPatch, actor: Actor) -> CoreRes
 /// Removes a stock-take (its flows stay).
 pub fn delete(workspace: &Path, id: &InventoryId) -> CoreResult<()> {
     let path = path_of(workspace, id)?;
+    let _lock = lock_folder(workspace)?;
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(not_found(id)),
@@ -902,5 +928,35 @@ mod tests {
         delete(dir.path(), &made.id).unwrap();
         assert!(list(dir.path()).unwrap().is_empty());
         assert!(load(dir.path(), &InventoryId::new("../x")).is_err());
+    }
+
+    #[test]
+    fn changes_at_the_same_time_are_all_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let actor = Actor::named(ActorKind::Mcp, "claude-code");
+        let made = change(
+            dir.path(),
+            &InventoryPatch {
+                title: Some("経理課".into()),
+                ..Default::default()
+            },
+            actor.clone(),
+        )
+        .unwrap();
+        std::thread::scope(|s| {
+            for n in 0..8 {
+                let (root, id, actor) = (dir.path(), made.id.clone(), actor.clone());
+                s.spawn(move || {
+                    let patch = InventoryPatch {
+                        id: Some(id),
+                        tasks: vec![task(json!({ "name": format!("仕事 {n}") }))],
+                        ..Default::default()
+                    };
+                    change(root, &patch, actor).unwrap();
+                });
+            }
+        });
+        assert_eq!(load(dir.path(), &made.id).unwrap().tasks.len(), 8);
+        assert_eq!(list(dir.path()).unwrap().len(), 1);
     }
 }
