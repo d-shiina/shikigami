@@ -5,7 +5,7 @@
 import { Play, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { flowBusy, useAgent } from "../agent";
-import { useAskable } from "../lib/aiWay";
+import { pasteWay, useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
@@ -213,7 +213,7 @@ export function RunPausePanel() {
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
         const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: pause.stepId }, `${owner.name} ・ ${t.pause.fixContext}`);
-        setTold(sent ? t.pause.asked(agentName) : t.pause.notSent(agentName));
+        setTold(sent ? (pasteWay() ? t.pause.copiedFor(agentName) : t.pause.asked(agentName)) : t.pause.notSent(agentName));
       } else {
         setTold(await clipboardAi.ask(text));
       }
