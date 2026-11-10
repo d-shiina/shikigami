@@ -562,3 +562,28 @@ fn the_box_example_takes_an_oauth_access_token() {
     let key = &ocr.step_defs()[0].params_schema["properties"]["key"].to_string();
     assert!(!key.contains("accessToken"), "{key}");
 }
+
+#[test]
+fn a_bridge_names_its_app_and_windows() {
+    let mut ok = manifest("t", json!([echo_step(json!({}))]));
+    ok["bridge"] = json!({
+        "app": "sapgui",
+        "windows": [{ "className": "SAP_FRONTEND_SESSION" }, { "process": "saplogon" }]
+    });
+    let dir = plugin_dir(ok.clone(), "");
+    let plugin = Plugin::load(dir.path(), &["browser"]).unwrap();
+    let bridge = plugin.manifest().bridge.clone().unwrap();
+    assert_eq!(bridge.app, "sapgui");
+    assert_eq!(bridge.windows.len(), 2);
+
+    let mut bad = ok.clone();
+    bad["bridge"] = json!({ "app": "uia", "windows": [] });
+    let found = problems(bad).join("\n");
+    assert!(found.contains("bridge.app"), "{found}");
+    assert!(found.contains("bridge.windows"), "{found}");
+
+    let mut bad = ok;
+    bad["bridge"] = json!({ "app": "sapgui", "windows": [{}] });
+    let found = problems(bad).join("\n");
+    assert!(found.contains("bridge.windows[0]"), "{found}");
+}

@@ -12,6 +12,8 @@
 
 ### 変更
 
+- SAP GUI Scripting を通した SAP GUI の操作（`inspect_ui` に SAP の部品 id が並ぶ、`desktop.*` が SAP の中まで届く、`sap.runTransaction`）を本体から外し、SAP のプラグイン（有料、別に提供）に移しました。本体だけのとき、SAP GUI のウィンドウは UI Automation で見える範囲と、文字（`target.ocr`）・画像で操作します。`inspect_ui` の注記がそう案内します。エラーコード `SAP_SCRIPTING_OFF`・`NOT_SAP_WINDOW` は本体からなくなりました
+- プラグインが「このウィンドウは自分のほうがよく見える」と申し出られるようにしました（マニフェストの `bridge`）。そのウィンドウへの `desktop.*` のノードと `inspect_ui` はプラグインを通して動き、フローの書き方は変わりません（docs/design/plugins.md §10）。プラグインの名前 `sap` は予約から外しました
 - フローの画面の下にあった「見本」の欄と、GitHub のチュートリアル（docs/tutorials）をなくしました。初めての人は「何を自動化しますか？」の欄から AI に頼んで始めます。見本の完成版のフローは、CI が最後まで実行して確かめるテスト用として `examples/tutorials/` に残しています
 
 ## [0.1.21] - 2026-11-10

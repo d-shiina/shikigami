@@ -56,7 +56,7 @@ You cannot see the screen, so never write a CSS selector, an element id or coord
 … { "type": "browser.click", "name": "保存", "params": { "target": { "part": "saveButton" } } }
 ```
 
-- app is "browser" for web pages (browser.*) and "desktop" for Windows apps (desktop.*, sap.*).
+- app is "browser" for web pages (browser.*) and "desktop" for Windows apps (desktop.*).
 - The label says what it is and where, so the person can find it: Writer asks them to pick each part on the screen.
 - Use one part for the same thing in several steps. Write { "part": "<name>" } and nothing else beside it.
 - A desktop part covers the window too: do not write "window" in those steps.
