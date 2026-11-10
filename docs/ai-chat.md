@@ -31,6 +31,15 @@ Instead of attaching it every time, you can put the reference into a Microsoft C
 
 ## 2. Bring the answer back
 
+### Adding a screen
+
+The AI cannot see your screen, so on its own it only names the buttons and fields, and you pick each later with "Pick on screen". With **Add a screen** above the box, the request also lists the names and kinds of that screen's buttons, fields and lists, and the AI can point at them.
+
+- **Click an app's window**: Writer gets out of the way; click the window you want the AI to see.
+- **Web page address**: opens and reads the page in Writer's browser. The pages the flow opens are offered. For a page that needs a login, log in in that browser, then press **Open and add** again.
+
+Only the names and kinds of the parts go into the request: no typed values, text on the screen, data rows of tables and lists, or pictures. The screens go with the next request you copy, and are taken off after it.
+
 Copy the AI's answer and come back to Writer: when the answer is on the clipboard, **Take in from the clipboard** appears (Writer looks only while it waits for an answer, when you come back to it; you can turn this off under Settings → AI). Pasting it into the box and pressing **Take in** works too. Text around the answer is fine, and so are comments and trailing commas the AI adds to its JSON.
 
 - **Taken in**: the flow opens, and the card shows three things.

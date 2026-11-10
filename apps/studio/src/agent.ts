@@ -84,7 +84,8 @@ export type PasteHelpers = {
   /** Whether requests go to an AI chat by the clipboard now. */
   active(): boolean;
   /** The whole request for the AI chat: instructions, the flow, the person's words. */
-  compose(message: string, flow: AgentRequest["flow"] | null): Promise<string>;
+  /** `chatId`: the conversation it is for (the screens added to it go too). */
+  compose(message: string, flow: AgentRequest["flow"] | null, chatId: string): Promise<string>;
   copy(text: string): Promise<void>;
   /** Opens the AI chat in the browser, when Writer knows where it is. */
   open(): void;
@@ -355,7 +356,7 @@ export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<
       const first = !(chat(chatId)?.items ?? []).some((i) => i.role === "ai" && i.handoff);
       set({ open: true });
       try {
-        const prompt = raw ? text : await paste.compose(text, flow);
+        const prompt = raw ? text : await paste.compose(text, flow, chatId);
         await paste.copy(prompt);
         update(chatId, (c) => ({
           ...c,

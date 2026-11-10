@@ -49,6 +49,7 @@ import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { chatAi, pasteWay, useAiWay } from "./lib/aiWay";
 import { composeRequest } from "./lib/handoff";
+import { useScreens } from "./lib/screenParts";
 import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
@@ -645,13 +646,13 @@ export function App() {
       createAgentStore(agent, {
         // An AI chat that cannot reach SpellSheet: the request goes by the clipboard (lib/aiWay.ts).
         active: pasteWay,
-        async compose(message, ref) {
+        async compose(message, ref, chatId) {
           const shown = store.getState().flow;
           const [instructions, flow] = await Promise.all([
             api.aiInstructions(),
             ref ? (shown?.id === ref.id ? Promise.resolve(shown) : api.getFlow(ref.id)) : Promise.resolve(null),
           ]);
-          return composeRequest(message, instructions, flow, ref?.stepId ?? null);
+          return composeRequest(message, instructions, flow, ref?.stepId ?? null, useScreens.getState().byChat[chatId] ?? []);
         },
         copy: (text) => navigator.clipboard.writeText(text),
         open() {

@@ -214,6 +214,7 @@ You cannot see the screen, so never write a CSS selector, an element id or coord
 - The label says what it is and where, so the person can find it: Writer asks them to pick each part on the screen.
 - Use one part for the same thing in several steps. Write { "part": "<name>" } and nothing else beside it.
 - A desktop part covers the window too: do not write "window" in those steps.
+- When the request has a section "画面の部品" (or "Screen parts"), Writer read that screen for you. For an element listed there, give its part a "target" built from the list, names copied exactly: desktop { "window": { "process": "<process>" }, "element": { "id": "<id>" } } (role and name when it has no id), browser { "role": "<role>", "name": "<name>" }. Anything not in the list still gets a part without a target.
 - Some screens show no buttons or fields to pick (Citrix, remote desktops, drawn screens). There, use desktop.mouseClick, desktop.waitFor or desktop.isVisible with a part whose label starts with "画像：" and says what the picture shows (画像：保存ボタンのアイコン). The person cuts its picture out of the screen in Writer (画面から切り取る); Writer keeps it in templates/ and fills the target in.
 
 ## Logins, files and settings
