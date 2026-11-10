@@ -13,6 +13,7 @@
 //! Names, sites and which fields are set are stored in clear text: they are
 //! what Studio lists and what AI clients may see.
 
+mod api_keys;
 mod keys;
 mod totp;
 mod wincred;
@@ -34,6 +35,7 @@ use spellsheet_core::secret::{
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
+pub use api_keys::{ApiKeys, MemoryApiKeys, platform_api_keys};
 pub use keys::{Key, KeyStore, MemoryKeyStore, platform_key_store};
 pub use wincred::{
     MemoryWindowsCredentials, WindowsCredentialInfo, WindowsCredentials, WindowsLogin,

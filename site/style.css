@@ -420,3 +420,12 @@ footer a { color: var(--fg-muted); }
 .cmp-2 thead th:first-child, .cmp-2 tbody th { width: 132px; }
 @media (max-width: 560px) { .cmp-2 thead th:first-child, .cmp-2 tbody th { width: 76px; } }
 .cmp-note { margin-top: 16px; font-size: 13px; color: var(--fg-muted); max-width: 52em; }
+
+/* 3 枚のシート */
+.sheets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+@media (max-width: 900px) { .sheets { grid-template-columns: 1fr; max-width: 560px; } }
+.sheet { margin: 0; }
+.sheet img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-top: 3px solid var(--c-mark, var(--line)); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.08); background: #fff; aspect-ratio: 900 / 827; object-fit: cover; object-position: top; }
+.sheet figcaption { margin-top: 16px; color: var(--fg-muted); font-size: 15px; }
+.sheet figcaption strong { display: block; color: var(--fg); font-size: 18px; margin-bottom: 4px; }
+.sheet .num { display: inline-block; color: var(--c, var(--accent)); font-weight: 700; font-size: 13px; margin-bottom: 4px; }

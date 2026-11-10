@@ -14,13 +14,14 @@ function fakeStorage() {
 
 const now = (s: AgentState) => currentChat(s);
 
-const ready: AgentInfo = { available: true, kind: "claudeCode", name: "Claude Code", command: "claude", problem: null, remembers: true, installable: false, signsIn: true };
+const ready: AgentInfo = { available: true, kind: "claudeCode", name: "Claude Code", command: "claude", problem: null, remembers: true, installable: false, signsIn: true, usesApiKey: false, hasApiKey: false };
 
 function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
   return {
     info: vi.fn(async () => ready),
     choices: vi.fn(async () => []),
     select: vi.fn(async (kind) => ({ ...ready, kind, name: kind })),
+    setApiKey: vi.fn(async (key) => ({ ...ready, hasApiKey: key !== null })),
     send: vi.fn(async () => "turn_1"),
     stop: vi.fn(async () => undefined),
     note: vi.fn(async () => undefined),
@@ -235,6 +236,28 @@ describe("agent store", () => {
     expect(items).toHaveLength(2);
     expect(items[1]).toMatchObject({ role: "ai", turnId: "turn_2", status: "running" });
     expect(store.getState().login).toEqual({ phase: "idle" });
+  });
+
+  it("asks for the API key instead of signing in, then sends the message again", async () => {
+    let turn = 0;
+    const gemini: AgentInfo = { ...ready, kind: "gemini", name: "Gemini CLI", signsIn: false, usesApiKey: true, hasApiKey: false };
+    const api = fakeAgent({
+      info: vi.fn(async () => gemini),
+      send: vi.fn(async () => `turn_${++turn}`),
+      setApiKey: vi.fn(async (key) => ({ ...gemini, hasApiKey: key !== null })),
+    });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("請求書を集めて", { id: "scn_a", name: "A" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "API key not valid", costUsd: null, needsLogin: true });
+    await store.getState().startLogin();
+    expect(api.login).not.toHaveBeenCalled();
+    expect(store.getState().login).toEqual({ phase: "idle" });
+
+    await store.getState().saveApiKey("AIza-test");
+    expect(api.setApiKey).toHaveBeenCalledWith("AIza-test");
+    expect(store.getState().info?.hasApiKey).toBe(true);
+    await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the sign-in box with the reason when signing in fails", async () => {

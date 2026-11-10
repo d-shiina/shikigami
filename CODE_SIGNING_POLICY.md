@@ -1,9 +1,7 @@
 # Code signing policy / コード署名ポリシー
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-*SignPath Foundation への申請中です。承認されるまで、インストーラーは署名なしで配布しています。*
-*The application to SignPath Foundation is in progress. Until it is approved, the installers are distributed unsigned.*
+*インストーラーにはまだコード署名がありません。署名を始めたら、使う証明書をここに書きます。*
+*The installers are not code-signed yet. When signing starts, the certificate used will be named here.*
 
 ## What is signed / 署名するもの
 
@@ -21,7 +19,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 - Every change goes into `main` through a pull request, and CI must pass before it is merged
 - Changes from people outside the organization are reviewed by a committer before merging
 - Every signing request is approved by hand by an approver
-- Everyone in these roles uses multi-factor authentication for GitHub and SignPath
+- Everyone in these roles uses multi-factor authentication for GitHub and the signing service
 
 ## Privacy policy / プライバシー
 

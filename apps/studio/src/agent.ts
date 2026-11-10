@@ -130,6 +130,8 @@ export type AgentState = {
   retry(chatId?: string): Promise<boolean>;
   /** Starts the agent's own sign-in; the stopped messages are sent again once it is done. */
   startLogin(): Promise<void>;
+  /** Saves (null: deletes) the API key the AI in use runs on; the stopped messages are sent again. Throws when it cannot be saved. */
+  saveApiKey(key: string | null): Promise<void>;
   submitLoginCode(code: string): Promise<boolean>;
   cancelLogin(): Promise<void>;
   onLoginEvent(event: LoginEvent): void;
@@ -409,7 +411,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         try {
           set({ info: await api.info() });
         } catch (e) {
-          set({ info: { available: false, kind: "claudeCode", name: "AI", command: null, problem: errorText(e), remembers: false, installable: false, signsIn: false } });
+          set({ info: { available: false, kind: "claudeCode", name: "AI", command: null, problem: errorText(e), remembers: false, installable: false, signsIn: false, usesApiKey: false, hasApiKey: false } });
         }
       },
 
@@ -515,11 +517,26 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       },
 
       async startLogin() {
+        // An AI that runs on an API key asks for the key in the pane instead.
+        if (get().info?.usesApiKey) {
+          set({ login: { phase: "idle" } });
+          return;
+        }
         set({ login: { phase: "waiting", url: null, sendingCode: false } });
         try {
           await api.login();
         } catch (e) {
           set({ login: { phase: "failed", message: errorText(e) } });
+        }
+      },
+
+      async saveApiKey(key) {
+        const info = await api.setApiKey(key);
+        set({ info });
+        if (!info.hasApiKey) return;
+        for (const c of [...get().chats].sort((a, b) => b.updatedAt - a.updatedAt)) {
+          const last = c.items.at(-1);
+          if (last?.role === "ai" && last.needsLogin) void get().retry(c.id);
         }
       },
 

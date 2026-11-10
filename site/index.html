@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SpellSheet｜いつもの AI が作り、PC が回し続ける Windows の業務自動化</title>
-  <meta name="description" content="SpellSheet は、何を自動化するかを AI と業務の棚卸しで決め、いつもの AI に頼んで業務の自動化フローを作り、人が読んで直し、PC の中で AI なしに動かし続ける Windows 向けの RPA です。無料のオープンソース（Apache-2.0）。">
-  <meta property="og:title" content="SpellSheet｜いつもの AI が作り、あなたが読んで直し、PC が回し続ける。">
-  <meta property="og:description" content="好きな AI で作れて、人が読んで直せて、PC の中で無人実行まで済む。日本の業務アプリ向けの無料 RPA。">
+  <title>SpellSheet｜業務の棚卸しから実行結果まで、シートで残る Windows の業務自動化</title>
+  <meta name="description" content="SpellSheet は、何を自動化するかを AI と業務の棚卸しで決め、お使いの AI に業務の自動化フローを組ませ、担当者が手順書で確かめ、PC の中で AI なしに動かす Windows 向けの RPA です。無料のオープンソース（Apache-2.0）。">
+  <meta property="og:title" content="SpellSheet｜業務の棚卸しから実行結果まで、シートで残る。">
+  <meta property="og:description" content="何を自動化するかの相談からフロー作りまで AI に依頼でき、できたフローは PC の中だけで AI なしに動く。日本の業務アプリ向けの無料 RPA。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="assets/writer-og.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
@@ -22,6 +22,7 @@
     <div class="wrap">
       <a class="brand" href="./"><img src="assets/mark.png" alt="">SpellSheet</a>
       <nav class="nav" aria-label="ページ内">
+        <a class="hide-sm" href="#sheets">シート</a>
         <a class="hide-sm" href="#consult">業務の棚卸し</a>
         <a class="hide-sm" href="#points">特長</a>
         <a class="hide-sm" href="#how">使い方</a>
@@ -41,8 +42,8 @@
       <div class="shade"></div>
       <div class="wrap">
         <p class="eyebrow">Windows の業務自動化（RPA）・無料のオープンソース</p>
-        <h1><span>いつもの AI が作り、</span><span>あなたが読んで直し、</span><span>PC が回し続ける。</span></h1>
-        <p class="lead">やりたいことをふだんの言葉で頼むと、AI が画面を確かめながら自動化のフローを組みます。できたフローは日本語の手順と画面の写真で読めて、その場で直せます。確定したフローは、AI を使わずに PC の中だけで毎日動きます。</p>
+        <h1><span>業務の棚卸しから実行結果まで、</span><span>シートで残る。</span></h1>
+        <p class="lead">何を自動化するかは「業務の棚卸し」、どう動くかは「手順書」、何をしたかは「実行結果」。AI が作ったものは、どれも担当者が読めるシートになります。できたフローは PC の中だけで、AI なしで毎日動きます。</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="download.html"><svg class="i"><use href="assets/icons.svg#download"/></svg>無料でダウンロード</a>
           <a class="btn btn-lg" href="#how">使い方を見る</a>
@@ -58,12 +59,33 @@
       </div>
     </section>
 
+    <section id="sheets">
+      <div class="wrap">
+        <h2>3 枚のシート</h2>
+        <p class="sub">自動化の前・途中・後を、それぞれ 1 枚のシートで確かめられます。印刷や Excel への書き出しもできます。</p>
+        <div class="sheets">
+          <figure class="sheet c-cyan">
+            <img src="assets/sheet-inventory.webp" width="900" height="821" alt="業務の棚卸しのシート。月にかかっている時間、減らせそうな時間、最初に作るとよい仕事が並ぶ" loading="lazy">
+            <figcaption><span class="num">前</span><strong>業務の棚卸し</strong>何を自動化するか。AI が業務を聞き取り、仕事ごとの時間と、どれから作るとよいかをまとめます。</figcaption>
+          </figure>
+          <figure class="sheet c-green">
+            <img src="assets/sheet-manual.webp" width="900" height="827" alt="業務手順書の表紙。版・更新日・使うもの・できあがるもの・目次が並ぶ" loading="lazy">
+            <figcaption><span class="num">途中</span><strong>手順書</strong>どう動くか。フローを A4 の業務手順書にし、1 手順ずつ説明と画面の写真を並べます。</figcaption>
+          </figure>
+          <figure class="sheet c-orange">
+            <img src="assets/sheet-result.webp" width="900" height="827" alt="フローの実行結果のシート。出力項目、最後の画面、操作の記録が並ぶ" loading="lazy">
+            <figcaption><span class="num">後</span><strong>実行結果</strong>何をしたか。できたファイル、最後の画面、書き込んだ・送ったものを、実行のたびに残します。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
     <section id="consult">
       <div class="wrap">
         <div class="feature c-navy">
           <div>
             <p class="label">はじめに　何を自動化するか、AI と決める</p>
-            <h3>AI が業務を聞き取り、楽になる順に並べます</h3>
+            <h3>AI が業務を聞き取り、効果の大きい順に並べます</h3>
             <p>RPA を入れても、どの仕事から自動化すればよいか分からないことがよくあります。SpellSheet では、AI がコンサルタントのように聞き取ります。どんな仕事があるか、どのくらいの頻度で 1 回に何分かかるか、そのうちどれだけが写す・打ち込む・照らし合わせるといった手を動かすだけの作業か。</p>
             <p>聞いた内容は 1 枚の「業務の棚卸し」にまとまります。いま月に何時間かかっているか、自動化で何時間減らせそうか、どの仕事から作るとよいかが並びます。気になる行の「AI に作ってもらう」から、聞いた内容を添えてそのままフローを頼めます。</p>
             <ul class="ticks">
@@ -84,21 +106,20 @@
     <section id="points" class="soft">
       <div class="wrap">
         <h2>4 つの特長</h2>
-        <p class="sub">どれか 1 つなら、ほかにもあります。SpellSheet は 4 つがそろっていることを大切にしています。</p>
         <div class="points">
           <div class="point c-cyan">
             <div class="num"><svg class="i"><use href="assets/icons.svg#sparkles"/></svg>01</div>
-            <h3>いつもの AI で作れる</h3>
+            <h3>お使いの AI で作れる</h3>
             <p>Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor。会社ですでに使っている AI がそのまま使えます。</p>
           </div>
           <div class="point c-green">
             <div class="num"><svg class="i"><use href="assets/icons.svg#book-open"/></svg>02</div>
-            <h3>人が読んで直せる</h3>
-            <p>フローは日本語の手順と画面の写真で読めます。AI の変更は、確かめてから使い始めます。</p>
+            <h3>すべてシートで残る</h3>
+            <p>業務の棚卸し・手順書・AI の変更の確認・実行結果。どれも担当者が読めて、印刷や書き出しができます。</p>
           </div>
           <div class="point c-orange">
             <div class="num"><svg class="i"><use href="assets/icons.svg#shield-check"/></svg>03</div>
-            <h3>PC の中で無人実行まで</h3>
+            <h3>PC の中だけで動く</h3>
             <p>動かすときに AI もクラウドも使いません。スケジュールでの無人実行まで、社内の PC で完結します。</p>
           </div>
           <div class="point c-navy">
@@ -114,8 +135,8 @@
       <div class="wrap">
         <div class="feature c-cyan">
           <div>
-            <p class="label">01　いつもの AI で作れる</p>
-            <h3>頼むだけで、AI が画面を確かめながら組み立てます</h3>
+            <p class="label">01　お使いの AI で作れる</p>
+            <h3>AI が実際の画面を試しながら組み立てます</h3>
             <p>「毎朝、受注メールの Excel を開いて、1 行ずつ販売管理システムに入力する」のように書いて送ると、AI が実際の画面を調べ、操作を試して、通った操作だけをフローに残します。組み上がっていく様子は、そのままフロー図で見えます。</p>
             <p>AI は Writer の中から選んで導入とサインインができます。会社が許可している AI をそのまま使えるので、新しい AI サービスの契約や稟議は要りません。</p>
             <ul class="ai-list" aria-label="使える AI">
@@ -130,8 +151,8 @@
 
         <div class="feature flip c-green">
           <div>
-            <p class="label">02　人が読んで直せる</p>
-            <h3>フローは、紙の手順書のように読めます</h3>
+            <p class="label">02　すべてシートで残る</p>
+            <h3>どのフローも、A4 の手順書になります</h3>
             <p>どのフローも、A4 の手順書として開けます。1 手順ずつ、日本語の説明と操作する直前の画面の写真が並びます。業務の担当者が「この順番で合っているか」を自分の目で確かめられます。</p>
             <p>AI がフローを変えたときは、何がどう変わったかを 1 枚のレポートで確かめ、よければ「変更を承諾」します。承諾して確定した版だけが、ほかの人の実行や自動実行に使われます。</p>
             <ul class="ticks">
@@ -148,7 +169,7 @@
 
         <div class="feature c-orange">
           <div>
-            <p class="label">03　PC の中で無人実行まで</p>
+            <p class="label">03　PC の中だけで動く</p>
             <h3>動かすときは、AI もクラウドも使いません</h3>
             <p>AI を使うのは作るときと直すときだけです。確定したフローは PC の中だけで動くので、毎日動かしても AI の料金は増えず、毎回同じ手順で動きます。</p>
             <p>スケジュールやフォルダーにファイルが置かれたときに自動で動かせて、失敗したときなどは Teams や Slack に知らせます。ログイン情報は Windows の資格情報マネージャーに保管し、AI には名前しか渡しません。</p>
@@ -178,7 +199,7 @@
         <div class="feature flip c-navy">
           <div>
             <p class="label">04　日本の業務アプリ向けで、無料</p>
-            <h3>いつもの業務の画面とファイルを、そのまま扱えます</h3>
+            <h3>Excel・基幹システム・手書きの帳票まで扱えます</h3>
             <p>Excel のひな形への書き込み、Web の基幹システムへの入力、Java で作られた社内システム・古い Windows アプリの操作、手書きの帳票の読み取りまで、日本の事務の仕事に合わせて作っています。画面も説明も日本語です。</p>
             <p>本体は Apache-2.0 のオープンソースで、無料で使えます。実行する PC の台数や同時に動かす数で料金はかかりません。SAP GUI など一部の連携は、有料のプラグインとして別に提供します（準備中）。</p>
           </div>
@@ -199,18 +220,18 @@
     <section id="how" class="soft">
       <div class="wrap">
         <h2>使い方</h2>
-        <p class="sub">業務 1 本を、頼んでから毎月の実行までつなげる流れです。</p>
+        <p class="sub">業務 1 本を自動化するまでの流れです。</p>
         <div class="steps">
           <div class="step">
-            <h3>頼む</h3>
+            <h3>依頼</h3>
             <p>Writer の「何を自動化しますか？」に、やりたいことをふだんの業務の言葉で書きます。AI が画面を確かめながらフローを組みます。何から頼むか決まっていなければ、先に AI と業務の棚卸しをします。</p>
           </div>
           <div class="step">
-            <h3>読んで試し、承諾する</h3>
+            <h3>確認・承諾</h3>
             <p>フロー図や手順書で中身を読み、「ここから実行」で試します。違うところは AI に頼むか、その場で直します。よければ変更を承諾し、確定版にします。</p>
           </div>
           <div class="step">
-            <h3>毎日動かす</h3>
+            <h3>実行</h3>
             <p>実行画面からボタン 1 つで、またはスケジュールで自動に。動かすだけの人には、入力欄だけの実行画面を渡せます。</p>
           </div>
         </div>
@@ -245,7 +266,7 @@
     <section id="compare" class="soft">
       <div class="wrap">
         <h2>よくある RPA 製品との違い</h2>
-        <p class="sub">大きな組織での管理の仕組みや導入の実績では、ほかの製品が先を行っています。SpellSheet は、無料で始められること、いつもの AI で作れること、PC の中だけで動くことを大事にしています。</p>
+        <p class="sub">大きな組織での管理の仕組みや導入の実績では、ほかの製品が先を行っています。SpellSheet は、無料で始められること、お使いの AI で作れること、PC の中だけで動くことを大事にしています。</p>
         <div class="cmp-scroll" tabindex="0" role="region" aria-label="比較表">
           <table class="cmp cmp-2">
             <thead>
@@ -356,7 +377,7 @@
           </details>
           <details>
             <summary>何から自動化すればよいか分かりません</summary>
-            <p>Writer の「業務の棚卸し」で AI と相談してください。AI が 1 回に 1〜2 問ずつ、ふだんの仕事と、その頻度や時間を聞き取ります。15 分ほどで、月に何時間かかっているか、どの仕事から作ると一番楽になるかが 1 枚にまとまります。途中でやめて、あとから続きを話すこともできます。</p>
+            <p>Writer の「業務の棚卸し」で AI と相談してください。AI が 1 回に 1〜2 問ずつ、ふだんの仕事と、その頻度や時間を聞き取ります。15 分ほどで、月に何時間かかっているか、どの仕事から作ると効果が大きいかが 1 枚にまとまります。途中でやめて、あとから続きを話すこともできます。</p>
           </details>
           <details>
             <summary>AI の契約は必要ですか？</summary>
@@ -384,7 +405,7 @@
 
     <section class="final">
       <div class="wrap">
-        <h2>まずは 1 本、試してみてください</h2>
+        <h2>業務 1 本から、無料で始められます</h2>
         <p class="sub">インストールは数分です。何から始めるか迷ったら、AI との業務の棚卸しから始められます。</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="download.html"><svg class="i"><use href="assets/icons.svg#download"/></svg>無料でダウンロード</a>

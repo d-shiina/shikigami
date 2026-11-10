@@ -30,14 +30,18 @@ pub enum AgentKind {
     Copilot,
     /// Cursor's Agent CLI (`cursor-agent`).
     Cursor,
+    /// Google's Antigravity CLI (`agy`), which took over from Gemini CLI for
+    /// personal Google accounts (including free ones).
+    Antigravity,
     /// Any other program: the message on stdin, stdout lines as the reply.
     Command,
 }
 
 /// The ones Studio knows how to run, in the order the pane offers them.
-pub(crate) const KNOWN: [AgentKind; 5] = [
+pub(crate) const KNOWN: [AgentKind; 6] = [
     AgentKind::ClaudeCode,
     AgentKind::Codex,
+    AgentKind::Antigravity,
     AgentKind::Gemini,
     AgentKind::Copilot,
     AgentKind::Cursor,
@@ -78,6 +82,7 @@ impl AgentKind {
             Self::Gemini => "Gemini CLI",
             Self::Copilot => "GitHub Copilot",
             Self::Cursor => "Cursor",
+            Self::Antigravity => "Antigravity",
             Self::Command => "AI",
         }
     }
@@ -90,6 +95,7 @@ impl AgentKind {
             Self::Gemini => "Google",
             Self::Copilot => "GitHub",
             Self::Cursor => "Cursor",
+            Self::Antigravity => "Google",
             Self::Command => "",
         }
     }
@@ -101,6 +107,7 @@ impl AgentKind {
             Self::Gemini => Some("gemini"),
             Self::Copilot => Some("copilot"),
             Self::Cursor => Some("cursor-agent"),
+            Self::Antigravity => Some("agy"),
             Self::Command => None,
         }
     }
@@ -111,7 +118,7 @@ impl AgentKind {
             Self::Codex => Some("@openai/codex"),
             Self::Gemini => Some("@google/gemini-cli"),
             Self::Copilot => Some("@github/copilot"),
-            Self::ClaudeCode | Self::Cursor | Self::Command => None,
+            Self::ClaudeCode | Self::Cursor | Self::Antigravity | Self::Command => None,
         }
     }
 
@@ -119,6 +126,33 @@ impl AgentKind {
     /// <prompt>`) rather than stdin.
     pub(crate) fn prompt_as_argument(self) -> bool {
         self == Self::Cursor
+    }
+
+    /// What goes on stdin for `prompt`: the text itself, except for
+    /// Antigravity, which reads one `user` event (`--input-format
+    /// stream-json`; a long message on its command line would hit Windows'
+    /// length limit).
+    pub(crate) fn stdin_payload(self, prompt: &str) -> String {
+        if self == Self::Antigravity {
+            let mut line = json!({ "event": "user", "message": { "content": prompt } }).to_string();
+            line.push('\n');
+            line
+        } else {
+            prompt.to_owned()
+        }
+    }
+
+    /// The API key it runs on, kept in Windows Credential Manager under this
+    /// name, and the variable it reads the key from. Gemini CLI no longer
+    /// takes a personal Google account's sign-in, only a key.
+    pub(crate) fn api_key(self) -> Option<(&'static str, &'static str)> {
+        (self == Self::Gemini).then_some(("gemini", "GEMINI_API_KEY"))
+    }
+
+    /// Whether it signs in only on its own screen (in a window of its own)
+    /// rather than through a command run hidden.
+    pub(crate) fn signs_in_on_own_screen(self) -> bool {
+        self == Self::Antigravity
     }
 
     /// Arguments that come before the rest when `program` is not the tool
@@ -179,19 +213,19 @@ impl AgentKind {
             Self::Codex => &["https://auth.openai.com/", "https://chatgpt.com/"],
             Self::Copilot => &["https://github.com/login/"],
             Self::Cursor => &["https://cursor.com/"],
-            Self::Gemini | Self::Command => &[],
+            Self::Gemini | Self::Antigravity | Self::Command => &[],
         }
     }
 
-    /// The command that signs it in, run hidden. Gemini CLI signs in only
-    /// from its own screen.
+    /// The command that signs it in, run hidden. Gemini CLI runs on an API
+    /// key and Antigravity signs in only on its own screen.
     pub(crate) fn login_args(self) -> Option<&'static [&'static str]> {
         match self {
             Self::ClaudeCode => Some(&["auth", "login"]),
             Self::Codex => Some(&["login"]),
             Self::Copilot => Some(&["login", "--web-flow"]),
             Self::Cursor => Some(&["login"]),
-            Self::Gemini | Self::Command => None,
+            Self::Gemini | Self::Antigravity | Self::Command => None,
         }
     }
 }
@@ -230,6 +264,10 @@ fn install_dirs() -> Vec<PathBuf> {
         // `npm install -g` (the default prefix).
         if let Some(appdata) = std::env::var_os("APPDATA") {
             dirs.push(PathBuf::from(appdata).join("npm"));
+        }
+        // Antigravity CLI's installer.
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join("agy").join("bin"));
         }
     } else if let Some(home) = dirs::home_dir() {
         dirs.push(home.join(".npm-global").join("bin"));
@@ -273,6 +311,9 @@ pub(crate) struct Turn<'a> {
     /// This turn's own folder: the messages the person sends while it runs
     /// ([`INBOX`]), and the settings that name that folder.
     pub own: Option<&'a Path>,
+    /// It runs on an API key saved in Writer ([`AgentKind::api_key`]),
+    /// passed in its environment by the caller.
+    pub api_key: bool,
 }
 
 /// The folder in a turn's own folder for what the person sends meanwhile.
@@ -338,7 +379,7 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
         }
         AgentKind::Gemini => {
             write_if_changed(&turn.dir.join("GEMINI.md"), turn.system_prompt)?;
-            let settings = json!({
+            let mut settings = json!({
                 "mcpServers": { SERVER: {
                     "command": turn.cli,
                     "args": with_inbox(true),
@@ -347,6 +388,11 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
                 }},
                 "tools": { "exclude": GEMINI_BUILTIN_TOOLS },
             });
+            // The key saved in Writer, even when the person's own settings
+            // still name the Google sign-in Gemini CLI no longer takes.
+            if turn.api_key {
+                settings["security"] = json!({ "auth": { "selectedType": "gemini-api-key" } });
+            }
             let folder = turn.dir.join(".gemini");
             std::fs::create_dir_all(&folder)?;
             write_if_changed(
@@ -403,6 +449,26 @@ pub(crate) fn prepare(kind: AgentKind, turn: &Turn<'_>) -> std::io::Result<(Vec<
             // What its launcher sets when its Node.js runs it directly.
             env.push(("CURSOR_INVOKED_AS", "agent".to_owned()));
             cursor_args(turn.dir, session)
+        }
+        AgentKind::Antigravity => {
+            // It reads AGENTS.md and GEMINI.md in its workspace (this folder)
+            // and the MCP servers in .agents/mcp_config.json there.
+            write_if_changed(&turn.dir.join("AGENTS.md"), turn.system_prompt)?;
+            write_if_changed(&turn.dir.join("GEMINI.md"), turn.system_prompt)?;
+            let folder = turn.dir.join(".agents");
+            std::fs::create_dir_all(&folder)?;
+            // Shared by every turn: the MCP server finds this turn's inbox in
+            // its environment, which it gets from the agent's.
+            let mcp =
+                json!({ "mcpServers": { SERVER: { "command": turn.cli, "args": server_args } } });
+            write_if_changed(
+                &folder.join("mcp_config.json"),
+                &serde_json::to_string_pretty(&mcp).unwrap_or_default(),
+            )?;
+            if let Some(own) = own {
+                env.push((INBOX_VAR, own.join(INBOX).display().to_string()));
+            }
+            antigravity_args(session)
         }
     };
     Ok((args, env))
@@ -531,6 +597,82 @@ fn cursor_args(dir: &Path, session: Option<&str>) -> Vec<String> {
     args.extend(["--trust", "--approve-mcps", "--force"].map(str::to_owned));
     if let Some(session) = session {
         args.push("--resume".to_owned());
+        args.push(session.to_owned());
+    }
+    args
+}
+
+/// Antigravity CLI's settings file (`~/.gemini/antigravity-cli/settings.json`):
+/// it has no settings of its own per folder.
+pub(crate) fn antigravity_settings() -> Option<PathBuf> {
+    Some(
+        dirs::home_dir()?
+            .join(".gemini")
+            .join("antigravity-cli")
+            .join("settings.json"),
+    )
+}
+
+/// The permission rule that lets SpellSheet's tools run without asking: a
+/// headless run cannot ask, and turns down what is not allowed.
+const ANTIGRAVITY_ALLOW: &str = "mcp(spellsheet/*)";
+
+/// Adds [`ANTIGRAVITY_ALLOW`] to `permissions.allow` in the person's
+/// Antigravity settings ([`antigravity_settings`], done by the caller before
+/// each message), keeping everything else as it is. Its file and
+/// shell tools stay as the person set them: without a rule allowing them,
+/// a headless run turns them down. A file it cannot read is left alone.
+pub(crate) fn allow_spellsheet_in(path: &Path) -> std::io::Result<()> {
+    let mut settings = match std::fs::read_to_string(path) {
+        Ok(text) if text.trim().is_empty() => json!({}),
+        Ok(text) => match serde_json::from_str::<Value>(&text) {
+            Ok(v @ Value::Object(_)) => v,
+            _ => {
+                tracing::warn!(path = %path.display(), "leaving unreadable Antigravity settings as they are");
+                return Ok(());
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => return Err(e),
+    };
+    let Some(root) = settings.as_object_mut() else {
+        return Ok(());
+    };
+    let permissions = root.entry("permissions").or_insert_with(|| json!({}));
+    let Some(permissions) = permissions.as_object_mut() else {
+        return Ok(());
+    };
+    let allow = permissions.entry("allow").or_insert_with(|| json!([]));
+    let Some(allow) = allow.as_array_mut() else {
+        return Ok(());
+    };
+    if allow.iter().any(|r| r.as_str() == Some(ANTIGRAVITY_ALLOW)) {
+        return Ok(());
+    }
+    allow.push(json!(ANTIGRAVITY_ALLOW));
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(
+        path,
+        serde_json::to_string_pretty(&settings).unwrap_or_default(),
+    )
+}
+
+/// `agy --input-format stream-json --output-format stream-json`: the
+/// message comes on stdin as one `user` event ([`AgentKind::stdin_payload`]).
+fn antigravity_args(session: Option<&str>) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--disable-slash-commands",
+    ]
+    .map(str::to_owned)
+    .into();
+    if let Some(session) = session {
+        args.push("--conversation".to_owned());
         args.push(session.to_owned());
     }
     args
@@ -950,6 +1092,143 @@ impl CursorStream {
     }
 }
 
+/// Reads `agy --output-format stream-json`: `step_update` events for each
+/// step (its reply in `text_delta` pieces, tool calls in `tool_info`), and
+/// one `result` at the end with the conversation's id and status.
+#[derive(Default)]
+pub(crate) struct AntigravityStream {
+    session: bool,
+    text: String,
+    /// Whether any of the reply has been shown, so the final `response`
+    /// is shown only when no pieces came.
+    said: bool,
+    /// Tool steps already announced, by step index, with the tool's name.
+    tools: HashMap<i64, String>,
+}
+
+impl AntigravityStream {
+    fn flush(&mut self) -> Option<AgentEvent> {
+        let text = std::mem::take(&mut self.text);
+        (!text.trim().is_empty()).then(|| {
+            self.said = true;
+            AgentEvent::Text { text }
+        })
+    }
+
+    fn session(&mut self, v: &Value) -> Option<AgentEvent> {
+        if self.session {
+            return None;
+        }
+        let session_id = str_of(v, "conversation_id").filter(|s| !s.is_empty())?;
+        self.session = true;
+        Some(AgentEvent::Session { session_id })
+    }
+
+    /// A SpellSheet tool and its input: called by its own name
+    /// (`mcp_spellsheet_get_flow`) or through `call_mcp_tool`.
+    fn spellsheet_tool(name: &str, params: Option<&Value>) -> Option<(String, Option<Value>)> {
+        if let Some(name) = tool_name(name) {
+            return Some((name, params.cloned()));
+        }
+        if name != "call_mcp_tool" {
+            return None;
+        }
+        let params = params?;
+        let field = |keys: &[&str]| keys.iter().find_map(|k| params.get(*k));
+        let server = field(&["ServerName", "serverName", "server_name"])?.as_str()?;
+        if server != SERVER {
+            return None;
+        }
+        let tool = field(&["ToolName", "toolName", "tool_name"])?
+            .as_str()?
+            .to_owned();
+        let args = field(&["Arguments", "arguments"]).map(|a| match a {
+            Value::String(text) => serde_json::from_str(text).unwrap_or_else(|_| a.clone()),
+            other => other.clone(),
+        });
+        Some((tool, args))
+    }
+
+    fn error_text(error: &Value) -> String {
+        match error {
+            Value::String(s) => s.clone(),
+            other => str_of(other, "message").unwrap_or_else(|| other.to_string()),
+        }
+    }
+
+    pub(crate) fn line(&mut self, line: &str) -> Vec<AgentEvent> {
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            return Vec::new();
+        };
+        let kind = str_of(&v, "type").or_else(|| str_of(&v, "event"));
+        let mut out: Vec<AgentEvent> = self.session(&v).into_iter().collect();
+        match kind.as_deref() {
+            Some("step_update") => match str_of(&v, "step_type").as_deref() {
+                Some("agent_response") => {
+                    if let Some(delta) = str_of(&v, "text_delta") {
+                        self.text.push_str(&delta);
+                    }
+                }
+                Some("tool") => {
+                    let info = v.get("tool_info").cloned().unwrap_or(Value::Null);
+                    let Some(name) = str_of(&info, "name").or_else(|| str_of(&v, "tool_name"))
+                    else {
+                        return out;
+                    };
+                    let Some((tool, args)) = Self::spellsheet_tool(&name, info.get("parameters"))
+                    else {
+                        return out;
+                    };
+                    let step = v.get("step_index").and_then(Value::as_i64).unwrap_or(-1);
+                    if !self.tools.contains_key(&step) {
+                        out.extend(self.flush());
+                        out.push(AgentEvent::tool(tool.clone(), args.as_ref()));
+                        self.tools.insert(step, tool.clone());
+                    }
+                    if str_of(&v, "state").as_deref() != Some("DONE") {
+                        return out;
+                    }
+                    if let Some(error) = info.get("error").filter(|e| !e.is_null()) {
+                        out.push(AgentEvent::ToolFailed {
+                            message: truncate(&Self::error_text(error), TOOL_ERROR_LEN),
+                        });
+                    } else if tool == "create_flow" {
+                        let text = match info.get("output") {
+                            Some(Value::String(s)) => s.clone(),
+                            Some(Value::Object(o)) if o.contains_key("content") => {
+                                content_text(o.get("content"))
+                            }
+                            other => content_text(other),
+                        };
+                        out.extend(created(&text));
+                    }
+                }
+                _ => {}
+            },
+            Some("result") => {
+                out.extend(self.flush());
+                if !self.said
+                    && let Some(text) = str_of(&v, "response").filter(|t| !t.trim().is_empty())
+                {
+                    self.said = true;
+                    out.push(AgentEvent::Text { text });
+                }
+                let ok = str_of(&v, "status").is_none_or(|s| s.eq_ignore_ascii_case("success"));
+                let message = (!ok).then(|| {
+                    v.get("error")
+                        .filter(|e| !e.is_null())
+                        .map(Self::error_text)
+                        .filter(|m| !m.trim().is_empty())
+                        .unwrap_or_else(|| "AI が途中で終了しました".to_owned())
+                });
+                out.push(AgentEvent::done(ok, message, None));
+            }
+            _ => {}
+        }
+        out
+    }
+}
+
 /// The text of a Cursor MCP result: `content` as MCP gives it, where a text
 /// part may hold its text directly or under `text.text`.
 fn cursor_result_text(success: &Value) -> String {
@@ -981,6 +1260,7 @@ mod tests {
             system_prompt: "be brief",
             session,
             own: None,
+            api_key: false,
         }
     }
 
@@ -1407,6 +1687,182 @@ mod tests {
                 },
                 AgentEvent::done(false, Some("Rate limited".into()), None),
             ]
+        );
+    }
+
+    #[test]
+    fn gemini_uses_the_saved_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyed = Turn {
+            api_key: true,
+            ..turn(dir.path(), None)
+        };
+        prepare(AgentKind::Gemini, &keyed).unwrap();
+        let settings: Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join(".gemini/settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            settings.pointer("/security/auth/selectedType"),
+            Some(&json!("gemini-api-key"))
+        );
+        assert_eq!(
+            AgentKind::Gemini.api_key(),
+            Some(("gemini", "GEMINI_API_KEY"))
+        );
+        assert_eq!(AgentKind::Antigravity.api_key(), None);
+        assert_eq!(AgentKind::Gemini.login_args(), None);
+    }
+
+    #[test]
+    fn antigravity_gets_only_spellsheet() {
+        let dir = tempfile::tempdir().unwrap();
+        let own = dir.path().join("turns").join("turn_1");
+        std::fs::create_dir_all(&own).unwrap();
+        let with_own = Turn {
+            own: Some(&own),
+            ..turn(dir.path(), Some("conv-1"))
+        };
+        let (args, env) = prepare(AgentKind::Antigravity, &with_own).unwrap();
+        assert_eq!(
+            args,
+            [
+                "--input-format",
+                "stream-json",
+                "--output-format",
+                "stream-json",
+                "--disable-slash-commands",
+                "--conversation",
+                "conv-1"
+            ]
+        );
+        assert!(!args.iter().any(|a| a == "--dangerously-skip-permissions"));
+        assert!(!AgentKind::Antigravity.prompt_as_argument());
+        assert!(env.contains(&(INBOX_VAR, own.join(INBOX).display().to_string())));
+        assert!(dir.path().join("AGENTS.md").is_file());
+        assert!(dir.path().join("GEMINI.md").is_file());
+        let mcp: Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join(".agents/mcp_config.json")).unwrap(),
+        )
+        .unwrap();
+        let servers = mcp.get("mcpServers").unwrap().as_object().unwrap();
+        assert_eq!(servers.keys().collect::<Vec<_>>(), ["spellsheet"]);
+        // One file for every turn: the inbox is not in it.
+        let args = mcp.pointer("/mcpServers/spellsheet/args").unwrap();
+        assert!(!args.to_string().contains("inbox"));
+        assert!(args.to_string().contains("--writer-chat"));
+    }
+
+    #[test]
+    fn antigravity_reads_the_message_as_one_user_event() {
+        let line = AgentKind::Antigravity.stdin_payload("一行目\n二行目");
+        assert!(line.ends_with('\n'));
+        assert_eq!(line.matches('\n').count(), 1);
+        let v: Value = serde_json::from_str(line.trim_end()).unwrap();
+        assert_eq!(
+            v,
+            json!({ "event": "user", "message": { "content": "一行目\n二行目" } })
+        );
+        assert_eq!(AgentKind::Codex.stdin_payload("hi"), "hi");
+    }
+
+    #[test]
+    fn antigravity_may_use_spellsheet_and_keeps_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("antigravity-cli").join("settings.json");
+        allow_spellsheet_in(&path).unwrap();
+        let read =
+            || -> Value { serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap() };
+        assert_eq!(
+            read(),
+            json!({ "permissions": { "allow": ["mcp(spellsheet/*)"] } })
+        );
+        std::fs::write(
+            &path,
+            r#"{"model":"x","permissions":{"allow":["command(git)"],"deny":["command(rm -rf)"]}}"#,
+        )
+        .unwrap();
+        allow_spellsheet_in(&path).unwrap();
+        allow_spellsheet_in(&path).unwrap();
+        assert_eq!(
+            read(),
+            json!({ "model": "x", "permissions": {
+                "allow": ["command(git)", "mcp(spellsheet/*)"],
+                "deny": ["command(rm -rf)"],
+            }})
+        );
+        // Not JSON as Studio reads it (comments): left alone.
+        std::fs::write(&path, "{ // mine\n}").unwrap();
+        allow_spellsheet_in(&path).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // mine\n}");
+    }
+
+    #[test]
+    fn reads_antigravity() {
+        let mut s = AntigravityStream::default();
+        let lines = [
+            r#"{"type":"init","cwd":"D:\\agent","tools":[],"permission_mode":"default"}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":0,"state":"DONE","step_type":"user_input"}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"作り"}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"ます。"}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"mcp_spellsheet_create_flow","tool_info":{"name":"mcp_spellsheet_create_flow","parameters":{"name":"請求書"}}}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":2,"state":"DONE","step_type":"tool","tool_info":{"name":"mcp_spellsheet_create_flow","parameters":{"name":"請求書"},"output":"{\"flow\":{\"id\":\"f1\",\"name\":\"請求書\"}}"}}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":3,"state":"DONE","step_type":"tool","tool_info":{"name":"call_mcp_tool","parameters":{"ServerName":"spellsheet","ToolName":"validate_flow","Arguments":"{\"flowId\":\"f1\"}"},"error":{"message":"not allowed"}}}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":4,"state":"DONE","step_type":"tool","tool_info":{"name":"run_command","parameters":{"command":"dir"}}}"#,
+            r#"{"type":"step_update","conversation_id":"conv-1","step_index":5,"state":"ACTIVE","step_type":"agent_response","text_delta":"フローを作りました。"}"#,
+            r#"{"type":"result","conversation_id":"conv-1","status":"SUCCESS","response":"作ります。フローを作りました。"}"#,
+        ];
+        let events: Vec<AgentEvent> = lines.iter().flat_map(|l| s.line(l)).collect();
+        assert_eq!(
+            events,
+            [
+                AgentEvent::Session {
+                    session_id: "conv-1".into()
+                },
+                AgentEvent::Text {
+                    text: "作ります。".into()
+                },
+                AgentEvent::tool("create_flow".into(), Some(&json!({"name":"請求書"}))),
+                AgentEvent::Created {
+                    flow_id: "f1".into(),
+                    name: "請求書".into()
+                },
+                AgentEvent::tool("validate_flow".into(), Some(&json!({"flowId":"f1"}))),
+                AgentEvent::ToolFailed {
+                    message: "not allowed".into()
+                },
+                AgentEvent::Text {
+                    text: "フローを作りました。".into()
+                },
+                AgentEvent::done(true, None, None),
+            ]
+        );
+        // Only the final answer: shown once.
+        let mut s = AntigravityStream::default();
+        let only = s.line(
+            r#"{"type":"result","conversation_id":"c","status":"SUCCESS","response":"はい"}"#,
+        );
+        assert_eq!(
+            only,
+            [
+                AgentEvent::Session {
+                    session_id: "c".into()
+                },
+                AgentEvent::Text {
+                    text: "はい".into()
+                },
+                AgentEvent::done(true, None, None),
+            ]
+        );
+        let failed = AntigravityStream::default()
+            .line(r#"{"type":"result","status":"ERROR","error":"authentication required"}"#);
+        assert_eq!(
+            failed,
+            [AgentEvent::done(
+                false,
+                Some("authentication required".into()),
+                None
+            )]
         );
     }
 }

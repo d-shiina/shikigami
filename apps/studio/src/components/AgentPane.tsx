@@ -1,5 +1,5 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
-// agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with SpellSheet's MCP server; whatever it
+// agent (Claude Code, Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
 import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { plainLine } from "../lib/markdown";
 import { Markdown } from "./Markdown";
+import { ApiKeyBox } from "./AgentApiKey";
 import { headline, summarize, purpose } from "../lib/review";
 import { useReviewView } from "../lib/reviewView";
 import { useInbox } from "./ReviewDesk";
@@ -115,7 +116,8 @@ export function AgentPane({ width }: { width: number }) {
             </div>
           </>
         )}
-        {items.length === 0 && info?.available && (
+        {info?.usesApiKey && !info.hasApiKey && <ApiKeyBox />}
+        {items.length === 0 && info?.available && !(info.usesApiKey && !info.hasApiKey) && (
           <div className="grid h-full place-items-center">
             <div className="flex flex-col items-center gap-2">
               <img src="/mark.png" alt="" className="h-10 w-10 opacity-15 grayscale" />
@@ -128,6 +130,7 @@ export function AgentPane({ width }: { width: number }) {
         ))}
         {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
         <LoginBox name={info?.name ?? "AI"} />
+        {info?.hasApiKey && <ApiKeyBox />}
         <div ref={end} />
       </div>
       <div className="border-t border-slate-200 p-3">
@@ -501,6 +504,7 @@ function ChoiceCard({ part, onChoose }: { part: Extract<AgentPart, { kind: "choi
 const FALLBACK_CHOICES: AgentChoice[] = [
   { kind: "claudeCode", name: "Claude Code", maker: "Anthropic", installed: false, selected: false },
   { kind: "codex", name: "Codex", maker: "OpenAI", installed: false, selected: false },
+  { kind: "antigravity", name: "Antigravity", maker: "Google", installed: false, selected: false },
   { kind: "gemini", name: "Gemini CLI", maker: "Google", installed: false, selected: false },
   { kind: "copilot", name: "GitHub Copilot", maker: "GitHub", installed: false, selected: false },
   { kind: "cursor", name: "Cursor", maker: "Cursor", installed: false, selected: false },
@@ -588,7 +592,7 @@ function SetupCard() {
             <Download size={13} strokeWidth={2} aria-hidden="true" />
             {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(name)}
           </button>
-          <div className="text-[11px] leading-relaxed text-slate-500">{kind === "claudeCode" || kind === "cursor" ? t.agent.setup.whatHappens : t.agent.setup.whatHappensNpm}</div>
+          <div className="text-[11px] leading-relaxed text-slate-500">{kind === "claudeCode" || kind === "cursor" || kind === "antigravity" ? t.agent.setup.whatHappens : t.agent.setup.whatHappensNpm}</div>
         </>
       )}
     </div>
@@ -634,6 +638,8 @@ const QUIET_MS = 60_000;
 /** Signs the agent in without leaving the pane, after a turn failed on an expired login. */
 function LoginBox({ name }: { name: string }) {
   const login = useAgent((s) => s.login);
+  // An AI that runs on an API key asks for the key instead (ApiKeyBox).
+  const usesApiKey = useAgent((s) => s.info?.usesApiKey ?? false);
   const needed = useAgent((s) => {
     const last = currentChat(s).items.at(-1);
     return last?.role === "ai" && last.needsLogin;
@@ -642,7 +648,7 @@ function LoginBox({ name }: { name: string }) {
   const submitCode = useAgent((s) => s.submitLoginCode);
   const cancel = useAgent((s) => s.cancelLogin);
   const [code, setCode] = useState("");
-  if (!needed && login.phase === "idle") return null;
+  if (usesApiKey || (!needed && login.phase === "idle")) return null;
   const box = "space-y-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink";
   const primary =
     "h-8 rounded-lg bg-primary px-3 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400";

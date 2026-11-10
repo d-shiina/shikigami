@@ -547,6 +547,10 @@ export type AgentInfo = {
   installable: boolean;
   /** The pane can sign it in. */
   signsIn: boolean;
+  /** It runs on an API key pasted in Writer (Gemini CLI). */
+  usesApiKey: boolean;
+  /** That key is saved (in Windows Credential Manager). */
+  hasApiKey: boolean;
 };
 
 export type AgentRequest = {
@@ -590,6 +594,8 @@ export const agent = {
   choices: () => call<AgentChoice[]>("agent_choices"),
   /** Uses this agent from the next message on. */
   select: (kind: AgentKind) => call<AgentInfo>("agent_select", { kind }),
+  /** Saves the API key the AI in use runs on; null deletes it. */
+  setApiKey: (key: string | null) => call<AgentInfo>("agent_set_api_key", { key }),
   /** Runs the agent's own installer in the background; progress arrives through `onInstall`. */
   install: (kind: AgentKind) => call<void>("agent_install", { kind }),
   cancelInstall: () => call<void>("agent_install_cancel"),
@@ -609,7 +615,7 @@ export type ChoiceOption = { label: string; description: string | null };
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
 /** Which AI to set up; the installer is chosen by this. */
-export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "cursor" | "command";
+export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "cursor" | "antigravity" | "command";
 /** An agent Studio knows how to run. */
 export type AgentChoice = { kind: AgentKind; name: string; maker: string; installed: boolean; selected: boolean };
 /** The stage the installer is at: Node.js by winget, the npm package, the tool's own installer, then checking it is there. */
