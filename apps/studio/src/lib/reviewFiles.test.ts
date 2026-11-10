@@ -46,10 +46,16 @@ describe("readCheck", () => {
 });
 
 describe("isQuestion", () => {
-  it("tells a question the AI asked from a decision it stated", () => {
+  it("asks for words only where yes or no does not answer", () => {
     expect(isQuestion("ニュースの取得元はどこにしますか？（Google ニュースなど）")).toBe(true);
-    expect(isQuestion("Is it the order number?")).toBe(true);
-    expect(isQuestion("ニュースは NHK NEWS WEB から取ります\n今回の例：10 件")).toBe(false);
-    expect(isQuestion("ニュースは NHK から取ります\n今回の例：どれ？")).toBe(false);
+    expect(isQuestion("見出しだけですか？それとも記事本文も含めますか？")).toBe(true);
+    expect(isQuestion("何件まで取りますか？")).toBe(true);
+    expect(isQuestion("Which site should it read?")).toBe(true);
+    expect(isQuestion("出力先のフォルダー名は？")).toBe(true);
+    expect(isQuestion("保存形式は CSV ですか、Excel ですか？")).toBe(true);
+    expect(isQuestion("検索するのは注文番号でよいですか？")).toBe(false);
+    expect(isQuestion("失敗したら処理を止めますか？")).toBe(false);
+    expect(isQuestion("Is it the order number?")).toBe(false);
+    expect(isQuestion("ニュースは NHK NEWS WEB から取ります\n今回の例：どれ？")).toBe(false);
   });
 });

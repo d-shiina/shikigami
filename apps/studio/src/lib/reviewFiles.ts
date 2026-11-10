@@ -81,11 +81,16 @@ export function usedRows(effects: Effect[], values: InputRow[]): UsedRow[] {
 }
 
 /**
- * Whether the AI asked rather than stated what it decided ("どこから取りますか？"):
- * yes or no does not answer it, the person writes the answer.
+ * Whether the AI asked an open question that yes or no does not answer
+ * ("どこから取りますか？", "A ですか？それとも B ですか？"): the person writes the
+ * answer. A question yes or no answers ("注文番号で検索してよいですか？") keeps the buttons.
  */
 export function isQuestion(text: string): boolean {
-  return /[？?]/.test(readCheck(text).rule);
+  const rule = readCheck(text).rule;
+  if (!/[？?]/.test(rule)) return false;
+  // A choice between options ("CSV ですか、Excel ですか？") or a bare noun ("出力先のフォルダー名は？").
+  if (/か[、,]/.test(rule) || /[はをが][？?]/.test(rule)) return true;
+  return /(どこ|どれ|どの|どちら|どっち|どう|どんな|どのよう|何|なに|なん[でのに]|いつ|誰|だれ|いくつ|いくら|それとも|または.*[？?]|\b(which|what|where|when|who|whom|how|or)\b)/i.test(rule);
 }
 
 /** An AI's judgement as written in `checks`: the rule on the first line, this run's example after it. */
