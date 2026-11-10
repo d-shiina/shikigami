@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SpellSheet｜いつもの AI が作り、PC が回し続ける Windows の業務自動化</title>
-  <meta name="description" content="SpellSheet は、いつもの AI に頼んで業務の自動化フローを作り、人が読んで直し、PC の中で AI なしに動かし続ける Windows 向けの RPA です。無料のオープンソース（Apache-2.0）。">
+  <meta name="description" content="SpellSheet は、何を自動化するかを AI と業務の棚卸しで決め、いつもの AI に頼んで業務の自動化フローを作り、人が読んで直し、PC の中で AI なしに動かし続ける Windows 向けの RPA です。無料のオープンソース（Apache-2.0）。">
   <meta property="og:title" content="SpellSheet｜いつもの AI が作り、あなたが読んで直し、PC が回し続ける。">
   <meta property="og:description" content="好きな AI で作れて、人が読んで直せて、PC の中で無人実行まで済む。日本の業務アプリ向けの無料 RPA。">
   <meta property="og:type" content="website">
@@ -22,6 +22,7 @@
     <div class="wrap">
       <a class="brand" href="./"><img src="assets/mark.png" alt="">SpellSheet</a>
       <nav class="nav" aria-label="ページ内">
+        <a class="hide-sm" href="#consult">業務の棚卸し</a>
         <a class="hide-sm" href="#points">特長</a>
         <a class="hide-sm" href="#how">使い方</a>
         <a class="hide-sm" href="#compare">違い</a>
@@ -53,6 +54,29 @@
       <div class="wrap">
         <div class="shot">
           <picture><source srcset="assets/writer-dark.webp" media="(prefers-color-scheme: dark)"><img src="assets/writer.webp" width="1440" height="900" alt="SpellSheet Writer でフローを開いた画面。左にプロジェクトのファイル、中央にフロー図、上に AI への依頼欄がある"></picture>
+        </div>
+      </div>
+    </section>
+
+    <section id="consult">
+      <div class="wrap">
+        <div class="feature c-navy">
+          <div>
+            <p class="label">はじめに　何を自動化するか、AI と決める</p>
+            <h3>AI が業務を聞き取り、楽になる順に並べます</h3>
+            <p>RPA を入れても、どの仕事から自動化すればよいか分からないことがよくあります。SpellSheet では、AI がコンサルタントのように聞き取ります。どんな仕事があるか、どのくらいの頻度で 1 回に何分かかるか、そのうちどれだけが写す・打ち込む・照らし合わせるといった手を動かすだけの作業か。</p>
+            <p>聞いた内容は 1 枚の「業務の棚卸し」にまとまります。いま月に何時間かかっているか、自動化で何時間減らせそうか、どの仕事から作るとよいかが並びます。気になる行の「AI に作ってもらう」から、聞いた内容を添えてそのままフローを頼めます。</p>
+            <ul class="ticks">
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>時間と順位は決まった式で出すので、何度開いても同じ結果です。数字はその場で直せます</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>Excel に書き出して、上司への説明や記録に使えます</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>パスワード・取引先や社員の名前・金額は聞きません</li>
+              <li><svg class="i"><use href="assets/icons.svg#check"/></svg>本体の機能なので無料です</li>
+            </ul>
+          </div>
+          <figure class="figure" style="margin:0">
+            <picture><source srcset="assets/inventory-dark.webp" media="(prefers-color-scheme: dark)"><img src="assets/inventory.webp" width="1440" height="900" alt="業務の棚卸しの画面。月にかかっている時間、減らせそうな時間、最初に作るとよい仕事と、減らせそうな時間と作りやすさの図が並ぶ"></picture>
+            <figcaption>業務の棚卸し。減らせそうな時間と作りやすさで、作る順が決まります</figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -179,7 +203,7 @@
         <div class="steps">
           <div class="step">
             <h3>頼む</h3>
-            <p>Writer の「何を自動化しますか？」に、やりたいことをふだんの業務の言葉で書きます。AI が画面を確かめながらフローを組みます。</p>
+            <p>Writer の「何を自動化しますか？」に、やりたいことをふだんの業務の言葉で書きます。AI が画面を確かめながらフローを組みます。何から頼むか決まっていなければ、先に AI と業務の棚卸しをします。</p>
           </div>
           <div class="step">
             <h3>読んで試し、承諾する</h3>
@@ -251,6 +275,11 @@
                 <th scope="row">AI に頼んで作る</th>
                 <td class="me">Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor から、日本語で頼める。AI が画面を調べながら組む</td>
                 <td>製品に組み込まれた AI 機能で作る。地域・言語・プランが限られるものもある</td>
+              </tr>
+              <tr>
+                <th scope="row">何を自動化するか</th>
+                <td class="me">AI が業務を聞き取り、減らせそうな時間と作りやすさで候補を並べる（業務の棚卸し、無料）</td>
+                <td>業務の洗い出しは、別の製品（プロセスマイニングなど）や導入支援のサービスで行うことが多い</td>
               </tr>
               <tr>
                 <th scope="row">MCP</th>
@@ -326,6 +355,10 @@
             <p>はい。本体（Writer・Runner・Worker、スケジュール、フローの受け渡し）は Apache-2.0 のオープンソースで、すべて無料です。一度無料で出した機能を、あとから有料にすることはしません。AI で作るときの AI の料金だけは、お使いの AI サービスの契約によります。</p>
           </details>
           <details>
+            <summary>何から自動化すればよいか分かりません</summary>
+            <p>Writer の「業務の棚卸し」で AI と相談してください。AI が 1 回に 1〜2 問ずつ、ふだんの仕事と、その頻度や時間を聞き取ります。15 分ほどで、月に何時間かかっているか、どの仕事から作ると一番楽になるかが 1 枚にまとまります。途中でやめて、あとから続きを話すこともできます。</p>
+          </details>
+          <details>
             <summary>AI の契約は必要ですか？</summary>
             <p>AI に作ってもらうときは、Claude Code・Codex・Gemini CLI・GitHub Copilot・Cursor のどれかが使える契約が必要です。作ったフローを動かすだけなら、AI は要りません。MCP に対応していない AI チャット（Microsoft Copilot など）でも、仕様書を渡して答えを貼り付ける方法でフローを作れます。</p>
           </details>
@@ -352,7 +385,7 @@
     <section class="final">
       <div class="wrap">
         <h2>まずは 1 本、試してみてください</h2>
-        <p class="sub">インストールは数分です。見本のフローを開けば、すぐに中身と動きを確かめられます。</p>
+        <p class="sub">インストールは数分です。何から始めるか迷ったら、AI との業務の棚卸しから始められます。</p>
         <div class="cta">
           <a class="btn btn-primary btn-lg" href="download.html"><svg class="i"><use href="assets/icons.svg#download"/></svg>無料でダウンロード</a>
           <a class="btn btn-lg" data-gh="" href="https://github.com/spellsheet/spellsheet">GitHub で見る<svg class="i i-sm"><use href="assets/icons.svg#external-link"/></svg></a>
