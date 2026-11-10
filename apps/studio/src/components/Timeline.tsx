@@ -1,5 +1,5 @@
-import { ArrowRight, Check, Undo2 } from "lucide-react";
-import type { HistoryEntry } from "@spellsheet/schema";
+import { ArrowRight, Check, Cog, type LucideIcon, Sparkles, SquareTerminal, Undo2, User } from "lucide-react";
+import type { ActorKind, HistoryEntry } from "@spellsheet/schema";
 import { useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime, verbLabel } from "../lib/changes";
@@ -30,21 +30,28 @@ export function entryScope(lines: ChangeLine[]): { suffix: string; title?: strin
   };
 }
 
+/** Who made a change, as a lucide icon: letters ("AI", "コマ") do not fit a 16px circle. */
+const ACTOR_ICON: Record<ActorKind, LucideIcon> = {
+  mcp: Sparkles,
+  chat: Sparkles,
+  studio: User,
+  cli: SquareTerminal,
+  system: Cog,
+};
+
 export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: number }) {
   const external = isExternal(entry);
+  const ai = entry.actor.kind === "mcp" || entry.actor.kind === "chat";
+  const Icon = ACTOR_ICON[entry.actor.kind] ?? User;
   return (
     <span
       style={{ width: size, height: size }}
-      className={`grid shrink-0 place-items-center rounded-full text-[10px] font-bold ${
-        entry.actor.kind === "mcp" || entry.actor.kind === "chat"
-          ? "bg-brand-500 text-white"
-          : external
-            ? "bg-slate-300 text-slate-700"
-            : "bg-ink text-paper"
+      className={`grid shrink-0 place-items-center rounded-full ${
+        ai ? "bg-brand-500 text-white" : external ? "bg-slate-300 text-slate-700" : "bg-ink text-paper"
       }`}
       title={actorLabel(entry)}
     >
-      {entry.actor.kind === "mcp" || entry.actor.kind === "chat" ? "AI" : entry.actor.kind === "studio" ? t.personMark : t.actor[entry.actor.kind].slice(0, 2)}
+      <Icon size={Math.round(size * 0.62)} strokeWidth={2} aria-hidden="true" />
     </span>
   );
 }

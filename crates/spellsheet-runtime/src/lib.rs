@@ -11,6 +11,7 @@
 pub mod adapter;
 pub mod audit;
 pub mod builtin;
+mod cloud;
 pub mod debug;
 pub mod drafts;
 pub mod event;
@@ -311,6 +312,13 @@ impl Runtime {
             } else {
                 Vec::new()
             };
+        // A whole run of a flow whose folder is set to cloud storage fetches
+        // its input first and sends its output last (`config/cloud.json`).
+        let cloud = match (&options.project_dir, options.full_run) {
+            (Some(dir), true) => spellsheet_core::cloud::CloudFile::read(dir)
+                .map(|file| file.map(|f| (dir.clone(), f))),
+            _ => Ok(None),
+        };
         let cancel = CancellationToken::new();
         let force = CancellationToken::new();
         let debugger = options.debug.map(|debug| {
@@ -462,9 +470,37 @@ impl Runtime {
                     step_id: Some(start.clone()),
                 });
             }
-            let result = match init {
-                Ok(()) => executor.top_block(&flow.steps).await,
+            let (cloud, setting) = match cloud {
+                Ok(cloud) => (cloud, Ok(())),
+                Err(message) => (None, Err(RunError::new("CLOUD_SETTING_INVALID", message))),
+            };
+            // What output/ held before the run: only what it writes is sent.
+            let before = cloud
+                .as_ref()
+                .filter(|(_, c)| c.output.is_some())
+                .map(|(dir, _)| cloud::snapshot(dir));
+            let result = match init.and(setting) {
+                Ok(()) => {
+                    // 「ここから実行」 keeps input/ as the earlier run left it.
+                    let fetched = match cloud.as_ref().and_then(|(_, c)| c.input.as_ref()) {
+                        Some(place) if start_step.is_none() => cloud::fetch(&executor, place).await,
+                        _ => Ok(()),
+                    };
+                    match fetched {
+                        Ok(()) => executor.top_block(&flow.steps).await,
+                        Err(interrupt) => Err(interrupt),
+                    }
+                }
                 Err(e) => Err(exec::Interrupt::Failed(e)),
+            };
+            let result = match (result, &cloud, &before) {
+                (Ok(proceed), Some((dir, c)), Some(before)) => match &c.output {
+                    Some(place) => cloud::send(&executor, place, dir, before)
+                        .await
+                        .map(|()| proceed),
+                    None => Ok(proceed),
+                },
+                (result, ..) => result,
             };
             let (status, mut error) = exec::final_status(&result);
             // While the browser or window is still open (the hooks below close them).

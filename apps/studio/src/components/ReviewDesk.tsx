@@ -1,7 +1,7 @@
 // The review desk: AI edits waiting to be looked at, across every flow.
 // Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
-import { ArrowRight, Check, ChevronDown, ChevronRight, CloudUpload, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, CloudUpload, Undo2, X } from "lucide-react";
 import type { HistoryEntry, Step, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
@@ -73,7 +73,7 @@ export function ReviewRail({ onExpand }: { onExpand: () => void }) {
         title={t.desk.expand}
         className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
-        »
+        <ChevronsRight size={15} strokeWidth={1.75} aria-hidden="true" />
       </button>
       {inbox.map((item) => (
         <button key={item.flowId} type="button" title={item.name} onClick={() => openReport(item.flowId)}>
@@ -100,7 +100,7 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
               title={t.close}
               className="ml-auto grid h-6 w-6 place-items-center rounded-lg font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
             >
-              «
+              <ChevronsLeft size={15} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
         </div>

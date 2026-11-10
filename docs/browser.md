@@ -166,7 +166,7 @@ Use it only for what no other node can read (a value kept in the page's JavaScri
 - It runs in the frame of `target`, otherwise in `frame` (the page when omitted)
 - It runs even on pages whose CSP forbids eval
 - A returned promise is awaited up to the node's `timeoutMs`, then `SCRIPT_TIMEOUT`. An exception or a syntax error is `SCRIPT_ERROR` with its message
-- It runs **only inside the open page**, never touching the PC's files or programs. It can still do anything the page can (send, delete), so it is `dangerous` and shows under "外への影響" in the review panel
+- It runs **only inside the open page**, never touching the PC's files or programs. It can still do anything the page can (send, delete), so it is `dangerous` and shows under "What this flow changes" (このフローが変えるもの) in the review panel
 - Registered secrets cannot be passed in. Secret values and what is typed in password fields come back as `***`
 
 ### Recording

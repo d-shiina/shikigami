@@ -134,6 +134,20 @@ impl Plugin {
         &self.dir
     }
 
+    /// The program started for this plugin, its arguments and folder: a
+    /// plugin with a `bridge` is started a second time for it.
+    pub fn command(&self) -> (PathBuf, Vec<String>, PathBuf) {
+        let program = &self.manifest.command.program;
+        let path = if program.contains(['/', '\\']) {
+            self.dir.join(program)
+        } else if spellsheet_runtime::node::is_node(program) {
+            spellsheet_runtime::node::node_program()
+        } else {
+            PathBuf::from(program)
+        };
+        (path, self.manifest.command.args.clone(), self.dir.clone())
+    }
+
     pub fn step_defs(&self) -> &[StepTypeDef] {
         &self.defs
     }

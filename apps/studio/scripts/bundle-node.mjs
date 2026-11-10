@@ -21,8 +21,10 @@ const NODE_SHA256 = {
   arm64: "a0c807319fede24c4a0d8f84564c82a619bd313b16b10c007c383c2609e99171",
 };
 
-// The custom nodes shipped with Writer (examples/plugins/<name>).
-const SHIPPED_PLUGINS = ["box"];
+// The plugins shipped with Writer (examples/plugins/<name>). None for now: the
+// cloud storage plugins are offered separately. Shipping one again also needs
+// "bundled/plugins": "plugins" back in tauri.release.conf.json.
+const SHIPPED_PLUGINS = [];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const outDir = join(root, "apps/studio/src-tauri/bundled");
@@ -93,8 +95,7 @@ function stageAdapter() {
 }
 
 /**
- * The custom nodes Writer offers itself (reading a file from Box through its
- * API), in `plugins\<name>\` next to Writer. Each is a plain Node.js
+ * The plugins Writer offers itself, in `plugins\<name>\` next to Writer. Each is a plain Node.js
  * program without dependencies; its tests stay out.
  */
 function stagePlugins() {

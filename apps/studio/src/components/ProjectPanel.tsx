@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { startFileDrag, useFileDrag } from "./FileDrag";
-import { NeededFiles, OutputPlaceMenu, useNeededFiles } from "./FilePlaces";
+import { CloudPlaceLine, NeededFiles, OutputPlaceMenu, useNeededFiles } from "./FilePlaces";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { baseNameRange, textAsk } from "../lib/ask";
@@ -133,6 +133,7 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
         <span className="ml-auto font-mono text-[10.5px]">{over ? t.project.dropHere(`${role}/`) : `${role}/`}</span>
         {role === "output" && <OutputPlaceMenu />}
       </div>
+      {(role === "input" || role === "output") && <CloudPlaceLine side={role} />}
       {files.map((f) => (
         <FileRow key={f.path} file={f} role={role} />
       ))}

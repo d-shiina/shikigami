@@ -1,4 +1,4 @@
-// The 「カスタム ノード」 page (code: extensions / plugins), opened from Settings and the palette (docs/extensions.md): extensions installed on this
+// The 「プラグイン」 page (code: extensions / plugins), opened from the sidebar and the palette (docs/extensions.md): extensions installed on this
 // PC, as in VS Code: turn one on or off, check for an update, uninstall it,
 // or install one from a zip file, an https URL, a GitHub repository or the
 // catalog (the registries: JSON indexes, the official one first, each entry

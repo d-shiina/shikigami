@@ -116,6 +116,11 @@ pub struct ProjectFiles {
     /// `config/`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub needed: Vec<crate::places::NeededFile>,
+    /// `config/cloud.json`: cloud storage a whole run fetches `input/` from
+    /// and sends `output/` to (see [`crate::cloud`]). With an input place,
+    /// files missing from `input/` are fetched then, so none are `needed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud: Option<crate::cloud::CloudFile>,
 }
 
 /// A file carried in a bundle.
@@ -373,6 +378,7 @@ pub fn list(id: &FlowId, dir: &Path) -> CoreResult<ProjectFiles> {
         folders: all,
         files,
         needed: Vec::new(),
+        cloud: crate::cloud::CloudFile::read(dir).ok().flatten(),
     })
 }
 

@@ -2218,6 +2218,12 @@ export interface ProjectFiles {
    * `config/`).
    */
   needed?: NeededFile[];
+  /**
+   * `config/cloud.json`: cloud storage a whole run fetches `input/` from
+   * and sends `output/` to (see [`crate::cloud`]). With an input place,
+   * files missing from `input/` are fetched then, so none are `needed`.
+   */
+  cloud?: CloudFile | null;
 }
 /**
  * One file in a project folder.
@@ -2254,6 +2260,77 @@ export interface NeededFile {
    * The steps that read it, in flow order.
    */
   stepIds: StepId[];
+}
+/**
+ * `config/cloud.json`.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "CloudFile".
+ */
+export interface CloudFile {
+  /**
+   * Always `spellsheet.cloud`.
+   */
+  format: string;
+  /**
+   * Fetched into `input/` before the run.
+   */
+  input?: CloudPlace | null;
+  /**
+   * Where the files the run writes to `output/` are sent after it.
+   */
+  output?: CloudPlace | null;
+}
+/**
+ * A folder in cloud storage, and how to reach it.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "CloudPlace".
+ */
+export interface CloudPlace {
+  /**
+   * The plugin that reaches the storage (`box`, `googledrive`,
+   * `onedrive`): its `<service>.downloadFolder` and `<service>.upload`
+   * do the work.
+   */
+  service: string;
+  /**
+   * The storage's name in the run's log (`Box`). Defaults to `service`.
+   */
+  label?: string;
+  /**
+   * The OAuth secret the plugin signs in with (its access token is
+   * passed as `{ "secret": …, "field": "accessToken" }`).
+   */
+  secret: string;
+  /**
+   * `oauth.signIn` params besides `secret` (`authorizeUrl`, `tokenUrl`,
+   * `redirectUrl`, `scope`, `authorizeParams`): the run signs in first,
+   * asking a person only when there is no sign-in to refresh yet.
+   */
+  signIn?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * The folder: a path from the storage's top (`経理/受注`), its ID or a
+   * link to it, as the plugin takes them.
+   */
+  folder: string;
+  /**
+   * The folder as people know it (`経理/受注`), for the log and Writer,
+   * when `folder` is an ID or a link. Defaults to `folder`.
+   */
+  folderName?: string;
+  /**
+   * Input only: fetch the files whose names match (`*.xlsx`). Empty:
+   * every file directly in the folder.
+   */
+  pattern?: string;
+  /**
+   * Input only: fetch just these files of the folder, by name; a missing
+   * one fails the run. Empty: every file (that matches `pattern`).
+   */
+  files?: string[];
 }
 /**
  * A settings file (`config/*.json`) kept out of the flow: values a
