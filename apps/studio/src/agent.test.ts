@@ -495,9 +495,12 @@ describe("agent store", () => {
     await store.getState().init();
     expect(store.getState().info?.installable).toBe(true);
     await store.getState().startInstall("claudeCode");
-    expect(store.getState().install).toEqual({ phase: "running", lines: [] });
+    expect(store.getState().install).toMatchObject({ phase: "running", step: null, lines: [] });
+    // The stage it is at, then its words.
+    store.getState().onInstallEvent({ kind: "step", step: "installer" });
+    expect(store.getState().install).toMatchObject({ phase: "running", step: "installer" });
     store.getState().onInstallEvent({ kind: "progress", line: "Downloading…" });
-    expect(store.getState().install).toMatchObject({ phase: "running", lines: ["Downloading…"] });
+    expect(store.getState().install).toMatchObject({ phase: "running", step: "installer", lines: ["Downloading…"] });
     // The installer failed: its words, and a way to try again.
     store.getState().onInstallEvent({ kind: "done", ok: false, message: "no network", needsLogin: false });
     expect(store.getState().install).toEqual({ phase: "failed", message: "no network" });
@@ -509,6 +512,23 @@ describe("agent store", () => {
     // Installed and signed out: the sign-in starts by itself.
     expect(login).toHaveBeenCalledTimes(1);
     expect(store.getState().login.phase).toBe("waiting");
+  });
+
+  it("notes when the installer last printed, so a quiet unpack is not taken for a hang", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const store = createAgentStore(fakeAgent());
+      await store.getState().startInstall("gemini");
+      expect(store.getState().install).toMatchObject({ startedAt: 1_000, lastAt: 1_000 });
+      vi.setSystemTime(5_000);
+      store.getState().onInstallEvent({ kind: "step", step: "package" });
+      vi.setSystemTime(9_000);
+      store.getState().onInstallEvent({ kind: "progress", line: "npm http fetch GET 200 https://registry.npmjs.org/@google%2fgemini-cli 403ms" });
+      expect(store.getState().install).toMatchObject({ step: "package", startedAt: 1_000, lastAt: 9_000 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("offers the install button again only once a stopped installer is gone", async () => {

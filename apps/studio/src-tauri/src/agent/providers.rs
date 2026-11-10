@@ -94,7 +94,7 @@ impl AgentKind {
         }
     }
 
-    fn program(self) -> Option<&'static str> {
+    pub(crate) fn program(self) -> Option<&'static str> {
         match self {
             Self::ClaudeCode => Some("claude"),
             Self::Codex => Some("codex"),

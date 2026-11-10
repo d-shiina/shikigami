@@ -612,7 +612,9 @@ export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: bool
 export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "cursor" | "command";
 /** An agent Studio knows how to run. */
 export type AgentChoice = { kind: AgentKind; name: string; maker: string; installed: boolean; selected: boolean };
-export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean } | { kind: "cancelled" };
+/** The stage the installer is at: Node.js by winget, the npm package, the tool's own installer, then checking it is there. */
+export type InstallStep = "node" | "package" | "installer" | "check";
+export type InstallEvent = { kind: "step"; step: InstallStep } | { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean } | { kind: "cancelled" };
 
 export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin" | "onInstall">;
 
