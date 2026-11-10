@@ -93,7 +93,7 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
     ["zipPdf", ["file.zip", "file.unzip", "pdf.merge", "pdf.split", "pdf.extractPages"]],
   ],
   windows: [
-    ["open", ["desktop.launch", "sap.runTransaction", "desktop.setWindow", "desktop.closeWindow"]],
+    ["open", ["desktop.launch", "desktop.setWindow", "desktop.closeWindow"]],
     [
       "operate",
       ["desktop.click", "desktop.setValue", "desktop.select", "desktop.check", "desktop.selectMenu", "desktop.type", "desktop.press", "desktop.mouseClick", "desktop.hover", "desktop.drag", "desktop.scroll", "desktop.mouseScroll"],

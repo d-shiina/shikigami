@@ -93,9 +93,9 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 22);
+    assert_eq!(defs.len(), 21);
     for def in &defs {
-        assert!(def.step_type.starts_with("desktop.") || def.step_type.starts_with("sap."));
+        assert!(def.step_type.starts_with("desktop."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
@@ -629,13 +629,20 @@ fn keys_use_browser_names() {
 fn sap_and_java_windows_are_recognised() {
     let mut sap = window("SAP Easy Access", "saplogon.exe");
     sap.class_name = "SAP_FRONTEND_SESSION".into();
-    assert_eq!(Engine::of(&sap), Engine::SapGui);
+    // No SAP plugin here: UI Automation, with a note saying so.
+    assert_eq!(Engine::of(&sap), Engine::SapGuiWithoutPlugin);
+    assert_eq!(Engine::of(&sap).as_str(), "sapgui");
     let mut java = window("受注管理", "javaw.exe");
     java.class_name = "SunAwtFrame".into();
     assert_eq!(Engine::of(&java), Engine::Java);
     assert_eq!(Engine::of(&window("メモ帳", "notepad.exe")), Engine::Uia);
     assert!(Engine::Uia.note().is_none());
-    assert!(Engine::SapGui.note().unwrap().contains("user_scripting"));
+    assert!(
+        Engine::SapGuiWithoutPlugin
+            .note()
+            .unwrap()
+            .contains("SAP plugin")
+    );
 }
 
 #[test]
@@ -1024,52 +1031,6 @@ fn grids_are_read_from_their_element_tree() {
         grid_from_nodes(&plain, 10).records(),
         vec![json!({ "列1": "東京" }), json!({ "列1": "大阪" })]
     );
-}
-
-#[test]
-fn sap_gui_words_map_to_desktop_ones() {
-    use crate::sapgui::{component_id, looks_like_component_id, role, vkey};
-    assert_eq!(role("GuiCTextField", ""), "textbox");
-    assert_eq!(role("GuiButton", ""), "button");
-    assert_eq!(role("GuiShell", "GridView"), "grid");
-    assert_eq!(role("GuiTableControl", ""), "table");
-    assert_eq!(role("GuiSomethingNew", ""), "custom");
-    // Every SAP role is one of the shared roles.
-    for kind in [
-        "GuiTextField",
-        "GuiTab",
-        "GuiStatusbar",
-        "GuiUserArea",
-        "GuiBox",
-    ] {
-        assert!(roles::control_type(role(kind, "")).is_some(), "{kind}");
-    }
-    assert_eq!(
-        component_id("wnd[0]", "usr/txtRSYST-BNAME"),
-        "wnd[0]/usr/txtRSYST-BNAME"
-    );
-    assert_eq!(
-        component_id("wnd[1]", "wnd[0]/tbar[0]/okcd"),
-        "wnd[0]/tbar[0]/okcd"
-    );
-    assert_eq!(
-        component_id("wnd[0]", "/app/con[0]/ses[1]/wnd[1]/usr/btnOK"),
-        "wnd[1]/usr/btnOK"
-    );
-    assert_eq!(component_id("", "/app/con[0]/ses[0]/wnd[0]"), "wnd[0]");
-    assert!(looks_like_component_id("wnd[0]/usr/txtA"));
-    assert!(!looks_like_component_id("btnSave"));
-    let key = |text: &str| vkey(&keys::parse(text).unwrap());
-    assert_eq!(key("Enter"), Some(0));
-    assert_eq!(key("F3"), Some(3));
-    assert_eq!(key("Shift+F2"), Some(14));
-    assert_eq!(key("Control+F1"), Some(25));
-    assert_eq!(key("Control+Shift+F12"), Some(48));
-    assert_eq!(key("Control+S"), Some(11));
-    assert_eq!(key("Escape"), Some(12));
-    assert_eq!(key("PageDown"), Some(82));
-    assert_eq!(key("Alt+F4"), None);
-    assert_eq!(key("Tab"), None);
 }
 
 #[test]

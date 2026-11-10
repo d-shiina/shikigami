@@ -69,9 +69,8 @@ use crate::keys;
 use crate::keys::{Chord, Key};
 use crate::menu;
 use crate::overlay::{Input, Overlay, Raw, held_now};
+use crate::plugin_bridge::PluginWindow;
 use crate::roles;
-use crate::sap::SapWindow;
-use crate::sapgui;
 use crate::snip;
 use crate::table::{self, GRID_ROLES, Grid};
 use crate::target::{
@@ -402,34 +401,23 @@ impl Uia {
                 timeout_ms,
             } => self.record(&title, hint, timeout_ms),
             Op::GetTable { target, max_rows } => self.get_table(&target, max_rows),
-            Op::SapTransaction { target, .. } => {
-                let (_, window, _) = self.find_window(&target.window)?;
-                Err(match Engine::of(&window) {
-                    Engine::SapGui => sap_scripting_off(),
-                    _ => StepError::permanent(
-                        "NOT_SAP_WINDOW",
-                        format!("'{}' is not a SAP GUI window", window.title),
-                    )
-                    .with_details(json!({ "hint": "Target the SAP GUI window (inspect_ui lists it with app sapgui)." })),
-                })
-            }
         }
     }
 
-    // -- SAP GUI and Java ---------------------------------------------------------
+    // -- Java and plugin bridges ----------------------------------------------------
 
-    /// How the window `query` names is reached: through SAP GUI Scripting
-    /// or Java Access Bridge when it belongs to such an app and the way in
-    /// works, otherwise through UI Automation.
+    /// How the window `query` names is reached: through the Java Access
+    /// Bridge or a plugin's bridge when it belongs to such an app and the
+    /// way in works, otherwise through UI Automation.
     fn reach(&self, query: &WindowQuery) -> Reach {
         let Ok((el, window, _)) = self.find_window(query) else {
             return Reach::Uia;
         };
         match Engine::of(&window) {
-            Engine::Uia => Reach::Uia,
-            Engine::SapGui => match SapWindow::attach(window.handle) {
-                Some(sap) => Reach::Bridge(Box::new(sap), window, el),
-                None => Reach::Unreachable(sap_scripting_off()),
+            Engine::Uia | Engine::SapGuiWithoutPlugin => Reach::Uia,
+            Engine::Plugin(spec) => match PluginWindow::attach(spec, &window) {
+                Ok(app) => Reach::Bridge(Box::new(app), window, el),
+                Err(e) => Reach::Unreachable(e),
             },
             Engine::Java => match JavaWindow::attach(&window) {
                 Ok(java) => Reach::Bridge(Box::new(java), window, el),
@@ -438,7 +426,7 @@ impl Uia {
         }
     }
 
-    /// Carries out `op` through SAP GUI Scripting or Java Access Bridge
+    /// Carries out `op` through the Java Access Bridge or a plugin's bridge
     /// when its window is such an app, or hands it (perhaps changed: an
     /// element turned into its place on the screen) back to UI Automation.
     fn via_app(&self, op: Op) -> Result<Routed, StepError> {
@@ -466,8 +454,7 @@ impl Uia {
             | Op::Wheel { target, .. }
             | Op::Hover { target }
             | Op::Menu { target, .. }
-            | Op::GetTable { target, .. }
-            | Op::SapTransaction { target, .. } => &target.window,
+            | Op::GetTable { target, .. } => &target.window,
         };
         let (app, info, window_el) = match self.reach(window) {
             Reach::Uia => return Ok(Routed::Uia(Box::new(op))),
@@ -476,12 +463,7 @@ impl Uia {
                 // The window itself, pictures and inspect_ui (with a note)
                 // still work through UI Automation.
                 let named = op_target(&op).and_then(|t| t.element.as_ref());
-                let blocked = match e.code.as_str() {
-                    "SAP_SCRIPTING_OFF" => named
-                        .and_then(|e| e.id.as_deref())
-                        .is_some_and(sapgui::looks_like_component_id),
-                    _ => named.is_some() && !matches!(op, Op::Probe { .. }),
-                };
+                let blocked = named.is_some() && !matches!(op, Op::Probe { .. });
                 if blocked {
                     return Err(e);
                 }
@@ -500,7 +482,6 @@ impl Uia {
                 result["window"] = json!({ "title": info.title, "process": info.process, "className": info.class_name });
                 done(result)
             }
-            Op::SapTransaction { code, .. } => done(app.transaction(&code)?),
             Op::GetTable { target, max_rows } => {
                 done(app.table(target.element.as_ref(), max_rows)?)
             }
@@ -508,7 +489,7 @@ impl Uia {
                 if target.element.is_some() {
                     return Err(StepError::permanent(
                         "NOT_SUPPORTED",
-                        "in SAP GUI and Java apps desktop.selectMenu walks the menu bar only",
+                        "in Java apps and apps reached through a plugin desktop.selectMenu walks the menu bar only",
                     )
                     .with_details(json!({ "hint": "Open it with desktop.mouseClick (button: right), then click its item with desktop.mouseClick and target.ocr, or use the menu bar path." })));
                 }
@@ -557,9 +538,9 @@ impl Uia {
                     Op::Scroll { .. } => {
                         return Err(StepError::permanent(
                             "NOT_SUPPORTED",
-                            "SAP GUI and Java tables are not scrolled by desktop.scroll",
+                            "tables of Java apps and of apps reached through a plugin are not scrolled by desktop.scroll",
                         )
-                        .with_details(json!({ "hint": "desktop.getTable reads a whole SAP table, ALV grid or Java table; otherwise use desktop.mouseScroll or desktop.press with PageDown." })));
+                        .with_details(json!({ "hint": "desktop.getTable reads the whole table; otherwise use desktop.mouseScroll or desktop.press with PageDown." })));
                     }
                     Op::MouseClick {
                         target,
@@ -592,7 +573,7 @@ impl Uia {
         })
     }
 
-    /// A target naming an element of a SAP GUI or Java window, as the
+    /// A target naming an element of a bridged window, as the
     /// place at its centre.
     fn app_point(
         &self,
@@ -2503,11 +2484,11 @@ fn move_to(at: POINT) -> Result<(), StepError> {
 enum Reach {
     Uia,
     Bridge(Box<dyn AppBridge>, WindowInfo, IUIAutomationElement),
-    /// SAP GUI or Java, but its way in does not work (why).
+    /// Java or a plugin's app, but its way in does not work (why).
     Unreachable(StepError),
 }
 
-/// Where an op goes after the SAP GUI / Java check.
+/// Where an op goes after the bridge check.
 enum Routed {
     Done(Value),
     Uia(Box<Op>),
@@ -2537,19 +2518,8 @@ fn op_target(op: &Op) -> Option<&Target> {
         | Op::Wheel { target, .. }
         | Op::Hover { target }
         | Op::Menu { target, .. }
-        | Op::GetTable { target, .. }
-        | Op::SapTransaction { target, .. } => Some(target),
+        | Op::GetTable { target, .. } => Some(target),
     }
-}
-
-fn sap_scripting_off() -> StepError {
-    StepError::permanent(
-        "SAP_SCRIPTING_OFF",
-        "SAP GUI Scripting cannot reach this SAP GUI window",
-    )
-    .with_details(json!({
-        "hint": "Ask the user to enable scripting on the SAP server (transaction RZ11: sapgui/user_scripting = TRUE) and in SAP GUI Options > Accessibility & Scripting > Scripting (enable, turn off the notifications), then try again. Without it only the window itself, OCR and images work."
-    }))
 }
 
 /// A pattern of `el`, or an error when it does not support it.

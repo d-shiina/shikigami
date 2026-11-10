@@ -2589,7 +2589,6 @@ export const en: Dict = {
     "desktop.setValue": "Set value",
     "desktop.type": "Type",
     "desktop.waitFor": "Wait for window",
-    "sap.runTransaction": "Start SAP transaction",
     "dialog.input": "Ask for input",
     "dialog.form": "Input form",
     "dialog.message": "Show message",
