@@ -5,6 +5,7 @@
 import { Play, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { flowBusy, useAgent } from "../agent";
+import { useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
@@ -170,9 +171,8 @@ export function RunPausePanel() {
   const setReviewing = useStudio((s) => s.setReviewing);
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
-  const agentAvailable = useAgent((s) => s.info?.available === true);
+  const { ready: agentAvailable, name: agentName } = useAskable();
   const agentBusy = useAgent((s) => flowBusy(s, flow?.id));
-  const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
   const [told, setTold] = useState<string | null>(null);

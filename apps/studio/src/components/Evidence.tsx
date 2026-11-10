@@ -6,6 +6,7 @@ import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@spel
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { flowBusy, useAgent } from "../agent";
+import { useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
@@ -290,8 +291,9 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
   const flow = useStudio((s) => s.flow);
-  const agentReady = useAgent((s) => s.info?.available === true && !flowBusy(s, flow?.id));
-  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const askable = useAskable();
+  const agentReady = useAgent((s) => !flowBusy(s, flow?.id)) && askable.ready;
+  const agentName = askable.name;
   const askAgent = useAgent((s) => s.send);
   const [fixNow, setFixNow] = useKeptState("sendBack.fixNow", true);
   const label = useStepLabel();

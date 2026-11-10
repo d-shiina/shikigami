@@ -2,52 +2,47 @@
 
 English | [日本語](ja/ai-chat.md)
 
-Some workplaces allow only one AI, such as Microsoft Copilot, and it cannot connect to SpellSheet's MCP server. Such an AI can still write flows: it reads a guide that describes the flow format, every node and every function, answers with JSON, and you paste the answer into Writer. Writer checks it, opens it, and shows what is left for you to do.
+Some workplaces allow only one AI, such as Microsoft Copilot, and it cannot connect to SpellSheet's MCP server. Such an AI can still write flows: Writer puts the request together (how to answer, the flow as it is, your words), copies it and opens the AI chat. You bring the AI's answer back, and Writer checks it, takes it in, and shows what changed and what is left for you to do.
 
 The AI never runs anything and never sees your screen or your passwords. What it writes is saved as the working content; unattended runs use it only after a person reviews and publishes it ([policy.md](policy.md)).
 
-## 1. Give the AI the guide
+## 0. Say which AI you use
 
-The guide is two files, made from the nodes installed on your PC:
+The first time you open Writer's AI chat with no AI on the PC that Writer can run (such as Claude Code), Writer asks which AI you use. You pick it by name; Writer decides whether it can use MCP.
 
-| File | What it is | Where it goes |
-| --- | --- | --- |
-| `spellsheet-ai-instructions.md` | How to answer (under 8,000 characters) | The agent's instructions |
-| `spellsheet-ai-reference.md` | The flow format, every node with its params and examples, every function | Knowledge (an attached file) |
+- **Microsoft Copilot**: work account (Microsoft 365 Copilot) or personal account. Both are used by copying into the chat.
+- **ChatGPT, Gemini, Claude**: the chat in the browser or app, or the version installed on the PC (Codex, Antigravity, Claude Code). With the installed version, Writer runs the AI, which looks at the screen and tests as it builds the flow.
+- **GitHub Copilot, Cursor**: Writer runs them.
+- **Not sure**: an AI already on this PC if there is one, else copying into a chat.
 
-Save them from Writer (Flows › **Paste an AI answer** › **Save the guide**; they go to `Downloads\SpellSheet AI 仕様書`) or with the command line:
+You can change it later under **Settings → AI**, "How to work with AI".
 
-```
-spellsheet ai-guide --dir <folder>
-```
+## 1. Ask
 
-A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Plugins are only in the files you save on your PC.
+Write what you want to automate in the AI chat box (the sites or apps, the order of the work, the files it reads and writes). **Copy and open Microsoft 365 Copilot** (it shows the AI you chose) copies the request and opens the AI chat in the browser. Paste it there and send. With a flow open, the request carries the flow as it is, so you can ask for changes in plain words too.
 
-- **Microsoft Copilot Studio agent**: paste the whole of `spellsheet-ai-instructions.md` into the agent's instructions and add `spellsheet-ai-reference.md` as a knowledge source. Everyone who uses the agent then asks it for flows directly.
-- **A chat without agents**: attach both files at the start of the conversation (or paste the instructions and attach the reference) and ask the AI to follow them. The reference is long, so a chat that reads only part of an attachment may miss nodes; an agent with the reference as knowledge works better.
+In a new chat, attach the reference `spellsheet-ai-reference.md` (the flow format, every node's parameters with examples, the functions) once. **Open the reference file** in the chat box opens the folder it is saved in (`Downloads\SpellSheet AI 仕様書`). The reference is made from the nodes on this PC, plugins included.
 
-Save the guide again after updating SpellSheet or installing a plugin, and replace the files the AI has.
+The AI cannot see the screen, so it never guesses buttons or fields. It names each one as a **part** and says where it is ("the Save button at the top right"); you point at the element in Writer. It never writes passwords either, only the name of a login, which you register in Writer.
 
-## 2. Ask for a flow
+### Keep it in a Copilot Studio agent
 
-Tell the AI what to automate in plain words: the site or app, the order of the work, the files it reads and writes. It asks about what it needs and answers with one JSON block (the "answer": a summary, questions for you, and the flow).
+Instead of attaching it every time, you can put the reference into a Microsoft Copilot Studio agent. Save the two files with **Settings → AI → Save reference** (or `spellsheet ai-guide --dir <folder>`), paste the whole of `spellsheet-ai-instructions.md` into the agent's instructions, and add `spellsheet-ai-reference.md` to its knowledge. A version with the built-in nodes only is in [docs/ai/](ai/). Save and replace them after updating SpellSheet or adding plugins.
 
-Because the AI cannot see the screen, it does not guess buttons or fields. It names each one as a **part** and describes where it is ("the Save button at the top right"); you point at it in Writer. It also never writes passwords: it names a login, and you register it in Writer.
+## 2. Bring the answer back
 
-## 3. Paste the answer into Writer
+Copy the AI's answer and come back to Writer: when the answer is on the clipboard, **Take in from the clipboard** appears (Writer looks only while it waits for an answer, when you come back to it; you can turn this off under Settings → AI). Pasting it into the box and pressing **Take in** works too. Text around the answer is fine, and so are comments and trailing commas the AI adds to its JSON.
 
-Open **Paste an AI answer** (on the Flows page, in the AI pane, or by right-clicking the flow chart), paste the AI's whole reply (text around the JSON is fine) and press **Take in**. You can add it as a new flow or replace the content of the open flow (Undo brings the old content back).
+- **Taken in**: the flow opens, and the card shows three things.
+  - **Changes**: the nodes added, changed and removed.
+  - **Your part**: what only you can do, each with its button: pick the element on the screen, register a login (the form opens with the name filled in), put a file in the flow's folder. Done items leave the list.
+  - **For the AI to fix**: mistakes in how the flow is written (a required parameter missing, a node that does not exist). **Copy fix request**, paste it into the chat, and take in the new answer.
+- **Not readable** (broken JSON, unknown fields): nothing changes. **Copy fix request** sends it back to the chat.
+- **Cut off** (the chat stopped a long answer midway): **Copy request to continue**, paste it into the chat, and take in what comes back; Writer reads it together with the first part.
 
-- **When it cannot be read** (broken JSON, unknown fields), nothing is changed. Press **Copy text for the AI** and paste it into the chat: it lists each problem and asks for the whole answer again.
-- **When it is taken in**, Writer shows two lists:
-  - **To do before it runs**: what only you can do, each with its button. *Pick on the screen* (opens the part; click the element with Pick on screen), *Register the login* (opens the secret form with the name filled in), *Put the file in the flow's folder* (opens the folder). Nodes that wait for you carry a **To do** mark on the flow chart, and the title bar counts them. Each item leaves the list when it is done.
-  - **For the AI to fix**: mistakes in how the flow is written (a missing param, an unknown node). **Copy text for the AI** copies the problems together with the current flow; paste it into the chat and take the new answer in again.
+The AI's summary and questions go to **Review**, just like changes from an AI connected through MCP. Answer the questions, try the flow, then publish.
 
-The AI's summary and questions go to **Review** like the changes of an AI connected by MCP: answer the questions there, try the flow, and publish it.
-
-## 4. Change a flow with the AI
-
-To have the AI change an existing flow, right-click the flow chart and choose **Copy for an AI** (or use the button in the paste dialog). It copies the flow and how to answer; paste it into the chat, write what to change, and take the answer in with *replace the content of the open flow*. The AI keeps the node IDs and the parts you picked, so the review shows only what changed.
+To take in an answer from a chat begun elsewhere, use **Paste AI answer** at the top of the AI chat, beside **New** on the flows page, or in the flow chart's right-click menu.
 
 ## The answer format
 

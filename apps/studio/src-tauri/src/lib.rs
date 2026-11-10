@@ -179,6 +179,7 @@ pub fn run() {
             extensions::restart_for_extensions,
             commands::save_ai_guide,
             commands::paste_ai_answer,
+            commands::ai_instructions,
             commands::set_workspace,
             commands::list_versions,
             commands::create_version,

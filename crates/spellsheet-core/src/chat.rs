@@ -65,6 +65,11 @@ pub struct AnswerProblem {
     /// it in its own answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub found: Option<String>,
+    /// The answer stops before its JSON ends (the chat cut a long reply
+    /// short): the AI is asked to go on, and its next answer is read
+    /// together with this one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cut: bool,
 }
 
 impl AnswerProblem {
@@ -74,6 +79,7 @@ impl AnswerProblem {
             message: message.into(),
             step: None,
             found: None,
+            cut: false,
         }
     }
 
@@ -125,6 +131,12 @@ fn step_at(flow: &Value, pointer: &str) -> Option<String> {
 }
 
 // -- the guide ------------------------------------------------------------
+
+/// The short instructions, for a message copied into an AI chat (the
+/// reference goes along as a file).
+pub fn instructions() -> &'static str {
+    INSTRUCTIONS
+}
 
 /// The instructions and the reference for the step types in `registry`.
 pub fn guide(registry: &StepRegistry) -> Vec<GuideFile> {
@@ -562,34 +574,174 @@ fn shape_problems(flow: &Value) -> Vec<AnswerProblem> {
 /// The JSON in a pasted reply: the ```json block that holds a flow, or the
 /// whole text, or the outermost { … }.
 fn find_json(text: &str) -> Result<Value, Vec<AnswerProblem>> {
-    let blocks = fenced_blocks(text);
+    // Chat windows show the answer with typographic marks; copied, a few of
+    // them stand where JSON needs plain ones.
+    let text = &text.replace('\u{00a0}', " ").replace('\u{feff}', "");
+    let (blocks, open) = fenced_blocks(text);
     let mut first_error = None;
+    // The answer is the block that says so; the AI may show other JSON first.
+    let mut parsed: Vec<Value> = Vec::new();
     for block in &blocks {
-        match serde_json::from_str::<Value>(block) {
-            Ok(value) if looks_like_answer(&value) => return Ok(value),
-            Ok(_) => {}
+        match parse_lenient(block) {
+            Ok(value) if is_answer(&value) => return Ok(value),
+            Ok(value) => parsed.push(value),
             Err(e) => {
                 first_error.get_or_insert_with(|| syntax_problem(block, &e));
             }
         }
     }
+    if let Some(value) = parsed.into_iter().find(looks_like_answer) {
+        return Ok(value);
+    }
+    // A reply cut short ends inside its code block.
+    if let Some(open) = open
+        && !open.trim().is_empty()
+    {
+        // Whole after all, only its closing fence missing.
+        return match parse_lenient(&open) {
+            Ok(value) if looks_like_answer(&value) => Ok(value),
+            _ => Err(vec![cut_problem(&open)]),
+        };
+    }
     if let Some(problem) = first_error {
         return Err(vec![problem]);
     }
     let trimmed = text.trim();
-    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+    if let Ok(value) = parse_lenient(trimmed) {
         return Ok(value);
     }
-    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}'))
-        && start < end
-    {
-        let inner = &trimmed[start..=end];
-        return serde_json::from_str::<Value>(inner).map_err(|e| vec![syntax_problem(inner, &e)]);
+    match (trimmed.find('{'), trimmed.rfind('}')) {
+        (Some(start), Some(end)) if start < end => {
+            let inner = &trimmed[start..];
+            let closed = &trimmed[start..=end];
+            parse_lenient(closed).map_err(|e| {
+                if e.is_eof() || unbalanced(inner) {
+                    vec![cut_problem(inner)]
+                } else {
+                    vec![syntax_problem(closed, &e)]
+                }
+            })
+        }
+        (Some(start), _) => Err(vec![cut_problem(&trimmed[start..])]),
+        _ => Err(vec![AnswerProblem::new(
+            "",
+            "No JSON found. Answer with one ```json code block holding { \"format\": \"spellsheet.answer\", \"summary\": …, \"checks\": […], \"flow\": { … } }.",
+        )]),
     }
-    Err(vec![AnswerProblem::new(
+}
+
+fn is_answer(value: &Value) -> bool {
+    value.get("format").and_then(Value::as_str) == Some(ANSWER_FORMAT) && looks_like_answer(value)
+}
+
+/// JSON as chat AIs write it: strict first, then without the comments and
+/// trailing commas they often add (nothing else is changed, so a value
+/// never means something other than what was written).
+fn parse_lenient(text: &str) -> Result<Value, serde_json::Error> {
+    serde_json::from_str::<Value>(text).or_else(|first| {
+        let cleaned = without_comments_and_trailing_commas(text);
+        serde_json::from_str::<Value>(&cleaned).map_err(|_| first)
+    })
+}
+
+/// Drops `// …` and `/* … */` comments and commas right before `}` or `]`,
+/// outside strings.
+fn without_comments_and_trailing_commas(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    let mut in_string = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_string {
+            out.push(c);
+            if c == '\\' {
+                if let Some(&next) = chars.get(i + 1) {
+                    out.push(next);
+                    i += 1;
+                }
+            } else if c == '"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '/' if chars.get(i + 1) == Some(&'/') => {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            '/' if chars.get(i + 1) == Some(&'*') => {
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+                continue;
+            }
+            ',' => {
+                let next = chars[i + 1..].iter().find(|c| !c.is_whitespace());
+                if !matches!(next, Some('}' | ']')) {
+                    out.push(c);
+                }
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    out
+}
+
+/// More `{` / `[` opened than closed, outside strings.
+fn unbalanced(text: &str) -> bool {
+    let mut depth = 0i64;
+    let mut in_string = false;
+    let mut escaped = false;
+    for c in text.chars() {
+        if in_string {
+            match (escaped, c) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '{' | '[' => depth += 1,
+            '}' | ']' => depth -= 1,
+            _ => {}
+        }
+    }
+    depth > 0 || in_string
+}
+
+fn cut_problem(partial: &str) -> AnswerProblem {
+    let tail: String = {
+        let line = partial.trim_end().lines().last().unwrap_or("").trim();
+        line.chars()
+            .rev()
+            .take(80)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
+    };
+    let mut problem = AnswerProblem::new(
         "",
-        "No JSON found. Answer with one ```json code block holding { \"format\": \"spellsheet.answer\", \"summary\": …, \"checks\": […], \"flow\": { … } }.",
-    )])
+        format!(
+            "Your answer was cut off before the JSON ended. It stops at: {tail}. Go on from exactly that point in a new ```json code block, without repeating what you already wrote."
+        ),
+    );
+    problem.cut = true;
+    problem
 }
 
 fn looks_like_answer(value: &Value) -> bool {
@@ -598,8 +750,9 @@ fn looks_like_answer(value: &Value) -> bool {
         .is_some_and(|o| o.contains_key("flow") || o.contains_key("steps"))
 }
 
-/// The contents of every ``` fenced block, in order.
-fn fenced_blocks(text: &str) -> Vec<String> {
+/// The contents of every closed ``` fenced block, in order, and what an
+/// unclosed last one holds.
+fn fenced_blocks(text: &str) -> (Vec<String>, Option<String>) {
     let mut blocks = Vec::new();
     let mut current: Option<String> = None;
     for line in text.lines() {
@@ -617,7 +770,7 @@ fn fenced_blocks(text: &str) -> Vec<String> {
             (None, false) => {}
         }
     }
-    blocks
+    (blocks, current)
 }
 
 fn syntax_problem(text: &str, e: &serde_json::Error) -> AnswerProblem {
@@ -692,7 +845,7 @@ mod tests {
 
     #[test]
     fn problems_say_where_and_what() {
-        let bad = read_answer("```json\n{ \"flow\": { \"name\": \"x\", \"steps\": [ { \"type\": \"log.message\", } ] } }\n```")
+        let bad = read_answer("```json\n{ \"flow\": { \"name\": \"x\", \"steps\": [ { \"type\": \"log.message\" \"name\": \"a\" } ] } }\n```")
             .unwrap_err();
         assert!(bad[0].message.contains("line 1"), "{bad:?}");
         let unknown = read_answer(r#"{ "flow": { "name": "x", "steps": [ { "type": "log.message", "parameters": {} } ] } }"#)
@@ -721,5 +874,38 @@ mod tests {
         );
         let none = read_answer("どうぞよろしく").unwrap_err();
         assert!(none[0].message.contains("No JSON"));
+    }
+
+    #[test]
+    fn reads_comments_and_trailing_commas_chat_ais_add() {
+        let reply = "```json\n{\n  // 答え\n  \"format\": \"spellsheet.answer\",\n  \"summary\": \"挨拶 // そのまま\",\n  \"checks\": [],\n  \"flow\": { \"name\": \"挨拶\", \"steps\": [ { \"type\": \"log.message\", \"params\": { \"message\": \"a, ]\" }, }, ], },\n}\n```";
+        let answer = read_answer(reply).unwrap();
+        assert_eq!(answer.summary.as_deref(), Some("挨拶 // そのまま"));
+        assert_eq!(answer.flow.steps.len(), 1);
+    }
+
+    #[test]
+    fn reads_a_whole_answer_whose_closing_fence_was_left_off() {
+        let reply = "```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"挨拶\", \"steps\": [] } }\n";
+        assert_eq!(read_answer(reply).unwrap().flow.name, "挨拶");
+    }
+
+    #[test]
+    fn prefers_the_block_that_says_it_is_the_answer() {
+        let reply = "例：\n```json\n{ \"steps\": [] }\n```\n答え：\n```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"本物\", \"steps\": [] } }\n```";
+        assert_eq!(read_answer(reply).unwrap().flow.name, "本物");
+    }
+
+    #[test]
+    fn says_when_the_reply_was_cut_off() {
+        let open_block = "```json\n{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"長い\", \"steps\": [ { \"type\": \"log.mess";
+        let problems = read_answer(open_block).unwrap_err();
+        assert!(problems[0].cut, "{problems:?}");
+        assert!(problems[0].message.contains("log.mess"));
+        let no_fence = "{ \"format\": \"spellsheet.answer\", \"flow\": { \"name\": \"長い\", \"steps\": [ { \"type\": \"log.message\" }";
+        assert!(read_answer(no_fence).unwrap_err()[0].cut);
+        // A plain mistake is not taken for a cut.
+        let wrong = "```json\n{ \"format\": \"spellsheet.answer\" \"flow\": {} }\n```";
+        assert!(!read_answer(wrong).unwrap_err()[0].cut);
     }
 }
