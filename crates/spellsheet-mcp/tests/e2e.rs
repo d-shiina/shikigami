@@ -340,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 42);
+    assert_eq!(tools.len(), 44);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -1276,6 +1276,108 @@ async fn only_the_writer_chat_gets_ask_user_to_choose() {
         assert!(is_error);
         assert_eq!(value["code"], "INVALID_PARAMS");
     }
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn ai_takes_stock_of_the_work_and_finds_what_to_automate_first() {
+    let h = start(ServerOptions::default()).await;
+    // Clients that show prompts start the interview from one.
+    let prompts = h.client.list_all_prompts().await.unwrap();
+    assert!(prompts.iter().any(|p| p.name == "find_what_to_automate"));
+    let mut args = JsonObject::new();
+    args.insert("about".into(), json!("経理課の請求担当"));
+    let started = h
+        .client
+        .get_prompt(
+            rmcp::model::GetPromptRequestParams::new("find_what_to_automate").with_arguments(args),
+        )
+        .await
+        .unwrap();
+    let text = serde_json::to_string(&started.messages).unwrap();
+    assert!(
+        text.contains("経理課の請求担当") && text.contains("get_work_inventory"),
+        "{text}"
+    );
+
+    // Nothing yet: the guide comes with the (empty) list, for clients without prompts too.
+    let none = h.ok("get_work_inventory", json!({})).await;
+    assert_eq!(none["inventories"], json!([]));
+    assert!(
+        none["guide"]
+            .as_str()
+            .unwrap()
+            .contains("save_work_inventory")
+    );
+
+    // Saved as the interview goes: first the picture and the list of work.
+    let made = h
+        .ok(
+            "save_work_inventory",
+            json!({
+                "title": "経理課 月次の締め",
+                "about": "経理課 2 名",
+                "systems": ["販売管理（Windows）", "Excel"],
+                "tasks": [
+                    { "name": "受注メールの Excel を販売管理に入力" },
+                    { "name": "請求書の PDF をメールで送る" },
+                    { "name": "予算の見直し" }
+                ]
+            }),
+        )
+        .await;
+    let id = made["inventory"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(made["assessment"]["incomplete"], 3);
+    assert!(made["hint"].as_str().is_some());
+
+    // Then the details of the ones that take time.
+    let assessed = h
+        .ok(
+            "save_work_inventory",
+            json!({
+                "id": id,
+                "tasks": [
+                    { "id": "t1", "frequency": { "times": 1, "per": "day" }, "minutes": 40, "people": 2,
+                      "manualShare": 90, "ease": "high", "errorImpact": "high",
+                      "stepTypes": ["mail.list", "excel.readRows", "desktop.setValue"] },
+                    { "id": "t2", "frequency": { "times": 1, "per": "month" }, "minutes": 120,
+                      "manualShare": 80, "ease": "high" },
+                    { "id": "t3", "notNow": "判断が中心" }
+                ]
+            }),
+        )
+        .await;
+    let a = &assessed["assessment"];
+    assert_eq!(a["first"], "t1");
+    assert_eq!(a["tasks"][0]["taskId"], "t1");
+    assert_eq!(a["tasks"][0]["monthlyMinutes"], 1600.0);
+    assert_eq!(a["tasks"][0]["savableMinutes"], 1440.0);
+    assert_eq!(a["tasks"][1]["group"], "later");
+    assert_eq!(a["tasks"][2]["group"], "notNow");
+
+    // A bad number is refused and nothing changes.
+    let (is_error, refused) = h
+        .call(
+            "save_work_inventory",
+            json!({ "id": id, "tasks": [{ "id": "t1", "manualShare": 150 }] }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(refused["code"], "INVALID_EDIT");
+    let (is_error, missing) = h
+        .call("get_work_inventory", json!({ "id": "inv_missing" }))
+        .await;
+    assert!(is_error);
+    assert_eq!(missing["code"], "INVENTORY_NOT_FOUND");
+
+    // Writer (another process) reads the same file.
+    let listed = spellsheet_core::inventory::list(&h.root).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].title, "経理課 月次の締め");
+    let read = h.ok("get_work_inventory", json!({ "id": id })).await;
+    assert_eq!(read["inventory"]["tasks"][0]["people"], 2);
+    assert_eq!(read["inventory"]["createdBy"]["name"], "test-client");
+
     h.client.cancel().await.unwrap();
 }
 

@@ -21,6 +21,7 @@ spellsheet-secrets.workspace = true
 spellsheet-agent.workspace = true
 spellsheet-manager.workspace = true
 spellsheet-files.workspace = true
+spellsheet-excel.workspace = true
 rpassword = "7.5.4"
 anyhow.workspace = true
 clap.workspace = true

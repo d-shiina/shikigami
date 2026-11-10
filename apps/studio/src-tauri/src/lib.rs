@@ -10,6 +10,7 @@ mod commands;
 mod debug;
 mod extensions;
 mod instance;
+mod inventory;
 mod legacy;
 mod manual;
 mod opened;
@@ -217,6 +218,11 @@ pub fn run() {
             manual::manual_image,
             manual::save_manual_masks,
             manual::save_manual_export,
+            inventory::list_inventories,
+            inventory::get_inventory,
+            inventory::change_inventory,
+            inventory::delete_inventory,
+            inventory::export_inventory,
             commands::import_flow,
             commands::list_flows,
             commands::project_files,

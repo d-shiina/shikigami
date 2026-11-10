@@ -11,7 +11,7 @@
 // Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
 // as a strip, as Linear and VS Code do: the places stay one click away and
 // their counts stay in sight. Hovering an icon names it.
-import { AppWindow, Blocks, FolderClosed, Pin, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
+import { AppWindow, Blocks, ClipboardList, FolderClosed, Pin, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
@@ -256,6 +256,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
         {/* Folded, only the open flow stays: the way back to the editor. */}
         {mini && flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent mini={mini} />}
         <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} mini={mini} />
+        <Item icon={ClipboardList} label={t.inventory.place} on={place === "inventory"} onClick={go("inventory")} title={t.inventory.placeTitle} mini={mini} />
         <Item icon={CalendarClock} label={t.runs.place} on={place === "runs"} onClick={go("runs")} title={t.runs.placeTitle} mini={mini} />
         <Item
           icon={KeyRound}

@@ -99,6 +99,10 @@ pub(crate) enum Command {
     /// Requests from AI clients waiting for a person's approval.
     #[command(subcommand)]
     Approval(ApprovalCmd),
+    /// Stock-takes of work (業務の棚卸し) an AI made with a person: the
+    /// tasks, the time they take, and what to automate first.
+    #[command(subcommand)]
+    Inventory(InventoryCmd),
     /// The worker: runs flows unattended on this PC (schedules, file
     /// triggers, jobs from a management server) so Task Scheduler is not
     /// needed. `agent` (its name before) works too.
@@ -310,6 +314,30 @@ pub(crate) enum PolicyCmd {
     Check,
     /// Write policy.json with the defaults, to edit (keeps an existing file).
     Init,
+}
+
+#[derive(Subcommand, Clone)]
+pub(crate) enum InventoryCmd {
+    /// The stock-takes of the workspace, the latest changed first.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// One stock-take: its tasks in the order to build them.
+    Show {
+        id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Write one as an Excel workbook (.xlsx).
+    Export {
+        id: String,
+        /// The file to write.
+        path: PathBuf,
+        /// Headings in English instead of Japanese.
+        #[arg(long)]
+        english: bool,
+    },
 }
 
 #[derive(Subcommand)]

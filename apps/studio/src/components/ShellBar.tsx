@@ -3,12 +3,13 @@
 // (Ctrl+P), and the AI's chat (Ctrl+J). They sit on the window's ground, in
 // the bar along its top, as Windows apps carry their name and VS Code its
 // command center with Copilot beside it.
-import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Settings2, Sparkles, Workflow } from "lucide-react";
+import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, ClipboardList, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Settings2, Sparkles, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
 import { useStudio } from "../context";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
+import { sendFresh } from "../lib/inventory";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { isActive, type Place } from "../store";
 import { runnerApi } from "../runner/api";
@@ -209,6 +210,7 @@ export function SearchBar({ onToggleSidebar }: { onToggleSidebar: () => void }) 
 const PLACES: [Place, LucideIcon, () => string][] = [
   ["library", LayoutList, () => t.flows],
   ["review", Inbox, () => t.awaitingReview],
+  ["inventory", ClipboardList, () => t.inventory.place],
   ["runs", CalendarClock, () => t.runs.place],
   ["secrets", KeyRound, () => t.secrets],
   ["extensions", Blocks, () => t.extensions.place],
@@ -257,6 +259,16 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
     for (const [place, icon, label] of PLACES) if (hit(label())) out.push({ id: `place:${place}`, group: "places", icon, label: label(), run: () => setPlace(place) });
     const actions: Command[] = [
       { id: "new", group: "commands", icon: Plus, label: t.shell.newFlowCommand, run: () => setPlace("library") },
+      {
+        id: "consult",
+        group: "commands",
+        icon: ClipboardList,
+        label: t.inventory.consult,
+        run: () => {
+          setPlace("inventory");
+          sendFresh(agent, t.inventory.startMessage);
+        },
+      },
       // Not while a run of it is under way: that would start a second copy (the bar's Run and F5 hold back too).
       ...(flow && !isActive(run) ? [{ id: "run", group: "commands" as const, icon: Play, label: t.shell.runCommand, hint: "F5", run: () => void startRun() }] : []),
       { id: "ai-toggle", group: "commands", icon: MessageSquareText, label: t.shell.toggleAi, hint: "Ctrl+J", run: () => agent.getState().setOpen(!agent.getState().open) },

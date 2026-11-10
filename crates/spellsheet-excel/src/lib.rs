@@ -33,6 +33,7 @@ pub mod book;
 #[cfg(windows)]
 mod com;
 pub mod date;
+pub mod inventory;
 #[cfg(windows)]
 mod live;
 pub mod macros;

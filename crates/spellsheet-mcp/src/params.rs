@@ -673,3 +673,12 @@ pub struct ImportFlowParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_conflict: Option<ImportConflict>,
 }
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GetWorkInventoryParams {
+    /// The inventory to read. Omit to list them all (to continue one, or to
+    /// start a new one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}

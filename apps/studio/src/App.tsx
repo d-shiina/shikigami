@@ -30,6 +30,7 @@ import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { RunInputsDialog } from "./components/RunInputsDialog";
+import { InventoryPage } from "./components/InventoryPage";
 import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
@@ -444,6 +445,11 @@ function Shell() {
       )}
       {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
       {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+      {place === "inventory" && (
+        <div className="min-w-0 flex-1">
+          <InventoryPage />
+        </div>
+      )}
       {place === "runs" && (
         <div className="min-w-0 flex-1">
           <RunsPage />

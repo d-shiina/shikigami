@@ -2,7 +2,7 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@spellsheet/schema";
-import { CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
+import { CalendarClock, ChevronDown, ClipboardList, ClipboardPaste, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
@@ -14,6 +14,7 @@ import { describeWhen } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { deleteFlowsAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
+import { sendFresh } from "../lib/inventory";
 import { projectApi } from "../project";
 import { fileToFlowFile } from "./HandOff";
 
@@ -91,6 +92,12 @@ function ImportConflict() {
  */
 function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
   const agentStore = useAgentApi();
+  const setPlace = useStudio((s) => s.setPlace);
+  // Not sure what to automate: the AI asks about the work, and its sheet fills in beside the chat.
+  const onConsult = () => {
+    setPlace("inventory");
+    sendFresh(agentStore, t.inventory.startMessage);
+  };
   const [text, setText] = useState("");
   const ask = () => {
     const request = text.trim();
@@ -139,6 +146,15 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
           <span className="text-[12px] text-slate-500">{t.firstSteps.withAiBody}</span>
         </div>
       </form>
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-paper px-3 py-2.5">
+        <ClipboardList size={16} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <button type="button" onClick={onConsult} className="text-[13px] font-medium text-brand-600 hover:underline">
+            {t.inventory.consult}
+          </button>
+          <p className="text-[12px] text-slate-500">{t.inventory.consultBody}</p>
+        </div>
+      </div>
       <p className="mt-4 flex flex-wrap items-center gap-x-1 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
         {t.firstSteps.otherWays}
         <button type="button" onClick={onCreate} className="flex items-center gap-1 text-brand-600 hover:underline">

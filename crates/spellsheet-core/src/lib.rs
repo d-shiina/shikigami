@@ -15,6 +15,7 @@ pub mod expr;
 pub mod flow_folders;
 pub mod ids;
 pub mod inbox;
+pub mod inventory;
 pub mod migrate;
 pub mod model;
 pub mod ops;
@@ -40,7 +41,7 @@ pub mod version;
 pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, NewApproval, Redeem};
 pub use call::Subflow;
 pub use error::{CoreError, CoreResult, ErrorPayload};
-pub use ids::{ApprovalId, FlowId, ObservationId, PickId, RunId, StepId};
+pub use ids::{ApprovalId, FlowId, InventoryId, ObservationId, PickId, RunId, StepId};
 pub use inbox::{ChatInbox, InboxMessage};
 pub use model::{
     Flow, FlowSettings, FlowSummary, Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION,
