@@ -160,6 +160,35 @@ pub(crate) fn places(
         .collect()
 }
 
+/// A step told only the folder to write into (`browser.download` with
+/// `folder`) names the file it wrote in what it returns (`{ path }`): that
+/// file is the place, in the folder's stead, so the run's record stamps it.
+pub(crate) fn with_returned_file(
+    mut places: Vec<Place>,
+    params: &Value,
+    result: &Value,
+    risk: RiskLevel,
+) -> Vec<Place> {
+    if risk == RiskLevel::Safe || params.get("path").is_some() {
+        return places;
+    }
+    let (Some(Value::String(folder)), Some(Value::String(file))) =
+        (params.get("folder"), result.get("path"))
+    else {
+        return places;
+    };
+    if file.trim().is_empty() {
+        return places;
+    }
+    places.retain(|p| p.reads || p.screen || &p.target != folder);
+    places.push(Place {
+        target: file.clone(),
+        reads: false,
+        screen: false,
+    });
+    places
+}
+
 fn places_outside(
     step_type: &str,
     params: &Value,
@@ -350,6 +379,35 @@ mod tests {
         assert_eq!(
             found,
             vec![place("C:/in/a.csv", true), place("C:/out/a.csv", false)]
+        );
+    }
+
+    #[test]
+    fn a_download_into_a_folder_names_the_file_it_saved() {
+        let params = json!({ "target": { "text": "CSV" }, "folder": "C:/out" });
+        let found = places(
+            "browser.download",
+            &params,
+            RiskLevel::Interactive,
+            &paths(&["path", "folder"]),
+            &[],
+        );
+        assert_eq!(found, vec![place("C:/out", false)]);
+        let result = json!({ "path": "C:/out/orders.csv", "fileName": "orders.csv" });
+        assert_eq!(
+            with_returned_file(found, &params, &result, RiskLevel::Interactive),
+            vec![place("C:/out/orders.csv", false)]
+        );
+        // A step given the file's own path keeps it.
+        let named = json!({ "path": "C:/out/a.csv" });
+        assert_eq!(
+            with_returned_file(
+                vec![place("C:/out/a.csv", false)],
+                &named,
+                &json!({ "path": "C:/x" }),
+                RiskLevel::Interactive
+            ),
+            vec![place("C:/out/a.csv", false)]
         );
     }
 

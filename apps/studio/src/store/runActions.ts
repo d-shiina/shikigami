@@ -31,8 +31,13 @@ import {
 import { secretFixOf } from "./secrets";
 import { findStep } from "./steps";
 
-export const runActions = ({ api, set, get }: StoreContext) =>
-  ({
+export const runActions = ({ api, set, get }: StoreContext) => {
+  /** Turns the editor to the 実行結果 of a whole run that ended well. `seq` counts these, so a second run of the same flow turns it again. */
+  const showResult = (flowId: string, runId: string) => {
+    if (get().resultFor?.runId === runId) return;
+    set({ resultFor: { flowId, runId, seq: (get().resultFor?.seq ?? 0) + 1 } });
+  };
+  return {
     async testStep(stepId, values) {
       const flow = get().flow;
       if (!flow || get().stepTest?.running || (get().run && isActive(get().run))) return;
@@ -110,6 +115,9 @@ export const runActions = ({ api, set, get }: StoreContext) =>
           // A run's log opens under the chart.
           bottom: "log",
         }));
+        // A quick run may have ended before the command returned, before it was known as whole.
+        const ended = get().run;
+        if (whole && ended?.runId === runId && ended.status === "succeeded") showResult(flow.id, runId);
       } catch (e) {
         set({ error: message(e) });
       }
@@ -435,7 +443,7 @@ export const runActions = ({ api, set, get }: StoreContext) =>
       } else if (trying && env.type === "runFinished") set({ trying: null });
       const ended = get().run;
       if (env.type === "runFinished" && env.status === "succeeded" && ended?.runId === env.runId && ended.whole && ended.flowId) {
-        set({ resultFor: { flowId: ended.flowId, runId: env.runId, seq: env.seq } });
+        showResult(ended.flowId, env.runId);
       }
     },
 
@@ -450,4 +458,5 @@ export const runActions = ({ api, set, get }: StoreContext) =>
     dismiss() {
       set({ notice: null, error: null });
     },
-  }) satisfies Partial<StudioState>;
+  } satisfies Partial<StudioState>;
+};

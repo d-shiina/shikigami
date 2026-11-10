@@ -2006,7 +2006,7 @@ impl Executor {
                         will_retry: false,
                     });
                     self.capture_screen(step, &params, Moment::After).await;
-                    self.touch(step, &params);
+                    self.touch(step, &params, &value);
                     if let Some(name) = &step.save_as {
                         self.set_var(name, value, Some(&step.id));
                     }
@@ -2115,7 +2115,7 @@ impl Executor {
     /// other steps, when the run writes no log, or when the screen is gone.
     /// Notes what a step that succeeded worked on outside the run, and
     /// which browser the run is on.
-    fn touch(&self, step: &Step, params: &Value) {
+    fn touch(&self, step: &Step, params: &Value, result: &Value) {
         let risk = self
             .risks
             .get(&step.step_type)
@@ -2133,6 +2133,7 @@ impl Executor {
                 .get(&step.step_type)
                 .map_or(&[], |v| &v[..]),
         );
+        let places = crate::touched::with_returned_file(places, params, result, risk);
         self.emitter.touch(places, &step.step_type, &step.id);
         if step.step_type == BROWSER_CLOSE {
             self.emitter.set_last_page(None);
