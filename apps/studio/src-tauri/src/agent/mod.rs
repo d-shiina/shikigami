@@ -2245,7 +2245,11 @@ mod tests {
                 "the script is ASCII; the pane words it"
             );
         }
-        for kind in [AgentKind::ClaudeCode, AgentKind::Cursor] {
+        for kind in [
+            AgentKind::ClaudeCode,
+            AgentKind::Cursor,
+            AgentKind::Antigravity,
+        ] {
             assert!(
                 install_script(kind).contains(InstallStep::Installer.marker()),
                 "{kind:?}"
