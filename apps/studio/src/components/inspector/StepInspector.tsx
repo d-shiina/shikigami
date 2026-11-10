@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
 import { ArrowLeft, ArrowRight, CircleX, Maximize2, MessageSquareText, TriangleAlert } from "lucide-react";
 import { openAsk, useAgentApiMaybe, useAgentMaybe } from "../../agent";
+import { chatAi, useAiWay } from "../../lib/aiWay";
 import { t } from "../../lib/i18n";
 import { GROUP } from "../../lib/stepTypes";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../../lib/dataFlow";
@@ -142,7 +143,9 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
   const agent = useAgentApiMaybe();
+  // In the paste way, the AI chat's name (Microsoft Copilot…), not the one Writer would run.
   const agentName = useAgentMaybe((a) => a.info?.name ?? "AI", "AI");
+  const pasteName = useAiWay((s) => (s.way === "paste" ? (s.chat === "other" ? "AI" : chatAi(s.chat).name) : null));
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -174,7 +177,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
             {agent && (
             <button
               type="button"
-              title={t.props.askFixTitle(agentName)}
+              title={t.props.askFixTitle(pasteName ?? agentName)}
               onClick={() => agent && openAsk(agent, { about: { id: flow.id, name: flow.name }, draft: t.props.askFixDraft(step.name || typeTitle(step, def)) })}
               className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink"
             >

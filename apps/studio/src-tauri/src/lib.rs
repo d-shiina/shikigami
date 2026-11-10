@@ -222,6 +222,8 @@ pub fn run() {
             inventory::list_inventories,
             inventory::get_inventory,
             inventory::change_inventory,
+            inventory::inventory_chat_guide,
+            inventory::paste_inventory_answer,
             inventory::delete_inventory,
             inventory::export_inventory,
             commands::import_flow,

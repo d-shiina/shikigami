@@ -749,6 +749,118 @@ pub fn change(workspace: &Path, patch: &InventoryPatch, actor: Actor) -> CoreRes
     Ok(inventory)
 }
 
+// -- by an AI chat that cannot reach SpellSheet -------------------------------
+
+/// The `format` of a stock-take an AI chat writes for the person to paste back.
+pub const ANSWER_FORMAT: &str = "spellsheet.inventory";
+
+/// What Writer copies to start the interview in an AI chat without MCP (the
+/// paste way). Same interview as the MCP prompt, but the record goes back as
+/// one JSON block the person copies into Writer.
+pub const CHAT_GUIDE: &str = r#"# Take stock of my work (業務の棚卸し) for SpellSheet
+
+You are a consultant who listens. Interview me about my everyday work, find what takes time, and help me pick the one or two tasks worth automating first with SpellSheet (a Windows RPA tool). At the end you write the record as JSON; I paste it into SpellSheet Writer, which computes the hours and the order.
+
+## Rules
+
+- Ask one or two short questions per message, in my language and my business words. No jargon (RPA, ROI, KPI).
+- Never ask for passwords, real customer or employee names, amounts, or screenshots. When an example helps, ask for column names only (取引先名、金額).
+- Record what I said. Where you estimate, say so in the task's "note" and ask me to confirm. Do not invent numbers.
+
+## Steps
+
+1. The whole picture: my department and role, and the systems I use every day (web systems, Windows business apps, Excel, mail, paper or FAX).
+2. List the work: walk through last week from Monday morning, then month-end and month-start, closing, and work done a few times a year. Also ask what is tedious, what I fear getting wrong, and what only I can do. Aim for 5 to 15 tasks.
+3. Go deeper on the 3 to 5 that take the most time: how often, minutes each time, how many people do it, what share of that time is hands-only work (copying, typing, downloading, checking against a list) rather than judging or talking, where the input comes from, whether the steps are fixed, how often exceptions happen, the screens and files used, and what a mistake costs.
+4. Judge how easy each is to automate (high, medium, low) with reasons: data input, fixed steps and few exceptions make it easier; web systems and Excel are usually high, Windows business apps medium, remote desktops (Citrix) and paper low. Mark work that does not suit automation now (judgment at its core, once a year, a system about to be replaced) with "notNow" and the reason.
+5. Show me the record and ask whether the numbers look right.
+
+## The record
+
+When I say 「まとめて」 (or "sum it up"), and at the end, answer with exactly one ```json code block like this, holding everything so far (not only what changed), and a short sentence asking me to copy it into Writer:
+
+```json
+{
+  "format": "spellsheet.inventory",
+  "title": "経理課 月次の締め",
+  "about": "経理課 請求担当、3 人",
+  "systems": ["販売管理（Web）", "Excel", "メール"],
+  "status": "interviewing",
+  "tasks": [
+    {
+      "name": "請求書の発行",
+      "description": "販売管理から当月分を出して PDF にしてメールで送る",
+      "steps": ["販売管理で当月の売上を検索", "請求書を PDF で保存", "取引先ごとにメールで送る"],
+      "frequency": { "times": 1, "per": "month" },
+      "minutes": 240,
+      "people": 1,
+      "manualShare": 80,
+      "ease": "high",
+      "easeReasons": ["Web の画面で手順が決まっている"],
+      "errorImpact": "high",
+      "systems": ["販売管理（Web）", "メール"],
+      "inputs": ["販売管理の売上一覧"],
+      "outputs": ["請求書 PDF"],
+      "exceptions": "月に 2〜3 件、宛先が変わる",
+      "notNow": null,
+      "note": "時間は本人の見込み"
+    }
+  ]
+}
+```
+
+- "per" is "day", "week", "month", "quarter" or "year". "manualShare" is a percent (0 to 100). "ease" and "errorImpact" are "high", "medium" or "low".
+- Leave out what you do not know yet; Writer shows what is still missing. Keep each task's "name" the same every time, so Writer updates it instead of adding a new one.
+- "status" is "interviewing" until I confirm the numbers, then "done".
+
+Start now with step 1.
+"#;
+
+/// A stock-take an AI chat wrote (CHAT_GUIDE) as the change to make: to a
+/// new one, or to `existing`, whose tasks are matched by name so that taking
+/// a later summary in again updates them instead of adding them twice.
+pub fn answer_patch(text: &str, existing: Option<&WorkInventory>) -> CoreResult<InventoryPatch> {
+    let is_record = |v: &Value| {
+        v.get("format").and_then(Value::as_str) == Some(ANSWER_FORMAT)
+            || (v.get("tasks").is_some_and(Value::is_array) && v.get("title").is_some())
+    };
+    let Some(Value::Object(mut answer)) = crate::chat::find_object(text, is_record) else {
+        return Err(invalid(format!(
+            "no stock-take found: answer with one ```json code block holding {{ \"format\": \"{ANSWER_FORMAT}\", \"title\": …, \"tasks\": […] }}"
+        )));
+    };
+    answer.remove("format");
+    let tasks = match answer.remove("tasks") {
+        Some(Value::Array(tasks)) => tasks,
+        None | Some(Value::Null) => Vec::new(),
+        Some(_) => return Err(invalid("\"tasks\" must be a list")),
+    };
+    let mut patch: InventoryPatch = serde_json::from_value(Value::Object(answer))
+        .map_err(|e| invalid(format!("the stock-take does not fit: {e}")))?;
+    patch.id = existing.map(|inv| inv.id.clone());
+    let key = |name: &str| name.trim().to_lowercase();
+    for task in tasks {
+        let Value::Object(mut fields) = task else {
+            return Err(invalid("each task must be an object with a \"name\""));
+        };
+        // Its place on this sheet is Writer's to give.
+        fields.remove("id");
+        let name = fields.get("name").and_then(Value::as_str).unwrap_or("");
+        let id = existing.and_then(|inv| {
+            inv.tasks
+                .iter()
+                .find(|t| key(&t.name) == key(name))
+                .map(|t| t.id.clone())
+        });
+        if id.is_some() {
+            // The same name as before: nothing to change in it.
+            fields.remove("name");
+        }
+        patch.tasks.push(TaskPatch { id, fields });
+    }
+    Ok(patch)
+}
+
 /// Removes a stock-take (its flows stay).
 pub fn delete(workspace: &Path, id: &InventoryId) -> CoreResult<()> {
     let path = path_of(workspace, id)?;
@@ -788,6 +900,40 @@ mod tests {
         })
         .unwrap();
         inv
+    }
+
+    #[test]
+    fn a_chat_answer_becomes_a_new_stock_take() {
+        let text = "まとめました。\n```json\n{\n  // 経理課\n  \"format\": \"spellsheet.inventory\",\n  \"title\": \"経理課 月次\",\n  \"systems\": [\"Excel\"],\n  \"tasks\": [ { \"name\": \"請求書\", \"frequency\": { \"times\": 1, \"per\": \"month\" }, \"minutes\": 240, \"id\": \"t9\" }, ],\n}\n```\nWriter に貼ってください。";
+        let patch = answer_patch(text, None).unwrap();
+        assert_eq!(patch.id, None);
+        assert_eq!(patch.title.as_deref(), Some("経理課 月次"));
+        assert_eq!(patch.tasks.len(), 1);
+        assert_eq!(patch.tasks[0].id, None);
+        assert!(!patch.tasks[0].fields.contains_key("id"));
+        let mut inv = WorkInventory::new("x", None);
+        inv.apply(&patch).unwrap();
+        assert_eq!(inv.tasks[0].minutes, Some(240.0));
+    }
+
+    #[test]
+    fn a_later_summary_updates_tasks_by_name() {
+        let inv = sample();
+        let text = r#"{ "format": "spellsheet.inventory", "title": "経理課", "status": "done", "tasks": [ { "name": " 週報 ", "minutes": 30 }, { "name": "新しい仕事" } ] }"#;
+        let patch = answer_patch(text, Some(&inv)).unwrap();
+        assert_eq!(patch.id, Some(inv.id.clone()));
+        let weekly = inv.tasks.iter().find(|t| t.name == "週報").unwrap();
+        assert_eq!(patch.tasks[0].id.as_deref(), Some(weekly.id.as_str()));
+        assert_eq!(patch.tasks[1].id, None);
+        let mut after = inv.clone();
+        after.apply(&patch).unwrap();
+        assert_eq!(after.tasks.len(), inv.tasks.len() + 1);
+        assert_eq!(after.status, InventoryStatus::Done);
+    }
+
+    #[test]
+    fn text_without_a_stock_take_is_refused() {
+        assert!(answer_patch("```json\n{ \"steps\": [] }\n```", None).is_err());
     }
 
     #[test]

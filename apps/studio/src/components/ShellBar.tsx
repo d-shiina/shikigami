@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
 import { useStudio } from "../context";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
-import { sendFresh } from "../lib/inventory";
+import { consult } from "../lib/inventory";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { isActive, type Place } from "../store";
 import { runnerApi } from "../runner/api";
@@ -267,7 +267,7 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
         label: t.inventory.consult,
         run: () => {
           setPlace("inventory");
-          sendFresh(agent, t.inventory.startMessage);
+          void consult(agent);
         },
       },
       // Not while a run of it is under way: that would start a second copy (the bar's Run and F5 hold back too).

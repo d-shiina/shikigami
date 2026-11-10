@@ -173,7 +173,9 @@ export function AgentPane({ width }: { width: number }) {
       </div>
       <div className="border-t border-slate-200 p-3">
         <div className="relative mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
-          {chat.flowId === null ? (
+          {chat.interview ? (
+            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.inventory.paste.chip}</span>
+          ) : chat.flowId === null ? (
             <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
           ) : here ? (
             <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{flow.name}</span>
@@ -189,9 +191,9 @@ export function AgentPane({ width }: { width: number }) {
             </button>
           )}
           {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
-          {paste && <ScreenAttach chatId={chat.id} />}
+          {paste && !chat.interview && <ScreenAttach chatId={chat.id} />}
         </div>
-        {paste && <AttachedScreens chatId={chat.id} />}
+        {paste && !chat.interview && <AttachedScreens chatId={chat.id} />}
         <textarea
           data-agent-input
           value={draft}
@@ -204,7 +206,7 @@ export function AgentPane({ width }: { width: number }) {
           }}
           rows={3}
           disabled={!ready}
-          placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
+          placeholder={chat.interview ? t.inventory.paste.placeholder : chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
           className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">

@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Chat, type ChatItem, type Handoff, useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
 import { chatAi, useAiWay } from "../lib/aiWay";
-import { agent, api, type AnswerProblem } from "../lib/api";
+import { agent, api, type AnswerProblem, inventoryApi } from "../lib/api";
+import { showInventory } from "../lib/inventory";
 import { describe } from "../lib/changes";
 import { readClipboardText } from "../lib/clipboard";
 import { joinParts, looksLikeAnswer } from "../lib/handoff";
@@ -36,6 +37,7 @@ const SHOWN_CHANGES = 8;
 export function HandoffCard({ chat, item, latest }: { chat: Chat; item: AiItem; latest: boolean }) {
   const { handoff } = item;
   if (handoff.result?.kind === "taken") return <Taken chat={chat} result={handoff.result} latest={latest} />;
+  if (handoff.result?.kind === "inventory") return <InterviewTaken chat={chat} result={handoff.result} latest={latest} />;
   return (
     <div className="space-y-2">
       {handoff.prompt && <Steps chat={chat} item={item} latest={latest && !handoff.result} />}
@@ -54,7 +56,8 @@ function Steps({ chat, item, latest }: { chat: Chat; item: AiItem; latest: boole
   const ai = chatAi(way);
   const name = ai.name;
   // The reference goes once per chat conversation: with the first request here.
-  const first = chat.items.find((i) => i.role === "ai" && i.handoff?.prompt)?.id === item.id;
+  // An interview needs no reference: it is all in what was copied.
+  const first = !chat.interview && chat.items.find((i) => i.role === "ai" && i.handoff?.prompt)?.id === item.id;
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -128,7 +131,7 @@ function Steps({ chat, item, latest }: { chat: Chat; item: AiItem; latest: boole
         </li>
         <li>
           <Num n={++n} />
-          {t.aiChat.steps.back(name)}
+          {chat.interview ? t.inventory.paste.back(name) : t.aiChat.steps.back(name)}
         </li>
       </ol>
       {error && <div className="text-shu-600">{error}</div>}
@@ -232,9 +235,23 @@ function useTakeIn(chat: Chat, item: AiItem) {
   const adopt = useAgent((s) => s.adoptFlow);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setInterview = useAgent((s) => s.setInterview);
   const run = async (answer: string) => {
     setBusy(true);
     setError(null);
+    if (chat.interview) {
+      try {
+        const { inventory, assessment } = await inventoryApi.pasteAnswer(answer, chat.interview.inventoryId);
+        const first = (inventory.tasks ?? []).find((task) => task.id === assessment.first)?.name ?? null;
+        settle(chat.id, item.id, { result: { kind: "inventory", id: inventory.id, title: inventory.title, tasks: (inventory.tasks ?? []).length, first } });
+        setInterview(chat.id, inventory.id);
+      } catch (e) {
+        settle(chat.id, item.id, { result: { kind: "problems", problems: [{ message: messageOf(e) }] } });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       if (chat.flowId && studio.getState().flow?.id !== chat.flowId) await studio.getState().open(chat.flowId);
       const s = studio.getState();
@@ -502,5 +519,43 @@ function Questions({ chat, flowId, revision, questions, latest }: { chat: Chat; 
           </button>
         ))}
     </section>
+  );
+}
+
+const messageOf = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
+
+/** An interview's record taken in as a stock-take: where to read it, and how to bring in more. */
+function InterviewTaken({ chat, result, latest }: { chat: Chat; result: Extract<NonNullable<Handoff["result"]>, { kind: "inventory" }>; latest: boolean }) {
+  const setPlace = useStudio((s) => s.setPlace);
+  const handOffAs = useAgent((s) => s.handOffAs);
+  const p = t.inventory.paste;
+  return (
+    <div className="space-y-1.5 rounded-lg border border-slate-200 bg-sheet px-3 py-2.5 text-[12px]">
+      <div className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+        <Check size={14} strokeWidth={2} className="shrink-0 text-moegi-600" aria-hidden="true" />
+        <span className="min-w-0">{p.taken(result.title, result.tasks)}</span>
+      </div>
+      {result.first && <p className="text-ink">{p.first(result.first)}</p>}
+      <p className="leading-relaxed text-slate-600">{p.takenLead}</p>
+      <div className="flex flex-wrap gap-1.5 pt-0.5">
+        <button
+          type="button"
+          onClick={() => {
+            showInventory(result.id);
+            setPlace("inventory");
+          }}
+          className={button}
+        >
+          <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
+          {p.open}
+        </button>
+        {latest && (
+          <button type="button" onClick={() => void handOffAs(chat.id, p.sumUpLabel, p.sumUp)} className={button}>
+            <ClipboardCopy size={13} strokeWidth={1.75} aria-hidden="true" />
+            {p.copySumUp}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

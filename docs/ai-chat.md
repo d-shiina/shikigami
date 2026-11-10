@@ -25,9 +25,18 @@ In a new chat, attach the reference `spellsheet-ai-reference.md` (the flow forma
 
 The AI cannot see the screen, so it never guesses buttons or fields. It names each one as a **part** and says where it is ("the Save button at the top right"); you point at the element in Writer. It never writes passwords either, only the name of a login, which you register in Writer.
 
-### Keep it in a Copilot Studio agent
+### Set it up once for your AI
 
-Instead of attaching it every time, you can put the reference into a Microsoft Copilot Studio agent. Save the two files with **Settings → AI → Save reference** (or `spellsheet ai-guide --dir <folder>`), paste the whole of `spellsheet-ai-instructions.md` into the agent's instructions, and add `spellsheet-ai-reference.md` to its knowledge. A version with the built-in nodes only is in [docs/ai/](ai/). Save and replace them after updating SpellSheet or adding plugins.
+Instead of attaching it every time, you can put the reference into the AI you use. Save the two files with **Settings → AI → Save reference** (or `spellsheet ai-guide --dir <folder>`), then add them as below. A version with the built-in nodes only is in [docs/ai/](ai/).
+
+| AI | Where | Instructions (paste the whole of `spellsheet-ai-instructions.md`) | File (add `spellsheet-ai-reference.md`) |
+|---|---|---|---|
+| Microsoft Copilot | A Copilot Studio agent | The agent's instructions | Knowledge |
+| ChatGPT | A project | Project instructions | Project files |
+| Gemini | A Gem | The Gem's instructions | Knowledge (files) |
+| Claude | A project | Project instructions | Project knowledge |
+
+Whether you can use these depends on your plan and your company's settings. Once set up, start new chats inside that agent, project or Gem and skip attaching the reference (you can skip that step in Writer's guide). Save and replace the files after updating SpellSheet or adding plugins.
 
 ## 2. Bring the answer back
 
