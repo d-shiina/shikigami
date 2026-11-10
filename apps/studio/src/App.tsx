@@ -14,7 +14,6 @@ import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
-import { AiPasteDialog } from "./components/AiPasteDialog";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
@@ -48,6 +47,8 @@ import { WindowControls } from "./components/WindowControls";
 import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
+import { chatAi, pasteWay, useAiWay } from "./lib/aiWay";
+import { composeRequest } from "./lib/handoff";
 import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
@@ -519,7 +520,6 @@ function Shell() {
     <>
       <CommandPalette />
       <HistoryDialog />
-      <AiPasteDialog />
       <SecretAskDialog />
       <RunInputsDialog />
       <ApprovalDialog />
@@ -640,7 +640,27 @@ export function App() {
   const store = useMemo(() => createStudioStore(api), []);
   // Sentences name a node's part by its label (`{ part: "btnSave" }` → 部品「保存ボタン」).
   setPartLookup((name) => store.getState().flow?.parts?.[name]);
-  const agentStore = useMemo(() => createAgentStore(agent), []);
+  const agentStore = useMemo(
+    () =>
+      createAgentStore(agent, {
+        // An AI chat that cannot reach SpellSheet: the request goes by the clipboard (lib/aiWay.ts).
+        active: pasteWay,
+        async compose(message, ref) {
+          const shown = store.getState().flow;
+          const [instructions, flow] = await Promise.all([
+            api.aiInstructions(),
+            ref ? (shown?.id === ref.id ? Promise.resolve(shown) : api.getFlow(ref.id)) : Promise.resolve(null),
+          ]);
+          return composeRequest(message, instructions, flow, ref?.stepId ?? null);
+        },
+        copy: (text) => navigator.clipboard.writeText(text),
+        open() {
+          const url = chatAi(useAiWay.getState().chat).url;
+          if (url) void agent.openUrl(url).catch(() => {});
+        },
+      }),
+    [store],
+  );
   const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), unsaved: unsavedAsk }), []);
 
   useEffect(() => {

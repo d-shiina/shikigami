@@ -70,6 +70,8 @@ export type AnswerProblem = {
   step?: string;
   /** What the answer has at `path`, as JSON (shortened). */
   found?: string;
+  /** The answer stops before its JSON ends: ask the AI to go on, then read both together. */
+  cut?: boolean;
 };
 /** The flow a pasted answer made or changed, or the problems to send back (nothing changed then). */
 export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
@@ -409,6 +411,7 @@ export const api = {
   startupReady: () => call<void>("startup_ready"),
   /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
   saveAiGuide: () => call<string>("save_ai_guide"),
+  aiInstructions: () => call<string>("ai_instructions"),
   /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
   pasteAiAnswer: (text: string, into?: string, expectedRevision?: number) =>
     call<PasteOutcome>("paste_ai_answer", { text, into, expectedRevision }),

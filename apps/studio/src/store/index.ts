@@ -233,8 +233,6 @@ export type StudioState = {
   distribution: { folders: DistributionFolder[]; views: DistributionView[] | null; open: boolean };
   /** A flow file being looked at before it is imported (opened from Explorer, dropped, chosen). */
   received: { file: FlowFile; preview: PackagePreview; away: boolean } | null;
-  /** The dialog for an answer pasted from an AI chat without MCP: a new flow, or into the open one. */
-  pasteOpen: "new" | "into" | null;
   /** Registered secrets (names, user names, sites; never values). */
   secrets: SecretInfo[];
   secretKeyLocation: string;
@@ -418,7 +416,6 @@ export type StudioState = {
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
-  setPasteOpen(mode: "new" | "into" | null): void;
   /**
    * Takes in an AI's answer: a new flow, or with `into` the open flow's new
    * content. Opens the flow it made; returns what happened, null on an error.
@@ -507,7 +504,6 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       handOff: null,
       distribution: { folders: [], views: null, open: false },
       received: null,
-      pasteOpen: null,
       secrets: [],
       secretKeyLocation: "",
       secretKeyMissing: false,

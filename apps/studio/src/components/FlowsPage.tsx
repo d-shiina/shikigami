@@ -3,7 +3,8 @@
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@spellsheet/schema";
 import { CalendarClock, ChevronDown, ClipboardList, ClipboardPaste, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
-import { openAsk, useAgent, useAgentApi } from "../agent";
+import { expectAnswerFor, openAsk, useAgent, useAgentApi } from "../agent";
+import { pasteWay } from "../lib/aiWay";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { DistributionNotice, useDistributionCheck } from "./Distribution";
@@ -104,7 +105,7 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
     openAsk(agentStore, { fresh: null, draft: request });
     const a = agentStore.getState();
     // Not set up yet: the pane shows how, and the request waits in its box.
-    if (request && a.info?.available) {
+    if (request && (a.info?.available || pasteWay())) {
       a.setDraft(a.current, "");
       void a.sendIn(a.current, request, null).then((sent) => !sent && a.setDraft(a.current, request));
     }
@@ -267,7 +268,6 @@ export function FlowsPage() {
   // The AI pane has its own "paste"; the header does not say it twice.
   const agentOpen = useAgent((a) => a.open);
   const summaries = useStudio((s) => s.summaries);
-  const setPasteOpen = useStudio((s) => s.setPasteOpen);
   const create = useStudio((s) => s.create);
   const receiveFile = useStudio((s) => s.receiveFile);
   const openHandOff = useStudio((s) => s.openHandOff);
@@ -511,7 +511,7 @@ export function FlowsPage() {
                   { label: l.emptyFlow, icon: MousePointerClick, run: () => setCreating(true) },
                   { label: t.importFlow, icon: Upload, run: () => picker.current?.click() },
                   { label: t.distribution.open, icon: FolderSync, run: openDistribution },
-                  ...(agentOpen ? [] : [{ label: t.paste.title, icon: ClipboardPaste, run: () => setPasteOpen("new") }]),
+                  ...(agentOpen ? [] : [{ label: t.paste.title, icon: ClipboardPaste, run: () => expectAnswerFor(agentStore, null) }]),
                 ]);
               }}
               className="grid h-7 w-7 place-items-center rounded-r-lg border-l border-white/25 bg-primary text-on-primary hover:bg-primary-hover"

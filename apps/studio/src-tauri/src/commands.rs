@@ -424,6 +424,13 @@ pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
     Ok(dir.display().to_string())
 }
 
+/// The short instructions for an AI without MCP, put at the top of each
+/// request Writer copies for an AI chat.
+#[tauri::command]
+pub fn ai_instructions() -> String {
+    spellsheet_core::chat::instructions().to_owned()
+}
+
 /// What pasting an AI's answer did: the flow it made or changed, or the
 /// problems to send back to the AI (nothing was changed then).
 #[derive(Debug, Serialize)]

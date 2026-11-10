@@ -7,6 +7,7 @@ import { Circle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAgent } from "../agent";
+import { useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { clipboardAi } from "../lib/askAi";
@@ -187,8 +188,7 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
   const stepTypes = useStudio((s) => s.stepTypes);
   const applyOps = useStudio((s) => s.applyOps);
   const select = useStudio((s) => s.select);
-  const agentAvailable = useAgent((s) => s.info?.available === true);
-  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const { ready: agentAvailable, name: agentName } = useAskable();
   const askAgent = useAgent((s) => s.send);
   const [told, setTold] = useState<string | null>(null);
   const [working, setWorking] = useState(false);

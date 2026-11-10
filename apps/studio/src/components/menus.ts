@@ -33,7 +33,7 @@ import {
   Lock,
   UserRound,
 } from "lucide-react";
-import { openAsk, useAgentApi } from "../agent";
+import { expectAnswerFor, openAsk, useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
 import { isActive, runBreakpoints, selectedIds, trailOf, WRAP_BLOCK } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
@@ -140,6 +140,7 @@ export function useSlotMenu() {
 /** Right-click on the chart's background: what the dock and the corners offer. */
 export function usePaneMenu() {
   const store = useStudioApi();
+  const agent = useAgentApi();
   const openFile = useProjectMaybe((p) => p.open, null);
   return (options: { fit: () => void; inside: boolean }): MenuSpec[] => {
     const s = store.getState();
@@ -163,7 +164,7 @@ export function usePaneMenu() {
       "-",
       { label: t.menu.fitView, icon: Scan, run: options.fit },
       "-",
-      { label: t.paste.menu, icon: ClipboardPaste, run: () => store.getState().setPasteOpen("into") },
+      { label: t.paste.menu, icon: ClipboardPaste, run: () => expectAnswerFor(agent, s.flow ? { id: s.flow.id, name: s.flow.name } : null) },
       s.flow && { label: t.paste.copyFlow, icon: ClipboardCopy, run: () => copyText(handOffText(store.getState().flow!)) },
       s.flow && openFile && { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void openFile("", false) },
       ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },

@@ -3,6 +3,7 @@
 // (Ctrl+P), and the AI's chat (Ctrl+J). They sit on the window's ground, in
 // the bar along its top, as Windows apps carry their name and VS Code its
 // command center with Copilot beside it.
+import { useAskable } from "../lib/aiWay";
 import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, ClipboardList, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Settings2, Sparkles, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -145,7 +146,7 @@ export function AiButton() {
   const setOpen = useAgent((s) => s.setOpen);
   const busy = useAgent(anyBusy);
   const news = useAgent((s) => s.chats.some((c) => c.unread));
-  const name = useAgent((s) => s.info?.name ?? "AI");
+  const { name } = useAskable();
   const tool = useAgent((s) => activity(s)?.tool ?? null);
   const working = useAgent((s) => activity(s) !== null);
   const what = working && tool ? ((t.agent.tools as Record<string, string>)[tool] ?? tool) : null;

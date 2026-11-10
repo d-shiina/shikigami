@@ -180,9 +180,6 @@ export const sharingActions = ({ api, set, get, applyOutcome, reloadCurrent, mut
       set({ pendingImport: null });
     },
 
-    setPasteOpen(mode) {
-      set({ pasteOpen: mode });
-    },
 
     async pasteAnswer(text, into) {
       const flow = into ? get().flow : null;

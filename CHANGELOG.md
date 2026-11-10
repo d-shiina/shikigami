@@ -8,6 +8,8 @@
 
 ### 主な変更
 
+- MCP を使えない AI（Microsoft Copilot やブラウザーの ChatGPT など）でも、Writer の AI チャットからそのままフローを作れるようにしました。AI チャットを初めて開いたとき、この PC に Writer から動かせる AI が無ければ「ふだん使っている AI」を名前で選んでもらい、MCP を使えるかどうかは Writer が判断します。チャットにコピーして使う AI なら、依頼を書いて **コピーして ○○ を開く** を押すと、答え方の指示・今のフロー・依頼をまとめてコピーして AI のチャットを開きます。AI の答えをコピーして Writer に戻るとクリップボードから見つけて取り込み、変わったところ・あなたの作業・AI に修正を依頼するところを出し、修正や続きの依頼もボタン 1 つでコピーします。これまでの「AI の答えを貼り付け」の画面はこれに置き換えました（docs/ai-chat.md）
+- AI の答えの読み取りを強くしました。JSON のコメントや末尾のカンマを読み、答えの例と本物が並んでいれば `"format": "spellsheet.answer"` の付いた方を取り、チャットが長い答えを途中で止めたときはそう伝えて続きを頼めるようにしました
 - Writer の AI チャットで使う AI に Antigravity（Google の Antigravity CLI、Gemini CLI の後継）を足しました。無料の Google アカウントでも使えます（無料の回数は週ごとで、Google が決めます）。設定 → AI の「使う AI」で選ぶと、インストールから画面で行え、サインインは Antigravity の画面からブラウザーで行います。Antigravity には SpellSheet のツールだけを許可し（`~/.gemini/antigravity-cli/settings.json` の `permissions.allow` に `mcp(spellsheet/*)` を足します）、コマンドの実行やファイルの書き込みは許可しません
 - Gemini CLI は Google AI Studio の API キーで動かすようにしました。Google が個人の Google アカウントでのサインインを受け付けなくなったためです。AI チャットと設定 → AI に API キーの欄があり、キーは Windows 資格情報マネージャーに保存して、Gemini CLI を起動するときだけ渡します（無料の枠は 1 日 250 回まで）
 
