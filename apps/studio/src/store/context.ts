@@ -7,6 +7,10 @@ import { t } from "../lib/i18n";
 import type { StudioState } from "./index";
 
 export function message(e: unknown): string {
+  if (e instanceof ApiError && e.code === "DUPLICATE_FLOW_NAME") {
+    const name = (e.details as { name?: unknown } | undefined)?.name;
+    return t.duplicateFlowName(typeof name === "string" ? name : "");
+  }
   return e instanceof Error ? e.message : String(e);
 }
 

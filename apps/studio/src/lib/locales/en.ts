@@ -175,6 +175,8 @@ export const en: Dict = {
   newFlow: "New flow",
   newFlowPrompt: "Flow name",
   defaultFlowName: "New flow",
+  duplicateFlowName: (name: string) =>
+    `A flow named "${name}" already exists. Each flow's folder is named after it, so choose another name`,
   duplicate: "Duplicate",
   copiedNodes: (n: number) => `Copied ${n} node${n === 1 ? "" : "s"}. Ctrl+V pastes them`,
   nothingToPaste: "There are no nodes on the clipboard. Select nodes and press Ctrl+C to copy them",

@@ -324,7 +324,7 @@ fn shared_workspace_keeps_per_pc_data_outside() {
         shared
             .path()
             .join("flows")
-            .join(s.id.as_str())
+            .join(&s.name)
             .join("flow.json")
             .is_file()
     );

@@ -26,7 +26,7 @@
 - OneDrive や社内ファイルサーバーのフォルダをワークスペースにする。`workspace.json` に `{"shared": true}` を置くと共有ワークスペースになる（`spellsheet workspace init <dir> --shared`、または Studio の保存先「変更」で「複数人で使う」にチェック）。
 - 共有部分：`flows/`・`versions/`・`trash/`・`.lock`。
 - PC ごとの部分：`history/`（Undo と変更ジャーナル）、`runs/`（実行記録）、MCP 監査ログ。`%LOCALAPPDATA%\SpellSheet\local\<フォルダ名>-<パスのハッシュ>\` に置く。人ごとの Undo が混ざらず、OneDrive の同期競合も起きない。資格情報の保管庫もこちら側に置く。
-- 既定のワークスペースは `SPELLSHEET_HOME` > `%APPDATA%\SpellSheet\config.json` の `workspace` > `%APPDATA%\SpellSheet\workspace` の順。`spellsheet workspace use <dir>` と Studio の「変更」は `config.json` を書くので、Studio・CLI・MCP サーバーが同じ場所を使う。
+- 既定のワークスペースは `SPELLSHEET_HOME` > `%APPDATA%\SpellSheet\config.json` の `workspace` > `%LOCALAPPDATA%\SpellSheet\workspace` の順。0.1.20 までは `%APPDATA%`（Roaming）に置いていたが、会社のローミングプロファイルでサインインのたびに output・実行記録・スクショごと同期されて重くなるので Local に移した。古い場所にあれば最初の起動で移し、古いパスを指す `--workspace` や config.json も新しい場所を開く。config.json は小さいので Roaming のまま。`spellsheet workspace use <dir>` と Studio の「変更」は `config.json` を書くので、Studio・CLI・MCP サーバーが同じ場所を使う。
 - 同時編集の保護は従来どおり：書き込みはワークスペースのロックを取り、リビジョンが変わっていれば `REVISION_CONFLICT`。ファイルサーバー（SMB）ではロックが PC をまたいで効く。OneDrive は同期が遅れるため、同じフローを同時に編集しない運用を前提にする（他の PC で変わった文書は Undo スタックを捨てて読み直す既存の仕組みが働く）。
 
 ### ファイルで渡す（`.spx`）

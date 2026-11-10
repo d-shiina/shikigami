@@ -43,7 +43,7 @@ fn a_new_flow_gets_a_folder_with_the_standard_folders() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
     let s = create(&svc, "受注");
-    let folder = dir.path().join("flows").join(s.id.as_str());
+    let folder = dir.path().join("flows").join("受注");
     assert!(folder.join("flow.json").is_file());
     for name in ["input", "config", "templates", "output", "work", "logs"] {
         assert!(folder.join(name).is_dir(), "{name}");
@@ -67,16 +67,16 @@ fn flat_flow_files_move_into_folders() {
     // The layout before flow folders.
     let flows = dir.path().join("flows");
     std::fs::rename(
-        flows.join(id.as_str()).join("flow.json"),
+        flows.join("古い形").join("flow.json"),
         flows.join(format!("{id}.json")),
     )
     .unwrap();
-    std::fs::remove_dir_all(flows.join(id.as_str())).unwrap();
+    std::fs::remove_dir_all(flows.join("古い形")).unwrap();
 
     let svc = service_at(dir.path());
     assert!(!flows.join(format!("{id}.json")).exists());
-    assert!(flows.join(id.as_str()).join("flow.json").is_file());
-    assert!(flows.join(id.as_str()).join("input").is_dir());
+    assert!(flows.join("古い形").join("flow.json").is_file());
+    assert!(flows.join("古い形").join("input").is_dir());
     assert_eq!(svc.get(&id).unwrap().name, "古い形");
 }
 
@@ -91,24 +91,26 @@ fn scenario_workspaces_from_0_1_become_flow_workspaces() {
     // before folders, written with the old call step.
     let flows = dir.path().join("flows");
     let folder = flows.join(id.as_str());
+    std::fs::rename(flows.join("フォルダー"), &folder).unwrap();
     std::fs::rename(folder.join("flow.json"), folder.join("scenario.json")).unwrap();
     let old_call = serde_json::json!({
         "schemaVersion": 3, "id": flat_id.as_str(), "name": "平たい",
         "steps": [{ "id": "c", "type": "scenario.call", "params": { "scenario": id.as_str() } }]
     });
-    std::fs::remove_dir_all(flows.join(flat_id.as_str())).unwrap();
+    std::fs::remove_dir_all(flows.join("平たい")).unwrap();
     std::fs::write(flows.join(format!("{flat_id}.json")), old_call.to_string()).unwrap();
     std::fs::rename(&flows, dir.path().join("scenarios")).unwrap();
 
     let svc = service_at(dir.path());
     assert!(!dir.path().join("scenarios").exists());
-    assert!(folder.join("flow.json").is_file());
-    assert!(!folder.join("scenario.json").exists());
+    // And the folders are named after the flows.
+    assert!(flows.join("フォルダー").join("flow.json").is_file());
+    assert!(!folder.exists());
     assert_eq!(svc.get(&id).unwrap().name, "フォルダー");
     let caller = svc.get(&flat_id).unwrap();
     assert_eq!(caller.steps[0].step_type, "flow.call");
     assert_eq!(caller.steps[0].params["flow"], id.as_str());
-    assert!(flows.join(flat_id.as_str()).join("flow.json").is_file());
+    assert!(flows.join("平たい").join("flow.json").is_file());
 }
 
 #[test]
@@ -224,7 +226,7 @@ fn deleting_a_flow_trashes_its_folder() {
     svc.write_project_file(&s.id, "input/a.csv", b"x", false)
         .unwrap();
     svc.delete(&s.id, None, actor()).unwrap();
-    assert!(!dir.path().join("flows").join(s.id.as_str()).exists());
+    assert!(!dir.path().join("flows").join("a").exists());
     let trashed = std::fs::read_dir(dir.path().join("trash"))
         .unwrap()
         .next()
@@ -273,4 +275,98 @@ fn bundles_carry_the_files_but_not_what_runs_made() {
     // So does a duplicate.
     let dup = svc.duplicate(&s.id, None, actor()).unwrap().flow;
     assert_eq!(paths(&svc, &dup.id), ["templates/請求書.xlsx"]);
+}
+
+#[test]
+fn folders_named_by_id_take_the_flows_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let (a, b) = {
+        let svc = service_at(dir.path());
+        (create(&svc, "請求書").id, create(&svc, "請求書 (2)").id)
+    };
+    let flows = dir.path().join("flows");
+    // As an older build left them: named by ID, and two with one name.
+    std::fs::rename(flows.join("請求書"), flows.join(a.as_str())).unwrap();
+    std::fs::rename(flows.join("請求書 (2)"), flows.join(b.as_str())).unwrap();
+    let mut doc: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(flows.join(b.as_str()).join("flow.json")).unwrap())
+            .unwrap();
+    doc["name"] = "請求書".into();
+    std::fs::write(flows.join(b.as_str()).join("flow.json"), doc.to_string()).unwrap();
+
+    let svc = service_at(dir.path());
+    let mut folders: Vec<String> = std::fs::read_dir(&flows)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    folders.sort();
+    assert_eq!(folders, ["請求書", "請求書 (2)"]);
+    assert_eq!(svc.list().unwrap().len(), 2);
+    // The one kept under 請求書 (2) still saves with its name.
+    let flow = svc.get(&b).unwrap();
+    svc.edit(
+        &b,
+        Some(flow.revision),
+        vec![spellsheet_core::EditOp::UpdateFlow {
+            patch: spellsheet_core::ops::FlowPatch {
+                description: Some("x".into()),
+                ..Default::default()
+            },
+        }],
+        actor(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn renaming_a_flow_renames_its_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    let s = create(&svc, "受注");
+    svc.write_project_file(&s.id, "input/a.csv", b"x", false)
+        .unwrap();
+    rename(&svc, &s.id, "受注を集計する: 月次").unwrap();
+    let flows = dir.path().join("flows");
+    assert!(!flows.join("受注").exists());
+    let folder = flows.join("受注を集計する： 月次");
+    assert!(folder.join("input/a.csv").is_file());
+    assert_eq!(svc.project_dir(&s.id).unwrap(), folder);
+    assert_eq!(svc.get(&s.id).unwrap().name, "受注を集計する: 月次");
+}
+
+#[test]
+fn two_flows_cannot_share_a_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    let a = create(&svc, "Invoice");
+    // A new flow with a taken name gets a number.
+    let b = create(&svc, "invoice");
+    assert_eq!(b.name, "invoice (2)");
+    let c = create(&svc, "新しいフロー");
+    let err = rename(&svc, &c.id, "INVOICE").unwrap_err();
+    assert_eq!(err.code(), "DUPLICATE_FLOW_NAME");
+    assert_eq!(svc.get(&c.id).unwrap().name, "新しいフロー");
+    // Changing only the case of its own name is fine.
+    rename(&svc, &a.id, "INVOICE").unwrap();
+    assert!(dir.path().join("flows").join("INVOICE").is_dir());
+}
+
+fn rename(
+    svc: &FlowService,
+    id: &spellsheet_core::FlowId,
+    name: &str,
+) -> spellsheet_core::CoreResult<()> {
+    let flow = svc.get(id).unwrap();
+    svc.edit(
+        id,
+        Some(flow.revision),
+        vec![spellsheet_core::EditOp::UpdateFlow {
+            patch: spellsheet_core::ops::FlowPatch {
+                name: Some(name.into()),
+                ..Default::default()
+            },
+        }],
+        actor(),
+    )
+    .map(|_| ())
 }

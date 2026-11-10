@@ -4,7 +4,7 @@ use super::*;
 
 #[tool_router(router = edit_tools, vis = "pub(super)")]
 impl SpellSheetMcp {
-    /// Create a flow. Steps may omit IDs. Drafts may be invalid; check the returned validation.
+    /// Create a flow. Steps may omit IDs. Drafts may be invalid; check the returned validation. Flow names are unique in the workspace (its folder is named after it): a taken name gets " (2)", so use the returned name.
     #[tool(annotations(
         read_only_hint = false,
         destructive_hint = false,
