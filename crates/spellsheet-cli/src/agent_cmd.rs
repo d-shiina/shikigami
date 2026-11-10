@@ -277,6 +277,11 @@ pub fn agent_cmd(
     let local_root = svc.store().local_root().to_path_buf();
     match cmd {
         AgentCmd::Run => {
+            // Started at sign-in by the task or the Run key, it has a console
+            // window of its own: closing it would stop the worker.
+            if spellsheet_desktop::console::leave_own_console() {
+                tracing::debug!("left the console Windows opened for the worker");
+            }
             let runtime = runtime.clone().for_workspace(
                 svc.store().root(),
                 Arc::new(Vault::open(svc.store().root())),
