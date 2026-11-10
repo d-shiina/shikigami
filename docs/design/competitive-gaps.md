@@ -192,7 +192,7 @@
 | 2 | 無人実行の土台 | PC をまたいだ入力の排他、キャンセル時の `finally`、ロックの検知（ロック中に動かすのは G18） |
 | 3・13 | 画面から選ぶ・光らせる・名前付きの部品 | 「画面から選ぶ」「光らせる」、`parts`（[desktop.md](../desktop.md)） |
 | 4 | IE モード・人が開いたブラウザ | `desktop.*` で IE モード、`browser.attach`（実機確認は G1） |
-| 5 | SAP / Java の経路 | SAP GUI Scripting・Java Access Bridge、`sap.runTransaction`（実機確認は G1） |
+| 5 | SAP / Java の経路 | Java Access Bridge は本体。SAP GUI Scripting は SAP のプラグイン（有料、別に提供）で、本体にはプラグインがウィンドウの読み方を差し込む口がある（実機確認は G1） |
 | 7 | エラーが英語 | `errorText.ts`・検証の問題の日本語化 |
 | 8・25 | 管理サーバー・監査 | 管理サーバー、`spellsheet audit`、`records.keepDays` |
 | 9 | 失敗の通知 | `policy.json` の `notify`（Teams・メール） |

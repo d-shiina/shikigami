@@ -140,6 +140,9 @@ pub(crate) enum Command {
         /// The client is the AI chat in SpellSheet Writer (it shows ask_user_to_choose as a card).
         #[arg(long, hide = true)]
         writer_chat: bool,
+        /// Writer's folder for messages the person sends while the AI works.
+        #[arg(long, hide = true)]
+        inbox: Option<std::path::PathBuf>,
     },
 }
 

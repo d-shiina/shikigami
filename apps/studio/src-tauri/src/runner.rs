@@ -174,7 +174,7 @@ pub async fn runner_pick(kind: String, start: Option<String>) -> CmdResult<Optio
         return Err(err("INVALID_INPUT", format!("cannot pick a {kind}")));
     }
     let folder = start
-        .map(std::path::PathBuf::from)
+        .map(|p| std::path::PathBuf::from(spellsheet_core::project::expand_env(&p)))
         .and_then(|p| {
             if p.is_dir() {
                 Some(p)

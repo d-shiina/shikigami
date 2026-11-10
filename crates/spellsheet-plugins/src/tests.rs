@@ -530,3 +530,75 @@ fn plugins_from_before_the_rename_load_from_a_read_only_folder() {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(found.plugins.len(), 1, "{:?}", found.problems);
 }
+
+#[test]
+fn an_oauth_setting_takes_an_access_token() {
+    let mut m = manifest(
+        "store",
+        json!([{
+            "action": "download",
+            "label": "ダウンロード",
+            "description": "Downloads a file to `to`.",
+            "params": {
+                "type": "object",
+                "properties": {
+                    "account": { "type": "string" },
+                    "to": { "type": "string" }
+                },
+                "required": ["account", "to"],
+                "additionalProperties": false
+            },
+            "secretParams": ["account"],
+            "pathParams": ["to"],
+            "examples": [{ "type": "store.download", "params": { "account": "Store", "to": "input/a.xlsx" } }]
+        }]),
+    );
+    m["credentials"] =
+        json!([{ "kind": "oauth", "label": "アプリ（OAuth）", "params": ["account"] }]);
+    let dir = plugin_dir(m, "");
+    let plugin = Plugin::load(dir.path(), &[]).unwrap();
+    let download = &plugin.step_defs()[0];
+    assert_eq!(
+        download.plugin.as_ref().unwrap().credentials[0].kind,
+        spellsheet_core::secret::SecretKind::Oauth
+    );
+    // The OAuth setting offers the access token; other secret settings do not.
+    let fields =
+        &download.params_schema["properties"]["account"]["oneOf"][1]["properties"]["field"]["enum"];
+    assert!(
+        fields.as_array().unwrap().contains(&json!("accessToken")),
+        "{fields}"
+    );
+    let ocr = Plugin::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/azure-ocr"),
+        &[],
+    )
+    .unwrap();
+    let key = &ocr.step_defs()[0].params_schema["properties"]["key"].to_string();
+    assert!(!key.contains("accessToken"), "{key}");
+}
+
+#[test]
+fn a_bridge_names_its_app_and_windows() {
+    let mut ok = manifest("t", json!([echo_step(json!({}))]));
+    ok["bridge"] = json!({
+        "app": "sapgui",
+        "windows": [{ "className": "SAP_FRONTEND_SESSION" }, { "process": "saplogon" }]
+    });
+    let dir = plugin_dir(ok.clone(), "");
+    let plugin = Plugin::load(dir.path(), &["browser"]).unwrap();
+    let bridge = plugin.manifest().bridge.clone().unwrap();
+    assert_eq!(bridge.app, "sapgui");
+    assert_eq!(bridge.windows.len(), 2);
+
+    let mut bad = ok.clone();
+    bad["bridge"] = json!({ "app": "uia", "windows": [] });
+    let found = problems(bad).join("\n");
+    assert!(found.contains("bridge.app"), "{found}");
+    assert!(found.contains("bridge.windows"), "{found}");
+
+    let mut bad = ok;
+    bad["bridge"] = json!({ "app": "sapgui", "windows": [{}] });
+    let found = problems(bad).join("\n");
+    assert!(found.contains("bridge.windows[0]"), "{found}");
+}

@@ -21,6 +21,7 @@ on:
       - apps/studio/src-tauri/tauri.conf.json
       - apps/studio/src-tauri/tauri.release.conf.json
       - apps/studio/src-tauri/windows/**
+      - scripts/build-mcpb.mjs
       - scripts/release-notes.mjs
 
 permissions:
@@ -185,6 +186,20 @@ jobs:
           tauriScript: pnpm tauri
           args: --config src-tauri/tauri.release.gen.json
 
+      # The MCP server as an MCP Bundle (the same files the installer ships)
+      # and its MCP Registry entry, for AI clients that install MCP servers
+      # from the registry (docs/release.md).
+      - name: MCP bundle
+        shell: bash
+        run: node scripts/build-mcpb.mjs "${{ steps.version.outputs.version }}"
+
+      - name: Attach the MCP bundle to the release
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.version.outputs.tag }}" target/mcpb/spellsheet.mcpb target/mcpb/server.json --clobber
+
       # Every run keeps the installers for 14 days, so a trial build can be
       # installed by hand before tagging.
       - uses: actions/upload-artifact@v4
@@ -192,5 +207,7 @@ jobs:
           name: installers-${{ steps.version.outputs.version }}
           path: |
             target/release/bundle/nsis/*.exe
+            target/mcpb/spellsheet.mcpb
+            target/mcpb/server.json
           if-no-files-found: error
           retention-days: 14

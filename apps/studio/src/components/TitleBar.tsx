@@ -17,6 +17,7 @@ const PAGE_TITLE: Partial<Record<Place, () => string>> = {
   runs: () => t.runs.place,
   secrets: () => t.secrets,
   settings: () => t.shell.settings,
+  extensions: () => t.extensions.place,
 };
 
 export function TitleBar({ view, onView }: { view: View; onView: (view: View) => void }) {
@@ -48,17 +49,6 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
           </span>
           <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">{t.drafting.tag}</span>
         </div>
-      ) : place === "extensions" ? (
-        // Custom nodes are managed from Settings, so the page reads as a part of it.
-        <>
-          <button type="button" onClick={() => setPlace("settings")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
-            {t.shell.settings}
-          </button>
-          <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
-            /
-          </span>
-          <span className="truncate px-0.5 text-[13px] font-semibold text-ink">{t.extensions.place}</span>
-        </>
       ) : (
         page && <span className="truncate text-[13px] font-bold">{page}</span>
       )}

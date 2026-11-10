@@ -158,6 +158,24 @@ impl FlowService {
             }
         }
         let flows: Vec<&Flow> = std::iter::once(content).chain(subflows.iter()).collect();
+        let mut requires = package::requirements(&flows, self.registry());
+        let mut configs: Vec<Vec<u8>> = Vec::new();
+        for flow in &flows {
+            let dir = self.store.project_dir(&flow.id);
+            for file in project::list(&flow.id, &dir)?.files {
+                if file.path.starts_with("config/")
+                    && file.path.ends_with(".json")
+                    && let Ok(bytes) = std::fs::read(dir.join(&file.path))
+                {
+                    configs.push(bytes);
+                }
+            }
+        }
+        requires.places = crate::places::package_places(
+            &flows,
+            self.registry(),
+            configs.iter().map(Vec::as_slice),
+        );
         Ok(package::PackagePlan {
             flow_id: current.id.clone(),
             name: current.name.clone(),
@@ -432,7 +450,26 @@ impl FlowService {
                     name: s.name.clone(),
                 })
                 .collect(),
-            requires: package::requirements(&flows, self.registry()),
+            requires: {
+                let mut requires = package::requirements(&flows, self.registry());
+                let configs: Vec<Vec<u8>> = bundle
+                    .files
+                    .iter()
+                    .filter(|f| f.path.starts_with("config/") && f.path.ends_with(".json"))
+                    .filter_map(|f| {
+                        use base64::Engine as _;
+                        base64::engine::general_purpose::STANDARD
+                            .decode(&f.data)
+                            .ok()
+                    })
+                    .collect();
+                requires.places = crate::places::package_places(
+                    &flows,
+                    self.registry(),
+                    configs.iter().map(Vec::as_slice),
+                );
+                requires
+            },
             contents: Vec::new(),
         };
         let bytes = package::write(&bundle, manifest)?;
@@ -531,6 +568,19 @@ impl FlowService {
                     CheckStatus::Ok
                 } else {
                     CheckStatus::NotAllowed
+                },
+            });
+        }
+        for place in &requires.places {
+            checks.push(RequirementCheck {
+                kind: CheckKind::Place,
+                name: place.clone(),
+                range: None,
+                installed: None,
+                status: if crate::places::reachable(place) {
+                    CheckStatus::Ok
+                } else {
+                    CheckStatus::Missing
                 },
             });
         }

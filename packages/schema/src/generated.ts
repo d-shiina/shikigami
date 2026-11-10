@@ -153,7 +153,7 @@ export type SubflowImport = "created" | "updated" | "kept";
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "CheckKind".
  */
-export type CheckKind = "plugin" | "secret" | "site" | "app";
+export type CheckKind = ("plugin" | "secret" | "site" | "app") | "place";
 /**
  * State of one requirement on this PC.
  *
@@ -344,7 +344,7 @@ export type NotifyFormat = "teams" | "slack" | "json";
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ConfigType".
  */
-export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
+export type ConfigType = ("text" | "number" | "boolean") | "date" | "list" | "folder";
 /**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
  * via the `definition` "ExpectedStatus".
@@ -1409,6 +1409,13 @@ export interface PackageRequires {
    * Inputs asked for when the flow runs (no default value).
    */
   inputs?: PackageInput[];
+  /**
+   * Places outside the flow's folder it reads or writes, written out in
+   * full in its steps or as a folder in its settings files
+   * (`\\fs01\経理`, `%USERPROFILE%\Box\経理`): the PC that runs it
+   * has to reach them.
+   */
+  places?: string[];
 }
 /**
  * This interface was referenced by `SpellSheetApi`'s JSON-Schema
@@ -1506,6 +1513,13 @@ export interface PackageRequires1 {
    * Inputs asked for when the flow runs (no default value).
    */
   inputs?: PackageInput[];
+  /**
+   * Places outside the flow's folder it reads or writes, written out in
+   * full in its steps or as a folder in its settings files
+   * (`\\fs01\経理`, `%USERPROFILE%\Box\経理`): the PC that runs it
+   * has to reach them.
+   */
+  places?: string[];
 }
 /**
  * Options of [`crate::FlowService::export_package`].
@@ -2197,6 +2211,19 @@ export interface ProjectFiles {
    * Every file except `flow.json`, sorted by path.
    */
   files: ProjectFile[];
+  /**
+   * Files the flow reads from `input/` that are not there yet: ask the
+   * person where they come from (put the file in `input/`, or read it
+   * from a file server or a folder synced with cloud storage set in
+   * `config/`).
+   */
+  needed?: NeededFile[];
+  /**
+   * `config/cloud.json`: cloud storage a whole run fetches `input/` from
+   * and sends `output/` to (see [`crate::cloud`]). With an input place,
+   * files missing from `input/` are fetched then, so none are `needed`.
+   */
+  cloud?: CloudFile | null;
 }
 /**
  * One file in a project folder.
@@ -2217,6 +2244,93 @@ export interface ProjectFile {
    * that writes it fails with `FILE_IN_USE`.
    */
   inUse?: boolean;
+}
+/**
+ * A file the flow reads from its `input/` folder that is not there yet.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "NeededFile".
+ */
+export interface NeededFile {
+  /**
+   * Relative to the flow's folder, `/`-separated (`input/受注.xlsx`).
+   */
+  path: string;
+  /**
+   * The steps that read it, in flow order.
+   */
+  stepIds: StepId[];
+}
+/**
+ * `config/cloud.json`.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "CloudFile".
+ */
+export interface CloudFile {
+  /**
+   * Always `spellsheet.cloud`.
+   */
+  format: string;
+  /**
+   * Fetched into `input/` before the run.
+   */
+  input?: CloudPlace | null;
+  /**
+   * Where the files the run writes to `output/` are sent after it.
+   */
+  output?: CloudPlace | null;
+}
+/**
+ * A folder in cloud storage, and how to reach it.
+ *
+ * This interface was referenced by `SpellSheetApi`'s JSON-Schema
+ * via the `definition` "CloudPlace".
+ */
+export interface CloudPlace {
+  /**
+   * The plugin that reaches the storage (`box`, `googledrive`,
+   * `onedrive`): its `<service>.downloadFolder` and `<service>.upload`
+   * do the work.
+   */
+  service: string;
+  /**
+   * The storage's name in the run's log (`Box`). Defaults to `service`.
+   */
+  label?: string;
+  /**
+   * The OAuth secret the plugin signs in with (its access token is
+   * passed as `{ "secret": …, "field": "accessToken" }`).
+   */
+  secret: string;
+  /**
+   * `oauth.signIn` params besides `secret` (`authorizeUrl`, `tokenUrl`,
+   * `redirectUrl`, `scope`, `authorizeParams`): the run signs in first,
+   * asking a person only when there is no sign-in to refresh yet.
+   */
+  signIn?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * The folder: a path from the storage's top (`経理/受注`), its ID or a
+   * link to it, as the plugin takes them.
+   */
+  folder: string;
+  /**
+   * The folder as people know it (`経理/受注`), for the log and Writer,
+   * when `folder` is an ID or a link. Defaults to `folder`.
+   */
+  folderName?: string;
+  /**
+   * Input only: fetch the files whose names match (`*.xlsx`). Empty:
+   * every file directly in the folder.
+   */
+  pattern?: string;
+  /**
+   * Input only: fetch just these files of the folder, by name; a missing
+   * one fails the run. Empty: every file (that matches `pattern`).
+   */
+  files?: string[];
 }
 /**
  * A settings file (`config/*.json`) kept out of the flow: values a
@@ -2245,7 +2359,7 @@ export interface ConfigItem {
    * The key in the object `config.read` returns (`settings.締め日`).
    */
   name: string;
-  type?: ("text" | "number" | "boolean") | "date" | "list";
+  type?: ("text" | "number" | "boolean") | "date" | "list" | "folder";
   value?: {
     [k: string]: unknown;
   };

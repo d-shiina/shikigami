@@ -21,7 +21,7 @@ Save them from Writer (Flows › **Paste an AI answer** › **Save the guide**; 
 spellsheet ai-guide --dir <folder>
 ```
 
-A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Node plugins are only in the files you save on your PC.
+A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Plugins are only in the files you save on your PC.
 
 - **Microsoft Copilot Studio agent**: paste the whole of `spellsheet-ai-instructions.md` into the agent's instructions and add `spellsheet-ai-reference.md` as a knowledge source. Everyone who uses the agent then asks it for flows directly.
 - **A chat without agents**: attach both files at the start of the conversation (or paste the instructions and attach the reference) and ask the AI to follow them. The reference is long, so a chat that reads only part of an attachment may miss nodes; an agent with the reference as knowledge works better.

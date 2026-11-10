@@ -10,6 +10,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { AgentApi, AgentChoice, AgentEvent, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
+import { ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
@@ -34,6 +35,14 @@ export type ChatItem =
       prompt?: string;
       /** Answers the AI's card above, which shows it, so it is not drawn again. */
       answers?: boolean;
+      /**
+       * Sent while the AI worked: `waiting` until the AI reads it with its
+       * next tool call, then `heard`. One it never read goes out as the next
+       * message once the turn ends, and is a plain message from then on.
+       */
+      note?: "waiting" | "heard";
+      /** Not given to the AI, and why (e.g. it held a password). */
+      refused?: string;
     }
   | {
       role: "ai";
@@ -65,11 +74,6 @@ export type Chat = {
   sending: boolean;
   /** Finished while it was not on screen. */
   unread: boolean;
-  /**
-   * A correction sent while the AI was working: the running turn is being
-   * stopped, and this message goes out as soon as it has.
-   */
-  interrupting: Extract<ChatItem, { role: "person" }> | null;
   /** What the person is writing here and has not sent. */
   draft: string;
   updatedAt: number;
@@ -154,12 +158,18 @@ export const flowBusy = (s: Pick<AgentState, "chats">, flowId: string | null | u
 export const INTERRUPT_NOTE =
   "[The person stopped your previous turn midway to send this correction. Edits you made before that are already in the flow; check with get_flow before redoing anything. Follow this message over the earlier request where they differ.]";
 
+/** Put before what the person wrote during a turn that ended before the AI read it. */
+export const AFTER_NOTE =
+  "[The person wrote this while you were working, but your turn ended before you read it. Take it into account now; what you did is already in the flow.]";
+
 const CHATS_KEY = "spellsheet.studio.agentChats";
 /** Before conversations per flow: one conversation for everything. */
 const OLD_SESSION_KEY = "spellsheet.studio.agentSession";
 const KEEP = 30;
 
-type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt">;
+type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt"> & { items?: ChatItem[] };
+/** Messages kept per conversation across restarts. */
+const KEEP_ITEMS = 60;
 
 function load(): Saved[] {
   try {
@@ -182,12 +192,31 @@ function save(chats: Chat[]) {
       .filter((c) => c.sessionId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, KEEP)
-      .map(({ id, flowId, title, sessionId, agent, updatedAt }) => ({ id, flowId, title, sessionId, agent, updatedAt }));
+      .map(({ id, flowId, title, sessionId, agent, updatedAt, items }) => ({ id, flowId, title, sessionId, agent, updatedAt, items: items.slice(-KEEP_ITEMS) }));
     globalThis.localStorage?.setItem(CHATS_KEY, JSON.stringify(keep));
     globalThis.localStorage?.removeItem(OLD_SESSION_KEY);
   } catch {
     // As above.
   }
+}
+
+/**
+ * The conversation as it was when Writer closed. A reply still coming then
+ * ends there; a message waiting for the AI was never sent.
+ */
+function restore(items: ChatItem[] | undefined): ChatItem[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((i) => i && (i.role === "person" || i.role === "ai") && !(i.role === "person" && i.note === "waiting"))
+    .map((i) =>
+      i.role === "ai" && i.status === "running" ? { ...i, status: i.parts.length > 0 ? "done" : "failed", preparing: null, message: t.agent.closedMidway, needsLogin: false } : i,
+    );
+}
+
+/** Where the last item that passes `test` is, or -1. */
+function lastIndex<T>(items: T[], test: (item: T) => boolean): number {
+  for (let i = items.length - 1; i >= 0; i--) if (test(items[i]!)) return i;
+  return -1;
 }
 
 /** The person's next message answers every card still waiting in the conversation. */
@@ -224,7 +253,6 @@ function blank(flow: FlowLabel | null): Chat {
     turnId: null,
     sending: false,
     unread: false,
-    interrupting: null,
     draft: "",
     updatedAt: Date.now(),
   };
@@ -236,12 +264,27 @@ const empty = (c: Chat) => c.items.length === 0 && !c.sessionId && !isBusy(c) &&
 export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
   return createStore<AgentState>()((set, get) => {
     const chat = (id: string) => get().chats.find((c) => c.id === id);
+    // The conversation is kept as it grows, so closing Writer mid-reply loses little.
+    let saving: ReturnType<typeof setTimeout> | null = null;
+    const saveSoon = () => {
+      if (saving) return;
+      saving = setTimeout(() => {
+        saving = null;
+        save(get().chats);
+      }, 1000);
+    };
     const update = (id: string, change: (c: Chat) => Chat) => {
       set({ chats: get().chats.map((c) => (c.id === id ? change(c) : c)) });
+      saveSoon();
     };
+    /** Changes the reply a turn is writing now (its last one: a message read meanwhile starts another). */
     const updateTurn = (turnId: string, change: (item: Extract<ChatItem, { role: "ai" }>) => ChatItem) => {
       const owner = get().chats.find((c) => c.items.some((i) => i.role === "ai" && i.turnId === turnId));
-      if (owner) update(owner.id, (c) => ({ ...c, items: c.items.map((i) => (i.role === "ai" && i.turnId === turnId ? change(i) : i)) }));
+      if (owner)
+        update(owner.id, (c) => {
+          const at = lastIndex(c.items, (i) => i.role === "ai" && i.turnId === turnId);
+          return { ...c, items: c.items.map((i, n) => (n === at && i.role === "ai" ? change(i) : i)) };
+        });
       return owner;
     };
     /** Shows `id`, dropping conversations left empty. */
@@ -284,23 +327,69 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         update(chatId, (c) => ({ ...c, turnId, sending: false, items: reply(c, { turnId }) }));
         for (const e of early.get(turnId) ?? []) get().onEvent(e);
         early.delete(turnId);
-        // Corrected before the agent had even started.
-        if (chat(chatId)?.interrupting && chat(chatId)?.turnId === turnId) await api.stop(turnId).catch(() => undefined);
+        // Written while the agent was starting.
+        for (const i of chat(chatId)?.items ?? []) if (i.role === "person" && i.note === "waiting" && !posted.has(i.id)) post(chatId, i);
         return true;
       } catch (e) {
         update(chatId, (c) => ({ ...c, sending: false, items: reply(c, { status: "failed", message: errorText(e) }) }));
-        void sendInterrupting(chatId);
+        void sendLeft(chatId, false);
         return false;
       }
     };
-    /** The turn a correction waited for has ended: send the correction. */
-    const sendInterrupting = (chatId: string) => {
-      const waiting = chat(chatId)?.interrupting;
-      if (!waiting || isBusy(chat(chatId))) return Promise.resolve(false);
-      update(chatId, (c) => ({ ...c, interrupting: null }));
-      return dispatch(chatId, waiting.prompt ?? waiting.text, waiting.flow);
+    // Messages given to the running turn, and those on their way there.
+    const posted = new Set<string>();
+    const posting = new Map<string, Promise<unknown>>();
+    // Turns the person stopped.
+    const stopped = new Set<string>();
+    /** Gives a message written while the AI works to its turn, for the AI's next tool call. */
+    const post = (chatId: string, note: Extract<ChatItem, { role: "person" }>) => {
+      const turnId = chat(chatId)?.turnId;
+      if (!turnId || posting.has(note.id)) return;
+      const sent = api.note(turnId, note.id, note.text).then(
+        () => void posted.add(note.id),
+        (e: unknown) => {
+          // Ended meanwhile: it goes as the next message. Anything else is not sent.
+          if (e instanceof ApiError && e.code === "TURN_ENDED") return;
+          update(chatId, (c) => ({ ...c, items: c.items.map((i) => (i.id === note.id && i.role === "person" ? { ...i, note: undefined, refused: errorText(e) } : i)) }));
+        },
+      );
+      posting.set(note.id, sent);
+      void sent.finally(() => posting.delete(note.id));
     };
-    const restored: Chat[] = load().map((c) => ({ ...c, items: [], turnId: null, sending: false, unread: false, interrupting: null, draft: "" }));
+    /**
+     * A turn ended: what the person wrote meanwhile and the AI did not read
+     * goes out now as one message.
+     */
+    const sendLeft = async (chatId: string, wasStopped: boolean) => {
+      const left = (chat(chatId)?.items ?? []).filter((i): i is Extract<ChatItem, { role: "person" }> => i.role === "person" && i.note === "waiting");
+      if (left.length === 0 || isBusy(chat(chatId))) return false;
+      const ids = new Set(left.map((i) => i.id));
+      const lastId = left.at(-1)!.id;
+      const prompt = `${wasStopped ? INTERRUPT_NOTE : AFTER_NOTE}\n\n${left.map((i) => i.text).join("\n\n")}`;
+      // The last of them carries the whole message, so a retry sends all of it again.
+      update(chatId, (c) => ({
+        ...c,
+        items: c.items.map((i) => (i.role === "person" && ids.has(i.id) ? { ...i, note: undefined, ...(i.id === lastId ? { prompt } : {}) } : i)),
+      }));
+      return dispatch(chatId, prompt, left.at(-1)!.flow);
+    };
+    /** After a turn: learns which messages the AI read, then sends the rest. */
+    const settleNotes = async (chatId: string, turnId: string, wasStopped: boolean) => {
+      const mine = (chat(chatId)?.items ?? []).filter((i) => i.role === "person" && i.note === "waiting").map((i) => i.id);
+      await Promise.allSettled(mine.map((id) => posting.get(id)).filter(Boolean));
+      const unread = new Set(await api.takeNotes(turnId).catch(() => [] as string[]));
+      update(chatId, (c) => ({
+        ...c,
+        sending: false,
+        items: c.items.map((i) =>
+          i.role === "person" && i.note === "waiting" && posted.has(i.id) && !unread.has(i.id) ? { ...i, note: "heard" as const } : i,
+        ),
+      }));
+      for (const id of mine) posted.delete(id);
+      save(get().chats);
+      await sendLeft(chatId, wasStopped);
+    };
+    const restored: Chat[] = load().map((c) => ({ ...c, items: restore(c.items), turnId: null, sending: false, unread: false, draft: "" }));
     const first = blank(null);
     return {
       info: null,
@@ -390,13 +479,13 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       async sendIn(chatId, message, flow, context = null) {
         const text = message.trim();
         const target = chat(chatId);
-        if (!text || !target || target.interrupting || flowBusy(get(), target.flowId, chatId)) return false;
+        if (!text || !target || flowBusy(get(), target.flowId, chatId)) return false;
         if (isBusy(target)) {
-          // A correction mid-turn: stop the turn, then send this in the same
-          // conversation so the agent keeps what it has done and heard.
-          const person = { role: "person" as const, id: nextId("item"), text, context, flow, prompt: `${INTERRUPT_NOTE}\n\n${text}`, answers: waitsForChoice(target.items) };
-          update(chatId, (c) => ({ ...c, interrupting: person, items: [...answerChoices(c.items, text), person] }));
-          if (target.turnId) await api.stop(target.turnId).catch(() => undefined);
+          // Written while the AI works: it reads this with its next tool
+          // call, without being stopped.
+          const person = { role: "person" as const, id: nextId("item"), text, context, flow, note: "waiting" as const };
+          update(chatId, (c) => ({ ...c, items: [...c.items, person] }));
+          post(chatId, person);
           return true;
         }
         const person: ChatItem = { role: "person", id: nextId("item"), text, context, flow, answers: waitsForChoice(target.items) };
@@ -406,7 +495,9 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
 
       async stop(chatId = get().current) {
         const turnId = chat(chatId)?.turnId;
-        if (turnId) await api.stop(turnId).catch(() => undefined);
+        if (!turnId) return;
+        stopped.add(turnId);
+        await api.stop(turnId).catch(() => undefined);
       },
 
       async retry(chatId = get().current) {
@@ -562,6 +653,24 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               ],
             }));
             return;
+          case "heard": {
+            // What the AI read: shown where it read it, and its reply goes on below.
+            const ids = new Set(event.ids);
+            update(owner.id, (c) => {
+              const heard = c.items.filter((i) => i.role === "person" && ids.has(i.id)).map((i) => ({ ...i, note: "heard" as const }));
+              if (heard.length === 0) return c;
+              const rest = c.items.filter((i) => !(i.role === "person" && ids.has(i.id)));
+              const at = lastIndex(rest, (i) => i.role === "ai" && i.turnId === event.turnId);
+              if (at < 0) return c;
+              const before = rest[at] as Extract<ChatItem, { role: "ai" }>;
+              const next: ChatItem = { ...before, id: nextId("item"), parts: [], preparing: null, message: null };
+              return {
+                ...c,
+                items: [...rest.slice(0, at), { ...before, status: "done" as const, preparing: null }, ...heard, next, ...rest.slice(at + 1)],
+              };
+            });
+            return;
+          }
           case "toolFailed":
             updateTurn(event.turnId, (i) => ({
               ...i,
@@ -570,8 +679,9 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
             return;
           case "done": {
             turnAgent.delete(event.turnId);
-            // Stopped for a correction: not a failure, the conversation goes on.
-            const cut = owner.interrupting !== null && !event.ok;
+            const wasStopped = stopped.delete(event.turnId);
+            // Stopped with a message waiting: not a failure, the conversation goes on with it.
+            const cut = wasStopped && !event.ok && owner.items.some((i) => i.role === "person" && i.note === "waiting");
             updateTurn(event.turnId, (i) => ({
               ...i,
               // Claude Code also says the error as the reply; show it once.
@@ -581,13 +691,21 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               needsLogin: !event.ok && !cut && event.needsLogin,
               preparing: null,
             }));
+            const mine = owner.turnId === event.turnId;
+            const notes = mine && owner.items.some((i) => i.role === "person" && i.note === "waiting");
             update(owner.id, (c) => ({
               ...c,
-              turnId: c.turnId === event.turnId ? null : c.turnId,
+              turnId: mine ? null : c.turnId,
+              // Busy until it knows which messages the AI read.
+              sending: c.sending || notes,
               unread: c.unread || get().current !== c.id || !get().open,
               updatedAt: Date.now(),
             }));
-            void sendInterrupting(owner.id);
+            if (notes) void settleNotes(owner.id, event.turnId, wasStopped);
+            else {
+              void api.takeNotes(event.turnId).catch(() => undefined);
+              save(get().chats);
+            }
             return;
           }
         }

@@ -11,9 +11,15 @@ impl FlowService {
         Ok(self.store.project_dir(id))
     }
 
-    /// The folders and files of the flow's folder.
+    /// The folders and files of the flow's folder, with the input files
+    /// its steps read that are not there yet.
     pub fn project_files(&self, id: &FlowId) -> CoreResult<ProjectFiles> {
-        project::list(id, &self.project_dir(id)?)
+        let mut files = project::list(id, &self.project_dir(id)?)?;
+        let fetched = files.cloud.as_ref().is_some_and(|c| c.input.is_some());
+        if !fetched && let Ok(flow) = self.get(id) {
+            files.needed = crate::places::needed_files(&flow, self.registry(), &files);
+        }
+        Ok(files)
     }
 
     /// Absolute path of a file (or folder) in the flow's folder; it need

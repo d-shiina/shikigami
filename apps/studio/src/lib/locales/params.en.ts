@@ -224,7 +224,6 @@ export const paramsEn = {
     "mail.forward": { to: "Forward to", body: "Forward text", via: "Mailbox" },
     "mail.sendDraft": { id: "Draft", via: "Mailbox" },
     "process.run": { args: "Arguments" },
-    "sap.runTransaction": { code: "Transaction code" },
     "flow.delay": { ms: "Wait (ms)" },
   } as Record<string, Record<string, string>>,
   choices: {

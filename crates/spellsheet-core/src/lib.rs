@@ -8,16 +8,19 @@ pub mod approval;
 pub mod calendar;
 pub mod call;
 pub mod chat;
+pub mod cloud;
 pub mod distribution;
 pub mod error;
 pub mod expr;
 pub mod ids;
+pub mod inbox;
 pub mod migrate;
 pub mod model;
 pub mod ops;
 pub mod package;
 pub mod paths;
 pub mod pick;
+pub mod places;
 pub mod policy;
 pub mod project;
 pub mod registry;
@@ -37,6 +40,7 @@ pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, New
 pub use call::Subflow;
 pub use error::{CoreError, CoreResult, ErrorPayload};
 pub use ids::{ApprovalId, FlowId, ObservationId, PickId, RunId, StepId};
+pub use inbox::{ChatInbox, InboxMessage};
 pub use model::{
     Flow, FlowSettings, FlowSummary, Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION,
     Step, VarDirection, VarFormat, VarType, VariableDef, part_ref, takes_part, target_part,

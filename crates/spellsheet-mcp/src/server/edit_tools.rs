@@ -221,6 +221,12 @@ impl SpellSheetMcp {
     /// The files in a flow's folder (input/, config/, templates/, output/,
     /// work/, logs/ and any folders of its own), with each file's path relative
     /// to the folder: write that path as is in a step's path param.
+    /// `needed` lists the input/ files the steps read that are not there yet:
+    /// ask the user where each comes from (put it in input/, or a file server
+    /// or synced cloud storage folder kept as a `folder` setting in config/,
+    /// or cloud storage reached through its API: config/cloud.json). `cloud`
+    /// is that setting; with an input place, missing files are fetched at
+    /// each run and none are `needed`.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_project_files(
         &self,

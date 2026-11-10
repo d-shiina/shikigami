@@ -1,0 +1,12 @@
+{
+  "pagefind.clear_search": "消す",
+  "pagefind.load_more": "さらに表示",
+  "pagefind.search_label": "このマニュアルを検索",
+  "pagefind.filters_label": "絞り込み",
+  "pagefind.zero_results": "「[SEARCH_TERM]」に合うページはありません",
+  "pagefind.many_results": "「[SEARCH_TERM]」の検索結果 [COUNT] 件",
+  "pagefind.one_result": "「[SEARCH_TERM]」の検索結果 [COUNT] 件",
+  "pagefind.alt_search": "「[SEARCH_TERM]」に合うページはありません。代わりに「[DIFFERENT_TERM]」の結果を表示しています",
+  "pagefind.search_suggestion": "「[SEARCH_TERM]」に合うページはありません。次の言葉で探してみてください：",
+  "pagefind.searching": "「[SEARCH_TERM]」を検索しています…"
+}
