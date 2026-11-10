@@ -10,8 +10,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use spellsheet_core::approval::Redeem;
 use spellsheet_core::{
-    Actor, ActorKind, AiAction, ApprovalId, ApprovalStore, CaseOutcome, ChangeNote, Decision,
-    EditOp, ErrorPayload, EvidenceDetail, FlowId, FlowService, NewApproval, NewFlow,
+    Actor, ActorKind, AiAction, ApprovalId, ApprovalStore, CaseOutcome, ChangeNote, ChatInbox,
+    Decision, EditOp, ErrorPayload, EvidenceDetail, FlowId, FlowService, NewApproval, NewFlow,
     NewObservation, NewVersion, ObservationId, ObservationSource, PickAnswer, PickRequestStore,
     Policy, RiskLevel, RunId, StepId, TestRun,
 };
@@ -48,6 +48,9 @@ pub struct ServerOptions {
     /// The client is the AI chat inside SpellSheet Writer, which shows
     /// ask_user_to_choose as a card. Other clients do not get that tool.
     pub writer_chat: bool,
+    /// Writer's folder for what the person writes in the chat while this
+    /// turn runs; every tool result carries what has arrived there.
+    pub inbox: Option<std::path::PathBuf>,
 }
 
 impl Default for ServerOptions {
@@ -56,9 +59,14 @@ impl Default for ServerOptions {
             allow: vec![ToolClass::Read, ToolClass::Write, ToolClass::Run],
             adapters: Vec::new(),
             writer_chat: false,
+            inbox: None,
         }
     }
 }
+
+/// Where a tool result carries what the person wrote while the AI worked.
+pub const MESSAGES_KEY: &str = "messagesFromThePerson";
+const MESSAGES_NOTE: &str = "The person wrote this in Writer's AI chat while you were working, without stopping you. Read it now and take it into account from here on: it comes after the request you are working on, and wins where the two differ. Do not redo what is already done unless it asks you to. Mention briefly in your reply how you took it in.";
 
 const MAX_WAIT_MS: u64 = 300_000;
 const DEFAULT_LOG_LIMIT: usize = 200;
@@ -113,6 +121,7 @@ struct Inner {
     vault: Arc<Vault>,
     approvals: ApprovalStore,
     picks: PickRequestStore,
+    inbox: Option<ChatInbox>,
     adapters: Vec<Arc<dyn Adapter>>,
     /// Run ID under which test_step / inspect_page keep adapter state
     /// (open pages) for this MCP session.
@@ -161,6 +170,7 @@ impl SpellSheetMcp {
                 vault,
                 approvals,
                 picks,
+                inbox: options.inbox.map(ChatInbox::new),
                 runs: Mutex::new(HashMap::new()),
                 audit,
                 adapters: options.adapters,
@@ -224,10 +234,37 @@ impl SpellSheetMcp {
             revision,
             run_id,
         });
-        Ok(match outcome {
-            Ok(value) => CallToolResult::structured(value),
-            Err(e) => CallToolResult::structured_error(to_value(&e)),
+        let (mut value, failed) = match outcome {
+            Ok(value) => (value, false),
+            Err(e) => (to_value(&e), true),
+        };
+        self.hand_over_messages(&mut value);
+        Ok(if failed {
+            CallToolResult::structured_error(value)
+        } else {
+            CallToolResult::structured(value)
         })
+    }
+
+    /// Adds what the person wrote in Writer's chat since the last tool call.
+    fn hand_over_messages(&self, value: &mut Value) {
+        let Some(inbox) = &self.inner.inbox else {
+            return;
+        };
+        let Value::Object(map) = value else {
+            return;
+        };
+        let messages = inbox.take();
+        if messages.is_empty() {
+            return;
+        }
+        map.insert(
+            MESSAGES_KEY.to_owned(),
+            json!({
+                "note": MESSAGES_NOTE,
+                "messages": messages.into_iter().map(|m| m.text).collect::<Vec<_>>(),
+            }),
+        );
     }
 
     fn edit(

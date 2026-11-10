@@ -23,6 +23,8 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
     select: vi.fn(async (kind) => ({ ...ready, kind, name: kind })),
     send: vi.fn(async () => "turn_1"),
     stop: vi.fn(async () => undefined),
+    note: vi.fn(async () => undefined),
+    takeNotes: vi.fn(async () => []),
     login: vi.fn(async () => undefined),
     loginCode: vi.fn(async () => undefined),
     cancelLogin: vi.fn(async () => undefined),
@@ -306,9 +308,36 @@ describe("agent store", () => {
     await store.getState().init();
     await store.getState().send("Aを直して", { id: "scn_a", name: "A" });
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess_a" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "直しました" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(now(store.getState()).sending).toBe(false));
     const again = createAgentStore(fakeAgent());
     again.getState().focus({ id: "scn_a", name: "A" });
-    expect(now(again.getState())).toMatchObject({ flowId: "scn_a", sessionId: "sess_a", items: [] });
+    expect(now(again.getState())).toMatchObject({ flowId: "scn_a", sessionId: "sess_a" });
+    // The words stay, not only the AI's memory of them.
+    expect(now(again.getState()).items).toMatchObject([
+      { role: "person", text: "Aを直して" },
+      { role: "ai", status: "done", parts: [{ kind: "text", text: "直しました" }] },
+    ]);
+    vi.unstubAllGlobals();
+  });
+
+  it("a reply cut off by closing Writer ends there when the conversation comes back", async () => {
+    fakeStorage();
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    await store.getState().send("Aを直して", { id: "scn_a", name: "A" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "見ています" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess_a" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "フローを読みました" });
+    // Kept as it grows, not only when the reply is done.
+    await new Promise((r) => setTimeout(r, 1100));
+    const again = createAgentStore(fakeAgent());
+    again.getState().focus({ id: "scn_a", name: "A" });
+    const chat = now(again.getState());
+    expect(chat.items[1]).toMatchObject({ parts: [{ kind: "text", text: "見ています" }, { kind: "text", text: "フローを読みました" }] });
+    expect(chat.items[1]).toMatchObject({ role: "ai", status: "done", message: "Writer を閉じたため、ここで止まりました" });
+    expect(chat.turnId).toBeNull();
     vi.unstubAllGlobals();
   });
 
@@ -318,7 +347,49 @@ describe("agent store", () => {
     expect(store.getState().chats.some((c) => c.sessionId === "sess_old" && c.flowId === null)).toBe(true);
     vi.unstubAllGlobals();
   });
-  it("takes a correction while the AI works: stops the turn, then sends it in the same conversation", async () => {
+  it("passes on what the person writes while the AI works, without stopping it", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const a = { id: "scn_a", name: "A" };
+    store.getState().focus(a);
+    await store.getState().send("CSVで保存して", a);
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "作っています" });
+    const chatId = store.getState().current;
+
+    expect(await store.getState().sendIn(chatId, "保存先は output/ の下に", a)).toBe(true);
+    expect(await store.getState().sendIn(chatId, "ファイル名に日付も", a)).toBe(true);
+    expect(api.stop).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(api.note).toHaveBeenCalledTimes(2));
+    const [first, second] = now(store.getState()).items.slice(2);
+    expect(api.note).toHaveBeenCalledWith("turn_1", first!.id, "保存先は output/ の下に");
+    expect(first).toMatchObject({ role: "person", note: "waiting" });
+
+    // Read with a tool result: shown there, and the reply goes on below it.
+    store.getState().onEvent({ turnId: "turn_1", kind: "heard", ids: [first!.id] });
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "output/ に保存します" });
+    let items = now(store.getState()).items;
+    expect(items.map((i) => (i.role === "person" ? `person:${i.note ?? ""}` : `ai:${i.status}`))).toEqual([
+      "person:",
+      "ai:done",
+      "person:heard",
+      "ai:running",
+      "person:waiting",
+    ]);
+    expect(items[3]).toMatchObject({ parts: [{ kind: "text", text: "output/ に保存します" }] });
+    expect(items[4]).toMatchObject({ id: second!.id });
+
+    // The turn ends; the AI also read the second one before it did.
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(api.takeNotes).toHaveBeenCalledWith("turn_1"));
+    await vi.waitFor(() => expect(now(store.getState()).sending).toBe(false));
+    items = now(store.getState()).items;
+    expect(items[4]).toMatchObject({ note: "heard" });
+    expect(api.send).toHaveBeenCalledOnce();
+  });
+
+  it("sends what the AI did not read as the next message", async () => {
     let turn = 0;
     const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
     const store = createAgentStore(api);
@@ -328,25 +399,64 @@ describe("agent store", () => {
     await store.getState().send("CSVで保存して", a);
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
     const chatId = store.getState().current;
+    await store.getState().sendIn(chatId, "やっぱりExcelで", a);
+    const note = now(store.getState()).items[2]!;
+    vi.mocked(api.takeNotes).mockResolvedValueOnce([note.id]);
 
-    expect(await store.getState().sendIn(chatId, "やっぱりExcelで", a)).toBe(true);
-    expect(api.stop).toHaveBeenCalledWith("turn_1");
-    expect(api.send).toHaveBeenCalledOnce();
-    // Only one correction at a time.
-    expect(await store.getState().sendIn(chatId, "もう一つ", a)).toBe(false);
-
-    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null, needsLogin: false });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
     const last = vi.mocked(api.send).mock.calls[1]![0];
     expect(last.sessionId).toBe("sess");
     expect(last.message).toContain("やっぱりExcelで");
-    expect(last.message).toContain("stopped your previous turn");
+    expect(last.message).toContain("your turn ended before you read it");
     const items = now(store.getState()).items;
     expect(items.map((i) => i.role)).toEqual(["person", "ai", "person", "ai"]);
-    expect(items[1]).toMatchObject({ status: "done" });
-    expect(items[2]).toMatchObject({ text: "やっぱりExcelで" });
-    expect(now(store.getState())).toMatchObject({ interrupting: null, turnId: "turn_2" });
+    expect(items[2]).toMatchObject({ text: "やっぱりExcelで", note: undefined });
+    expect(now(store.getState())).toMatchObject({ turnId: "turn_2" });
+    // A retry sends the same message again, note included.
+    store.getState().onEvent({ turnId: "turn_2", kind: "done", ok: false, message: "失敗", costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(now(store.getState()).turnId).toBeNull());
+    await store.getState().retry(chatId);
+    expect(vi.mocked(api.send).mock.calls[2]![0].message).toBe(last.message);
   });
+
+  it("stopping with a message waiting sends it at once as a correction", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const a = { id: "scn_a", name: "A" };
+    store.getState().focus(a);
+    await store.getState().send("CSVで保存して", a);
+    const chatId = store.getState().current;
+    await store.getState().sendIn(chatId, "待って、Excelで", a);
+    const note = now(store.getState()).items[2]!;
+    vi.mocked(api.takeNotes).mockResolvedValueOnce([note.id]);
+    await store.getState().stop(chatId);
+    expect(api.stop).toHaveBeenCalledWith("turn_1");
+
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.send).mock.calls[1]![0].message).toContain("stopped your previous turn");
+    expect(now(store.getState()).items[1]).toMatchObject({ status: "done" });
+  });
+
+  it("a message written while the agent starts reaches it once it runs", async () => {
+    let release: (id: string) => void = () => undefined;
+    const api = fakeAgent({ send: vi.fn(() => new Promise<string>((r) => (release = r))) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const a = { id: "scn_a", name: "A" };
+    store.getState().focus(a);
+    const sent = store.getState().send("CSVで保存して", a);
+    const chatId = store.getState().current;
+    await store.getState().sendIn(chatId, "日付つきで", a);
+    expect(api.note).not.toHaveBeenCalled();
+    release("turn_9");
+    await sent;
+    expect(api.note).toHaveBeenCalledWith("turn_9", expect.any(String), "日付つきで");
+  });
+
   it("keeps a conversation with an unsent draft when another flow is opened", () => {
     const store = createAgentStore(fakeAgent());
     store.getState().focus({ id: "scn_a", name: "A" });

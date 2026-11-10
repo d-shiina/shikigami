@@ -13,7 +13,7 @@ mod params;
 mod server;
 
 pub use params::*;
-pub use server::{ServerOptions, SpellSheetMcp, ToolClass, tool_contract};
+pub use server::{MESSAGES_KEY, ServerOptions, SpellSheetMcp, ToolClass, tool_contract};
 
 use std::sync::Arc;
 
