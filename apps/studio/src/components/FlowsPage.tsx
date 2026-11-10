@@ -4,7 +4,8 @@
 import type { FlowSummary } from "@spellsheet/schema";
 import { CalendarClock, ChevronDown, ClipboardList, ClipboardPaste, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { expectAnswerFor, openAsk, useAgent, useAgentApi } from "../agent";
-import { pasteWay } from "../lib/aiWay";
+import { pasteWay, useAiWay } from "../lib/aiWay";
+import { AiStart } from "./AiStart";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { DistributionNotice, useDistributionCheck } from "./Distribution";
@@ -100,6 +101,13 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
     sendFresh(agentStore, t.inventory.startMessage);
   };
   const [text, setText] = useState("");
+  // Which AI the person uses is settled here, before anything is asked (the
+  // pane asks too, for those who open it first).
+  const way = useAiWay((s) => s.way);
+  const askAgain = useAiWay((s) => s.askAgain);
+  const agentReady = useAgent((a) => a.info?.available === true);
+  const agentKnown = useAgent((a) => a.info !== null);
+  const [decided, setDecided] = useState<string | null>(null);
   const ask = () => {
     const request = text.trim();
     openAsk(agentStore, { fresh: null, draft: request });
@@ -115,6 +123,26 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
     <section aria-label={t.firstSteps.title} className="rounded-lg border border-slate-200 bg-sheet p-5">
       <h2 className="text-[15px] font-semibold text-ink">{t.firstSteps.title}</h2>
       <p className="mt-1 text-[13px] text-slate-500">{t.firstSteps.lead}</p>
+      {way === null && agentKnown && !agentReady && (
+        <div className="mt-3">
+          <AiStart onDecided={setDecided} />
+        </div>
+      )}
+      {decided && way !== null && (
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-[12.5px] leading-relaxed text-slate-700" role="status">
+          <span>{decided}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setDecided(null);
+              askAgain();
+            }}
+            className="text-brand-600 hover:underline"
+          >
+            {t.aiChat.decided.change}
+          </button>
+        </p>
+      )}
       <form
         className="mt-3"
         onSubmit={(e) => {
