@@ -101,4 +101,31 @@ describe("browser.attach", () => {
     }
     expect(open).toBe(false);
   });
+
+  it("closes the SSO Edge it started when the adapter shuts down", async () => {
+    const free = await freePort();
+    const profile = join(mkdtempSync(join(tmpdir(), "spellsheet-sso-")), "edge-profile");
+    const adapter = new Adapter({ timeoutMs: 15000, executablePath: executable, forceHeadless: true, ssoProfileDir: profile });
+    expect(((await adapter.call("attach", { runId: "run_quit", port: free })) as { started?: boolean }).started).toBe(true);
+    await adapter.shutdown();
+    expect(await portClosed(free)).toBe(true);
+  });
 });
+
+async function freePort(): Promise<number> {
+  return await new Promise<number>((resolve) => {
+    const server = createServer().listen(0, "127.0.0.1", () => {
+      const { port: p } = server.address() as { port: number };
+      server.close(() => resolve(p));
+    });
+  });
+}
+
+async function portClosed(p: number): Promise<boolean> {
+  for (let i = 0; i < 50; i++) {
+    const open = await fetch(`http://127.0.0.1:${p}/json/version`).then(() => true).catch(() => false);
+    if (!open) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}

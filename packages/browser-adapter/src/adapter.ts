@@ -164,6 +164,13 @@ export function ssoProfileDir(options: AdapterOptions, env: NodeJS.ProcessEnv = 
   return join(base, "SpellSheet", "edge-profile");
 }
 
+/** Closes a browser reached over CDP (closing the connection alone would leave it open). */
+async function closeBrowser(browser: Browser): Promise<void> {
+  const cdp = await browser.newBrowserCDPSession().catch(() => undefined);
+  await cdp?.send("Browser.close").catch(() => {});
+  await browser.close().catch(() => {});
+}
+
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
   const headlessEnv = env.SPELLSHEET_BROWSER_HEADLESS;
   const noDisplay = process.platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY;
@@ -266,6 +273,10 @@ export class Adapter {
   }
 
   async shutdown(): Promise<void> {
+    // SSO Edges the runs started go too; browsers the person started stay open.
+    for (const session of this.sessions.values()) {
+      if (session.started) await this.closeSession(session);
+    }
     for (const browser of this.browsers.values()) {
       await (await browser).close().catch(() => {});
     }
@@ -492,15 +503,26 @@ export class Adapter {
       try {
         // Ask the browser for its address directly: a proxy set for the PC
         // (HTTP_PROXY) must never be asked to reach 127.0.0.1.
+        // One deadline for finding, starting and connecting: the Runtime gives up on the step after it.
+        const deadline = Date.now() + this.limit(params);
+        const left = () => Math.max(deadline - Date.now(), 1);
         let endpoint: string;
         try {
-          endpoint = await debuggerUrl(port, Math.min(this.limit(params), 2000));
+          endpoint = await debuggerUrl(port, Math.min(left(), 2000));
         } catch (error) {
           if (!start) throw error;
-          endpoint = await this.startSsoBrowser(port, this.limit(params));
+          endpoint = await this.startSsoBrowser(port, deadline);
           started = true;
         }
-        browser = await chromium.connectOverCDP(endpoint, { timeout: this.limit(params) });
+        browser = await chromium.connectOverCDP(endpoint, { timeout: left() });
+        if (started && Date.now() > deadline) {
+          // Too late: the run may already have ended, so nothing would close it.
+          await closeBrowser(browser);
+          throw new AdapterError("BROWSER_LAUNCH_FAILED", "the SSO Edge started after the step's time limit", {
+            retryable: true,
+            details: { hint: "Run again (Edge starts faster the second time), or give the step a longer timeoutMs." },
+          });
+        }
       } catch (error) {
         if (error instanceof AdapterError) throw error;
         throw new AdapterError("BROWSER_NOT_RUNNING", `no browser is waiting on port ${port}: ${(error as Error).message.split("\n")[0]}`, {
@@ -533,7 +555,7 @@ export class Adapter {
    * Starts Edge with a debugging port and the SSO profile folder, and waits
    * until it answers on the port. Its address, as debuggerUrl gives it.
    */
-  private async startSsoBrowser(port: number, timeout: number): Promise<string> {
+  private async startSsoBrowser(port: number, deadline: number): Promise<string> {
     const executable = browserExecutable(this.options);
     if (!executable) {
       throw new AdapterError("BROWSER_LAUNCH_FAILED", "Microsoft Edge was not found on this PC", {
@@ -554,9 +576,8 @@ export class Adapter {
       if (code) failed ??= new Error(`the browser exited with code ${code}`);
     });
     child.unref();
-    const until = Date.now() + Math.max(timeout, 15000);
     let last: unknown;
-    while (Date.now() < until) {
+    while (Date.now() < deadline) {
       if (failed) break;
       try {
         return await debuggerUrl(port, 1000);
@@ -565,6 +586,8 @@ export class Adapter {
       }
       await new Promise((r) => setTimeout(r, 200));
     }
+    // Do not leave a half-started browser behind.
+    if (child.exitCode === null) child.kill();
     throw new AdapterError("BROWSER_LAUNCH_FAILED", `the SSO Edge did not open port ${port}: ${(failed ?? (last as Error | undefined))?.message ?? "no answer"}`, {
       details: {
         port,
@@ -1498,9 +1521,7 @@ export class Adapter {
       if (session.started) {
         // The SSO Edge this run started: close it so its port does not stay open.
         // Its profile folder stays, and with it the sign-in.
-        const cdp = await session.attached.newBrowserCDPSession().catch(() => undefined);
-        await cdp?.send("Browser.close").catch(() => {});
-        await session.attached.close().catch(() => {});
+        await closeBrowser(session.attached);
         return [];
       }
       // The person's browser stays as it is: only the connection goes.
