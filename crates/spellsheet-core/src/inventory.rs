@@ -512,6 +512,11 @@ pub struct Assessment {
     /// The task to build first, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first: Option<String>,
+    /// The task to build next: the highest ranked one that has no flow yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+    /// Ranked tasks that already have a flow.
+    pub built: usize,
     /// Tasks that still miss something to be placed.
     pub incomplete: usize,
 }
@@ -546,12 +551,28 @@ pub fn assess(inventory: &WorkInventory) -> Assessment {
         .iter()
         .find(|t| t.group == Group::First)
         .map(|t| t.task_id.clone());
+    let has_flow = |id: &str| {
+        inventory
+            .tasks
+            .iter()
+            .any(|t| t.id == id && !t.flow_ids.is_empty())
+    };
+    let next = tasks
+        .iter()
+        .find(|t| t.rank.is_some() && !has_flow(&t.task_id))
+        .map(|t| t.task_id.clone());
+    let built = tasks
+        .iter()
+        .filter(|t| t.rank.is_some() && has_flow(&t.task_id))
+        .count();
     let incomplete = tasks.iter().filter(|t| !t.missing.is_empty()).count();
     Assessment {
         tasks,
         monthly_minutes: round1(monthly_minutes),
         savable_minutes: round1(savable_minutes),
         first,
+        next,
+        built,
         incomplete,
     }
 }
@@ -825,6 +846,21 @@ mod tests {
             a.tasks[3].missing,
             ["frequency", "minutes", "manualShare", "ease"]
         );
+    }
+
+    #[test]
+    fn the_next_to_build_skips_tasks_that_have_a_flow() {
+        let mut inv = sample();
+        let a = assess(&inv);
+        assert_eq!((a.next.as_deref(), a.built), (Some("t1"), 0));
+        inv.apply(&InventoryPatch {
+            tasks: vec![task(json!({ "id": "t1", "flowIds": ["scn_a"] }))],
+            ..Default::default()
+        })
+        .unwrap();
+        let a = assess(&inv);
+        assert_eq!(a.first.as_deref(), Some("t1"));
+        assert_eq!((a.next.as_deref(), a.built), (Some("t2"), 1));
     }
 
     #[test]

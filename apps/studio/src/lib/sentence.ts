@@ -504,4 +504,18 @@ export function sentence(step: Step, def: StepTypeDef | undefined): Part[] {
 }
 
 /** The sentence as plain text, e.g. for tooltips and tests. */
+/** A value longer than a line of a sheet (a page of HTML, a long script). */
+const LONG = 60;
+
+/**
+ * A value as a sheet shows it: one too long to read in a sentence is cut to
+ * its first words, with how many characters it has in all.
+ */
+export function brief(code: string): { text: string; length: number } | null {
+  const chars = [...code];
+  if (chars.length <= LONG && !code.includes("\n")) return null;
+  const line = code.split("\n").find((l) => l.trim() !== "") ?? "";
+  return { text: [...line.trim()].slice(0, 36).join(""), length: chars.length };
+}
+
 export const plain = (parts: Part[]) => parts.map((p) => ("text" in p ? p.text : p.code)).join("");

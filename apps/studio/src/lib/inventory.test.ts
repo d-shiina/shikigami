@@ -29,6 +29,8 @@ const view: InventoryView = {
     monthlyMinutes: 1200,
     savableMinutes: 960,
     first: "t2",
+    next: "t1",
+    built: 0,
     incomplete: 1,
   },
 };

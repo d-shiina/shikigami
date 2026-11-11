@@ -4,7 +4,7 @@
 // The person reads the order, corrects a number where the AI misheard (the
 // order is worked out again by Flow Core), writes it out for Excel, and has
 // the AI build the first flow from a row.
-import { AppWindow, ChevronDown, ChevronRight, Clock, Download, Flag, Hourglass, type LucideIcon, MessageSquareText, Sparkles, Trash2, Users, Workflow } from "lucide-react";
+import { AppWindow, ChevronDown, CircleCheck, ChevronRight, Clock, Download, Flag, Hourglass, type LucideIcon, MessageSquareText, Sparkles, Trash2, Users, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
 import { useStudio } from "../context";
@@ -240,7 +240,9 @@ function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: Inven
   const i = t.inventory;
   const inv = view.inventory;
   const rows = ordered(view);
-  const first = rows.find((r) => r.task.id === view.assessment.first);
+  // The one to build now: the highest ranked task that has no flow yet.
+  const next = rows.find((r) => r.task.id === view.assessment.next);
+  const ranked = rows.filter((r) => r.score.rank != null).length;
   const agent = useAgentApi();
   const setPlace = useStudio((s) => s.setPlace);
   const build = (task: WorkTask) => {
@@ -257,19 +259,20 @@ function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: Inven
     [Hourglass, i.savable, <b className="font-semibold tabular-nums">{i.hoursMonth(hours(view.assessment.savableMinutes))}</b>],
     [
       Flag,
-      i.first,
-      first ? (
+      i.next,
+      next ? (
         <>
-          <b className="font-semibold">{first.task.name}</b>
-          <button type="button" onClick={() => build(first.task)} className={`${LINK} text-[13px]`}>
+          <b className="font-semibold">{next.task.name}</b>
+          <button type="button" onClick={() => build(next.task)} className={`${LINK} text-[13px]`}>
             <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" />
             {i.build}
           </button>
         </>
       ) : (
-        <span className="text-slate-500">{i.noFirst}</span>
+        <span className="text-slate-500">{ranked > 0 && view.assessment.built === ranked ? i.allBuilt : i.noNext}</span>
       ),
     ],
+    ...(ranked > 0 ? [[Workflow, i.progress, <span className="tabular-nums">{i.progressValue(view.assessment.built, ranked)}</span>] as [LucideIcon, string, React.ReactNode]] : []),
   ];
   return (
     <article className={`@container ${PAPER} pt-11 pb-14`} data-inventory-sheet>
@@ -329,7 +332,7 @@ function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: Inven
           </SheetHeading>
         </h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-[13.5px]">
+          <table className="w-full min-w-[820px] border-collapse text-[13.5px]">
             <thead>
               <tr className="border-b border-slate-300 text-left text-[12px] whitespace-nowrap text-slate-500">
                 <th className="w-10 py-2 pr-2 font-normal">{i.columns.rank}</th>
@@ -340,7 +343,8 @@ function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: Inven
                 <th className="py-2 pr-3 text-right font-normal">{i.columns.share}</th>
                 <th className="py-2 pr-3 text-right font-normal">{i.columns.monthly}</th>
                 <th className="py-2 pr-3 text-right font-normal">{i.columns.savable}</th>
-                <th className="py-2 font-normal">{i.columns.ease}</th>
+                <th className="py-2 pr-3 font-normal">{i.columns.ease}</th>
+                <th className="py-2 font-normal">{i.columns.flow}</th>
               </tr>
             </thead>
             {rows.map(({ task, score }) => (
@@ -440,7 +444,6 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
           </button>
           <div className="mt-1 ml-5 flex flex-wrap items-center gap-1.5">
             <GroupTag group={score.group} />
-            {flows.length > 0 && <Workflow size={13} strokeWidth={1.75} className="text-slate-500" aria-label={i.flows} />}
           </div>
         </td>
         <td className="whitespace-nowrap py-2 pr-3">
@@ -457,17 +460,27 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
         </td>
         <td className="whitespace-nowrap py-2.5 pr-3 text-right text-ink tabular-nums">{score.monthlyMinutes != null ? i.hours(hours(score.monthlyMinutes)) : <Unknown />}</td>
         <td className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold text-ink tabular-nums">{score.savableMinutes != null ? i.hours(hours(score.savableMinutes)) : <Unknown />}</td>
-        <td className="py-2">
+        <td className="py-2 pr-3">
           <LevelCell value={task.ease ?? null} label={i.columns.ease} onSave={(ease) => onSet({ ease })} />
+        </td>
+        <td className="whitespace-nowrap py-2.5">
+          {flows.length > 0 ? (
+            <span className="inline-flex items-center gap-1 text-ink">
+              <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" className="text-moegi-600" />
+              {i.built}
+            </span>
+          ) : score.rank != null ? (
+            <span className="text-slate-500">{i.notBuilt}</span>
+          ) : null}
         </td>
       </tr>
       {open && (
         <tr>
           <td />
-          <td colSpan={8} className="pr-2 pb-4">
+          <td colSpan={9} className="pr-2 pb-4">
             <Details task={task} missing={missing} />
             <p className="mt-2.5 ml-5 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] leading-[1.7]">
-              {score.group !== "notNow" && (
+              {score.group !== "notNow" && flows.length === 0 && (
                 <button type="button" onClick={onBuild} className={LINK}>
                   <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" />
                   {i.build}

@@ -2673,6 +2673,14 @@ export interface Assessment {
    */
   first?: string | null;
   /**
+   * The task to build next: the highest ranked one that has no flow yet.
+   */
+  next?: string | null;
+  /**
+   * Ranked tasks that already have a flow.
+   */
+  built: number;
+  /**
    * Tasks that still miss something to be placed.
    */
   incomplete: number;
