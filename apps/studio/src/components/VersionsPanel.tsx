@@ -2,6 +2,7 @@ import { ArrowRight, Undo2 } from "lucide-react";
 import type { DiffKind, FlowDiff, StepTypeDef, VersionSummary } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
+import { useFlowBusy } from "../lib/useFlowBusy";
 import { api } from "../lib/api";
 import { formatValue, relativeTime } from "../lib/changes";
 import { stepLabel, t } from "../lib/i18n";
@@ -74,6 +75,8 @@ function DiffView({ diff, defs }: { diff: FlowDiff; defs: Map<string, StepTypeDe
 function PublishedCard() {
   const published = useStudio((s) => s.published);
   const publish = useStudio((s) => s.publish);
+  // What the AI is still making is not fixed as a version.
+  const busy = useFlowBusy();
   const unpublish = useStudio((s) => s.unpublish);
   const [confirm, setConfirm] = useState(false);
   const health = useFlowHealth();
@@ -118,7 +121,9 @@ function PublishedCard() {
               void publish();
             }}
             onBlur={() => setPublishAnyway(false)}
-            className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+            disabled={busy}
+            title={busy ? t.sheetView.aiWorking : undefined}
+            className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
             {publishAnyway ? t.publishWarn.anyway : t.publishCurrent}
           </button>

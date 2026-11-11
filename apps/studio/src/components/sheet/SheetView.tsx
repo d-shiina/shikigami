@@ -21,6 +21,7 @@ import { extensionParamTitle } from "../../lib/extensions";
 import { usePendingReview } from "../Timeline";
 import type { HistoryEntry, PublishedState, StepTypeDef, VersionSummary } from "@spellsheet/schema";
 import { menuFor } from "../../lib/contextMenu";
+import { useFlowBusy } from "../../lib/useFlowBusy";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
@@ -157,7 +158,8 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
 }
 
 /** The last run, and the way to run again: said once, beside the heading. */
-function LastRun({ manifest, running, onRun, onExport }: { manifest: ManualManifest | null; running: boolean; onRun: () => void; onExport: () => void }) {
+/** `blocked`: why the flow cannot be run now (it is running, has errors, or the AI is still making it), as on the bar's run button. */
+function LastRun({ manifest, blocked, empty, onRun, onExport }: { manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void }) {
   const w = t.sheetView;
   const at = manifest
     ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -173,12 +175,12 @@ function LastRun({ manifest, running, onRun, onExport }: { manifest: ManualManif
       ) : (
         <p>{w.noRun}</p>
       )}
-      <button type="button" disabled={running} onClick={onRun} className="mt-0.5 inline-flex items-center gap-1 font-medium text-primary hover:underline disabled:opacity-50">
+      <button type="button" disabled={blocked !== null} title={blocked || undefined} onClick={onRun} className="mt-0.5 inline-flex items-center gap-1 font-medium text-primary enabled:hover:underline disabled:text-slate-400">
         <Play size={12} strokeWidth={2} aria-hidden="true" />
         {w.run}
       </button>
       {/* The sheet as a file to hand to someone: the manual, with its pictures. */}
-      <button type="button" onClick={onExport} className="mt-0.5 ml-4 inline-flex items-center gap-1 text-slate-600 hover:text-ink hover:underline">
+      <button type="button" disabled={empty} title={empty ? t.sheetView.noSteps : undefined} onClick={onExport} className="mt-0.5 ml-4 inline-flex items-center gap-1 text-slate-600 enabled:hover:text-ink enabled:hover:underline disabled:text-slate-400">
         <Download size={12} strokeWidth={1.75} aria-hidden="true" />
         {t.manual.export}
       </button>
@@ -207,8 +209,10 @@ function ChangeNote({ change, step, defs }: { change: Change; step: ManualStep; 
   const history = useStudio((s) => s.history);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
+  // While the AI is still at work on the flow, its changes so far are not yet something to decide on.
+  const busy = useFlowBusy();
   const { entry, added } = change;
-  const blocker = revertBlocker(entry, history);
+  const blocker = busy ? t.sheetView.aiWorking : revertBlocker(entry, history);
   const diffs = added
     ? []
     : describe(entry, flow, defs)
@@ -232,7 +236,7 @@ function ChangeNote({ change, step, defs }: { change: Change; step: ManualStep; 
           </p>
         ))}
         <p className="mt-0.5 flex gap-3">
-          <button type="button" onClick={() => approve(entry.revision)} className="font-medium text-primary hover:underline">
+          <button type="button" disabled={busy} title={busy ? t.sheetView.aiWorking : undefined} onClick={() => approve(entry.revision)} className="font-medium text-primary enabled:hover:underline disabled:text-slate-400">
             {t.approve}
           </button>
           <button type="button" disabled={blocker !== null} title={blocker ?? undefined} onClick={() => void revert(entry)} className="text-slate-600 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-400">
@@ -600,6 +604,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   const selection = useStudio((s) => s.selection);
   const running = useStudio((s) => isActive(s.run));
   const testing = useStudio((s) => s.stepTest?.running ?? false);
+  const errors = useStudio((s) => s.validation?.issues.some((i) => i.severity === "error") ?? false);
   const revision = useStudio((s) => s.flow?.revision);
   const [manifest, setManifest] = useState<ManualManifest | null>(null);
   const [masks, setMasks] = useState<Record<string, Mask>>({});
@@ -612,6 +617,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   const run = useStudio(trailOf);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
+  const aiBusy = useFlowBusy();
   const subflows = useSubflows(flow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
@@ -727,6 +733,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   };
   const when = schedules.map((s) => describeWhen(s.when));
   const chart = mode === "chart";
+  const noSteps = (flow.steps ?? []).length === 0;
 
   return (
     <div ref={desk} className="flow-chart absolute inset-0 overflow-auto px-5 py-7" data-sheet={mode}>
@@ -765,7 +772,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
             <div className={MARGIN}>
               {!chart && (
                 <Aside>
-                  <LastRun manifest={manifest} running={running} onRun={() => void startRun()} onExport={() => setExporting(true)} />
+                  <LastRun manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} />
                 </Aside>
               )}
               <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{doc.title}</h1>
@@ -774,7 +781,11 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
             </div>
           </header>
           {chart ? (
-            <ChartBody numbers={numbers} run={run} onOpen={onSheet} />
+            noSteps ? (
+              <p className="px-10 pt-2 pb-12 text-[13px] text-slate-500">{t.sheetView.noStepsChart}</p>
+            ) : (
+              <ChartBody numbers={numbers} run={run} onOpen={onSheet} />
+            )
           ) : (
             <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
               <div className={MARGIN}>
@@ -790,14 +801,17 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
       {/* What waits to be looked at, counted once at the foot of the desk; on the review desk its own foot says it. */}
       {place === "flows" && pending.length > 0 && (
         <div className="pointer-events-none sticky bottom-0 z-10 mt-6 flex justify-center">
-          <div className="pointer-events-auto flex items-center gap-4 rounded-[6px] bg-sheet py-2 pr-2 pl-4 text-[13px] text-ink shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]">
+          <div className={`pointer-events-auto flex items-center gap-4 rounded-[6px] bg-sheet py-2 pl-4 ${aiBusy ? "pr-4" : "pr-2"} text-[13px] text-ink shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}>
             <span className="flex items-center gap-2">
               <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" className="text-primary" />
-              {t.sheetView.waiting(pending.length)}
+              {aiBusy ? t.sheetView.aiWorking : t.sheetView.waiting(pending.length)}
             </span>
-            <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover">
-              {t.approveAll}
-            </button>
+            {/* Not while the AI is still making the flow: what is on the sheet is not all of it yet. */}
+            {!aiBusy && (
+              <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover">
+                {t.approveAll}
+              </button>
+            )}
           </div>
         </div>
       )}

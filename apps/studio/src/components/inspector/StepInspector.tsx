@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
 import { ArrowLeft, ArrowRight, CircleX, Maximize2, MessageSquareText, TriangleAlert } from "lucide-react";
 import { openAsk, useAgentApiMaybe, useAgentMaybe } from "../../agent";
+import { useFlowBusy } from "../../lib/useFlowBusy";
 import { t } from "../../lib/i18n";
 import { GROUP } from "../../lib/stepTypes";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../../lib/dataFlow";
@@ -143,6 +144,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const history = useStudio((s) => s.history);
   const agent = useAgentApiMaybe();
   const agentName = useAgentMaybe((a) => a.info?.name ?? "AI", "AI");
+  const flowIsBusy = useFlowBusy();
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -206,14 +208,14 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
               <span className="flex-1">
                 {t.props.changedBy(t.actor[e.actor.kind], e.revision)}
               </span>
-              <button type="button" className="font-medium hover:underline" onClick={() => approve(e.revision)}>
+              <button type="button" disabled={flowIsBusy} title={flowIsBusy ? t.sheetView.aiWorking : undefined} className="font-medium enabled:hover:underline disabled:text-slate-400" onClick={() => approve(e.revision)}>
                 {t.approve}
               </button>
               <button
                 type="button"
                 className="font-medium text-shu-600 enabled:hover:underline disabled:text-slate-400"
-                disabled={revertBlocker(e, history) !== null}
-                title={revertBlocker(e, history) ?? undefined}
+                disabled={flowIsBusy || revertBlocker(e, history) !== null}
+                title={flowIsBusy ? t.sheetView.aiWorking : (revertBlocker(e, history) ?? undefined)}
                 onClick={() => revert(e)}
               >
                 {t.revert}

@@ -9,6 +9,7 @@ import { t } from "../lib/i18n";
 import type { ReviewView } from "../lib/reviewView";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
+import { useFlowBusy } from "../lib/useFlowBusy";
 import { RunStatus } from "./StatusBar";
 
 const PlayIcon = () => (
@@ -153,15 +154,19 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const debug = useStudio((s) => s.debug);
 
+  // A flow the AI is still making is not run by hand: half of it is not there yet.
+  const aiBusy = useFlowBusy();
   if (!flow) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
+  // Nothing to run yet.
+  const noSteps = (flow.steps ?? []).length === 0;
   const running = run?.status === "running" || run?.status === "paused";
   const paused = run?.status === "paused";
 
   return (
     <div className="flex shrink-0 items-center gap-2">
       <ViewSwitch view={view} onChange={onView} />
-      <More onView={onView} canRun={errors === 0 && !running} />
+      <More onView={onView} canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
         <div className="flex h-7 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
@@ -204,8 +209,8 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
           <button
             type="button"
             onClick={() => startRun()}
-            disabled={errors > 0}
-            title={errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
+            disabled={errors > 0 || aiBusy || noSteps}
+            title={aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
             className="group flex h-7 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
             <PlayIcon />
@@ -223,7 +228,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
  * see it, running it a step at a time, how it got here, its folder, and
  * handing it to someone.
  */
-function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: boolean }) {
+function More({ onView, canRun, busy }: { onView: (view: ReviewView) => void; canRun: boolean; busy: boolean }) {
   const flow = useStudio((s) => s.flow);
   const place = useStudio((s) => s.place);
   const startRun = useStudio((s) => s.startRun);
@@ -245,8 +250,8 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
       onClick={(e) => {
         const box = e.currentTarget.getBoundingClientRect();
         openMenu({ clientX: box.left, clientY: box.bottom + 4, preventDefault: () => {} }, [
-          { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !canUndo, run: () => void undo() },
-          { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !canRedo, run: () => void redo() },
+          { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !canUndo || busy, run: () => void undo() },
+          { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !canRedo || busy, run: () => void redo() },
           "-",
           { label: t.vars.table.view, icon: Variable, run: () => onView("variables") },
           place === "flows" && { label: t.result.view, icon: ClipboardCheck, run: () => onView("result") },
@@ -257,7 +262,7 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
           { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
           setFiles && { label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) },
           openFolder && { label: t.project.openFolder, icon: FolderOutput, run: () => void openFolder("", false) },
-          { label: t.handOff.open, icon: Send, run: () => void openHandOff(flow.id) },
+          { label: t.handOff.open, icon: Send, disabled: busy, run: () => void openHandOff(flow.id) },
         ]);
       }}
       className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"

@@ -2,6 +2,8 @@
 import type { Flow, StepTypeDef } from "@spellsheet/schema";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createStore } from "zustand/vanilla";
+import { AgentContext, type AgentState } from "../../agent";
 import { StudioContext } from "../../context";
 import type { Api } from "../../lib/api";
 import { createStudioStore } from "../../store";
@@ -250,5 +252,25 @@ describe("several accounts of one site", () => {
     const ops = (edit.mock.calls[0] as unknown[])[2] as { op: string; stepId?: string; variable?: { name: string; choices: string[] } }[];
     expect(ops[0]).toMatchObject({ op: "setVariable", variable: { name: "アカウント", choices: ["受注（経理）", "受注（申請）"] } });
     expect(ops.slice(1).map((o) => o.stepId)).toEqual(["u", "p"]);
+  });
+});
+
+describe("while the AI is still working on the flow", () => {
+  it("does not let the step be run by hand until the AI is done", async () => {
+    const store = await studio();
+    const agent = createStore<AgentState>()(() => ({ chats: [{ id: "c1", flowId: "scn_a", turnId: "t1", sending: false }] }) as unknown as AgentState);
+    render(
+      <AgentContext.Provider value={agent}>
+        <StudioContext.Provider value={store}>
+          <StepInspector />
+        </StudioContext.Provider>
+      </AgentContext.Provider>,
+    );
+    const runTo = screen.getByRole("button", { name: "ここまで実行" }) as HTMLButtonElement;
+    expect(runTo.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "ノードの単体実行" }) as HTMLButtonElement).disabled).toBe(true);
+    // Done: the same buttons can be pressed again.
+    agent.setState({ chats: [{ id: "c1", flowId: "scn_a", turnId: null, sending: false }] } as unknown as AgentState);
+    await waitFor(() => expect((screen.getByRole("button", { name: "ここまで実行" }) as HTMLButtonElement).disabled).toBe(false));
   });
 });

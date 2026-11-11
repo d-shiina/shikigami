@@ -5,6 +5,7 @@ import { ArrowRight, Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRig
 import type { HistoryEntry, Step, StepTypeDef } from "@spellsheet/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
+import { useFlowBusy } from "../lib/useFlowBusy";
 import { useStudio } from "../context";
 import { api, type RunRecord } from "../lib/api";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime } from "../lib/changes";
@@ -1033,8 +1034,10 @@ export function ReviewActions({
   const revertAll = useStudio((s) => s.revertAll);
   const flow = useStudio((s) => s.flow);
   const [hint, setHint] = useState<"keep" | "sendBack" | "revert" | null>(null);
+  // While the AI is still at work on the flow, what it has changed so far is not all of it: nothing is decided yet.
+  const busy = useFlowBusy();
   if (pending.length === 0) return null;
-  const blocker = groupRevertBlocker(pending, history);
+  const blocker = busy ? t.sheetView.aiWorking : groupRevertBlocker(pending, history);
   const created = pending.some((e) => e.kind === "create");
   // A new flow the AI left without nodes has nothing to approve: it is sent back instead.
   const empty = created && flatten(flow?.steps ?? []).length === 0;
@@ -1045,7 +1048,7 @@ export function ReviewActions({
       </div>
     );
   }
-  const where = empty ? t.desk.emptyFlow : published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet;
+  const where = busy ? t.sheetView.aiWorking : empty ? t.desk.emptyFlow : published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet;
   const means = hint === null ? null : { keep: t.desk.keepMeans, sendBack: t.desk.sendBackMeans, revert: t.desk.revertMeans }[hint];
   const hover = (key: NonNullable<typeof hint>) => ({ onMouseEnter: () => setHint(key), onFocus: () => setHint(key), onMouseLeave: () => setHint(null), onBlur: () => setHint(null) });
   return (
@@ -1106,8 +1109,8 @@ export function ReviewActions({
         <button
           type="button"
           onClick={() => void approveAndPublish()}
-          disabled={empty}
-          title={empty ? t.desk.emptyFlow : t.desk.keepTitle}
+          disabled={empty || busy}
+          title={busy ? t.sheetView.aiWorking : empty ? t.desk.emptyFlow : t.desk.keepTitle}
           {...hover("keep")}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary enabled:hover:bg-primary-hover disabled:opacity-50"
         >

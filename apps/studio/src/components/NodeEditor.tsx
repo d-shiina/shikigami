@@ -8,6 +8,7 @@
 import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { ChevronLeft, FileText, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useFlowBusy } from "../lib/useFlowBusy";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { enclosingLoops, resultStep } from "../lib/loopScope";
@@ -132,6 +133,8 @@ export function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undef
   const trying = useStudio((s) => s.trying);
   const stepTest = useStudio((s) => s.stepTest);
   const runTo = useStudio((s) => s.runTo);
+  // A flow the AI is still making is not run by hand, not even one step of it.
+  const aiBusy = useFlowBusy();
   const testStep = useStudio((s) => s.testStep);
   const stopRun = useStudio((s) => s.stopRun);
   const tested = useStudio((s) => (flow ? s.tested[flow.id] : undefined));
@@ -164,11 +167,11 @@ export function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undef
         {t.editor.testing}
       </button>
     );
-  const blocked = inputs.missing.length > 0 || inputs.partial.length > 0;
-  const why = inputs.missing.length > 0 ? t.editor.testMissing(inputs.missing.join("・")) : t.editor.testPartial(inputs.partial.join("・"));
+  const blocked = aiBusy || inputs.missing.length > 0 || inputs.partial.length > 0;
+  const why = aiBusy ? t.toolbar.aiBusy : inputs.missing.length > 0 ? t.editor.testMissing(inputs.missing.join("・")) : t.editor.testPartial(inputs.partial.join("・"));
   return (
     <>
-      <button type="button" title={t.editor.runToTitle} onClick={() => void runTo(step.id!)} className={button}>
+      <button type="button" disabled={aiBusy} title={aiBusy ? t.toolbar.aiBusy : t.editor.runToTitle} onClick={() => void runTo(step.id!)} className={button}>
         <Play size={12} aria-hidden="true" />
         {t.editor.runTo}
       </button>

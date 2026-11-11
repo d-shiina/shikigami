@@ -1,7 +1,7 @@
 import { DistributionDialog } from "./components/Distribution";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
-import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
+import { activity, AgentContext, createAgentStore, flowBusy, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { AskDialog } from "./components/AskDialog";
@@ -524,10 +524,11 @@ function navigate(e: KeyboardEvent, state: StudioState) {
  * out), F9 breakpoint on the selected step. F10 / F11 start a run that
  * pauses before its first step.
  */
-function debugKey(e: KeyboardEvent, state: StudioState) {
+function debugKey(e: KeyboardEvent, state: StudioState, aiBusy: boolean) {
   const run = state.run;
   const paused = run?.status === "paused";
-  const runnable = state.flow && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
+  // As the bar's button: a flow the AI is still making is not run by hand.
+  const runnable = state.flow && (state.flow.steps ?? []).length > 0 && !aiBusy && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
   if (e.key === "F9") {
     if (state.selection?.kind === "step") state.toggleBreakpoint(state.selection.stepId);
   } else if (e.key === "F5") {
@@ -648,7 +649,7 @@ export function App() {
       if (e.key === "F5" || e.key === "F9" || e.key === "F10" || e.key === "F11") {
         // Run and step like a debugger, instead of reloading the window.
         e.preventDefault();
-        debugKey(e, store.getState());
+        debugKey(e, store.getState(), flowBusy(agentStore.getState(), store.getState().flow?.id));
         return;
       }
       if (mod && e.key === ",") {

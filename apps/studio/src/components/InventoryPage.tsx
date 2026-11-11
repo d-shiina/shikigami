@@ -247,7 +247,8 @@ function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: Inven
   const setPlace = useStudio((s) => s.setPlace);
   const build = (task: WorkTask) => {
     // The library shows the new flow being made, as for any request for a flow.
-    setPlace("library");
+    // Without an AI to ask, the request waits in the AI pane and this sheet stays.
+    if (agent.getState().info?.available) setPlace("library");
     sendFresh(agent, buildRequest(inv, task));
   };
   const setTask = (taskId: string, fields: Record<string, unknown>) => onChange({ id: inv.id, tasks: [{ id: taskId, ...fields }] });

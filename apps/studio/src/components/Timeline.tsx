@@ -2,6 +2,7 @@ import { ArrowRight, Check, Cog, type LucideIcon, Sparkles, SquareTerminal, Undo
 import type { ActorKind, HistoryEntry } from "@spellsheet/schema";
 import { useMemo } from "react";
 import { useStudio } from "../context";
+import { useFlowBusy } from "../lib/useFlowBusy";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime, verbLabel } from "../lib/changes";
 import { t } from "../lib/i18n";
 import { isExternal, pendingReview, revertBlocker } from "../store";
@@ -108,6 +109,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
   const history = useStudio((s) => s.history);
+  const busy = useFlowBusy();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const lines = describe(entry, flow, defs);
   const blocker = revertBlocker(entry, history);
@@ -124,8 +126,10 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
       <div className="mt-3 flex gap-2">
         <button
           type="button"
+          disabled={busy}
+          title={busy ? t.sheetView.aiWorking : undefined}
           onClick={() => approve(entry.revision)}
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
         >
           <Check size={12} strokeWidth={2.25} aria-hidden="true" />
           {t.approve}
@@ -188,6 +192,7 @@ export function Timeline() {
   const history = useStudio((s) => s.history);
   const pending = usePendingReview();
   const approveAll = useStudio((s) => s.approveAll);
+  const busy = useFlowBusy();
   const pendingRevs = new Set(pending.map((e) => e.revision));
   const entries = [...history].reverse();
 
@@ -201,7 +206,7 @@ export function Timeline() {
               {t.review}
               <span className="ml-1 text-shu-600">{pending.length}</span>
             </h3>
-            {pending.length > 1 && (
+            {pending.length > 1 && !busy && (
               <button type="button" onClick={() => void approveAll()} className="ml-auto text-xs text-slate-500 hover:text-ink">
                 {t.approveAll}
               </button>
