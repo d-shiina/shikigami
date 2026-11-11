@@ -279,12 +279,12 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                         "password": { "secret": "受注DB", "field": "password" },
                         "sql": "SELECT 受注番号, 顧客名, 金額 FROM 受注 WHERE 受注日 = ?",
                         "params": ["{{ formatDate(today(), 'yyyy-MM-dd') }}"]
-                    }, "saveAs": "orders" }),
+                    }, "saveAs": "受注一覧" }),
                     json!({ "type": types::QUERY, "params": {
                         "connection": "DSN=基幹システム;Trusted_Connection=yes",
                         "sql": "SELECT * FROM 得意先 WHERE 地区 = ?",
-                        "params": ["{{ area }}"]
-                    }, "saveAs": "rows" }),
+                        "params": ["{{ 地域 }}"]
+                    }, "saveAs": "行一覧" }),
                 ],
             ),
             Kind::Query,
@@ -304,8 +304,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                         "user": { "secret": "受注DB", "field": "username" },
                         "password": { "secret": "受注DB", "field": "password" },
                         "sql": "UPDATE 受注 SET 状態 = ? WHERE 受注番号 = ?",
-                        "params": ["請求済み", "{{ order.受注番号 }}"]
-                    }, "saveAs": "result" }),
+                        "params": ["請求済み", "{{ 受注.受注番号 }}"]
+                    }, "saveAs": "結果" }),
                 ],
             ),
             Kind::Execute,

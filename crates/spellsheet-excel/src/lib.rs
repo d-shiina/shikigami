@@ -573,9 +573,9 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": READ_ROWS, "name": "受注一覧を読む", "params": { "path": PATH, "sheet": "受注" }, "saveAs": "orders" }),
-                json!({ "type": "control.forEach", "params": { "items": "orders", "itemVar": "order" }, "blocks": { "body": [
-                    { "type": WRITE_CELL, "name": "状態を書く", "params": { "path": PATH, "sheet": "受注", "cell": "F{{ order._row }}", "value": "完了" } }
+                json!({ "type": READ_ROWS, "name": "受注一覧を読む", "params": { "path": PATH, "sheet": "受注" }, "saveAs": "受注一覧" }),
+                json!({ "type": "control.forEach", "params": { "items": "受注一覧", "itemVar": "受注" }, "blocks": { "body": [
+                    { "type": WRITE_CELL, "name": "状態を書く", "params": { "path": PATH, "sheet": "受注", "cell": "F{{ 受注._row }}", "value": "完了" } }
                 ] } }),
             ],
         },
@@ -595,8 +595,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "output/結果.xlsx", "rows": [ { "受注番号": "{{ order.受注番号 }}", "金額": "{{ order.金額 }}", "受注日": { "date": "{{ order.受注日 }}" } } ] } }),
-                json!({ "type": APPEND_ROWS, "params": { "path": "output/結果.xlsx", "sheet": "集計", "rows": "{{ results }}" } }),
+                json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "output/結果.xlsx", "rows": [ { "受注番号": "{{ 受注.受注番号 }}", "金額": "{{ 受注.金額 }}", "受注日": { "date": "{{ 受注.受注日 }}" } } ] } }),
+                json!({ "type": APPEND_ROWS, "params": { "path": "output/結果.xlsx", "sheet": "集計", "rows": "{{ 結果一覧 }}" } }),
             ],
         },
         Def {
@@ -614,7 +614,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": READ_CELL, "name": "締め日を読む", "params": { "path": PATH, "sheet": "設定", "cell": "B2" }, "saveAs": "closingDate" }),
+                json!({ "type": READ_CELL, "name": "締め日を読む", "params": { "path": PATH, "sheet": "設定", "cell": "B2" }, "saveAs": "締め日" }),
             ],
         },
         Def {
@@ -633,7 +633,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": WRITE_CELL, "name": "処理日を書く", "params": { "path": PATH, "sheet": "受注", "cell": "G{{ order._row }}", "value": { "date": "{{ processedAt }}" } } }),
+                json!({ "type": WRITE_CELL, "name": "処理日を書く", "params": { "path": PATH, "sheet": "受注", "cell": "G{{ 受注._row }}", "value": { "date": "{{ 処理日 }}" } } }),
                 json!({ "type": WRITE_CELL, "params": { "path": PATH, "sheet": "集計", "cell": "B10", "value": { "formula": "SUM(B2:B9)" } } }),
             ],
         },
@@ -652,7 +652,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": READ_RANGE, "params": { "path": PATH, "sheet": "単価表", "range": "A2:C50" }, "saveAs": "prices" }),
+                json!({ "type": READ_RANGE, "params": { "path": PATH, "sheet": "単価表", "range": "A2:C50" }, "saveAs": "単価一覧" }),
             ],
         },
         Def {
@@ -687,7 +687,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": LIST_SHEETS, "params": { "path": PATH }, "saveAs": "sheets" }),
+                json!({ "type": LIST_SHEETS, "params": { "path": PATH }, "saveAs": "シート一覧" }),
             ],
         },
         Def {
@@ -703,7 +703,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": ADD_SHEET, "params": { "path": "output/結果.xlsx", "sheet": "{{ month }}月" } }),
+                json!({ "type": ADD_SHEET, "params": { "path": "output/結果.xlsx", "sheet": "{{ 対象月 }}月" } }),
             ],
         },
         Def {
@@ -735,8 +735,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": "control.forEach", "params": { "items": "reverse(filter(orders, o => o.状態 == '取消'))", "itemVar": "order" }, "blocks": { "body": [
-                    { "type": DELETE_ROWS, "name": "取消の行を消す", "params": { "path": PATH, "sheet": "受注", "row": "{{ order._row }}" } }
+                json!({ "type": "control.forEach", "params": { "items": "reverse(filter(受注一覧, o => o.状態 == '取消'))", "itemVar": "受注" }, "blocks": { "body": [
+                    { "type": DELETE_ROWS, "name": "取消の行を消す", "params": { "path": PATH, "sheet": "受注", "row": "{{ 受注._row }}" } }
                 ] } }),
             ],
         },
@@ -787,7 +787,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": RENAME_SHEET, "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ month }}月" } }),
+                json!({ "type": RENAME_SHEET, "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ 対象月 }}月" } }),
             ],
         },
         Def {
@@ -803,7 +803,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: false,
             more_paths: &[],
             examples: vec![
-                json!({ "type": COPY_SHEET, "name": "ひな形から今月のシートを作る", "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ month }}月" } }),
+                json!({ "type": COPY_SHEET, "name": "ひな形から今月のシートを作る", "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ 対象月 }}月" } }),
             ],
         },
         Def {
@@ -850,7 +850,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             more_paths: &[],
             examples: vec![
                 json!({ "type": RUN_MACRO, "name": "集計マクロを実行", "params": { "path": "templates/集計.xlsm", "macro": "Module1.集計" } }),
-                json!({ "type": RUN_MACRO, "params": { "path": "templates/集計.xlsm", "macro": "月次レポート", "args": ["{{ month }}", 2026] }, "saveAs": "result" }),
+                json!({ "type": RUN_MACRO, "params": { "path": "templates/集計.xlsm", "macro": "月次レポート", "args": ["{{ 対象月 }}", 2026] }, "saveAs": "結果" }),
             ],
         },
         Def {
@@ -918,7 +918,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             needs_excel: true,
             more_paths: &["to"],
             examples: vec![
-                json!({ "type": EXPORT_PDF, "name": "請求書を PDF にする", "params": { "path": "output/請求書.xlsx", "sheet": "請求書", "to": "output/請求書_{{ customer.コード }}.pdf" } }),
+                json!({ "type": EXPORT_PDF, "name": "請求書を PDF にする", "params": { "path": "output/請求書.xlsx", "sheet": "請求書", "to": "output/請求書_{{ 顧客.コード }}.pdf" } }),
             ],
         },
         Def {

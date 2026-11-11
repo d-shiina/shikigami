@@ -390,7 +390,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::READ_TEXT, "params": { "path": "input/memo.txt" }, "saveAs": "memo" }),
+                    json!({ "type": types::READ_TEXT, "params": { "path": "input/memo.txt" }, "saveAs": "メモ" }),
                 ],
             ),
             Kind::ReadText,
@@ -407,7 +407,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::WRITE_TEXT, "params": { "path": "output/report.txt", "text": "合計 {{ total }} 円" } }),
+                    json!({ "type": types::WRITE_TEXT, "params": { "path": "output/report.txt", "text": "合計 {{ 合計 }} 円" } }),
                     json!({ "type": types::WRITE_TEXT, "params": { "path": "work/log.txt", "text": "{{ now() }} 完了\r\n", "append": true } }),
                 ],
             ),
@@ -425,7 +425,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::READ_CSV, "params": { "path": "input/orders.csv" }, "saveAs": "orders" }),
+                    json!({ "type": types::READ_CSV, "params": { "path": "input/orders.csv" }, "saveAs": "受注一覧" }),
                 ],
             ),
             Kind::ReadCsv,
@@ -451,7 +451,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 vec![ResourceDef::file("path")],
                 vec![json!({
                     "type": types::WRITE_CSV,
-                    "params": { "path": "output/result.csv", "rows": "{{ results }}", "columns": ["注文番号", "金額", "状態"], "encoding": "utf-8-bom" }
+                    "params": { "path": "output/result.csv", "rows": "{{ 結果一覧 }}", "columns": ["注文番号", "金額", "状態"], "encoding": "utf-8-bom" }
                 })],
             ),
             Kind::WriteCsv,
@@ -465,7 +465,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![],
                 vec![
-                    json!({ "type": types::EXISTS, "params": { "path": "work/done.flag" }, "saveAs": "done" }),
+                    json!({ "type": types::EXISTS, "params": { "path": "work/done.flag" }, "saveAs": "処理済み" }),
                 ],
             ),
             Kind::Exists,
@@ -487,7 +487,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![],
                 vec![
-                    json!({ "type": types::LIST, "params": { "folder": "C:\\work\\inbox", "pattern": "*.csv" }, "saveAs": "csvFiles" }),
+                    json!({ "type": types::LIST, "params": { "folder": "C:\\work\\inbox", "pattern": "*.csv" }, "saveAs": "CSVファイル一覧" }),
                 ],
             ),
             Kind::List,
@@ -521,7 +521,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("from"), ResourceDef::file("to")],
                 vec![
-                    json!({ "type": types::MOVE, "params": { "from": "{{ file.path }}", "to": "{{ pathJoin('C:\\\\work\\\\done', file.name) }}" } }),
+                    json!({ "type": types::MOVE, "params": { "from": "{{ ファイル.path }}", "to": "{{ pathJoin('C:\\\\work\\\\done', ファイル.name) }}" } }),
                 ],
             ),
             Kind::Move,
@@ -534,7 +534,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 object_schema(json!({ "path": path, "recursive": flag }), &["path"]),
                 RiskLevel::Dangerous,
                 vec![ResourceDef::file("path")],
-                vec![json!({ "type": types::DELETE, "params": { "path": "work/{{ name }}.csv" } })],
+                vec![json!({ "type": types::DELETE, "params": { "path": "work/{{ 名前 }}.csv" } })],
             ),
             Kind::Delete,
         ),
@@ -585,7 +585,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::UNZIP, "params": { "path": "input/download.zip", "to": "work/unzipped" }, "saveAs": "files" }),
+                    json!({ "type": types::UNZIP, "params": { "path": "input/download.zip", "to": "work/unzipped" }, "saveAs": "ファイル一覧" }),
                 ],
             ),
             Kind::Unzip,
