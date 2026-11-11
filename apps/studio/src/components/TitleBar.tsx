@@ -51,7 +51,21 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
           <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">{t.drafting.tag}</span>
         </div>
       ) : (
-        page && <span className="truncate text-[13px] font-bold">{page}</span>
+        page &&
+        // Every place starts from the list of flows, so each one says the way back there, as an open flow's bar does.
+        (place === "library" ? (
+          <span className="truncate text-[13px] font-bold">{page}</span>
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button type="button" onClick={() => setPlace("library")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+              {t.flows}
+            </button>
+            <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
+              /
+            </span>
+            <span className="truncate text-[13px] font-bold">{page}</span>
+          </div>
+        ))
       )}
       <span data-tauri-drag-region className="min-w-4 flex-1 self-stretch" />
       {editing &&
