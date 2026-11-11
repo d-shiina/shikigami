@@ -6,14 +6,17 @@
       "params": {
         "type": "object",
         "properties": {
+          "edge": {
+            "enum": [
+              "everyday",
+              "sso",
+              "port"
+            ]
+          },
           "port": {
             "type": "integer",
             "minimum": 1,
             "maximum": 65535
-          },
-          "start": {
-            "type": "boolean",
-            "default": true
           },
           "title": {
             "type": "string",

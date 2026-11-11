@@ -68,9 +68,9 @@ describe("browser.attach", () => {
     expect(person.exitCode).toBeNull();
   });
 
-  it("says how to start the browser when nothing listens and start is off", async () => {
+  it("says how to start the browser when nothing listens on the port it names", async () => {
     const adapter = new Adapter({ timeoutMs: 1000 });
-    const err = await failure(adapter.call("attach", { runId: "run_none", port: 1, start: false, timeoutMs: 1000 }));
+    const err = await failure(adapter.call("attach", { runId: "run_none", port: 1, timeoutMs: 1000 }));
     expect(err.code).toBe("BROWSER_NOT_RUNNING");
     expect(String(err.details?.hint)).toContain("--remote-debugging-port=1");
   });
@@ -86,7 +86,7 @@ describe("browser.attach", () => {
     const adapter = new Adapter({ timeoutMs: 15000, executablePath: executable, forceHeadless: true, ssoProfileDir: profile });
     const run = { runId: "run_sso", context: "sso" };
     // A tab to pick does not exist in a browser just started: the empty tab is used.
-    const tab = (await adapter.call("attach", { ...run, port: free, title: "勤怠" })) as { started?: boolean };
+    const tab = (await adapter.call("attach", { ...run, edge: "sso", port: free, title: "勤怠" })) as { started?: boolean };
     expect(tab.started).toBe(true);
     expect(existsSync(profile)).toBe(true);
     await adapter.call("open", { ...run, url: page("勤怠システム") });
@@ -106,7 +106,7 @@ describe("browser.attach", () => {
     const free = await freePort();
     const profile = join(mkdtempSync(join(tmpdir(), "spellsheet-sso-")), "edge-profile");
     const adapter = new Adapter({ timeoutMs: 15000, executablePath: executable, forceHeadless: true, ssoProfileDir: profile });
-    expect(((await adapter.call("attach", { runId: "run_quit", port: free })) as { started?: boolean }).started).toBe(true);
+    expect(((await adapter.call("attach", { runId: "run_quit", edge: "sso", port: free })) as { started?: boolean }).started).toBe(true);
     await adapter.shutdown();
     expect(await portClosed(free)).toBe(true);
   });

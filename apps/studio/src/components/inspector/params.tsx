@@ -247,7 +247,7 @@ function ParamField({
       </select>
     );
   } else if (schema.type === "boolean") {
-    editor = <input type="checkbox" className="mt-1.5" checked={value === true || (value == null && schema.default === true)} onChange={(e) => onChange(e.target.checked)} />;
+    editor = <input type="checkbox" className="mt-1.5" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
   } else if (schema.type === "integer" || schema.type === "number" || (schema.oneOf && !choices)) {
     // number | expression string (oneOf), or plain number
     hint ??= t.props.numberHint;

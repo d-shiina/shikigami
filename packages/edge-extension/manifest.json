@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "SpellSheet",
+  "version": "0.1.0",
+  "description": "Lets SpellSheet flows work in this Edge, with your own sign-ins. SpellSheet のフローが、ふだんのサインインのままこの Edge で動けるようにします。",
+  "minimum_chrome_version": "125",
+  "permissions": ["debugger", "tabs", "storage"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "icons": { "32": "icon-32.png", "128": "icon-128.png" },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkj5W7Fls+ccyXQzXRJl3R91ncmMZabhYlEoZGAvRDsAgYUKk4xXpqA/lsNRCZ5vPz0pDLEw6sn0LhLqCbOruDnuYFK80RuSwOZby6Cu7luEWPv9K/yUTjOkOxdT3ALwi5RjFNXPWzIhFRF+mSSPOebGqQd8ZPuouyb1ISa4st9TlljI/VOSDxiHWU7jpAGCxjKH8sHGbYrC4dP28cnl1JAKrru11IZAoXhfPvJKyUnyc8P475wHknlfFyNYqlJN3FB2wFhGWcZuY7OgNW7+kc8pWRRoO/I/MmDHzJpvzSryeSVKw35Znh68NSSNsGS8Gs51RWd5uoPX/QoG8VAqiMwIDAQAB"
+}
