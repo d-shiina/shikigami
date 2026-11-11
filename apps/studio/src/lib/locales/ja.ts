@@ -723,6 +723,7 @@ export const ja = {
   },
   agent: {
     setUp: "設定する",
+    moveLeft: "左に移す",
     moveRight: "右に移す",
     moveBelow: "下に移す",
     closeTalk: "会話を閉じる",

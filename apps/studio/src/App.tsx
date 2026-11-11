@@ -375,7 +375,7 @@ function Shell() {
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
   const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
-  const shown = { agent: agentOpen && agentPlace === "right", right: editing && hasFlow && rightOpen, inbox: place === "review" };
+  const shown = { agent: agentOpen && agentPlace !== "below", right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
@@ -384,7 +384,7 @@ function Shell() {
     const size = panel === "agent" ? fit.agent : sizes[panel];
     return (
       <Resizer
-        edge={panel === "right" || panel === "agent" ? "left" : "right"}
+        edge={panel === "right" || (panel === "agent" && agentPlace === "right") ? "left" : "right"}
         size={size}
         min={min}
         max={Math.max(size, Math.min(max, size + fit.chart - CHART_MIN))}
@@ -393,6 +393,13 @@ function Shell() {
       />
     );
   };
+  // Moved there by the person: the AI's conversation in a column of its own beside the work, on either side.
+  const agentColumn = fit.agent > 0 && (
+    <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+      <AgentPane desk={false} width={fit.agent} />
+      {grip("agent")}
+    </div>
+  );
   const work = (
     <div className="flex min-h-0 flex-1">
       {/* With nothing open, the editor has nothing to show: the library does. */}
@@ -468,6 +475,7 @@ function Shell() {
       </div>
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 px-1.5 pb-1.5">
+          {agentPlace === "left" && agentColumn}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
             <Attention />
@@ -477,13 +485,7 @@ function Shell() {
             {/* Asking the AI is under the work in every place (it makes new flows too): on the desk where a paper lies on one. */}
             {agentPlace === "below" && <AgentPane desk={(place === "flows" && ((hasFlow && view !== "result" && view !== "variables") || drafting)) || place === "review" || place === "inventory"} />}
           </div>
-          {/* Moved there by the person: the AI's conversation in a column of its own beside the work. */}
-          {agentPlace === "right" && fit.agent > 0 && (
-            <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-              <AgentPane desk={false} width={fit.agent} />
-              {grip("agent")}
-            </div>
-          )}
+          {agentPlace === "right" && agentColumn}
         </div>
       </div>
       {dialogs}

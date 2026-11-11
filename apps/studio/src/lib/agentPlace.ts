@@ -1,15 +1,16 @@
-// Where asking the AI sits: under the work (the field under the paper) or in a column on the right.
+// Where asking the AI sits: under the work (the field under the paper) or in a column on the left or the right.
 // A remembered preference of this PC, changed on the spot from the field or the conversation's header.
 import { useSyncExternalStore } from "react";
 
-export type AgentPlace = "below" | "right";
+export type AgentPlace = "below" | "right" | "left";
 
 const KEY = "spellsheet.studio.agentPlace";
 const listeners = new Set<() => void>();
 
 function stored(): AgentPlace {
   try {
-    return globalThis.localStorage?.getItem(KEY) === "right" ? "right" : "below";
+    const kept = globalThis.localStorage?.getItem(KEY);
+    return kept === "right" || kept === "left" ? kept : "below";
   } catch {
     return "below";
   }

@@ -723,6 +723,7 @@ export const en: Dict = {
   },
   agent: {
     setUp: "Set up",
+    moveLeft: "Move to the left",
     moveRight: "Move to the right",
     moveBelow: "Move under the work",
     closeTalk: "Close the conversation",
