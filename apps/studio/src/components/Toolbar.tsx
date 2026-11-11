@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, Variable } from "lucide-react";
+import { ArrowLeft, CircleCheck, CircleDashed, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, type LucideIcon } from "lucide-react";
 import { openMenu } from "../lib/contextMenu";
 import { FlowSwitch } from "./FlowSwitch";
 
@@ -35,13 +35,14 @@ export type View = "story" | "chart" | "variables" | "result";
  */
 function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
   const place = useStudio((s) => s.place);
-  const others: Partial<Record<ReviewView, string>> = { variables: t.vars.table.view, result: t.result.view };
-  const other = others[view];
+  // Every way to see the flow is in the switch, so none of them has to be found in a menu.
   const options: [ReviewView, string][] = [
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
     ["story", t.viewStory],
     ["chart", t.viewChart],
-    ...(other ? [[view, other] as [ReviewView, string]] : []),
+    ["variables", t.vars.table.view],
+    // The runs of the flow as it is kept; on the review desk the AI's own trial run is in the report.
+    ...(place === "flows" ? [["result", t.result.view] as [ReviewView, string]] : []),
   ];
   return (
     <div className="flex h-7 items-center rounded-lg bg-slate-100 p-0.5 text-[12px]" role="radiogroup">
@@ -176,7 +177,14 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
   return (
     <div className="flex shrink-0 items-center gap-2">
       <ViewSwitch view={view} onChange={onView} />
-      <More onView={onView} canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} />
+      {/* A narrow bar (the AI's column open beside a small window) keeps the tools in the menu instead. */}
+      <div className="flex items-center @max-[760px]/title:hidden">
+        <Tools busy={aiBusy} />
+        <More canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} />
+      </div>
+      <div className="hidden items-center @max-[760px]/title:flex">
+        <More canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} tools />
+      </div>
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
         <div className="flex h-7 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
@@ -234,23 +242,62 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
 }
 
 /**
+ * What belongs to the flow besides its steps, each one press away: its settings, how it got
+ * here, its files, and handing it to someone. Icons, named on hover, so the bar stays short.
+ */
+type Tool = { label: string; icon: LucideIcon; run: () => void; disabled?: boolean };
+
+function useTools(busy: boolean): Tool[] {
+  const flow = useStudio((s) => s.flow);
+  const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
+  const openHandOff = useStudio((s) => s.openHandOff);
+  const showFlowProps = useStudio((s) => s.showFlowProps);
+  const setFiles = useProjectMaybe((p) => p.setPanelOpen, null);
+  if (!flow) return [];
+  return [
+    { label: t.shell.flowSettings, icon: Settings2, run: showFlowProps },
+    { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
+    ...(setFiles ? [{ label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) }] : []),
+    { label: t.handOff.open, icon: Send, run: () => void openHandOff(flow.id), disabled: busy },
+  ];
+}
+
+function Tools({ busy }: { busy: boolean }) {
+  const tools = useTools(busy);
+  if (tools.length === 0) return null;
+  return (
+    <>
+      {tools.map(({ label, icon: Icon, run, disabled }) => (
+        <button
+          key={label}
+          type="button"
+          title={disabled ? t.toolbar.aiBusy : label}
+          aria-label={label}
+          disabled={disabled}
+          onClick={run}
+          className="grid h-7 w-7 place-items-center rounded-md text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+        >
+          <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      ))}
+    </>
+  );
+}
+
+/**
  * Everything else about the open flow, behind one button: the other ways to
  * see it, running it a step at a time, how it got here, its folder, and
  * handing it to someone.
  */
-function More({ onView, canRun, busy }: { onView: (view: ReviewView) => void; canRun: boolean; busy: boolean }) {
+function More({ canRun, busy, tools = false }: { canRun: boolean; busy: boolean; tools?: boolean }) {
+  const extra = useTools(busy);
   const flow = useStudio((s) => s.flow);
-  const place = useStudio((s) => s.place);
   const startRun = useStudio((s) => s.startRun);
-  const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
-  const openHandOff = useStudio((s) => s.openHandOff);
-  const showFlowProps = useStudio((s) => s.showFlowProps);
   const canUndo = useStudio((s) => s.canUndo);
   const canRedo = useStudio((s) => s.canRedo);
   const undo = useStudio((s) => s.undo);
   const redo = useStudio((s) => s.redo);
   const openFolder = useProjectMaybe((p) => p.open, null);
-  const setFiles = useProjectMaybe((p) => p.setPanelOpen, null);
   if (!flow) return null;
   return (
     <button
@@ -263,16 +310,10 @@ function More({ onView, canRun, busy }: { onView: (view: ReviewView) => void; ca
           { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !canUndo || busy, run: () => void undo() },
           { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !canRedo || busy, run: () => void redo() },
           "-",
-          { label: t.vars.table.view, icon: Variable, run: () => onView("variables") },
-          place === "flows" && { label: t.result.view, icon: ClipboardCheck, run: () => onView("result") },
-          "-",
           { label: t.toolbar.stepRun, icon: StepForward, disabled: !canRun, run: () => void startRun({ step: true }) },
           "-",
-          { label: t.shell.flowSettings, icon: Settings2, run: showFlowProps },
-          { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
-          setFiles && { label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) },
+          ...(tools ? extra : []),
           openFolder && { label: t.project.openFolder, icon: FolderOutput, run: () => void openFolder("", false) },
-          { label: t.handOff.open, icon: Send, disabled: busy, run: () => void openHandOff(flow.id) },
         ]);
       }}
       className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
