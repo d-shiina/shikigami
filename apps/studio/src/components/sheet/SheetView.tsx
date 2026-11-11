@@ -2,8 +2,8 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
 import { locale, t } from "../../lib/i18n";
@@ -230,6 +230,48 @@ function ChangeNotes({ steps, ctx }: { steps: ManualStep[]; ctx: RowCtx }) {
   );
 }
 
+/** One level deeper: everything the picked step is set to, where it is said, then what is done to the step as a whole. More is on the right button. */
+function Details({ stepId, ctx }: { stepId: string; ctx: RowCtx }) {
+  const act = "inline-flex items-center gap-1 hover:text-ink";
+  return (
+    <div className="mt-2.5 mb-1 border-y border-slate-200">
+      <StepInspector />
+      <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-200 px-4 py-2.5 text-[12.5px] text-slate-600">
+        <button type="button" onClick={ctx.onAdd} className={act}>
+          <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.sheetView.addBelow}
+        </button>
+        <button type="button" onClick={() => ctx.onMove(-1)} className={act}>
+          <ArrowUp size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.moveUp}
+        </button>
+        <button type="button" onClick={() => ctx.onMove(1)} className={act}>
+          <ArrowDown size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.moveDown}
+        </button>
+        <button type="button" onClick={() => ctx.onStop(stepId, true)} className={act}>
+          <CirclePause size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.sheetView.stop}
+        </button>
+        <button type="button" onClick={ctx.onRemove} className="inline-flex items-center gap-1 hover:text-shu-600">
+          <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.delete}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A place with no step in it yet: the first one is added there. */
+function AddHere({ parentId, block, ctx, first = false }: { parentId: string | null; block: string | null; ctx: RowCtx; first?: boolean }) {
+  return (
+    <button type="button" onClick={() => ctx.onAddIn(parentId, block)} className="my-1.5 inline-flex items-center gap-1 text-[13px] text-primary hover:underline">
+      <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+      {first ? t.sheetView.addFirst : t.sheetView.addHere}
+    </button>
+  );
+}
+
 /** `notes`: false on a screen's steps, whose changes are said together before the screen's picture. */
 function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; notes?: boolean }) {
   const picked = ctx.picked === step.stepId;
@@ -244,7 +286,7 @@ function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; n
       <div className="grid grid-cols-[28px_minmax(0,1fr)]">
       <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{step.number}</span>
       <div className="min-w-0">
-        <button type="button" onClick={() => onPick(step)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
+        <button type="button" onClick={() => onPick(step.stepId)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
           {/* The step the run is on is under the highlighter, as the one picked is. */}
           <span className={picked || state === "running" ? "flow-chart-on" : ""}>{step.text}</span>
           {state && state !== "running" && state !== "skipped" && <RunMark state={state} />}
@@ -257,26 +299,7 @@ function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; n
         )}
         {step.note && <p className="mt-1 text-[12.5px] leading-[1.7] text-slate-500">{step.note}</p>}
         {/* One level deeper: everything the step is set to, where it is said. A step of a called flow is changed in that flow. */}
-        {picked && step.callPath.length === 0 && (
-          <div className="mt-2.5 mb-1 border-y border-slate-200">
-            <StepInspector />
-            {/* What is done to the step as a whole, after what it is set to. More is on the right button. */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-200 px-4 py-2.5 text-[12.5px] text-slate-600">
-              <button type="button" onClick={ctx.onAdd} className="inline-flex items-center gap-1 hover:text-ink">
-                <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
-                {t.sheetView.addBelow}
-              </button>
-              <button type="button" onClick={() => ctx.onStop(step.stepId, true)} className="inline-flex items-center gap-1 hover:text-ink">
-                <CirclePause size={13} strokeWidth={1.75} aria-hidden="true" />
-                {t.sheetView.stop}
-              </button>
-              <button type="button" onClick={ctx.onRemove} className="inline-flex items-center gap-1 hover:text-shu-600">
-                <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
-                {t.delete}
-              </button>
-            </div>
-          </div>
-        )}
+        {picked && step.callPath.length === 0 && <Details stepId={step.stepId} ctx={ctx} />}
       </div>
       </div>
     </li>
@@ -338,7 +361,7 @@ function Aside({ children }: { children: React.ReactNode }) {
 type RowCtx = {
   pictures: Pictures;
   picked: string | null;
-  onPick: (step: ManualStep) => void;
+  onPick: (stepId: string) => void;
   /** The flow's own step (not one of a called flow). */
   stepOf: (id: string) => Step | undefined;
   onValue: (stepId: string, key: string, value: string | number) => void;
@@ -352,6 +375,10 @@ type RowCtx = {
   /** A new step under the picked one, and the picked one taken out. */
   onAdd: () => void;
   onRemove: () => void;
+  /** The picked step, one place up or down among its neighbours. */
+  onMove: (delta: -1 | 1) => void;
+  /** A first step into a place that has none (the flow itself: null). */
+  onAddIn: (parentId: string | null, block: string | null) => void;
   /** The right button on a step: everything else that is done to it. */
   menu: (stepId: string) => React.MouseEventHandler;
 };
@@ -406,23 +433,58 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
       </p>
     );
   }
-  if (item.kind === "quiet") return <p className="py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-500">{item.texts.join(t.sheetView.and)}</p>;
+  if (item.kind === "quiet") {
+    // Small steps of the work itself (a value kept, a line logged): said in one line, each opened like any step.
+    const open = item.ids.find((id) => id && id === ctx.picked);
+    return (
+      <div className="py-1.5 pl-7">
+        <p className="text-[13px] leading-[1.7] text-slate-500">
+          {item.texts.map((text, i) => {
+            const id = item.ids[i];
+            return (
+              <Fragment key={i}>
+                {i > 0 && t.sheetView.and}
+                {id ? (
+                  <button type="button" data-step={id} onClick={() => ctx.onPick(id)} onContextMenu={ctx.menu(id)} className="text-left hover:text-ink">
+                    <span className={id === ctx.picked ? "flow-chart-on text-ink" : ""}>{text}</span>
+                  </button>
+                ) : (
+                  text
+                )}
+              </Fragment>
+            );
+          })}
+        </p>
+        {open && <Details stepId={open} ctx={ctx} />}
+      </div>
+    );
+  }
   // What repeats, what runs only sometimes and what belongs together: a rule down the side, named at its top.
   const Icon = item.kind === "loop" ? Repeat : item.kind === "branch" ? Split : null;
+  // The step the part is of opens from its name, on the part that comes first (not again on 「そうでないとき」).
+  const head = item.of && (!item.block || !["else", "catch", "finally"].includes(item.block)) ? item.of : null;
   const more = item.kind === "loop" && item.times !== null ? t.manual.loopTimes(item.times) : item.kind === "branch" && item.taken !== null ? (item.taken ? t.manual.took : t.manual.notTaken) : null;
   return (
     <div className={`my-2 ml-[5px] border-l-2 pl-[21px] ${item.kind === "loop" ? "border-[var(--manual-loop-line)]" : "border-slate-200"}`}>
       {(item.label || more) && (
         <p className="flex flex-wrap items-center gap-x-2 py-1.5 text-[13px] text-slate-600">
           {Icon && <Icon size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-500" />}
-          <span className="font-medium">{item.label}</span>
+          {head ? (
+            <button type="button" data-step={head} onClick={() => ctx.onPick(head)} onContextMenu={ctx.menu(head)} className="text-left font-medium hover:text-ink">
+              <span className={head === ctx.picked ? "flow-chart-on text-ink" : ""}>{item.label}</span>
+            </button>
+          ) : (
+            <span className="font-medium">{item.label}</span>
+          )}
           {more && <span className="text-[12px] text-slate-400">{more}</span>}
         </p>
       )}
+      {head && head === ctx.picked && <Details stepId={head} ctx={ctx} />}
       <div className={item.kind === "branch" && item.taken === false ? "opacity-70" : ""}>
         {item.items.map((c, i) => (
           <Item key={i} item={c} ctx={ctx} />
         ))}
+        {item.items.length === 0 && item.of && item.block && <AddHere parentId={item.of} block={item.block} ctx={ctx} />}
       </div>
     </div>
   );
@@ -432,16 +494,20 @@ function ChapterView({ chapter, ctx }: { chapter: Chapter; ctx: RowCtx }) {
   // A chapter that is one loop or one branch is named by it: its name is not said twice.
   const only = chapter.items.length === 1 ? chapter.items[0] : undefined;
   const whole = only && "items" in only && only.label === chapter.title ? only : null;
+  const of = whole?.of && (!whole.block || !["else", "catch", "finally"].includes(whole.block)) ? whole.of : undefined;
   return (
     <section data-chapter={chapter.number} className="mt-10 scroll-mt-6">
-      <h2 className="mb-2">
+      {/* Named by a step of the flow, the heading opens that step as its name would lower down. */}
+      <h2 className="mb-2" data-step={of} onClick={of ? () => ctx.onPick(of) : undefined} onContextMenu={of ? ctx.menu(of) : undefined} style={of ? { cursor: "pointer" } : undefined}>
         <SheetHeading n={chapter.role ? undefined : chapter.number} size="chapter" aside={whole?.kind === "loop" && whole.times !== null ? t.manual.loopTimes(whole.times) : undefined}>
           {chapter.title}
         </SheetHeading>
       </h2>
+      {of && of === ctx.picked && <Details stepId={of} ctx={ctx} />}
       {(whole?.items ?? chapter.items).map((item, i) => (
         <Item key={i} item={item} ctx={ctx} />
       ))}
+      {whole && whole.items.length === 0 && whole.of && whole.block && <AddHere parentId={whole.of} block={whole.block} ctx={ctx} />}
     </section>
   );
 }
@@ -491,6 +557,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   const updateStep = useStudio((s) => s.updateStep);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const removeSelected = useStudio((s) => s.removeSelected);
+  const moveSelected = useStudio((s) => s.moveSelected);
   const stepMenu = useStepMenu();
   const selection = useStudio((s) => s.selection);
   const running = useStudio((s) => isActive(s.run));
@@ -574,7 +641,12 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
         return stepMenu(step, { owner: flow.id });
       }),
     // Pressed again, the step folds back.
-    onPick: (step) => select(selection?.kind === "step" && selection.stepId === step.stepId ? null : { kind: "step", stepId: step.stepId }),
+    onPick: (stepId) => select(selection?.kind === "step" && selection.stepId === stepId ? null : { kind: "step", stepId }),
+    onMove: (delta) => void moveSelected(delta),
+    onAddIn: (parentId, block) => {
+      select({ kind: "slot", parentId, block });
+      setPaletteOpen(true);
+    },
   };
   const when = schedules.map((s) => describeWhen(s.when));
   const chart = mode === "chart";
@@ -626,6 +698,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
                 {doc.chapters.map((c) => (
                   <ChapterView key={c.number} chapter={c} ctx={ctx} />
                 ))}
+                {(flow.steps ?? []).length === 0 && <AddHere parentId={null} block={null} ctx={ctx} first />}
               </div>
             </div>
           )}

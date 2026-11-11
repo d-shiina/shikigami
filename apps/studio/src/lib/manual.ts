@@ -92,12 +92,16 @@ export type Scene = {
 export type ManualItem =
   | Scene
   | { kind: "action"; step: ManualStep }
-  | { kind: "quiet"; texts: string[] }
+  /** `ids`: the step of each text, "" where it is a called flow's (not changed here). */
+  | { kind: "quiet"; texts: string[]; ids: string[] }
   /** A step that is switched off (only with `stopped`, see buildManual). */
   | { kind: "stopped"; stepId: string; text: string }
-  | { kind: "branch"; label: string; taken: boolean | null; items: ManualItem[] }
-  | { kind: "loop"; label: string; times: number | null; items: ManualItem[] }
-  | { kind: "group"; label: string; items: ManualItem[] };
+  | ({ kind: "branch"; label: string; taken: boolean | null; items: ManualItem[] } & Owner)
+  | ({ kind: "loop"; label: string; times: number | null; items: ManualItem[] } & Owner)
+  | ({ kind: "group"; label: string; items: ManualItem[] } & Owner);
+
+/** The flow's own step a part comes from, and which block of it the part holds (none for a called flow's). */
+export type Owner = { of?: string; block?: string };
 
 export type Chapter = {
   number: number;
@@ -317,10 +321,14 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
     if (QUIET.has(step.type)) {
       const prev = last();
       const text = label(step, ctx);
-      if (prev?.kind === "quiet") prev.texts.push(text);
-      else out.push({ kind: "quiet", texts: [text] });
+      const id = callPath.length === 0 ? (step.id ?? "") : "";
+      if (prev?.kind === "quiet") {
+        prev.texts.push(text);
+        prev.ids.push(id);
+      } else out.push({ kind: "quiet", texts: [text], ids: [id] });
       continue;
     }
+    const own = callPath.length === 0 ? step.id : undefined;
     switch (step.type) {
       case IF:
       case SWITCH:
@@ -329,7 +337,8 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
         const p = (step.params ?? {}) as Record<string, unknown>;
         const condition = typeof p.condition === "string" ? plain(humanize([{ code: readable(p.condition) }], ctx.words)) : "";
         for (const block of blocks(step, ctx)) {
-          if (block.steps.length === 0) continue;
+          // Where steps are changed, the block a step always has is there to be filled while it is still empty.
+          if (block.steps.length === 0 && !(ctx.stopped && own && (block.name === "then" || block.name === "try"))) continue;
           // A switch's cases are nodes of their own.
           if (step.type === SWITCH && block.name !== "default") {
             for (const c of block.steps) {
@@ -340,6 +349,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
                 label: t.manual.whenCase(label(step, ctx), label(c, ctx)),
                 taken: blockRan(caseSteps, callPath, ctx),
                 items: items(caseSteps, callPath, ctx),
+                of: callPath.length === 0 ? c.id : undefined,
               });
             }
             continue;
@@ -358,7 +368,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
                   : name
                     ? t.manual.otherwise
                     : t.manual.whenNot(condition);
-          out.push({ kind: "branch", label: branchLabel, taken: blockRan(block.steps, callPath, ctx), items: items(block.steps, callPath, ctx) });
+          out.push({ kind: "branch", label: branchLabel, taken: blockRan(block.steps, callPath, ctx), items: items(block.steps, callPath, ctx), of: own, block: block.name });
         }
         break;
       }
@@ -366,7 +376,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
       case REPEAT:
       case WHILE: {
         const body = step.blocks?.body ?? [];
-        out.push({ kind: "loop", label: label(step, ctx), times: loopTimes(body, callPath, ctx), items: items(body, callPath, ctx) });
+        out.push({ kind: "loop", label: label(step, ctx), times: loopTimes(body, callPath, ctx), items: items(body, callPath, ctx), of: own, block: "body" });
         break;
       }
       case GROUP:
@@ -378,7 +388,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
             out.push({ kind: "group", label: t.manual.alongside(label(branch, ctx)), items: items([branch], callPath, ctx) });
           }
         } else {
-          out.push({ kind: "group", label: label(step, ctx), items: items(inner, callPath, ctx) });
+          out.push({ kind: "group", label: label(step, ctx), items: items(inner, callPath, ctx), of: own, block: Object.keys(step.blocks ?? {})[0] });
         }
         break;
       }
@@ -386,7 +396,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
         const called = ctx.subflows.get(String((step.params as Record<string, unknown> | undefined)?.flow ?? ""));
         if (called && ctx.depth < 4) {
           const inner = { ...ctx, flowId: called.id, depth: ctx.depth + 1, words: new Map([...ctx.words, ...varWords(called.variables ?? [])]) };
-          out.push({ kind: "group", label: label(step, ctx), items: items(called.steps ?? [], [...callPath, step.id], inner) });
+          out.push({ kind: "group", label: label(step, ctx), items: items(called.steps ?? [], [...callPath, step.id], inner), of: own });
         } else {
           out.push({ kind: "action", step: manualStep(step, callPath, ctx) });
         }

@@ -2165,6 +2165,8 @@ export const en: Dict = {
     stopped: "Switched off",
     start: "Switch on",
     addBelow: "Add a step below",
+    addHere: "Add a step here",
+    addFirst: "Add the first step",
     stop: "Switch this step off",
     change: "Press to change",
     input: "Input",

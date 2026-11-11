@@ -2165,6 +2165,8 @@ export const ja = {
     stopped: "止めています",
     start: "動かす",
     addBelow: "下に手順を追加",
+    addHere: "ここに手順を追加",
+    addFirst: "最初の手順を追加",
     stop: "この手順を止める",
     change: "押して書き換える",
     input: "入力",
