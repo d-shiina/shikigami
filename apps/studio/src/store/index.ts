@@ -179,8 +179,6 @@ export type StudioState = {
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
   folded: Record<string, string[]>;
   outlineOpen: boolean;
-  /** The 手順書 is open for editing (its outline), not read as sheets: the right pane may show. */
-  manualEditing: boolean;
   /**
    * The right pane kept open by hand. Without it the pane opens only while a
    * node or part is selected, so the chart (or the 変数 table) has the room.
@@ -268,7 +266,6 @@ export type StudioState = {
   /** Moves to the previous / next step the AI changed (review desk). */
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
-  setManualEditing(on: boolean): void;
   setOutlineOpen(open: boolean): void;
   /** Keeps the right pane open (the flow's settings when nothing is selected), or closes it. */
   setInspectorOpen(open: boolean): void;
@@ -472,7 +469,6 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
-      manualEditing: false,
       inspectorOpen: loadFlag(INSPECTOR_KEY, false),
       paletteOpen: false,
       searchOpen: false,

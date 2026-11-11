@@ -24,17 +24,8 @@ import { menuFor } from "../../lib/contextMenu";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
-import { ExportDialog, MaskEditor, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "../ManualView";
+import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
-
-/** The pictures of the screens and what is done about them. */
-type Pictures = {
-  urls: Record<string, string>;
-  want: (file: string) => void;
-  masks: Record<string, Mask>;
-  onWhole: (shot: ManualShot) => void;
-  onMask: (shot: ManualShot) => void;
-};
 
 const CHIP = "mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink";
 
@@ -306,9 +297,9 @@ function Figure({ scene, pictures }: { scene: Scene; pictures: Pictures }) {
         title={t.manual.whole}
         onClick={() => pictures.onWhole(shot)}
         onKeyDown={(e) => e.key === "Enter" && pictures.onWhole(shot)}
-        className="cursor-zoom-in overflow-hidden rounded-[4px] border border-slate-200 [&_button]:hidden"
+        className="cursor-zoom-in overflow-hidden rounded-[4px] border border-slate-200"
       >
-        <ShotFrame shot={shot} marks={sceneMarks(scene)} ctx={pictures} small />
+        <ShotFrame shot={shot} marks={sceneMarks(scene)} ctx={pictures} />
       </div>
       <figcaption className="mt-1.5 flex items-start gap-2 text-[12px] leading-[1.5] text-slate-500">
         <span className="min-w-0 flex-1">

@@ -4,8 +4,9 @@
 // The flow becomes chapters (its top-level parts), each chapter a list of
 // screens with numbered operations, branches and loops as framed parts,
 // and work with no screen (variables, logs) folded into one quiet line.
-// This module only builds that outline; ManualView draws it and
-// manualExport writes it as one HTML file.
+// This module only builds that outline; the sheet draws it
+// (components/sheet/SheetView.tsx) and manualExport writes it as one HTML
+// file of A4 pages.
 import type { Flow, PublishedState, Step, StepTypeDef, VariableDef, VersionSummary } from "@spellsheet/schema";
 import { t } from "./i18n";
 import { blockLabel } from "./keywords";

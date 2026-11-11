@@ -15,7 +15,7 @@ import { type Recording, recordedSteps, recordingOps, tidyRequest } from "../lib
 import { plain, sentence } from "../lib/sentence";
 import { projectApi } from "../project";
 import { isActive, insertPlace, newStepId } from "../store";
-import { Sentence } from "./StoryView";
+import { Sentence } from "./Sentence";
 
 const stamp = () => {
   const d = new Date();

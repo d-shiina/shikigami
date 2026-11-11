@@ -54,10 +54,6 @@ export const uiActions = ({ set, get }: StoreContext) =>
       set({ followRun: on });
     },
 
-    setManualEditing(on) {
-      set({ manualEditing: on });
-    },
-
     setOutlineOpen(open) {
       saveFlag(OUTLINE_KEY, open);
       set({ outlineOpen: open });

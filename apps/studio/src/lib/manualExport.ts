@@ -1,4 +1,4 @@
-// The 手順書 as one HTML file: the same outline ManualView shows, with the
+// The 手順書 as one HTML file: the outline the sheet shows, on A4 pages, with the
 // pictures cut to the marked part and what is hidden burned in, so the file
 // can be opened, printed or turned into a PDF anywhere.
 import { locale, t } from "./i18n";
@@ -322,7 +322,7 @@ h2 .cn{font-size:12px;font-weight:600;color:#fff;background:var(--navy);border-r
 body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0 16mm;box-shadow:none;overflow:visible}.sheet>footer,.toc .pg,.toc .dots,.sheet>.stripe{display:none}#p1{padding-top:0}}
 `;
 
-/** One HTML file of `doc`: the same A4 sheets ManualView shows. `pictures` holds each scene's burned picture. */
+/** One HTML file of `doc`: A4 sheets. `pictures` holds each scene's burned picture. */
 export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOptions): string {
   const shown: Pictures = options.noPictures ? new Map() : pictures;
   const pages = pagesOf(doc, !options.noPictures);

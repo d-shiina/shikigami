@@ -9,7 +9,7 @@ import { type Effect, effects as flowEffects } from "../lib/effects";
 import { stepLabel, t } from "../lib/i18n";
 import { flatten } from "../lib/review";
 import { calledName, sentence } from "../lib/sentence";
-import { Sentence } from "./StoryView";
+import { Sentence } from "./Sentence";
 import { shortText } from "./ValueView";
 
 const primary = "rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-on-primary hover:bg-primary-hover";
