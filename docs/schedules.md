@@ -8,7 +8,7 @@ SpellSheet starts flows by itself: every morning at 8, on the 25th of each month
 
 The **worker** is one process per PC (per Windows user and workspace) that fires the schedules and runs them. It needs neither Writer nor an AI.
 
-In Writer, **Automation** in the sidebar shows whether the worker is running and what it is running, and **Turn on automation** starts it (registered to start at every sign-in, as `worker install` does). Schedules are added, edited and switched on and off on the same page. The flow inspector's **Schedules** section lists the flow's own.
+In Writer, **Automation** in the "SpellSheet Writer" menu (top left) shows whether the worker is running and what it is running, and **Turn on automation** starts it (registered to start at every sign-in, as `worker install` does). Schedules are added, edited and switched on and off on the same page. The flow inspector's **Schedules** section lists the flow's own.
 
 ```powershell
 spellsheet worker install     # start it whenever you sign in to Windows (and now)

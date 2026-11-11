@@ -28,7 +28,7 @@ SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, C
 1. Download `SpellSheet.Writer_<version>_x64-setup.exe` from the [latest release](https://github.com/spellsheet/spellsheet/releases/latest) and run it. It installs per user, so no administrator rights are needed. Writer updates itself from then on.
 2. Start **SpellSheet Writer** from the Start menu.
 3. To have AI build flows, open "AI chat" at the top of Writer (Ctrl+J), pick the AI you use (Claude Code, OpenAI Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) and press its button, such as "Install Claude Code": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
-4. Check the AI's changes under "To review" in the sidebar and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
+4. Check the AI's changes under "To review" at the top left and press "Accept changes". Published flows run without AI from Writer, from the "SpellSheet Runner" window, or on a schedule.
 
 The installer and `spellsheet.exe` are not code-signed yet ([Code signing policy](CODE_SIGNING_POLICY.md)), so Windows SmartScreen may warn on the first run; choose "More info", then "Run anyway".
 

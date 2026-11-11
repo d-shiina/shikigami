@@ -14,7 +14,7 @@ Writer shows them as **Plugins**; the code calls them plugins and extensions, an
 
 ### Writer's Plugins page
 
-Open it from **Plugins** in the sidebar or from the node palette (Add plugins, bottom left). It lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the page offers a Restart button).
+Open it from **Plugins** in the "SpellSheet Writer" menu (top left) or from the node palette (Add plugins, bottom left). It lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Writer restarts (the page offers a Restart button).
 
 An extension's nodes are listed in the palette under the extension's name, with its tag (e.g. "AI-OCR") before node names; their settings form is built from the manifest's JSON Schema.
 
