@@ -4,7 +4,7 @@ import { summarize } from "../lib/review";
 import type { StoreContext } from "./context";
 import type { StudioState } from "./index";
 import { pendingReview } from "./history";
-import { OUTLINE_KEY, INSPECTOR_KEY, saveFlag } from "./persist";
+import { INSPECTOR_KEY, saveFlag } from "./persist";
 import { callKey, diveChain } from "./run";
 
 export const uiActions = ({ set, get }: StoreContext) =>
@@ -54,14 +54,6 @@ export const uiActions = ({ set, get }: StoreContext) =>
       set({ followRun: on });
     },
 
-    setManualEditing(on) {
-      set({ manualEditing: on });
-    },
-
-    setOutlineOpen(open) {
-      saveFlag(OUTLINE_KEY, open);
-      set({ outlineOpen: open });
-    },
 
     setInspectorOpen(open) {
       saveFlag(INSPECTOR_KEY, open);

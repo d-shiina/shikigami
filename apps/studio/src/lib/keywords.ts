@@ -235,3 +235,31 @@ function plainExpr(value: unknown): string {
   const m = /^\{\{\s*([\s\S]*?)\s*\}\}$/.exec(s);
   return m ? (m[1] ?? "") : s;
 }
+
+/** On the chart to read, beside a guard (flow/chart.ts): where the flow goes when it leaves the line there. */
+export function guardOutcome(stop: Step): string {
+  const ja = locale === "ja";
+  if (stop.type === "control.continue") return ja ? "次の回へ進む" : "On to the next round";
+  if (stop.type === "control.break") return ja ? "繰り返しを抜ける" : "Leave the loop";
+  return ja ? "失敗として終える" : "Stop as failed";
+}
+
+/** The words of the chart to read (components/chart). */
+export function chartWords() {
+  const ja = locale === "ja";
+  return {
+    /** After a band's question and answer: "はい のときだけ". */
+    onlyWhen: (answer: string) => (ja ? `${answer} のときだけ` : `only when ${answer}`),
+    other: ja ? "その他のとき" : "Otherwise",
+    always: ja ? "最後に必ず" : "Always at the end",
+    failed: ja ? "失敗したとき" : "On failure",
+    failEnd: ja ? "失敗として終える" : "Stop as failed",
+    yes: ja ? "はい" : "Yes",
+    no: ja ? "いいえ" : "No",
+    more: (n: number) => (ja ? `ほか ${n}` : `+${n}`),
+    /** Where branches part to run at the same time; `limit` when only so many run at once. */
+    together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
+    /** After a loop's name, when its rounds run at the same time. */
+    atOnce: (n: number) => (ja ? `${n} 件ずつ同時に` : `${n} at a time`),
+  };
+}

@@ -9,7 +9,9 @@ import { useEffect, useState } from "react";
 import { type Chat, isBusy, useAgent, waitsForChoice } from "../agent";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { NODE_W, TERMINAL_H } from "../flow/layout";
+
+const NODE_W = 290;
+const TERMINAL_H = 30;
 
 /** What the AI is doing in the conversation, as one line under the node. */
 function doing(chat: Chat | undefined): string {

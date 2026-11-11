@@ -4,8 +4,9 @@
 // The flow becomes chapters (its top-level parts), each chapter a list of
 // screens with numbered operations, branches and loops as framed parts,
 // and work with no screen (variables, logs) folded into one quiet line.
-// This module only builds that outline; ManualView draws it and
-// manualExport writes it as one HTML file.
+// This module only builds that outline; the sheet draws it
+// (components/sheet/SheetView.tsx) and manualExport writes it as one HTML
+// file of A4 pages.
 import type { Flow, PublishedState, Step, StepTypeDef, VariableDef, VersionSummary } from "@spellsheet/schema";
 import { t } from "./i18n";
 import { blockLabel } from "./keywords";
@@ -91,14 +92,22 @@ export type Scene = {
 export type ManualItem =
   | Scene
   | { kind: "action"; step: ManualStep }
-  | { kind: "quiet"; texts: string[] }
-  | { kind: "branch"; label: string; taken: boolean | null; items: ManualItem[] }
-  | { kind: "loop"; label: string; times: number | null; items: ManualItem[] }
-  | { kind: "group"; label: string; items: ManualItem[] };
+  /** `ids`: the step of each text, "" where it is a called flow's (not changed here). */
+  | { kind: "quiet"; texts: string[]; ids: string[] }
+  /** A step that is switched off (only with `stopped`, see buildManual). */
+  | { kind: "stopped"; stepId: string; text: string }
+  | ({ kind: "branch"; label: string; taken: boolean | null; items: ManualItem[] } & Owner)
+  | ({ kind: "loop"; label: string; times: number | null; items: ManualItem[] } & Owner)
+  | ({ kind: "group"; label: string; items: ManualItem[] } & Owner);
+
+/** The flow's own step a part comes from, and which block of it the part holds (none for a called flow's). */
+export type Owner = { of?: string; block?: string };
 
 export type Chapter = {
   number: number;
   title: string;
+  /** Not a part of the work: what is done when the work fails, or always at its end (a try round all of the flow). */
+  role?: "failure" | "end";
   /** 「2 と同時に進めます」 */
   alongside: number[];
   items: ManualItem[];
@@ -193,6 +202,7 @@ type Ctx = {
   next: { n: number };
   missing: { n: number };
   depth: number;
+  stopped: boolean;
 };
 
 const count = (ctx: Ctx, key: string): number | null => (ctx.counts ? (ctx.counts[key] ?? 0) : null);
@@ -269,7 +279,12 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
   const out: ManualItem[] = [];
   const last = () => out.at(-1);
   for (const step of steps) {
-    if (step.disabled || !step.id) continue;
+    if (!step.id) continue;
+    if (step.disabled) {
+      // Said in its place only where it can be started again (the sheet), and only of the flow's own steps.
+      if (ctx.stopped && callPath.length === 0) out.push({ kind: "stopped", stepId: step.id, text: label(step, ctx) });
+      continue;
+    }
     const key = keyOf(callPath, step.id);
     const moment = screenMoment(step.type);
     if (moment) {
@@ -306,10 +321,14 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
     if (QUIET.has(step.type)) {
       const prev = last();
       const text = label(step, ctx);
-      if (prev?.kind === "quiet") prev.texts.push(text);
-      else out.push({ kind: "quiet", texts: [text] });
+      const id = callPath.length === 0 ? (step.id ?? "") : "";
+      if (prev?.kind === "quiet") {
+        prev.texts.push(text);
+        prev.ids.push(id);
+      } else out.push({ kind: "quiet", texts: [text], ids: [id] });
       continue;
     }
+    const own = callPath.length === 0 ? step.id : undefined;
     switch (step.type) {
       case IF:
       case SWITCH:
@@ -318,7 +337,8 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
         const p = (step.params ?? {}) as Record<string, unknown>;
         const condition = typeof p.condition === "string" ? plain(humanize([{ code: readable(p.condition) }], ctx.words)) : "";
         for (const block of blocks(step, ctx)) {
-          if (block.steps.length === 0) continue;
+          // Where steps are changed, the block a step always has is there to be filled while it is still empty.
+          if (block.steps.length === 0 && !(ctx.stopped && own && (block.name === "then" || block.name === "try"))) continue;
           // A switch's cases are nodes of their own.
           if (step.type === SWITCH && block.name !== "default") {
             for (const c of block.steps) {
@@ -329,6 +349,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
                 label: t.manual.whenCase(label(step, ctx), label(c, ctx)),
                 taken: blockRan(caseSteps, callPath, ctx),
                 items: items(caseSteps, callPath, ctx),
+                of: callPath.length === 0 ? c.id : undefined,
               });
             }
             continue;
@@ -347,7 +368,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
                   : name
                     ? t.manual.otherwise
                     : t.manual.whenNot(condition);
-          out.push({ kind: "branch", label: branchLabel, taken: blockRan(block.steps, callPath, ctx), items: items(block.steps, callPath, ctx) });
+          out.push({ kind: "branch", label: branchLabel, taken: blockRan(block.steps, callPath, ctx), items: items(block.steps, callPath, ctx), of: own, block: block.name });
         }
         break;
       }
@@ -355,7 +376,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
       case REPEAT:
       case WHILE: {
         const body = step.blocks?.body ?? [];
-        out.push({ kind: "loop", label: label(step, ctx), times: loopTimes(body, callPath, ctx), items: items(body, callPath, ctx) });
+        out.push({ kind: "loop", label: label(step, ctx), times: loopTimes(body, callPath, ctx), items: items(body, callPath, ctx), of: own, block: "body" });
         break;
       }
       case GROUP:
@@ -367,7 +388,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
             out.push({ kind: "group", label: t.manual.alongside(label(branch, ctx)), items: items([branch], callPath, ctx) });
           }
         } else {
-          out.push({ kind: "group", label: label(step, ctx), items: items(inner, callPath, ctx) });
+          out.push({ kind: "group", label: label(step, ctx), items: items(inner, callPath, ctx), of: own, block: Object.keys(step.blocks ?? {})[0] });
         }
         break;
       }
@@ -375,7 +396,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
         const called = ctx.subflows.get(String((step.params as Record<string, unknown> | undefined)?.flow ?? ""));
         if (called && ctx.depth < 4) {
           const inner = { ...ctx, flowId: called.id, depth: ctx.depth + 1, words: new Map([...ctx.words, ...varWords(called.variables ?? [])]) };
-          out.push({ kind: "group", label: label(step, ctx), items: items(called.steps ?? [], [...callPath, step.id], inner) });
+          out.push({ kind: "group", label: label(step, ctx), items: items(called.steps ?? [], [...callPath, step.id], inner), of: own });
         } else {
           out.push({ kind: "action", step: manualStep(step, callPath, ctx) });
         }
@@ -402,7 +423,7 @@ const onlyQuiet = (steps: Step[]) => steps.every((s) => QUIET.has(s.type) || s.d
 const STRUCTURE = new Set([IF, SWITCH, TRY, FOR_EACH, REPEAT, WHILE, GROUP, CALL]);
 
 /** Splits the top level into chapters: structured nodes each, plain runs together. */
-function chapterParts(steps: Step[]): { steps: Step[]; parallel: boolean }[] {
+function chapterParts(steps: Step[], stopped = false): { steps: Step[]; parallel: boolean }[] {
   const parts: { steps: Step[]; parallel: boolean }[] = [];
   let run: Step[] = [];
   const flush = () => {
@@ -410,7 +431,10 @@ function chapterParts(steps: Step[]): { steps: Step[]; parallel: boolean }[] {
     run = [];
   };
   for (const step of steps) {
-    if (step.disabled) continue;
+    if (step.disabled) {
+      if (stopped) run.push(step);
+      continue;
+    }
     if (step.type === PARALLEL) {
       flush();
       const branches = Object.values(step.blocks ?? {}).flat().filter((b) => !b.disabled);
@@ -460,7 +484,7 @@ function countScreens(list: ManualItem[]): { screens: number; loops: boolean } {
 }
 
 function chapterTitle(steps: Step[], ctx: Ctx): string {
-  const main = steps.find((s) => !QUIET.has(s.type)) ?? steps[0];
+  const main = steps.find((s) => !QUIET.has(s.type) && !s.disabled) ?? steps[0];
   return main ? label(main, ctx) : "";
 }
 
@@ -474,10 +498,13 @@ export type Uses = {
   inputFiles: string[];
   /** Files it writes or changes. */
   outputFiles: string[];
+  /** Files it starts from (the flow's templates/ folder) and reads its settings from (config/). */
+  templates: string[];
+  config: string[];
 };
 
 function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>, defs: ReadonlyMap<string, StepTypeDef>): Uses {
-  const found: Uses = { apps: [], logins: [], inputFiles: [], outputFiles: [] };
+  const found: Uses = { apps: [], logins: [], inputFiles: [], outputFiles: [], templates: [], config: [] };
   const add = (list: string[], text: string) => {
     if (text && !list.includes(text)) list.push(text);
   };
@@ -509,7 +536,10 @@ function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>, defs: ReadonlyMap
         if (value && /\.(xlsx|xlsm|xls|csv|docx|doc|pdf|txt)$/i.test(value) && (adapter === "excel" || adapter === "word" || adapter === "file" || adapter === "pdf")) {
           // A node that only reads (risk "safe") takes the file in; any other writes or changes it.
           const reads = defs.get(step.type)?.risk === "safe";
-          add(reads ? found.inputFiles : found.outputFiles, value.split(/[\\/]/).pop() ?? value);
+          // Where the file lies in the flow's folder says what it is for, before what the node does with it.
+          const folder = value.replace(/^\.[\\/]/, "").split(/[\\/]/)[0]?.toLowerCase();
+          const list = folder === "templates" ? found.templates : folder === "config" ? found.config : reads ? found.inputFiles : found.outputFiles;
+          add(list, value.split(/[\\/]/).pop() ?? value);
         }
       }
       if (adapter === "mail") add(found.apps, t.manual.usesMail);
@@ -553,6 +583,8 @@ export function buildManual(
   subflows: ReadonlyMap<string, Flow> = new Map(),
   masks: Readonly<Record<string, Mask>> = {},
   drafts: Drafts = {},
+  /** `stopped`: steps that are switched off are said in their place (to switch them on again there), not left out. */
+  options: { stopped?: boolean } = {},
 ): ManualDoc {
   const shots = new Map((manifest?.shots ?? []).filter((s) => !masks[s.key]?.hidden).map((s) => [s.key, s] as const));
   // A picture the person left out still counts as taken.
@@ -569,8 +601,16 @@ export function buildManual(
     words: varWords(flow.variables ?? []),
     missing,
     depth: 0,
+    stopped: options.stopped ?? false,
   };
-  const parts = chapterParts(flow.steps ?? []);
+  // A flow that is one try round all its work reads as that work: what it
+  // does on failure and at the end is said after it, not as a frame round it.
+  const top = (flow.steps ?? []).filter((s) => !s.disabled || base.stopped);
+  const loud = top.filter((s) => !QUIET.has(s.type) && !s.disabled);
+  const guard = loud.length === 1 && loud[0]?.type === TRY ? loud[0] : null;
+  const parts = chapterParts(guard ? top.flatMap((s) => (s === guard ? (s.blocks?.try ?? []) : [s])) : top, base.stopped);
+  // Steps are numbered through the whole sheet, so a number names one step.
+  const next = { n: 0 };
   const chapters: Chapter[] = [];
   let parallelSet: number[] = [];
   for (const part of parts) {
@@ -582,7 +622,7 @@ export function buildManual(
       parallelSet = [];
       continue;
     }
-    const ctx: Ctx = { ...base, next: { n: 0 } };
+    const ctx: Ctx = { ...base, next };
     // A chapter that is one group (and some quiet work) reads as the group itself.
     const main = part.steps.filter((s) => !QUIET.has(s.type));
     const steps =
@@ -594,6 +634,13 @@ export function buildManual(
     const number = chapters.length + 1;
     if (part.parallel) parallelSet.push(number);
     chapters.push({ number, title: chapterTitle(part.steps, ctx), alongside: [], items: list, ...countScreens(list) });
+  }
+  for (const [block, role, title] of [
+    ["catch", "failure", t.manual.onFailure],
+    ["finally", "end", t.manual.atTheEnd],
+  ] as const) {
+    const list = guard ? items(guard.blocks?.[block] ?? [], [], { ...base, next }) : [];
+    if (list.length > 0) chapters.push({ number: chapters.length + 1, title, role, alongside: [], items: list, ...countScreens(list) });
   }
   const pictures = chapters.reduce((n, c) => n + countPictures(c.items), 0);
   const vars = flow.variables ?? [];
@@ -730,7 +777,7 @@ function stepHeight(step: ManualStep): number {
 function blockHeight(block: PageBlock, pictures: boolean): number {
   if (block.kind === "label") return HEIGHT.label;
   const item = block.item;
-  if (item.kind === "quiet") return HEIGHT.quiet;
+  if (item.kind === "quiet" || item.kind === "stopped") return HEIGHT.quiet;
   if (item.kind === "action") return stepHeight(item.step) + (item.step.login ? HEIGHT.note : 0);
   let h = HEIGHT.caption + HEIGHT.gap;
   if (pictures && item.shot) {

@@ -6,7 +6,7 @@ People who start with RPA often do not know which of their work to automate firs
 
 ## How it goes
 
-1. **Start.** In Writer: the empty flow list's "Find what to automate with the AI", the sidebar's "Work inventory", or the search box at the top. From another AI client (Claude Code, Cursor, …): the MCP prompt `find_what_to_automate`, or just ask "what should I automate?".
+1. **Start.** In Writer: the empty flow list's "Find what to automate with the AI", "Work inventory" in the "SpellSheet Writer" menu (top left), or the search box at the top. From another AI client (Claude Code, Cursor, …): the MCP prompt `find_what_to_automate`, or just ask "what should I automate?".
 2. **Interview.** The AI asks one or two questions at a time, in about four stages: the work as a whole (department, systems used every day), listing the work (last week from Monday on, then month-end, closing and work done a few times a year), more detail on the 3 to 5 pieces that take the most time, and confirming the numbers. In Writer's AI chat, questions with fixed answers come as cards. What is said is saved as it goes, so the person can stop and continue later ("Continue with the AI").
 3. **The sheet.** Writer shows the inventory beside the chat and fills it in as the AI saves: hours a month now, hours a flow could save, the work to build first, a chart of time to save against ease, and the work in order. Numbers can be corrected on the sheet (click one); the order is worked out again.
 4. **Build.** "Have the AI build it" on a row asks the AI for a flow, with what was heard about that work (systems, files, steps, exceptions). The flow is linked to the row.

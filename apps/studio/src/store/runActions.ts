@@ -8,7 +8,6 @@ import { ApiError } from "../lib/api";
 import { errorLine } from "../lib/errorText";
 import { emptyTrace, enclosing, findNode, traceEvent, withError } from "../lib/runTrace";
 import { t } from "../lib/i18n";
-import { ancestorsOf } from "../flow/layout";
 import { message, type StoreContext } from "./context";
 import { pendingReview } from "./history";
 import type { StudioState } from "./index";
@@ -30,6 +29,7 @@ import {
 } from "./run";
 import { secretFixOf } from "./secrets";
 import { findStep } from "./steps";
+import type { Step } from "@spellsheet/schema";
 
 export const runActions = ({ api, set, get }: StoreContext) => {
   /** Turns the editor to the 実行結果 of a whole run that ended well. `seq` counts these, so a second run of the same flow turns it again. */
@@ -460,3 +460,15 @@ export const runActions = ({ api, set, get }: StoreContext) => {
     },
   } satisfies Partial<StudioState>;
 };
+
+/** The steps around step `id`, outermost first (empty when it is at the top or not found). */
+function ancestorsOf(steps: Step[], id: string): string[] {
+  for (const step of steps) {
+    if (step.id === id) return [];
+    for (const children of Object.values(step.blocks ?? {})) {
+      const inner = ancestorsOf(children, id);
+      if (inner.length > 0 || children.some((c) => c.id === id)) return [...(step.id ? [step.id] : []), ...inner];
+    }
+  }
+  return [];
+}

@@ -1,5 +1,4 @@
 import { DistributionDialog } from "./components/Distribution";
-import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
@@ -13,15 +12,13 @@ import { CommandPalette } from "./components/CommandPalette";
 import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { FlowCanvas } from "./components/FlowCanvas";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
-import { OutlinePanel } from "./components/Outline";
 
 import { FileSheet } from "./components/FileSheet";
 import { NeededFilesWatch } from "./components/FilePlaces";
 import { NodeEditor } from "./components/NodeEditor";
-import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
+import { ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
 import { ReviewFoot, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
 import { RunResultView } from "./components/RunResult";
@@ -38,20 +35,19 @@ import { SettingsPage } from "./components/SettingsPage";
 import { DraftingFlow } from "./components/DraftingFlow";
 import { FlowsPage } from "./components/FlowsPage";
 import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
-import { Sidebar } from "./components/Sidebar";
-import { AiButton, Brand, SearchBar } from "./components/ShellBar";
-import { ManualView } from "./components/ManualView";
+import { AiButton, Brand, SearchBar, Waiting } from "./components/ShellBar";
+import { SheetView } from "./components/sheet/SheetView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { WindowControls } from "./components/WindowControls";
-import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
+import type { View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
-import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
@@ -64,8 +60,6 @@ function Attention() {
   return null;
 }
 
-/** The desk's left gutter, the files column and the gap after it. */
-const OUTLINE_BESIDE_FILES = 12 + 264 + 12;
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -113,7 +107,6 @@ function Banner() {
 }
 
 const VIEW_KEY = "spellsheet.studio.view";
-const SIDEBAR_KEY = "spellsheet.studio.list";
 
 function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -175,7 +168,7 @@ function useWidth(): [number, (el: HTMLElement | null) => void] {
 /**
  * The editor: the open flow's chart (or procedure), what the run did and
  * what is wrong underneath, and the inspector on the right. The flow's
- * name and its actions are in the title bar. The sidebar and the review desk
+ * name and its actions are in the title bar. The review desk
  * both open flows into it.
  */
 function Editor({
@@ -200,7 +193,6 @@ function Editor({
   grip: Grip;
 }) {
   const hasFlow = useStudio((s) => s.flow !== null);
-  const outlineOpen = useStudio((s) => s.outlineOpen);
   const projectOpen = useProject((s) => s.panelOpen);
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
@@ -211,57 +203,20 @@ function Editor({
         <div className="@container relative min-h-0 flex-1">
           {report ? (
             report
-          ) : view === "story" ? (
-            <ManualView onView={onView} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
-            <ReactFlowProvider>
-              <FlowCanvas />
-              {/*
-                The flow's files and its outline lie on the desk left of the sheet, one column:
-                the files above, the outline under them taking the rest of the height.
-              */}
-              {hasFlow && projectOpen && (
-                <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
-                  <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
-                    <ProjectPanel />
-                  </div>
-                  {outlineOpen && <OutlinePanel />}
-                </div>
-              )}
-              {/*
-                With the files folded away their button keeps its place at the top of the column,
-                and the outline, when open, hangs under it; nothing one panel does hides the other's button.
-              */}
-              {hasFlow && !projectOpen && (
-                <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
-                  <div className="flex w-max gap-2">
-                    <ProjectButton />
-                    {!outlineOpen && <OutlineButton />}
-                    {!outlineOpen && <SearchButton />}
-                  </div>
-                  {outlineOpen && <OutlinePanel />}
-                </div>
-              )}
-              {/* The outline unfolds under the files, so its button waits beside them. */}
-              {hasFlow && projectOpen && !outlineOpen && (
-                <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
-                  <OutlineButton />
-                  <SearchButton />
-                </div>
-              )}
-            </ReactFlowProvider>
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} />
+          )}
+          {/* The flow's files lie on the desk left of the paper, opened from the menu and closed from themselves. */}
+          {!report && view !== "variables" && hasFlow && projectOpen && (
+            <div className="absolute top-3 bottom-3 left-3 z-10 w-[264px]">
+              <ProjectPanel />
+            </div>
           )}
           {!report && view !== "variables" && hasFlow && <FlowSearch />}
           {hasFlow && <NeededFilesWatch />}
           <FileSheet />
-          {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
-          {!report && view === "flow" && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
-              <CanvasDock />
-            </div>
-          )}
         </div>
         {foot}
         <RunPausePanel />
@@ -330,12 +285,12 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (revealed === lastRevealed.current) return;
     lastRevealed.current = revealed;
-    if (view === "result") onView("flow");
+    if (view === "result") onView("story");
   }, [revealed, view, onView]);
   const result = view === "result";
   return (
     <Editor
-      view={result ? "flow" : view}
+      view={result ? "story" : view}
       onView={onView}
       report={result ? <RunResultView onView={onView} /> : undefined}
       right={fit.right && !result ? <Inspector /> : null}
@@ -354,7 +309,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   const hasFlow = useStudio((s) => s.flow !== null);
   const view = useReviewView((s) => s.view);
   const setView = useReviewView((s) => s.setView);
-  const reading = view === "report" ? "flow" : view;
+  const reading = view === "report" ? "story" : view;
   // A link to a node (a change, an effect, a promise's error step, a log line) or a followed run
   // reveals it on the chart: from the report, that means switching to the chart to show it.
   const revealed = useStudio((s) => s.reveal?.seq ?? 0);
@@ -362,7 +317,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (revealed === lastRevealed.current) return;
     lastRevealed.current = revealed;
-    if (useReviewView.getState().view === "report") setView("flow");
+    if (useReviewView.getState().view === "report") setView("story");
   }, [revealed, setView]);
   // Ctrl+F searches the flow: from the report, that means switching to the chart where it shows.
   const searched = useStudio((s) => s.searchAsked);
@@ -370,7 +325,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (searched === lastSearched.current) return;
     lastSearched.current = searched;
-    if (useReviewView.getState().view === "report") setView("flow");
+    if (useReviewView.getState().view === "report") setView("story");
   }, [searched, setView]);
   return (
     <Editor
@@ -388,9 +343,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" || raw === "result" ? raw : "flow"));
-  const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
-  const [peek, setPeek] = useState(false);
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const agentOpen = useAgent((s) => s.open);
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
@@ -418,15 +371,11 @@ function Shell() {
   // On the review desk the report fills the editor; the chart opened from it works as in the editor.
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
-  // The 手順書 is read as sheets with nothing beside them; editing its outline brings the pane back.
-  const manualEditing = useStudio((s) => s.manualEditing);
-  const rightOpen =
-    shownView !== "report" && shownView !== "variables" && (shownView !== "story" || manualEditing) && (inspectorOpen || picked);
+  // The sheet opens a step's settings under its line, with nothing beside it.
+  const rightOpen = shownView !== "report" && shownView !== "variables" && shownView !== "story" && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
-  const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
-  // Whether the sidebar would fit if it were shown, whatever the person chose.
-  const room = fitPanels(width, { ...shown, sidebar: true }, sizes).sidebar;
+  const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
   const grip: Grip = (panel) => {
     const [min, max] = LIMITS[panel];
@@ -442,23 +391,6 @@ function Shell() {
       />
     );
   };
-  const showSidebar = sidebar === "open" && room;
-  // Hidden by hand with room, it comes back; without room, it is laid over the chart.
-  const toggleSidebar = () => {
-    if (showSidebar) setSidebar("closed");
-    else if (room) setSidebar("open");
-    else setPeek(!peek);
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
   const work = (
     <div className="flex min-h-0 flex-1">
       {/* With nothing open, the editor has nothing to show: the library does. */}
@@ -497,23 +429,6 @@ function Shell() {
       )}
     </div>
   );
-  const sidebarColumn = (
-    <>
-      {showSidebar && (
-        <div className="relative flex">
-          <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
-          {grip("sidebar")}
-        </div>
-      )}
-      {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
-      {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
-      {!showSidebar && peek && (
-        <Peek onClose={() => setPeek(false)}>
-          <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
-        </Peek>
-      )}
-    </>
-  );
   const dialogs = (
     <>
       <CommandPalette />
@@ -538,19 +453,19 @@ function Shell() {
   return (
     <div className="flex h-full flex-col bg-frame">
       <div data-tauri-drag-region className="relative flex h-10 shrink-0 items-center select-none">
-        <div data-tauri-drag-region style={{ width: showSidebar ? sizes.sidebar : SIDEBAR_MINI }} className={`flex shrink-0 items-center ${showSidebar ? "pl-2" : "justify-center"}`}>
-          <Brand compact={!showSidebar} />
+        <div data-tauri-drag-region className="flex shrink-0 items-center gap-2 pl-2">
+          <Brand />
+          <Waiting />
         </div>
         <span data-tauri-drag-region className="flex-1 self-stretch" />
         <div className="absolute top-1/2 left-1/2 flex w-[clamp(320px,44vw,620px)] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5">
-          <SearchBar onToggleSidebar={toggleSidebar} />
+          <SearchBar />
           <AiButton />
         </div>
         <WindowControls />
       </div>
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
-        {sidebarColumn}
-        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 pr-1.5 pb-1.5">
+        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 px-1.5 pb-1.5">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
             <Attention />
@@ -582,7 +497,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
   if (!state.flow || state.paletteOpen) return;
   // Buttons and links keep Tab for moving focus; the canvas and the page do not need it.
   const target = e.target as HTMLElement | null;
-  const onControl = target?.closest("button, a, [role=tab]") && !target.closest(".react-flow");
+  const onControl = target?.closest("button, a, [role=tab]");
   const key = e.key;
   const step = (delta: number) => {
     e.preventDefault();
@@ -603,7 +518,6 @@ function navigate(e: KeyboardEvent, state: StudioState) {
     state.changeBy(e.shiftKey ? -1 : 1);
   } else if (key === "Escape" && state.selection) state.select(null);
   else if ((key === "Escape" || key === "Backspace") && state.dive.length > 0) state.leaveCalls(state.dive.length - 1);
-  else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
 /**

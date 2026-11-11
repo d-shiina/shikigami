@@ -7,7 +7,7 @@
 // as the run left it), what it returned, the last page its browser showed,
 // everything it worked on outside itself, and what it was given.
 import type { FileStamp, RunReport, StepTypeDef } from "@spellsheet/schema";
-import { FolderOpen, Play, Workflow } from "lucide-react";
+import { FolderOpen, Play, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api, type RunRecord } from "../lib/api";
@@ -188,7 +188,7 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
   const status = report.status;
   const flowId = flow?.id;
   const show = (stepId: string) => {
-    onView("flow");
+    onView("story");
     goTo(stepId);
   };
   let n = 0;
@@ -307,14 +307,14 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
             {t.result.openOutput}
           </button>
         )}
-        <button type="button" onClick={() => onView("flow")} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3.5 text-[13px] hover:bg-slate-50">
-          <Workflow size={14} strokeWidth={1.75} aria-hidden="true" />
+        <button type="button" onClick={() => onView("story")} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3.5 text-[13px] hover:bg-slate-50">
+          <FileText size={14} strokeWidth={1.75} aria-hidden="true" />
           {t.result.toChart}
         </button>
         <button
           type="button"
           onClick={() => {
-            onView("flow");
+            onView("story");
             void startRun();
           }}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover"

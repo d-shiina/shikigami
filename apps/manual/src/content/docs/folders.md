@@ -11,7 +11,7 @@ SpellSheet のファイルは、次の 3 か所にあります。
 | `%APPDATA%\SpellSheet` | Writer の設定（`config.json`：どこをワークスペースにするかなど） |
 | `%LOCALAPPDATA%\SpellSheet` | この PC だけのもの（プラグイン、Writer のログ、共有ワークスペースのときの PC ごとの記録） |
 
-ワークスペースの場所は、Writer のサイドバーの上の保存先の名前にマウスを重ねると出ます。「設定」→「保存先」で変えられます。
+ワークスペースの場所は、「設定」→「保存先」で確かめられ、変えられます。
 
 ## ワークスペース
 
@@ -28,7 +28,7 @@ workspace\
   ── ここから下は「この PC の記録」 ──
   runs\               実行の記録（1 回の実行 1 フォルダー）
   history\            変更の履歴と、元に戻す（Undo）のための記録、AI の変更の確認の記録
-  manuals\            手順書の画面の写真
+  manuals\            シートに付く画面の写真
   observations\       AI がフローを作るときに見た画面
   audit\              AI ツール（MCP）からの操作の記録
   approvals\          AI の操作の承認の依頼

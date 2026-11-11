@@ -185,7 +185,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
     setSelected(new Set());
   }, [flowId]);
   const open = (id: string) => {
-    onView("flow");
+    onView("story");
     goTo(id);
   };
   const cols = t.vars.table.columns;

@@ -85,9 +85,9 @@ function place(anchor: PaletteAnchor | null): Spot {
   return { left: side, top: Math.min(Math.max(MARGIN, anchor.top), vh - MARGIN - height), height };
 }
 
-/** The selected node on the chart when it is on screen, else the "＋ ノード追加" of an empty flow (Ctrl+K opens beside it). */
+/** The selected step on the sheet when it is on screen, else the "＋ ノード追加" of an empty flow (Ctrl+K opens beside it). */
 function selectedAnchor(id: string | undefined): PaletteAnchor | null {
-  const el = id ? document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`) : document.querySelector("[data-add-first]");
+  const el = id ? document.querySelector(`[data-step="${CSS.escape(id)}"]`) : document.querySelector("[data-add-first]");
   const box = el?.getBoundingClientRect();
   if (!box || box.bottom < 0 || box.top > window.innerHeight || box.right < 0 || box.left > window.innerWidth) return null;
   return box;

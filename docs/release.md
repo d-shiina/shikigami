@@ -2,7 +2,7 @@
 
 English | [日本語](ja/release.md)
 
-The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). While an update waits, "Settings" in the sidebar shows a dot. It uses the official Tauri updater (`installMode: quiet`).
+The installed Writer updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Writer opens again as the new version a few seconds later) or when you close Writer (the next launch is the new version). While an update waits, "SpellSheet Writer" at the top left shows a dot. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
 - Checked at: `https://github.com/spellsheet/spellsheet/releases/latest/download/latest.json`

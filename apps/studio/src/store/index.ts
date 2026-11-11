@@ -43,7 +43,7 @@ import { registerExtensions } from "../lib/extensions";
 import type { Copied } from "../lib/stepClipboard";
 import { setFlowNames } from "../lib/sentence";
 import { message, storeContext } from "./context";
-import { loadBreakpoints, loadFolded, OUTLINE_KEY, INSPECTOR_KEY, loadFlag, loadReviewed } from "./persist";
+import { loadBreakpoints, loadFolded, INSPECTOR_KEY, loadFlag, loadReviewed } from "./persist";
 import { type RunOptions, type StepPlace, type StepTest, type RunState } from "./run";
 import type { SecretPrefill, SecretFix } from "./secrets";
 import { editActions } from "./editActions";
@@ -114,7 +114,7 @@ export type InsertAt = { parentId: string | null; block: string | null; index: n
 export type PaletteAnchor = { left: number; top: number; right: number; bottom: number };
 
 /**
- * The places in the sidebar; each fills the window right of it. "library" is
+ * The places of the window (listed under the app's name); each fills it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
 export type Place = "library" | "flows" | "review" | "inventory" | "runs" | "secrets" | "extensions" | "settings";
@@ -178,9 +178,6 @@ export type StudioState = {
   breakpoints: Record<string, string[]>;
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
   folded: Record<string, string[]>;
-  outlineOpen: boolean;
-  /** The 手順書 is open for editing (its outline), not read as sheets: the right pane may show. */
-  manualEditing: boolean;
   /**
    * The right pane kept open by hand. Without it the pane opens only while a
    * node or part is selected, so the chart (or the 変数 table) has the room.
@@ -268,8 +265,6 @@ export type StudioState = {
   /** Moves to the previous / next step the AI changed (review desk). */
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
-  setManualEditing(on: boolean): void;
-  setOutlineOpen(open: boolean): void;
   /** Keeps the right pane open (the flow's settings when nothing is selected), or closes it. */
   setInspectorOpen(open: boolean): void;
   /** Opens the right pane on the flow's own settings (name, variables, run settings). */
@@ -471,8 +466,6 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       stepTimes: null,
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
-      outlineOpen: loadFlag(OUTLINE_KEY, false),
-      manualEditing: false,
       inspectorOpen: loadFlag(INSPECTOR_KEY, false),
       paletteOpen: false,
       searchOpen: false,

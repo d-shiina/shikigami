@@ -39,7 +39,6 @@ export function saveBreakpoints(breakpoints: Record<string, string[]>) {
   }
 }
 
-export const OUTLINE_KEY = "spellsheet.studio.outline";
 
 export const INSPECTOR_KEY = "spellsheet.studio.inspector";
 
