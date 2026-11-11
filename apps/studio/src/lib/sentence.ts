@@ -141,20 +141,20 @@ function dialogText(dialog: unknown): string {
 const fileName = (path: unknown) => String(path ?? "").split(/[\\/]/).pop() ?? "";
 
 /** A desktop target ({ window, element | image | ocr | region | point }) in words. */
-function desktopJa(t: Record<string, unknown>): string {
+function desktopJa(t: Record<string, unknown>, bare = false): string {
   const win = (t.window ?? {}) as Record<string, unknown>;
-  const name = `「${String(win.title ?? win.process ?? win.className ?? "")}」`;
+  const name = bare ? "" : `「${String(win.title ?? win.process ?? win.className ?? "")}」の`;
   const image = t.image as Record<string, unknown> | undefined;
   const ocr = t.ocr as Record<string, unknown> | undefined;
   const region = t.region as Record<string, number> | undefined;
   const point = t.point as Record<string, number> | undefined;
   const nth = (q: Record<string, unknown> | undefined) => (typeof q?.nth === "number" ? `の${q.nth + 1}番目` : "");
-  if (image) return `${name}の画像 ${fileName(image.path)}${nth(image)}`;
-  if (ocr) return `${name}の文字「${String(ocr.text ?? "")}」${nth(ocr)}`;
-  if (point) return `${name}の座標 (${point.x}, ${point.y})`;
-  if (region) return `${name}の範囲 (${region.x}, ${region.y}, ${region.width}×${region.height})`;
+  if (image) return `${name}画像 ${fileName(image.path)}${nth(image)}`;
+  if (ocr) return `${name}文字「${String(ocr.text ?? "")}」${nth(ocr)}`;
+  if (point) return `${name}座標 (${point.x}, ${point.y})`;
+  if (region) return `${name}範囲 (${region.x}, ${region.y}, ${region.width}×${region.height})`;
   const el = t.element as Record<string, unknown> | undefined;
-  if (!el) return `${name}ウィンドウ`;
+  if (!el || Object.keys(el).length === 0) return bare ? "ウィンドウ" : `${name.slice(0, -1)}ウィンドウ`;
   // 「送り先」の中の「氏名」の後の入力欄
   const element = (q: Record<string, unknown>): string => {
     const within = q.within as Record<string, unknown> | undefined;
@@ -162,12 +162,18 @@ function desktopJa(t: Record<string, unknown>): string {
     const self = q.id ? ` [${String(q.id)}]${nth(q)}` : targetJa(q);
     return `${within ? `${element(within)}の中の` : ""}${after ? `${element(after)}の後の` : ""}${self}`;
   };
-  return `${name}の${element(el)}`;
+  return `${name}${element(el)}`.trim();
 }
 
-function desktopEn(t: Record<string, unknown>): string {
+function desktopEn(t: Record<string, unknown>, bare = false): string {
   const win = (t.window ?? {}) as Record<string, unknown>;
   const name = `"${String(win.title ?? win.process ?? win.className ?? "")}"`;
+  if (bare) {
+    // The same words without the window: cut what names it at the end.
+    const full = desktopEn(t);
+    for (const tail of [` in ${name}`, ` of ${name}`]) if (full.endsWith(tail)) return full.slice(0, -tail.length);
+    return "the window";
+  }
   const image = t.image as Record<string, unknown> | undefined;
   const ocr = t.ocr as Record<string, unknown> | undefined;
   const region = t.region as Record<string, number> | undefined;
@@ -199,6 +205,19 @@ const partName = (target: unknown): string | undefined => {
   if (!t || typeof t !== "object" || Object.keys(t).length !== 1 || typeof t.part !== "string") return undefined;
   return partLookup(t.part)?.label || t.part;
 };
+
+/**
+ * What a step works on, in words, without the window it is in: the chart
+ * names the window over the column (components/chart).
+ */
+export function targetInWindow(target: unknown): string | null {
+  if (!target || typeof target !== "object") return null;
+  const t = target as Record<string, unknown>;
+  if (partName(t)) return locale === "ja" ? targetJa(t) : targetEn(t);
+  if (t.window) return locale === "ja" ? desktopJa(t, true) : desktopEn(t, true);
+  if (Object.keys(t).length === 0) return null;
+  return locale === "ja" ? targetJa(t) : targetEn(t);
+}
 
 function targetJa(target: unknown): string {
   if (!target || typeof target !== "object") return "（要素未設定）";

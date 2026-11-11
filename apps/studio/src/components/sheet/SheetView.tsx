@@ -759,8 +759,8 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
             </ol>
           </nav>
         )}
-        {/* As a chart the paper is as wide as the chart (so it cannot be measured against, and keeps the plain margins). */}
-        <article className={`min-w-0 ${PAPER} ${chart ? "w-fit" : "@container/paper w-[980px] max-w-full"}`}>
+        {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
+        <article className={`${PAPER} ${chart ? "w-fit min-w-[min(980px,calc(100cqw-40px))]" : "@container/paper w-[980px] max-w-full min-w-0"}`}>
           <header className={`flow-root px-10 pt-11 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]`}>
             <div className={MARGIN}>
               {!chart && (

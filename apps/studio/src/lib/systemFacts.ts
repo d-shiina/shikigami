@@ -1,15 +1,18 @@
 // What the system does at each step, beyond the step's own name: where it
-// connects, which file it reads or writes, which secret it uses, how long it
+// connects, which program it starts, which part of the screen it works on,
+// which file it reads or writes, which secret it uses, how long it
 // waits and how often it tries again, and which values it takes from earlier
 // steps and hands to later ones. The chart shows these under each row, so the
 // person can see what really happens on the PC. Only what the flow itself
 // says for certain is listed: nothing is guessed.
 import type { Flow, Step, StepTypeDef } from "@spellsheet/schema";
-import { secretName } from "./sentence";
+import { secretName, targetInWindow } from "./sentence";
 import { variableUsage } from "./variableUsage";
 
 export type Fact =
   | /** A site or server it connects to. */ { kind: "connect"; host: string }
+  | /** A program it starts. */ { kind: "launch"; path: string }
+  | /** The part of the screen it works on, in words. */ { kind: "target"; words: string }
   | /** A file it only reads, or one it writes or changes. */ { kind: "read" | "write"; path: string }
   | { kind: "secret"; name: string }
   | /** The longest it waits, in seconds. */ { kind: "wait"; seconds: number }
@@ -55,6 +58,11 @@ export function systemFacts(flow: Flow, defs: ReadonlyMap<string, StepTypeDef>):
 
       const site = host(literal(p.url));
       if (site) list.push({ kind: "connect", host: site });
+      if (step.type === "desktop.launch" && literal(p.path)) list.push({ kind: "launch", path: literal(p.path)! });
+      if (adapter === "desktop" || adapter === "browser") {
+        const words = targetInWindow(p.target);
+        if (words) list.push({ kind: "target", words });
+      }
       if (adapter === "excel" || adapter === "word" || adapter === "file" || adapter === "pdf") {
         const reads = defs.get(step.type)?.risk === "safe";
         for (const key of FILE_KEYS) {

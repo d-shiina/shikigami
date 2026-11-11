@@ -3,7 +3,8 @@
 // It answers what the sheet's sentences cannot at a glance: which app each
 // piece of work touches and in what order, where work repeats, where it
 // only sometimes runs, and where a failure goes. So it is drawn the way a
-// business flow is drawn on paper: a column for each app, time running down,
+// business flow is drawn on paper: a column for each app (and, of desktop
+// apps, for each window: they are the screens a person would see), time running down,
 // one row for each step, and one line through them.
 //
 // - A step is a box on the line with its name in it, in the column of the
@@ -63,8 +64,11 @@ export type BandKind = "loop" | "when" | "always" | "group" | "together";
 /** The column of what runs when something fails. */
 export const FAIL_LANE = "@fail";
 
-/** `cols`: how many branches run side by side in it at the most. */
-export type Lane = { key: string; steps: Step[]; cols: number };
+/**
+ * `group`: the kind of app (a group of lib/palette). `name`: the window, for a desktop app's column.
+ * `cols`: how many branches run side by side in it at the most.
+ */
+export type Lane = { key: string; group: string; name?: string; steps: Step[]; cols: number };
 
 /** Where a row is: its column, and which of the places side by side in it (0 unless branches share the column). */
 type Place = { lane: number; off: number; y: number; h: number };
@@ -123,6 +127,50 @@ export function appOf(step: Step, defs: Defs): string | null {
 
 const blocksOf = (step: Step): [string, Step[]][] => Object.entries(step.blocks ?? {});
 
+const WINDOWS = "windows";
+/** A column's key for a window of a desktop app. */
+const windowKey = (name: string) => `${WINDOWS}\t${name}`;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
+const noExe = (file: string) => file.replace(/\.exe$/i, "");
+
+/**
+ * The column of each step that works on a desktop app: the window it names by its title. A step that names
+ * only the program (or starts it) is in the column of that program's first window; one that names nothing
+ * (a part of the flow) stays in the window the step before it worked on.
+ */
+function windowLanes(steps: Step[], defs: Defs): Map<Step, string> {
+  const all: Step[] = [];
+  const collect = (list: Step[]) => {
+    for (const step of list) {
+      if (appOf(step, defs) === WINDOWS) all.push(step);
+      for (const [, inner] of blocksOf(step)) collect(inner);
+    }
+  };
+  collect(steps);
+  const windowOf = (step: Step) => (((step.params ?? {}) as Record<string, unknown>).target as Record<string, unknown> | undefined)?.window as Record<string, unknown> | undefined;
+  const text = (v: unknown) => (typeof v === "string" && v && !v.includes("{{") ? v : null);
+  // Each program's first window with a title.
+  const home = new Map<string, string>();
+  for (const step of all) {
+    const w = windowOf(step);
+    const process = text(w?.process)?.toLowerCase();
+    const title = text(w?.title);
+    if (process && title && !home.has(process)) home.set(process, title);
+  }
+  const lanes = new Map<Step, string>();
+  let last: string | null = null;
+  for (const step of all) {
+    const w = windowOf(step);
+    const started = step.type === "desktop.launch" ? text(((step.params ?? {}) as Record<string, unknown>).path) : null;
+    const process = (text(w?.process) ?? (started ? baseName(started) : null))?.toLowerCase();
+    const name = text(w?.title) ?? (process ? (home.get(process) ?? noExe(process)) : text(w?.className));
+    const key: string = name ? windowKey(name) : (last ?? WINDOWS);
+    lanes.set(step, key);
+    last = key;
+  }
+  return lanes;
+}
+
 /** A line of what the system does, under a step's name in its box. */
 export const FACT_H = 17;
 /** Under the last of those lines, inside the box. */
@@ -131,12 +179,14 @@ export const FACT_PAD = 9;
 /** `facts`: how many lines of what the system does stand under a step's name (components/chart). */
 export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => number = () => 0): Chart {
   // The columns: each app, in the order the flow first touches it.
+  const windows = windowLanes(steps, defs);
+  const laneOf = (step: Step): string | null => windows.get(step) ?? appOf(step, defs);
   const keys: string[] = [];
   let fails = false;
   const scan = (list: Step[]) => {
     for (const step of list) {
       if (step.disabled) continue;
-      const app = appOf(step, defs);
+      const app = laneOf(step);
       if (app && !keys.includes(app)) keys.push(app);
       for (const [name, inner] of blocksOf(step)) {
         if (step.type === TRY && name === "catch") fails ||= inner.some((c) => !c.disabled);
@@ -146,9 +196,12 @@ export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => nu
   };
   scan(steps);
   if (keys.length === 0) keys.push("");
-  const lanes: Lane[] = keys.map((key) => ({ key, steps: [], cols: 1 }));
+  const lanes: Lane[] = keys.map((key) => {
+    const [group, name] = key.split("\t");
+    return { key, group: group!, ...(name ? { name } : {}), steps: [], cols: 1 };
+  });
   const failLane = fails ? lanes.length : null;
-  if (fails) lanes.push({ key: FAIL_LANE, steps: [], cols: 1 });
+  if (fails) lanes.push({ key: FAIL_LANE, group: FAIL_LANE, steps: [], cols: 1 });
 
   const rows: Row[] = [];
   const bands: Band[] = [];
@@ -181,7 +234,7 @@ export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => nu
     if (failing) return lane;
     const step = list.find((s) => !s.disabled);
     if (!step) return lane;
-    const app = appOf(step, defs);
+    const app = laneOf(step);
     if (app) return keys.indexOf(app);
     const blocks = step.blocks ?? {};
     if (step.type === IF) {
@@ -318,7 +371,7 @@ export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => nu
         prev = [];
         continue;
       }
-      const app = failing ? null : appOf(step, defs);
+      const app = failing ? null : laneOf(step);
       if (app) lane = keys.indexOf(app);
       lanes[lane]!.steps.push(step);
       const under = facts(step) * FACT_H;

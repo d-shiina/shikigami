@@ -33,7 +33,10 @@ describe("systemFacts", () => {
     ]);
   });
   it("names the secret a step uses, never its value", () => {
-    expect(facts.get("s2")).toEqual([{ kind: "secret", name: "受注システム" }]);
+    expect(facts.get("s2")).toEqual([
+      { kind: "target", words: "「パスワード」欄" },
+      { kind: "secret", name: "受注システム" },
+    ]);
   });
   it("tells a file read from one written, and follows a value from step to step", () => {
     expect(facts.get("s3")).toEqual([
@@ -46,5 +49,17 @@ describe("systemFacts", () => {
       { kind: "give", variable: "total", to: [], out: true },
       { kind: "take", variable: "rows", from: "s3" },
     ]);
+  });
+
+  it("says the program a step starts and the part of the screen it works on, without the window", () => {
+    const flow = {
+      steps: [
+        { id: "a", type: "desktop.launch", params: { path: "C:\\Hanbai\\hanbai.exe" } },
+        { id: "b", type: "desktop.click", params: { target: { window: { title: "販売管理" }, element: { id: "btnSave" } } } },
+      ],
+    } as unknown as Flow;
+    const facts = systemFacts(flow, new Map());
+    expect(facts.get("a")).toEqual([{ kind: "launch", path: "C:\\Hanbai\\hanbai.exe" }]);
+    expect(facts.get("b")).toEqual([{ kind: "target", words: "[btnSave]" }]);
   });
 });

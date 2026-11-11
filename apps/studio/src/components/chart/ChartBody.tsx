@@ -5,6 +5,7 @@ import type { Step } from "@spellsheet/schema";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  AppWindow,
   CircleX,
   Columns2,
   FileInput,
@@ -12,6 +13,7 @@ import {
   Globe,
   KeyRound,
   LogOut,
+  MousePointerClick,
   Repeat,
   RotateCw,
   Split,
@@ -68,6 +70,8 @@ const title = (step: Step, defs: Defs): string =>
 
 const FACT_ICON: Record<Fact["kind"], LucideIcon> = {
   connect: Globe,
+  launch: AppWindow,
+  target: MousePointerClick,
   read: FileInput,
   write: FileOutput,
   secret: KeyRound,
@@ -87,6 +91,10 @@ function FactLine({ fact, numbers }: { fact: Fact; numbers?: ReadonlyMap<string,
     switch (fact.kind) {
       case "connect":
         return fact.host;
+      case "launch":
+        return fact.path;
+      case "target":
+        return fact.words;
       case "read":
       case "write":
         return fact.path;
@@ -130,7 +138,8 @@ function targets(steps: Step[]): string[] {
   const found: string[] = [];
   for (const step of steps) {
     const p = (step.params ?? {}) as Record<string, unknown>;
-    for (const value of [p.url, p.path]) {
+    const win = (p.target as Record<string, unknown> | undefined)?.window as Record<string, unknown> | undefined;
+    for (const value of [p.url, p.path, win?.process]) {
       if (typeof value !== "string" || value.includes("{{")) continue;
       const name = /^https?:\/\//.test(value)
         ? value.replace(/^https?:\/\//, "").split("/")[0]!
@@ -243,7 +252,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
         const Icon = fail
           ? TriangleAlert
           : lane.key
-            ? groupIcon(lane.key)
+            ? groupIcon(lane.group)
             : null;
         const names = fail ? [] : targets(lane.steps);
         if (!lane.key) return null;
@@ -267,14 +276,14 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
                 style={{
                   color: fail
                     ? "var(--color-shu-600)"
-                    : (CATEGORY_COLOR[lane.key] ?? CATEGORY_COLOR.other),
+                    : (CATEGORY_COLOR[lane.group] ?? CATEGORY_COLOR.other),
                 }}
               />
             )}
             <span
               className={`text-[13.5px] font-semibold whitespace-nowrap ${fail ? "text-shu-600" : "text-ink"}`}
             >
-              {fail ? words.failed : groupLabel(lane.key)}
+              {fail ? words.failed : (lane.name ?? groupLabel(lane.group))}
             </span>
             {names.length > 0 && (
               <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">

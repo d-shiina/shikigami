@@ -264,6 +264,8 @@ export function chartWords() {
     /** What the system does at a step (lib/systemFacts.ts): the name of each kind, then its value. */
     facts: {
       connect: ja ? "接続先" : "Connects to",
+      launch: ja ? "起動" : "Starts",
+      target: ja ? "対象" : "Works on",
       read: ja ? "読み取り" : "Reads",
       write: ja ? "書き込み" : "Writes",
       secret: ja ? "シークレット" : "Secret",
