@@ -6,7 +6,7 @@
 
 <picture>
   <source srcset="../assets/writer-ja-dark.webp" media="(prefers-color-scheme: dark)">
-  <img src="../assets/writer-ja.webp" alt="AI の編集がそのまま Writer に反映される様子。中央にフロー図、右に AI チャット">
+  <img src="../assets/writer-ja.webp" alt="AI の編集がそのまま Writer に反映される様子。中央に 1 枚の紙のシート">
 </picture>
 
 ## 接続方法
