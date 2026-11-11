@@ -1,6 +1,6 @@
 // The flow as a chart to read (see flow/chart.ts for what it shows and why).
-// It is drawn on the sheet's paper (components/sheet/SheetView.tsx) in the sheet's own terms: a hairline down
-// each column, a mark on it for each step and the step's name beside it.
+// It is drawn on the sheet's paper (components/sheet/SheetView.tsx): a box for each step, in the column of
+// the app it works on, and an arrow from each box to the next.
 import type { Step } from "@spellsheet/schema";
 import {
   ArrowDownToLine,
@@ -25,13 +25,14 @@ import { useStudio } from "../../context";
 import type { RunState } from "../../store/run";
 import {
   type Band,
-  CROSS,
   type Defs,
   FACT_H,
+  FACT_PAD,
   FAIL_LANE,
   layoutChart,
   NEST,
   type Row,
+  TILE_H,
   TILE_W,
 } from "../../flow/chart";
 import { chartWords, guardOutcome } from "../../lib/keywords";
@@ -50,17 +51,16 @@ const HEAD_GAP = 20;
 const LANE_HEAD = 40;
 /** Between a column's name and its first row. */
 const TOP = 20;
-/** From a column's edge (and the bands round its rows) to its line. */
-const LEAD = 14;
-/** From the line to a row's words. */
-const WORDS = 16;
 /** Between places side by side in one column, and between columns. */
-const COL_GAP = 28;
+const COL_GAP = 36;
 /** A corner of the line where it changes column. */
-const TURN = 7;
-/** Where the line meets a row: the middle of its first line of words. */
-const mid = (row: Row) =>
-  row.kind === "bar" ? row.h / 2 : Math.min(row.h, 28) / 2;
+const TURN = 6;
+/** The arrow's head, and the room over a box the line comes down into it. */
+const HEAD = 5;
+const DROP = 13;
+/** Where the line leaves a row, and where it comes into one: a box's lower and upper edge, a bar's middle. */
+const leave = (row: Row) => (row.kind === "bar" ? row.h / 2 : row.h);
+const enter = (row: Row) => (row.kind === "bar" ? row.h / 2 : 0);
 
 /** What a step is called on the chart: the name it was given, else what it does in a sentence. */
 const title = (step: Step, defs: Defs): string =>
@@ -78,7 +78,7 @@ const FACT_ICON: Record<Fact["kind"], LucideIcon> = {
 };
 
 /** One thing the system does at a step: what kind, then the value, on a quiet line under the step's name. */
-function FactLine({ fact, numbers, indent }: { fact: Fact; numbers?: ReadonlyMap<string, number>; indent: number }) {
+function FactLine({ fact, numbers }: { fact: Fact; numbers?: ReadonlyMap<string, number> }) {
   const words = chartWords();
   const Icon = FACT_ICON[fact.kind];
   const at = (ids: string[]) =>
@@ -107,7 +107,7 @@ function FactLine({ fact, numbers, indent }: { fact: Fact; numbers?: ReadonlyMap
     }
   })();
   return (
-    <span className="flex items-center gap-1 text-[11.5px] leading-none text-slate-500" style={{ height: FACT_H, paddingLeft: indent }} title={`${words.facts[fact.kind]} ${value}`}>
+    <span className="flex items-center gap-1 text-[11.5px] leading-none text-slate-500" style={{ height: FACT_H }} title={`${words.facts[fact.kind]} ${value}`}>
       <Icon size={11} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-400" />
       <span className="shrink-0 text-slate-400">{words.facts[fact.kind]}</span>
       <span className="truncate">{value}</span>
@@ -178,7 +178,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
 
   // Columns: each as wide as the places side by side in it, and the bands round them.
   const side = NEST * chart.nest;
-  const place = LEAD + WORDS + TILE_W;
+  const place = TILE_W;
   const widths = chart.lanes.map(
     (l) => 2 * side + l.cols * place + (l.cols - 1) * COL_GAP,
   );
@@ -186,9 +186,9 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
   chart.lanes.forEach((_, i) =>
     lefts.push(i === 0 ? PAD : lefts[i - 1]! + widths[i - 1]! + COL_GAP),
   );
-  /** The line a row is on. */
+  /** The line a row is on: down the middle of its box. */
   const lineX = (r: { lane: number; off: number }) =>
-    lefts[r.lane]! + side + LEAD + r.off * (place + COL_GAP);
+    lefts[r.lane]! + side + TILE_W / 2 + r.off * (place + COL_GAP);
   const top = HEAD_GAP + LANE_HEAD + TOP;
   const width = lefts.at(-1)! + widths.at(-1)! + PAD;
   const height = top + chart.height + PAD;
@@ -202,10 +202,10 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
       )
       .map(lineX);
     const room = NEST * (b.inner + 1);
-    const left = Math.min(...xs) - LEAD - room + NEST;
+    const left = Math.min(...xs) - TILE_W / 2 - room;
     return {
       left,
-      width: Math.max(...xs) + WORDS + TILE_W + room - NEST - left,
+      width: Math.max(...xs) + TILE_W / 2 + room - left,
       top: top + b.top,
       height: b.bottom - b.top,
     };
@@ -213,8 +213,8 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
   /** A bar: over the lines it reaches and its own. */
   const barBox = (row: Extract<Row, { kind: "bar" }>) => {
     const xs = [lineX(row), ...row.over.map((i) => lineX(chart.rows[i]!))];
-    const left = Math.min(...xs) - 5;
-    return { left, width: Math.max(...xs) + 5 - left };
+    const left = Math.min(...xs) - 36;
+    return { left, width: Math.max(...xs) + 36 - left };
   };
   const path = ({ from, to }: { from: number; to: number }): string => {
     const a = chart.rows[from]!;
@@ -226,11 +226,11 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
         ? lineX(b)
         : lineX(a);
     const x2 = b.kind === "bar" ? x1 : lineX(b);
-    const y1 = top + a.y + mid(a);
-    const y2 = top + b.y + mid(b);
+    const y1 = top + a.y + leave(a);
+    const y2 = top + b.y + enter(b);
     if (x1 === x2) return `M ${x1} ${y1} V ${y2}`;
     // Down its own column, then across just over the row it goes to.
-    const across = top + b.y - CROSS / 2 - 2;
+    const across = top + b.y - DROP;
     const dir = x2 > x1 ? 1 : -1;
     return `M ${x1} ${y1} V ${across - TURN} Q ${x1} ${across} ${x1 + dir * TURN} ${across} H ${x2 - dir * TURN} Q ${x2} ${across} ${x2} ${across + TURN} V ${y2}`;
   };
@@ -301,20 +301,23 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
         height={height}
         aria-hidden="true"
       >
-        {chart.links.map((l) => (
-          <path
-            key={`${l.from}-${l.to}`}
-            d={path(l)}
-            fill="none"
-            stroke="var(--chart-line)"
-            strokeWidth={1.5}
-          />
-        ))}
+        {chart.links.map((l) => {
+          const to = chart.rows[l.to]!;
+          const x = to.kind === "bar" ? null : lineX(to);
+          const y = top + to.y;
+          return (
+            <g key={`${l.from}-${l.to}`}>
+              <path d={path(l)} fill="none" stroke="var(--chart-line)" strokeWidth={1.5} />
+              {/* The arrow's head, on the box the line goes to. */}
+              {x !== null && <path d={`M ${x - HEAD} ${y - HEAD - 1} L ${x} ${y} L ${x + HEAD} ${y - HEAD - 1}`} fill="none" stroke="var(--chart-line)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />}
+            </g>
+          );
+        })}
         {/* A failure anywhere in these rows goes to the column beside them. */}
         {chart.brackets.map((b, i) => {
           const x = lefts[chart.failLane!]! - COL_GAP / 2;
           const to = chart.rows[b.to]!;
-          const out = top + to.y + mid(to);
+          const out = top + to.y + Math.min(to.h, TILE_H) / 2;
           return (
             <g
               key={i}
@@ -328,7 +331,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
                 d={`M ${x - 6} ${top + b.top + 4} H ${x} V ${top + b.bottom - 4} H ${x - 6}`}
               />
               <path
-                d={`M ${x} ${out} H ${lineX(to) - 8}`}
+                d={`M ${x} ${out} H ${lineX(to) - TILE_W / 2}`}
                 strokeDasharray="3 4"
               />
             </g>
@@ -366,7 +369,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
   );
 }
 
-/** A row: its mark on the line at `x`, and its words beside it. */
+/** A row: its box, with the line at `x` down its middle. */
 function RowView({
   row,
   defs,
@@ -397,33 +400,32 @@ function RowView({
   // The step the run is on is under the highlighter, as the one picked is.
   const on = (picked !== null && picked === row.step.id) || state === "running" ? "flow-chart-on" : "";
   const pick = () => row.step.id && select(row.step.id);
-  // The mark is centred on the line; the words start WORDS past it.
-  const at = {
-    left: x - 8,
-    top: y,
-    height: row.h,
-    maxWidth: 8 + WORDS + TILE_W,
-  } as const;
-  const base = "absolute z-10 flex items-center text-left";
+  const box = { left: x - TILE_W / 2, top: y, width: TILE_W, height: row.h } as const;
+  const edge = state === "failed" ? "border-shu-500" : state === "succeeded" ? "border-moegi-600" : "border-slate-300";
+  const NO = "mr-1.5 inline-block min-w-[16px] shrink-0 text-[11.5px] font-normal text-slate-400 tabular-nums";
 
   if (row.kind === "step") {
-    const first = row.h - (facts?.length ? facts.length * FACT_H + 3 : 0);
     return (
-      <button type="button" title={tip} onClick={pick} style={at} className="absolute z-10 block text-left">
-        <span className="flex items-center" style={{ height: first }}>
-          <span className="flex w-4 shrink-0 justify-center">
-            <span
-              className={`rounded-full ${state === "failed" ? "size-[9px] bg-shu-500" : state === "succeeded" ? "size-[7px] bg-moegi-600" : row.quiet ? "size-[7px] border-[1.5px] border-slate-400 bg-sheet" : "size-[7px] bg-slate-500"}`}
-            />
-          </span>
-          <span style={{ marginLeft: WORDS - 8 }} className={`truncate ${row.quiet ? "text-[12.5px] text-slate-500" : "text-[13.5px] font-medium text-ink"}`}>
-            {number !== undefined && <span className="mr-1.5 inline-block w-[18px] text-[11.5px] font-normal text-slate-400 tabular-nums">{number}</span>}
+      <button
+        type="button"
+        title={tip}
+        onClick={pick}
+        style={box}
+        className={`flow-chart-node absolute z-10 block rounded-[6px] border px-3 text-left ${edge} ${row.quiet ? "flow-chart-node-quiet" : ""}`}
+      >
+        <span className="flex items-center" style={{ height: TILE_H - 2 }}>
+          {number != null && <span className={NO}>{number}</span>}
+          <span className={`truncate ${row.quiet ? "text-[12.5px] text-slate-600" : "text-[13.5px] font-medium text-ink"}`}>
             <span className={on}>{title(row.step, defs)}</span>
           </span>
         </span>
-        {facts?.map((fact, i) => (
-          <FactLine key={i} fact={fact} numbers={numbers} indent={8 + WORDS + (number !== undefined ? 24 : 0)} />
-        ))}
+        {facts && facts.length > 0 && (
+          <span className="block" style={{ paddingBottom: FACT_PAD - 2 }}>
+            {facts.map((fact, i) => (
+              <FactLine key={i} fact={fact} numbers={numbers} />
+            ))}
+          </span>
+        )}
       </button>
     );
   }
@@ -433,23 +435,11 @@ function RowView({
     return (
       <span
         title={tip}
-        style={at}
-        className={`${base} ${fail ? "text-shu-600" : "text-slate-600"}`}
+        style={{ left: x, top: y, height: row.h }}
+        className={`absolute z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-sheet px-3 text-[12.5px] font-medium whitespace-nowrap ${fail ? "border-shu-500 text-shu-600" : "border-slate-300 text-slate-600"}`}
       >
-        <span className="flex w-4 shrink-0 justify-center">
-          <Icon
-            size={14}
-            strokeWidth={1.75}
-            aria-hidden="true"
-            className="rounded-full bg-sheet"
-          />
-        </span>
-        <span
-          style={{ marginLeft: WORDS - 8 }}
-          className="truncate text-[12.5px] font-medium"
-        >
-          {fail ? title(row.step, defs) : guardOutcome(row.step)}
-        </span>
+        <Icon size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+        {fail ? title(row.step, defs) : guardOutcome(row.step)}
       </span>
     );
   }
@@ -457,43 +447,19 @@ function RowView({
     const Out = STOP_ICON[row.stop.type] ?? CircleX;
     const fail = row.stop.type === FAIL;
     return (
-      <button
-        type="button"
-        title={tip}
-        onClick={pick}
-        style={at}
-        className={`${base} items-start`}
-      >
-        <span className="flex h-7 w-4 shrink-0 items-center justify-center">
-          {/* A decision: a diamond on the line. */}
-          <span className="size-[8px] rotate-45 border-[1.5px] border-slate-500 bg-sheet" />
+      <button type="button" title={tip} onClick={pick} style={box} className={`flow-chart-node absolute z-10 block rounded-[6px] border px-3 text-left ${edge}`}>
+        <span className="flex items-center gap-2" style={{ height: TILE_H - 2 }}>
+          {/* A decision: a diamond before its question. */}
+          <span className="size-[8px] shrink-0 rotate-45 border-[1.5px] border-slate-500" />
+          <span className={`truncate text-[13.5px] font-medium text-ink ${on}`}>{question(row.step, defs)}</span>
         </span>
-        <span
-          style={{ marginLeft: WORDS - 8 }}
-          className="flex min-w-0 flex-col"
-        >
-          <span
-            className={`truncate text-[13.5px] leading-7 font-medium text-ink ${on}`}
-          >
-            {question(row.step, defs)}
+        {/* The answer that leaves the line here, and where it goes. The other answer is the arrow going on. */}
+        <span className={`flex items-center gap-1.5 text-[12px] ${fail ? "text-shu-600" : "text-slate-500"}`}>
+          <span className="shrink-0 rounded-full border border-slate-200 px-2 leading-[16px] font-medium whitespace-nowrap text-slate-600">
+            {row.block === "then" ? words.yes : words.no}
           </span>
-          {/* The answer that leaves the line here, and where it goes. The other answer is the line going on. */}
-          <span
-            className={`-mt-1 flex items-center gap-1.5 text-[12px] ${fail ? "text-shu-600" : "text-slate-500"}`}
-          >
-            <span className="shrink-0 rounded-full border border-slate-200 bg-sheet px-2 leading-[18px] font-medium whitespace-nowrap text-slate-600">
-              {row.block === "then" ? words.yes : words.no}
-            </span>
-            <Out
-              size={13}
-              strokeWidth={1.75}
-              aria-hidden="true"
-              className="shrink-0"
-            />
-            <span className="truncate">
-              {fail ? title(row.stop, defs) : guardOutcome(row.stop)}
-            </span>
-          </span>
+          <Out size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+          <span className="truncate">{fail ? title(row.stop, defs) : guardOutcome(row.stop)}</span>
         </span>
       </button>
     );
@@ -531,8 +497,8 @@ function RowView({
       type="button"
       title={tip}
       onClick={pick}
-      style={{ left: x - 13, top: y, height: row.h }}
-      className={`${base} gap-1.5 rounded-full border border-slate-200 bg-sheet pr-3 pl-[6px] text-[12px] whitespace-nowrap`}
+      style={{ left: x, top: y, height: row.h }}
+      className="absolute z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-300 bg-sheet pr-3 pl-2 text-left text-[12px] whitespace-nowrap"
     >
       <span className="flex w-[13px] shrink-0 justify-center">
         {Icon ? (

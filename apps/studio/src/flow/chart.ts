@@ -6,9 +6,10 @@
 // business flow is drawn on paper: a column for each app, time running down,
 // one row for each step, and one line through them.
 //
-// - A step is a mark on the line with its name beside it, in the column of
-//   the app it works on. Work on nothing outside (a calculation, a log) is a
-//   quieter mark where the line already is.
+// - A step is a box on the line with its name in it, in the column of the
+//   app it works on, and an arrow runs from each box to the next. Work on
+//   nothing outside (a calculation, a log) is a quieter box where the line
+//   already is.
 // - What repeats, and what runs only for one answer, is a band across the
 //   columns it touches, named in words on the line where it starts. No lines
 //   go back or round: the band and its words say it.
@@ -22,7 +23,7 @@
 //   stand beside each other in it), and they meet at a bar again, since what
 //   follows waits for them all.
 //
-// - Under a step's name stand the things the system does there that the
+// - In a step's box, under its name, stand the things the system does there that the
 //   sheet's sentences leave out (lib/systemFacts.ts): where it connects, the
 //   files it reads and writes, the secret it uses, how long it waits, and the
 //   values it takes from and gives to other steps.
@@ -34,18 +35,19 @@ import { BREAK, CASE, CONTINUE, FAIL, GROUP, IF, LOOP_TYPES, PARALLEL, SWITCH, T
 
 export type Defs = ReadonlyMap<string, StepTypeDef>;
 
-/** How wide a row's words may be. */
-export const TILE_W = 216;
-export const TILE_H = 28;
+/** A step's box: how wide it is, and how high its name is in it. */
+export const TILE_W = 248;
+export const TILE_H = 34;
 /** A tag (work on nothing outside), a band's name, a way out. */
-export const TAG_H = 24;
+export const TAG_H = 26;
 /** The bar where the line parts into branches that run at the same time, and where they meet. */
 export const BAR_H = 3;
 /** A guard: its question, and under it the answer that leaves the line and where it goes. */
-export const GUARD_H = 46;
-export const ROW_GAP = 6;
+export const GUARD_H = 58;
+/** Between two boxes: the arrow from one to the next. */
+export const ROW_GAP = 18;
 /** More room over a row the line crosses columns to reach. */
-export const CROSS = 10;
+export const CROSS = 8;
 /** Under the last row of a band, inside it. */
 const BAND_PAD = 8;
 /** Round a band, between it and the rows before and after. */
@@ -121,8 +123,10 @@ export function appOf(step: Step, defs: Defs): string | null {
 
 const blocksOf = (step: Step): [string, Step[]][] => Object.entries(step.blocks ?? {});
 
-/** A line of what the system does, under a row's name. */
+/** A line of what the system does, under a step's name in its box. */
 export const FACT_H = 17;
+/** Under the last of those lines, inside the box. */
+export const FACT_PAD = 9;
 
 /** `facts`: how many lines of what the system does stand under a step's name (components/chart). */
 export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => number = () => 0): Chart {
@@ -318,7 +322,7 @@ export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => nu
       if (app) lane = keys.indexOf(app);
       lanes[lane]!.steps.push(step);
       const under = facts(step) * FACT_H;
-      put({ kind: "step", step, lane, off: 0, y, h: (app || failing ? TILE_H : TAG_H) + (under > 0 ? under + 3 : 0), quiet: !app && !failing });
+      put({ kind: "step", step, lane, off: 0, y, h: TILE_H + (under > 0 ? under + FACT_PAD : 0), quiet: !app && !failing });
     }
   };
   walk(steps);

@@ -363,11 +363,11 @@ textarea {
 
 /*
  * The chart to read (components/chart): drawn on the sheet's paper (components/sheet) in the
- * sheet's own terms: words on hairlines, no boxes, and colour only where the
- * sheet has it (the highlighter, and vermilion for what fails).
+ * sheet's own terms: a hairline box for each step, arrows between them, and
+ * colour only where the sheet has it (the highlighter, and vermilion for what fails).
  */
 .flow-chart {
-  --chart-line: var(--color-slate-300);
+  --chart-line: var(--color-slate-400);
   background-color: var(--manual-desk);
 }
 .flow-chart-band-loop {
@@ -380,6 +380,16 @@ textarea {
 .flow-chart-band-always,
 .flow-chart-band-together {
   border: 1px solid var(--color-slate-200);
+}
+/* A step: a box on the line. Work on nothing outside is a quieter one. */
+.flow-chart-node {
+  background: var(--color-sheet);
+}
+.flow-chart-node:hover {
+  border-color: var(--color-slate-400);
+}
+.flow-chart-node-quiet {
+  border-style: dashed;
 }
 /* The row picked: the sheet's highlighter under its words. */
 .flow-chart-on {
