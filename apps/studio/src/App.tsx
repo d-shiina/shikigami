@@ -38,8 +38,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { DraftingFlow } from "./components/DraftingFlow";
 import { FlowsPage } from "./components/FlowsPage";
 import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
-import { Sidebar } from "./components/Sidebar";
-import { AiButton, Brand, SearchBar } from "./components/ShellBar";
+import { AiButton, Brand, SearchBar, Waiting } from "./components/ShellBar";
 import { SheetView } from "./components/sheet/SheetView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
@@ -51,7 +50,7 @@ import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
-import { CHART_MIN, DEFAULT_SIZES, SIDEBAR_MINI, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
@@ -113,7 +112,6 @@ function Banner() {
 }
 
 const VIEW_KEY = "spellsheet.studio.view";
-const SIDEBAR_KEY = "spellsheet.studio.list";
 
 function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -175,7 +173,7 @@ function useWidth(): [number, (el: HTMLElement | null) => void] {
 /**
  * The editor: the open flow's chart (or procedure), what the run did and
  * what is wrong underneath, and the inspector on the right. The flow's
- * name and its actions are in the title bar. The sidebar and the review desk
+ * name and its actions are in the title bar. The review desk
  * both open flows into it.
  */
 function Editor({
@@ -389,8 +387,6 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
 function Shell() {
   const place = useStudio((s) => s.place);
   const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "flow" || raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
-  const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
-  const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
@@ -422,9 +418,7 @@ function Shell() {
   const rightOpen = shownView !== "report" && shownView !== "variables" && shownView !== "story" && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
-  const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
-  // Whether the sidebar would fit if it were shown, whatever the person chose.
-  const room = fitPanels(width, { ...shown, sidebar: true }, sizes).sidebar;
+  const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
   const grip: Grip = (panel) => {
     const [min, max] = LIMITS[panel];
@@ -440,23 +434,6 @@ function Shell() {
       />
     );
   };
-  const showSidebar = sidebar === "open" && room;
-  // Hidden by hand with room, it comes back; without room, it is laid over the chart.
-  const toggleSidebar = () => {
-    if (showSidebar) setSidebar("closed");
-    else if (room) setSidebar("open");
-    else setPeek(!peek);
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
   const work = (
     <div className="flex min-h-0 flex-1">
       {/* With nothing open, the editor has nothing to show: the library does. */}
@@ -495,23 +472,6 @@ function Shell() {
       )}
     </div>
   );
-  const sidebarColumn = (
-    <>
-      {showSidebar && (
-        <div className="relative flex">
-          <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
-          {grip("sidebar")}
-        </div>
-      )}
-      {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
-      {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
-      {!showSidebar && peek && (
-        <Peek onClose={() => setPeek(false)}>
-          <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
-        </Peek>
-      )}
-    </>
-  );
   const dialogs = (
     <>
       <CommandPalette />
@@ -536,19 +496,19 @@ function Shell() {
   return (
     <div className="flex h-full flex-col bg-frame">
       <div data-tauri-drag-region className="relative flex h-10 shrink-0 items-center select-none">
-        <div data-tauri-drag-region style={{ width: showSidebar ? sizes.sidebar : SIDEBAR_MINI }} className={`flex shrink-0 items-center ${showSidebar ? "pl-2" : "justify-center"}`}>
-          <Brand compact={!showSidebar} />
+        <div data-tauri-drag-region className="flex shrink-0 items-center gap-2 pl-2">
+          <Brand />
+          <Waiting />
         </div>
         <span data-tauri-drag-region className="flex-1 self-stretch" />
         <div className="absolute top-1/2 left-1/2 flex w-[clamp(320px,44vw,620px)] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5">
-          <SearchBar onToggleSidebar={toggleSidebar} />
+          <SearchBar />
           <AiButton />
         </div>
         <WindowControls />
       </div>
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
-        {sidebarColumn}
-        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 pr-1.5 pb-1.5">
+        <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 px-1.5 pb-1.5">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
             <Attention />

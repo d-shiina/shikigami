@@ -1,4 +1,6 @@
-import { CircleCheck, CircleDashed, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Redo2, Search, Send, StepForward, Undo2 } from "lucide-react";
+import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Pencil, Redo2, Search, Send, StepForward, Undo2, Variable } from "lucide-react";
+import { openMenu } from "../lib/contextMenu";
+import { FlowSwitch } from "./FlowSwitch";
 
 const CHIP = "flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px]";
 import { useStudio } from "../context";
@@ -39,20 +41,21 @@ const CheckIcon = () => (
 export type View = "story" | "chart" | "flow" | "variables" | "result";
 
 /**
- * The sheet, the chart to read, the board the flow is put together on, or
- * its variables: ways to see the same flow. On
- * the review desk the AI's report comes first, as one more way to read it.
+ * The sheet or its chart: the two ways to read a flow. On the review desk
+ * the AI's report comes first, as one more. The other ways to see it (the
+ * board it is put together on, its variables, its last run) open from the
+ * menu beside the switch, and the one that is open is named here after the
+ * two, so the switch always says what is shown.
  */
 function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
   const place = useStudio((s) => s.place);
+  const others: Partial<Record<ReviewView, string>> = { flow: t.viewFlow, variables: t.vars.table.view, result: t.result.view };
+  const other = others[view];
   const options: [ReviewView, string][] = [
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
-    // A finished run of the flow on paper, with its earlier runs (not on the review desk).
-    ...(place === "flows" ? [["result", t.result.view] as [ReviewView, string]] : []),
     ["story", t.viewStory],
     ["chart", t.viewChart],
-    ["flow", t.viewFlow],
-    ["variables", t.vars.table.view],
+    ...(other ? [[view, other] as [ReviewView, string]] : []),
   ];
   return (
     <div className="flex h-7 items-center rounded-lg bg-slate-100 p-0.5 text-[12px]" role="radiogroup">
@@ -121,10 +124,8 @@ export function FlowTitle() {
   const published = useStudio((s) => s.published);
   const todos = useTodos().length;
   const unset = useUnsetCount();
-  const open = useProjectMaybe((p) => p.open, null);
   const place = useStudio((s) => s.place);
   const setPlace = useStudio((s) => s.setPlace);
-  const openHandOff = useStudio((s) => s.openHandOff);
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
@@ -141,40 +142,7 @@ export function FlowTitle() {
       <span className="shrink-0 text-[13px] text-slate-300 @max-[760px]/title:hidden" aria-hidden="true">
         /
       </span>
-      <span className="min-w-[5em] truncate px-0.5 text-[13px] font-semibold text-ink" title={flow.name}>
-        {flow.name}
-      </span>
-      {open && (
-        <button
-          type="button"
-          onClick={() => void open("", false)}
-          title={t.project.openFolder}
-          aria-label={t.project.openFolder}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
-        >
-          <FolderOutput size={14} strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      )}
-      {/* Handing it to another person or PC as one file. */}
-      <button
-        type="button"
-        onClick={() => void openHandOff(flow.id)}
-        title={t.handOff.open}
-        aria-label={t.handOff.open}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
-      >
-        <Send size={14} strokeWidth={1.75} aria-hidden="true" />
-      </button>
-      {/* The revision opens how the flow got here: its record and versions. */}
-      <button
-        type="button"
-        onClick={() => setHistoryOpen(true)}
-        title={`${t.shell.historyTitle}（${t.revisionCount(flow.revision ?? 0)}）`}
-        className={`${CHIP} text-slate-500 hover:bg-slate-100 hover:text-ink`}
-      >
-        <History size={13} strokeWidth={1.75} aria-hidden="true" />
-        <span className="@max-[920px]/title:hidden">{t.revision}</span>
-      </button>
+      <FlowSwitch />
       {/* What unattended runs execute; published from the history's versions. */}
       <button
         type="button"
@@ -191,25 +159,28 @@ export function FlowTitle() {
         {published ? <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" /> : <CircleDashed size={13} strokeWidth={1.75} aria-hidden="true" />}
         <span className="@max-[920px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
       </button>
-      <button
-        type="button"
-        onClick={() => setBottom("issues")}
-        className={`${CHIP} font-medium ${
-          errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos || unset ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
-        }`}
-        title={t.toolbar.issuesTitle}
-      >
-        {errors ? (
-          <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
-        ) : todos || unset ? (
-          <span className="h-3 w-3 rounded-full border-[1.5px] border-dashed border-amber-600" />
-        ) : (
-          <CheckIcon />
-        )}
-        <span className="@max-[920px]/title:hidden">
-          {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
-        </span>
-      </button>
+      {/* Said only when there is something to do about it. */}
+      {(errors > 0 || todos > 0 || unset > 0) && (
+        <button
+          type="button"
+          onClick={() => setBottom("issues")}
+          className={`${CHIP} font-medium ${
+            errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos || unset ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
+          }`}
+          title={t.toolbar.issuesTitle}
+        >
+          {errors ? (
+            <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
+          ) : todos || unset ? (
+            <span className="h-3 w-3 rounded-full border-[1.5px] border-dashed border-amber-600" />
+          ) : (
+            <CheckIcon />
+          )}
+          <span className="@max-[920px]/title:hidden">
+            {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
+          </span>
+        </button>
+      )}
       <span className="flex h-6 shrink-0 items-center rounded-md text-[12px] text-slate-500 @max-[920px]/title:hidden">
         <RunStatus />
       </span>
@@ -239,6 +210,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
   return (
     <div className="flex shrink-0 items-center gap-2">
       <ViewSwitch view={view} onChange={onView} />
+      <More onView={onView} canRun={errors === 0 && !running} />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
         <div className="flex h-7 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
@@ -280,16 +252,6 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
         <>
           <button
             type="button"
-            onClick={() => startRun({ step: true })}
-            disabled={errors > 0}
-            title={t.toolbar.stepRunTitle}
-            className="flex h-7 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
-          >
-            <span className="@max-[920px]/title:hidden">{t.toolbar.stepRun}</span>
-            <StepForward size={14} className="hidden @max-[920px]/title:inline" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
             onClick={() => startRun()}
             disabled={errors > 0}
             title={errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
@@ -303,6 +265,45 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
       )}
       <PaneToggle view={view} />
     </div>
+  );
+}
+
+/**
+ * Everything else about the open flow, behind one button: the other ways to
+ * see it, running it a step at a time, how it got here, its folder, and
+ * handing it to someone.
+ */
+function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: boolean }) {
+  const flow = useStudio((s) => s.flow);
+  const place = useStudio((s) => s.place);
+  const startRun = useStudio((s) => s.startRun);
+  const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
+  const openHandOff = useStudio((s) => s.openHandOff);
+  const openFolder = useProjectMaybe((p) => p.open, null);
+  if (!flow) return null;
+  return (
+    <button
+      type="button"
+      title={t.shell.more}
+      aria-label={t.shell.more}
+      onClick={(e) => {
+        const box = e.currentTarget.getBoundingClientRect();
+        openMenu({ clientX: box.left, clientY: box.bottom + 4, preventDefault: () => {} }, [
+          { label: t.viewFlow, icon: Pencil, run: () => onView("flow") },
+          { label: t.vars.table.view, icon: Variable, run: () => onView("variables") },
+          place === "flows" && { label: t.result.view, icon: ClipboardCheck, run: () => onView("result") },
+          "-",
+          { label: t.toolbar.stepRun, icon: StepForward, disabled: !canRun, run: () => void startRun({ step: true }) },
+          "-",
+          { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
+          openFolder && { label: t.project.openFolder, icon: FolderOutput, run: () => void openFolder("", false) },
+          { label: t.handOff.open, icon: Send, run: () => void openHandOff(flow.id) },
+        ]);
+      }}
+      className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
+    >
+      <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
+    </button>
   );
 }
 
@@ -356,7 +357,8 @@ function PaneToggle({ view }: { view: ReviewView }) {
   const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
   const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
   const showFlowProps = useStudio((s) => s.showFlowProps);
-  if ((place !== "flows" && place !== "review") || view === "variables" || view === "report" || view === "result") return null;
+  // The sheet opens a step's settings under its line: only the board and the chart have a pane beside them.
+  if ((place !== "flows" && place !== "review") || (view !== "flow" && view !== "chart")) return null;
   return (
     <button
       type="button"

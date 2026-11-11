@@ -114,7 +114,7 @@ export type InsertAt = { parentId: string | null; block: string | null; index: n
 export type PaletteAnchor = { left: number; top: number; right: number; bottom: number };
 
 /**
- * The places in the sidebar; each fills the window right of it. "library" is
+ * The places of the window (listed under the app's name); each fills it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
 export type Place = "library" | "flows" | "review" | "inventory" | "runs" | "secrets" | "extensions" | "settings";

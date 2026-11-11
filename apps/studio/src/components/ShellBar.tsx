@@ -7,13 +7,14 @@ import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, ClipboardList, In
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
-import { useStudio } from "../context";
+import { useStudio, useStudioApi } from "../context";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
 import { consult } from "../lib/inventory";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { isActive, type Place } from "../store";
 import { runnerApi } from "../runner/api";
 import { useAppVersion, useUpdate } from "./AppMenu";
+import { useInbox } from "./ReviewDesk";
 
 const KBD = "rounded-sm border border-slate-200 bg-sheet px-1 font-sans text-[10.5px] leading-4 font-medium text-slate-500";
 
@@ -60,14 +61,60 @@ function MenuRow({ icon: Icon, label, hint, onClick, on }: { icon?: LucideIcon; 
 const MenuLabel = ({ children }: { children: React.ReactNode }) => <div className="px-2 pt-2 pb-1 text-[11px] font-medium text-slate-400">{children}</div>;
 const MenuRule = () => <div className="my-1 h-px bg-slate-200" />;
 
+/** What waits on the person, and the way to the first of it. Sent-back flows wait on the AI, not on the person. */
+function useWaiting() {
+  const inbox = useInbox().filter((i) => !i.waiting);
+  const asks = useStudio((s) => s.secretRequests.length);
+  const flow = useStudio((s) => s.flow);
+  const open = useStudio((s) => s.open);
+  const setPlace = useStudio((s) => s.setPlace);
+  // Land on something to review rather than a flow with nothing new.
+  const enterReview = () => {
+    setPlace("review");
+    const first = inbox[0];
+    if (first && !inbox.some((i) => i.flowId === flow?.id)) void open(first.flowId);
+  };
+  return { inbox, asks, enterReview };
+}
+
+/**
+ * Beside the app's name: what waits on the person, counted, and nothing when
+ * nothing waits (only what waits is counted, see ui-principles.md). Each
+ * opens its place.
+ */
+export function Waiting() {
+  const { inbox, asks, enterReview } = useWaiting();
+  const setPlace = useStudio((s) => s.setPlace);
+  const chip = "flex h-6 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium whitespace-nowrap";
+  return (
+    <>
+      {inbox.length > 0 && (
+        <button type="button" onClick={enterReview} title={t.bar.reviewTitle} className={`${chip} bg-shu-50 text-shu-600 hover:bg-shu-100`}>
+          <Inbox size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.awaitingReview} {inbox.length}
+        </button>
+      )}
+      {asks > 0 && (
+        <button type="button" onClick={() => setPlace("secrets")} title={t.bar.secretAskTitle} className={`${chip} bg-amber-50 text-amber-700 hover:bg-amber-100`}>
+          <KeyRound size={13} strokeWidth={1.75} aria-hidden="true" />
+          {t.secrets} {asks}
+        </button>
+      )}
+    </>
+  );
+}
+
 /**
  * The app's name at the window's top left, as every Windows app carries it.
  * Its menu holds what is the window's, not the work's: theme, language,
  * settings and the version (with an update, when one waits).
  */
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand() {
   const [open, setOpen, ref] = usePopover();
   const setPlace = useStudio((s) => s.setPlace);
+  const place = useStudio((s) => s.place);
+  const { inbox, asks, enterReview } = useWaiting();
+  const store = useStudioApi();
   const version = useAppVersion();
   const update = useUpdate();
   const { choice } = useTheme();
@@ -87,20 +134,16 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         aria-expanded={open}
         aria-label={t.shell.brandMenu}
         title={t.shell.brandMenu}
-        className={`flex h-7 items-center gap-2 rounded-md ${compact ? "w-8 justify-center" : "pr-1.5 pl-1"} ${open ? "bg-slate-200/70" : "hover:bg-slate-200/50"}`}
+        className={`flex h-7 items-center gap-2 rounded-md pr-1.5 pl-1 ${open ? "bg-slate-200/70" : "hover:bg-slate-200/50"}`}
       >
         <img src="/mark.png" alt="" className="h-[18px] w-[18px] shrink-0" draggable={false} />
-        {!compact && (
-          <>
-            {/* The app's name from the strings (t.appName), so a rename of this screen follows by itself:
-                the product in ink, which screen of it in grey ("SpellSheet" + "Writer"). */}
-            <span className="text-[13.5px] tracking-[-0.01em] whitespace-nowrap">
-              <span className="font-semibold text-ink">{product}</span>
-              {screen && <span className="ml-1 font-medium text-slate-500">{screen}</span>}
-            </span>
-            <ChevronDown size={13} strokeWidth={2} className="text-slate-400" aria-hidden="true" />
-          </>
-        )}
+        {/* The app's name from the strings (t.appName), so a rename of this screen follows by itself:
+            the product in ink, which screen of it in grey ("SpellSheet" + "Writer"). */}
+        <span className="text-[13.5px] tracking-[-0.01em] whitespace-nowrap">
+          <span className="font-semibold text-ink">{product}</span>
+          {screen && <span className="ml-1 font-medium text-slate-500">{screen}</span>}
+        </span>
+        <ChevronDown size={13} strokeWidth={2} className="text-slate-400" aria-hidden="true" />
         {update && <span className="absolute top-0.5 left-5 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-frame" />}
       </button>
       {open && (
@@ -122,6 +165,17 @@ export function Brand({ compact = false }: { compact?: boolean }) {
               {t.updateAvailable} v{update}
             </button>
           )}
+          <MenuRule />
+          {/* The places of the work: one at a time fills the window. */}
+          <MenuRow icon={LayoutList} label={t.flows} on={place === "library" || place === "flows"} onClick={close(() => setPlace("library"))} />
+          <MenuRow icon={Inbox} label={t.awaitingReview} hint={inbox.length > 0 ? String(inbox.length) : undefined} onClick={close(enterReview)} />
+          <MenuRow icon={ClipboardList} label={t.inventory.place} onClick={close(() => setPlace("inventory"))} />
+          <MenuRow icon={CalendarClock} label={t.runs.place} onClick={close(() => setPlace("runs"))} />
+          <MenuRow icon={KeyRound} label={t.secrets} hint={asks > 0 ? String(asks) : undefined} onClick={close(() => setPlace("secrets"))} />
+          <MenuRow icon={Blocks} label={t.extensions.place} onClick={close(() => setPlace("extensions"))} />
+          <MenuRule />
+          {/* Another window, not a place: the published flows for the people who only run them. */}
+          <MenuRow icon={AppWindow} label={t.runner.open} onClick={close(() => void runnerApi.openWindow().catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) })))} />
           <MenuRule />
           <MenuLabel>{t.bar.theme}</MenuLabel>
           {THEMES.map(([key, label]) => (
@@ -178,7 +232,7 @@ export function AiButton() {
 type Command = { id: string; group: "ai" | "flows" | "places" | "commands"; icon: LucideIcon; label: string; note?: string; hint?: string; run: () => void };
 
 /** The search over everything, in the middle of the window's top bar (Ctrl+P). */
-export function SearchBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+export function SearchBar() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -202,7 +256,7 @@ export function SearchBar({ onToggleSidebar }: { onToggleSidebar: () => void }) 
         <span className="min-w-0 flex-1 truncate text-left">{t.shell.searchPlaceholder}</span>
         <span className={KBD}>Ctrl P</span>
       </button>
-      {open && <CommandDialog onClose={() => setOpen(false)} onToggleSidebar={onToggleSidebar} />}
+      {open && <CommandDialog onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -217,7 +271,7 @@ const PLACES: [Place, LucideIcon, () => string][] = [
   ["settings", Settings2, () => t.shell.settings],
 ];
 
-function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onToggleSidebar: () => void }) {
+function CommandDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [at, setAt] = useState(0);
   const summaries = useStudio((s) => s.summaries);
@@ -272,13 +326,12 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
       // Not while a run of it is under way: that would start a second copy (the bar's Run and F5 hold back too).
       ...(flow && !isActive(run) ? [{ id: "run", group: "commands" as const, icon: Play, label: t.shell.runCommand, hint: "F5", run: () => void startRun() }] : []),
       { id: "ai-toggle", group: "commands", icon: MessageSquareText, label: t.shell.toggleAi, hint: "Ctrl+J", run: () => agent.getState().setOpen(!agent.getState().open) },
-      { id: "sidebar", group: "commands", icon: LayoutList, label: t.shell.toggleSidebar, hint: "Ctrl+B", run: onToggleSidebar },
       { id: "theme", group: "commands", icon: Moon, label: t.shell.themeCommand(document.documentElement.dataset.theme === "dark" ? t.bar.themeLight : t.bar.themeDark), run: () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark") },
       { id: "runner", group: "commands", icon: AppWindow, label: t.runner.open, run: () => void runnerApi.openWindow().catch(() => {}) },
     ];
     for (const c of actions) if (hit(c.label)) out.push(c);
     return out;
-  }, [query, summaries, flow, open, setPlace, startRun, run, agent, onToggleSidebar]);
+  }, [query, summaries, flow, open, setPlace, startRun, run, agent]);
   // Something typed puts the AI first only when nothing else matches it.
   // The AI comes first: SpellSheet is built by asking it, so what is typed goes to it on Enter,
   // unless it names a flow, place or action exactly (then that opens).

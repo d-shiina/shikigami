@@ -170,7 +170,7 @@ export const en: Dict = {
   ask: {
     empty: "Type something",
   },
-  secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets in the sidebar and pick it in the input node",
+  secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets and pick it in the input node",
   flows: "Flows",
   newFlow: "New flow",
   newFlowPrompt: "Flow name",
@@ -2123,8 +2123,6 @@ export const en: Dict = {
     updated: (when: string) => `Updated ${when}`,
     confirmDelete: "Delete?",
     add: "New",
-    collapse: "Hide sidebar",
-    expand: "Show sidebar",
     create: "Create",
     search: "Search",
     count: (n: number) => `${n}`,
@@ -2316,6 +2314,7 @@ export const en: Dict = {
     restoreHint: "When off, a completed run leaves Writer small with the result in the band. Errors and stops always bring Writer back",
   },
   shell: {
+    more: "More",
     openNow: "Open now",
     aiChat: "AI chat",
     recentFlows: "Recent flows",
@@ -2333,7 +2332,6 @@ export const en: Dict = {
     noMatch: "Nothing found",
     newFlowCommand: "New flow",
     runCommand: "Run this flow",
-    toggleSidebar: "Show or hide the sidebar",
     toggleAi: "Open or close the AI chat",
     themeCommand: (name: string) => `Theme: ${name}`,
     languageCommand: (name: string) => `Language: ${name}`,

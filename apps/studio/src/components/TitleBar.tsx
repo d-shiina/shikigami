@@ -1,4 +1,4 @@
-// The window's title bar, right of the sidebar (which holds the workspace),
+// The window's title bar,
 // read left to right like the rest of Studio: what is open, then what to do
 // with it, ending with Run (the app's name, the search, the AI and the window
 // buttons sit above, in the window's bar). The window holds one flow at a time, so the bar that names the

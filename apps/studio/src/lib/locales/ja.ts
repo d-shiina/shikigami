@@ -170,7 +170,7 @@ export const ja = {
   ask: {
     empty: "入力してください",
   },
-  secretNoDefault: "機密の変数には既定値を書けません。パスワードはサイドバーの「シークレット」に登録して、入力ノードで選びます",
+  secretNoDefault: "機密の変数には既定値を書けません。パスワードは「シークレット」に登録して、入力ノードで選びます",
   flows: "フロー",
   newFlow: "新規作成",
   newFlowPrompt: "フロー名",
@@ -2123,8 +2123,6 @@ export const ja = {
     updated: (when: string) => `${when}に更新`,
     confirmDelete: "削除する",
     add: "追加",
-    collapse: "サイドバーを隠す",
-    expand: "サイドバーを表示",
     create: "作成",
     search: "検索",
     count: (n: number) => `${n}件`,
@@ -2316,6 +2314,7 @@ export const ja = {
     restoreHint: "オフにすると、完了したときは帯に結果を出したまま Writer は小さいままにします。エラーや中止のときは必ず戻します",
   },
   shell: {
+    more: "そのほか",
     openNow: "表示中",
     aiChat: "AI チャット",
     recentFlows: "最近のフロー",
@@ -2333,7 +2332,6 @@ export const ja = {
     noMatch: "見つかりません",
     newFlowCommand: "新しいフロー",
     runCommand: "このフローを実行",
-    toggleSidebar: "サイドバーの表示を切り替え",
     toggleAi: "AI チャットを開く・閉じる",
     themeCommand: (name: string) => `テーマ：${name}`,
     languageCommand: (name: string) => `表示言語：${name}`,
