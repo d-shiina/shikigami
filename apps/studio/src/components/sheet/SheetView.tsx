@@ -586,7 +586,8 @@ function Export({
 /** The last request to show a step that was answered: one is answered once, whichever sheet is up. */
 let revealed = 0;
 
-export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
+/** `onSheet`: asked from the chart, to read a step where its settings open (the sheet). */
+export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?: () => void }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const startRun = useStudio((s) => s.startRun);
@@ -773,7 +774,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
             </div>
           </header>
           {chart ? (
-            <ChartBody numbers={numbers} run={run} />
+            <ChartBody numbers={numbers} run={run} onOpen={onSheet} />
           ) : (
             <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
               <div className={MARGIN}>

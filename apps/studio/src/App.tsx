@@ -206,7 +206,7 @@ function Editor({
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
-            <SheetView mode={view === "chart" ? "chart" : "sheet"} />
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} onSheet={() => onView("story")} />
           )}
           {/* The flow's files lie on the desk left of the paper, opened from the menu and closed from themselves. */}
           {!report && view !== "variables" && hasFlow && projectOpen && (
@@ -363,16 +363,15 @@ function Shell() {
   const hasFlow = useStudio((s) => s.flow !== null);
   const drafting = useStudio((s) => s.drafting !== null);
   const editing = place === "flows" || place === "review";
-  // The right pane takes room only while it has something to say: the node or part picked on the
-  // chart, or the flow's settings kept open by hand. The 変数 table edits in place, so it never has
-  // one.
+  // The right pane takes room only for what has no line on the sheet: the flow's settings kept
+  // open by hand, or a part picked from the files. A step's settings open under its line on the
+  // sheet, never beside it.
   const inspectorOpen = useStudio((s) => s.inspectorOpen);
-  const picked = useStudio((s) => s.selection?.kind === "step" || s.selection?.kind === "part");
+  const picked = useStudio((s) => s.selection?.kind === "part");
   // On the review desk the report fills the editor; the chart opened from it works as in the editor.
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
-  // The sheet opens a step's settings under its line, with nothing beside it.
-  const rightOpen = shownView !== "report" && shownView !== "variables" && shownView !== "story" && (inspectorOpen || picked);
+  const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, shown, sizes);

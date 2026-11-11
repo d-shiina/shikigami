@@ -43,7 +43,7 @@ import { registerExtensions } from "../lib/extensions";
 import type { Copied } from "../lib/stepClipboard";
 import { setFlowNames } from "../lib/sentence";
 import { message, storeContext } from "./context";
-import { loadBreakpoints, loadFolded, INSPECTOR_KEY, loadFlag, loadReviewed } from "./persist";
+import { loadBreakpoints, loadFolded, loadReviewed } from "./persist";
 import { type RunOptions, type StepPlace, type StepTest, type RunState } from "./run";
 import type { SecretPrefill, SecretFix } from "./secrets";
 import { editActions } from "./editActions";
@@ -466,7 +466,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       stepTimes: null,
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
-      inspectorOpen: loadFlag(INSPECTOR_KEY, false),
+      // The flow's settings open from the bar's menu, and start closed each time.
+      inspectorOpen: false,
       paletteOpen: false,
       searchOpen: false,
       searchAsked: 0,

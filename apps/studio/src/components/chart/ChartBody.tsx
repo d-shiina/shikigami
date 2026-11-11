@@ -100,12 +100,13 @@ const BAND_ICON: Partial<Record<Band["kind"], LucideIcon>> = {
 /**
  * `numbers`: each step's number on the sheet, so a row here and a line there are found from one another.
  * `run`: the run that is going, or the last one: how far it got is said on the rows.
+ * `onOpen`: a row pressed is read on the sheet, where its settings open under its line.
  */
-export function ChartBody({ numbers, run }: { numbers?: ReadonlyMap<string, number>; run?: RunState | null }) {
+export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<string, number>; run?: RunState | null; onOpen?: () => void }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   const defs: Defs = useMemo(
     () => new Map(stepTypes.map((d) => [d.type, d] as const)),
     [stepTypes],
@@ -294,7 +295,10 @@ export function ChartBody({ numbers, run }: { numbers?: ReadonlyMap<string, numb
             picked={picked}
             number={numbers ? (numbers.get(row.step.id ?? "") ?? null) : undefined}
             state={row.step.id ? run?.steps[row.step.id] : undefined}
-            select={(stepId) => select({ kind: "step", stepId })}
+            select={(stepId) => {
+              goTo(stepId);
+              onOpen?.();
+            }}
           />
         ),
       )}
@@ -415,7 +419,7 @@ function RowView({
           <span
             className={`-mt-1 flex items-center gap-1.5 text-[12px] ${fail ? "text-shu-600" : "text-slate-500"}`}
           >
-            <span className="rounded-full border border-slate-200 bg-sheet px-2 leading-[18px] font-medium text-slate-600">
+            <span className="shrink-0 rounded-full border border-slate-200 bg-sheet px-2 leading-[18px] font-medium whitespace-nowrap text-slate-600">
               {row.block === "then" ? words.yes : words.no}
             </span>
             <Out
