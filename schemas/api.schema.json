@@ -1626,7 +1626,7 @@
           ]
         },
         {
-          "description": "An AI in a chat window without MCP (Microsoft Copilot, ...): a\nperson pasted its answer into Studio. Reviewed like an MCP edit.",
+          "description": "An AI in a chat window without MCP, whose answer a person pasted\ninto Writer. Writer no longer takes such answers in; kept so that\nhistory written by older versions still reads (reviewed like MCP).",
           "type": "string",
           "const": "chat"
         }

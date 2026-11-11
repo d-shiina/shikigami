@@ -7,10 +7,8 @@ import { Circle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAgent } from "../agent";
-import { useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
-import { clipboardAi } from "../lib/askAi";
 import { locale, t } from "../lib/i18n";
 import { pageAbove } from "../lib/loopScope";
 import { type Recording, recordedSteps, recordingOps, tidyRequest } from "../lib/recording";
@@ -188,7 +186,9 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
   const stepTypes = useStudio((s) => s.stepTypes);
   const applyOps = useStudio((s) => s.applyOps);
   const select = useStudio((s) => s.select);
-  const { ready: agentAvailable, name: agentName } = useAskable();
+  const agentAvailable = useAgent((s) => s.info?.available === true);
+  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const openAgent = useAgent((s) => s.setOpen);
   const askAgent = useAgent((s) => s.send);
   const [told, setTold] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
@@ -229,7 +229,9 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
         if (sent) return onClose();
         setTold(t.recording.notSent(agentName));
       } else {
-        setTold(await clipboardAi.ask(text));
+        // No AI to ask yet: the AI pane shows how to set one up.
+        openAgent(true);
+        setTold(t.aiSetUpFirst);
       }
     } catch (e) {
       setTold(t.recording.notSent(e instanceof Error ? e.message : String(e)));

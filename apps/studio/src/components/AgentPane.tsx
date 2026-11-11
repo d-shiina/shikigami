@@ -1,19 +1,14 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
-import { chatAi, useAiWay } from "../lib/aiWay";
-import { AiStart } from "./AiStart";
-import { HandoffCard } from "./ChatHandoff";
 import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { useScreens } from "../lib/screenParts";
 import { plainLine } from "../lib/markdown";
 import { Markdown } from "./Markdown";
-import { AttachedScreens, ScreenAttach } from "./ScreenAttach";
 import { ApiKeyBox } from "./AgentApiKey";
 import { headline, summarize, purpose } from "../lib/review";
 import { useReviewView } from "../lib/reviewView";
@@ -29,18 +24,10 @@ export function AgentPane({ width }: { width: number }) {
   const chat = useAgent(currentChat);
   const blockedElsewhere = useAgent((s) => flowBusy(s, currentChat(s).flowId, s.current));
   const sendIn = useAgent((s) => s.sendIn);
-  const clearScreens = useScreens((s) => s.clear);
   const stop = useAgent((s) => s.stop);
   const newChat = useAgent((s) => s.newChat);
   const flow = useStudio((s) => s.flow);
   const openFlow = useStudio((s) => s.open);
-  const expectAnswer = useAgent((s) => s.expectAnswer);
-  const way = useAiWay((s) => s.way);
-  const setWay = useAiWay((s) => s.setWay);
-  const askAgain = useAiWay((s) => s.askAgain);
-  const chatName = useAiWay((s) => chatAi(s.chat).name);
-  const otherChat = useAiWay((s) => s.chat === "other");
-  const [decided, setDecided] = useState<string | null>(null);
   const selection = useStudio((s) => s.selection);
   // One draft per conversation, so switching does not carry text to another flow.
   const setDraft = useAgent((s) => s.setDraft);
@@ -55,15 +42,8 @@ export function AgentPane({ width }: { width: number }) {
     // Newer WebView2 returns a promise here; an effect must not.
     void end.current?.scrollIntoView({ block: "end" });
   }, [items, chat.id]);
-  // An AI Writer can run is already set up: nothing to ask.
   const available = info?.available === true;
-  useEffect(() => {
-    if (way === null && available) setWay("agent");
-  }, [way, available, setWay]);
   if (!open) return null;
-  const paste = way === "paste";
-  const ready = available || paste;
-  const lastHandoff = [...items].reverse().find((i) => i.role === "ai" && i.handoff)?.id;
   // The conversation may be about another flow than the one in the editor.
   const here = flow !== null && chat.flowId === flow.id;
   const stepId = here && selection?.kind === "step" ? selection.stepId : null;
@@ -80,11 +60,9 @@ export function AgentPane({ width }: { width: number }) {
     const text = draft;
     setDraftOf(id, () => "");
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
-    // The screens went with that request; the next one adds its own.
-    else if (paste) clearScreens(id);
   };
   // Only the last reply's card can still be answered, and not while the AI works.
-  const canChoose = !busy && !blockedElsewhere && available && !paste;
+  const canChoose = !busy && !blockedElsewhere && available;
   return (
     <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col bg-sheet">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-3 pl-2">
@@ -101,16 +79,6 @@ export function AgentPane({ width }: { width: number }) {
         </button>
         <button
           type="button"
-          onClick={() => expectAnswer(chat.id)}
-          disabled={busy}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
-          title={t.aiChat.expect}
-          aria-label={t.aiChat.expect}
-        >
-          <ClipboardPaste size={15} />
-        </button>
-        <button
-          type="button"
           onClick={() => setOpen(false)}
           className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
           aria-label={t.close}
@@ -119,39 +87,17 @@ export function AgentPane({ width }: { width: number }) {
         </button>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {info && !available && way === null && <AiStart onDecided={setDecided} />}
-        {decided && way !== null && items.length === 0 && (
-          <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-paper px-3 py-2 text-[12px] leading-relaxed text-slate-700" role="status">
-            <span className="min-w-0 flex-1">{decided}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setDecided(null);
-                askAgain();
-              }}
-              className="shrink-0 text-brand-600 hover:underline"
-            >
-              {t.aiChat.decided.change}
-            </button>
-          </div>
-        )}
-        {info && !available && way === "agent" && (
+        {info && !available && (
           <>
             {info.installable ? (
               <SetupCard />
             ) : (
               <div className="rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
             )}
-            {!decided && (
-              <button type="button" onClick={askAgain} className="text-[12px] text-brand-600 hover:underline">
-                {t.aiChat.decided.change}
-              </button>
-            )}
           </>
         )}
-        {paste && items.length === 0 && <PasteIntro name={otherChat ? "AI" : chatName} />}
-        {!paste && info?.usesApiKey && !info.hasApiKey && <ApiKeyBox />}
-        {items.length === 0 && available && !paste && !(info.usesApiKey && !info.hasApiKey) && (
+        {info?.usesApiKey && !info.hasApiKey && <ApiKeyBox />}
+        {items.length === 0 && available && !(info.usesApiKey && !info.hasApiKey) && (
           <div className="grid h-full place-items-center">
             <div className="flex flex-col items-center gap-2">
               <img src="/mark.png" alt="" className="h-10 w-10 opacity-15 grayscale" />
@@ -159,23 +105,17 @@ export function AgentPane({ width }: { width: number }) {
             </div>
           </div>
         )}
-        {items.map((item, i) =>
-          item.role === "ai" && item.handoff ? (
-            <HandoffCard key={item.id} chat={chat} item={{ ...item, handoff: item.handoff }} latest={item.id === lastHandoff} />
-          ) : (
-            <Item key={item.id} item={item} onChoose={canChoose && i === items.length - 1 ? (answer) => void submit(answer) : null} />
-          ),
-        )}
+        {items.map((item, i) => (
+          <Item key={item.id} item={item} onChoose={canChoose && i === items.length - 1 ? (answer) => void submit(answer) : null} />
+        ))}
         {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
-        {!paste && <LoginBox name={info?.name ?? "AI"} />}
-        {!paste && info?.hasApiKey && <ApiKeyBox />}
+        <LoginBox name={info?.name ?? "AI"} />
+        {info?.hasApiKey && <ApiKeyBox />}
         <div ref={end} />
       </div>
       <div className="border-t border-slate-200 p-3">
         <div className="relative mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
-          {chat.interview ? (
-            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.inventory.paste.chip}</span>
-          ) : chat.flowId === null ? (
+          {chat.flowId === null ? (
             <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
           ) : here ? (
             <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{flow.name}</span>
@@ -191,9 +131,7 @@ export function AgentPane({ width }: { width: number }) {
             </button>
           )}
           {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
-          {paste && !chat.interview && <ScreenAttach chatId={chat.id} />}
         </div>
-        {paste && !chat.interview && <AttachedScreens chatId={chat.id} />}
         <textarea
           data-agent-input
           value={draft}
@@ -205,13 +143,13 @@ export function AgentPane({ width }: { width: number }) {
             }
           }}
           rows={3}
-          disabled={!ready}
-          placeholder={chat.interview ? t.inventory.paste.placeholder : chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
+          disabled={!available}
+          placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
           className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
           <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.noteHint : undefined}>
-            {blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : paste ? "" : t.agent.sendHint}
+            {blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}
           </span>
           {chat.turnId && (
             <button
@@ -224,35 +162,16 @@ export function AgentPane({ width }: { width: number }) {
           )}
           <button
             type="button"
-            disabled={!ready || blockedElsewhere || draft.trim() === ""}
+            disabled={!available || blockedElsewhere || draft.trim() === ""}
             onClick={() => void submit()}
             title={busy ? t.agent.noteHint : undefined}
             className={`${chat.turnId ? "" : "ml-auto "}h-8 shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400`}
           >
-            {paste ? (otherChat ? t.aiChat.sendOther : t.aiChat.send(chatName)) : t.agent.send}
+            {t.agent.send}
           </button>
         </div>
       </div>
     </aside>
-  );
-}
-
-/** The paste way, before anything is asked: how a request goes and comes back. */
-function PasteIntro({ name }: { name: string }) {
-  const steps = [t.aiChat.intro.step1, t.aiChat.intro.step2(name), t.aiChat.intro.step3(name)];
-  return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-paper px-3 py-2.5 text-[12px] leading-relaxed text-slate-700">
-      <div className="text-[13px] font-semibold text-ink">{t.aiChat.intro.title(name)}</div>
-      <ol className="space-y-1">
-        {steps.map((step, i) => (
-          <li key={i} className="flex gap-1.5">
-            <span className="w-3.5 shrink-0 text-slate-500 tabular-nums">{i + 1}.</span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
-      <div className="text-[11.5px] text-slate-500">{t.aiChat.intro.upgrade}</div>
-    </div>
   );
 }
 

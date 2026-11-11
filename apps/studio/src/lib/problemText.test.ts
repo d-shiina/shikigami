@@ -1,7 +1,7 @@
 import type { Flow, ValidationIssue } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
-import { answerProblemText, shortJson, stepAt, valueAt, writtenAt } from "./problemText";
-import { returnText } from "./todos";
+import { shortJson, stepAt, valueAt, writtenAt } from "./problemText";
+import { fixText } from "./todos";
 
 const flow = {
   schemaVersion: 5,
@@ -34,17 +34,6 @@ describe("what was written where a problem is", () => {
     expect(shortJson("x".repeat(400)).endsWith("…")).toBe(true);
   });
 
-  it("words a pasted answer's problems for the person", () => {
-    expect(answerProblemText({ message: "The JSON is not valid at line 3, column 5: …" })).toContain("3 行目");
-    expect(answerProblemText({ path: "/flow/steps/0", message: "Additional properties are not allowed ('parameters' was unexpected)" })).toContain(
-      "「parameters」",
-    );
-    expect(answerProblemText({ path: "/flow/steps/0", message: '"type" is a required property' })).toContain("「type」");
-    expect(answerProblemText({ path: "/flow/name", message: '1 is not of type "string"' })).toContain("文字");
-    // Nothing English goes on screen.
-    expect(answerProblemText({ path: "/flow/x", message: "something unexpected" })).not.toMatch(/[a-z]{4,} [a-z]{4,}/);
-  });
-
   it("gives the AI what was written, how to fix it and the rules", () => {
     const issues = [
       {
@@ -56,17 +45,10 @@ describe("what was written where a problem is", () => {
         hint: "Compare with == and != (there is no === or !==).",
       },
     ] as ValidationIssue[];
-    const text = returnText(issues, flow);
-    expect(text).toContain("/flow/steps/0/params/condition （ノード「金額の確認」）");
+    const text = fixText(issues, flow);
+    expect(text).toContain("/steps/0/params/condition （ノード「金額の確認」）");
     expect(text).toContain('書かれていた内容: "total === 3"');
     expect(text).toContain("直し方: Compare with ==");
     expect(text).toContain("式の決まり（抜粋）");
-  });
-
-  it("carries the node and the value of a problem Core found in the answer", () => {
-    const text = returnText([{ path: "/flow/steps/0", message: "Additional properties…", step: "記録", found: '{"param":{}}' }]);
-    expect(text).toContain("（ノード「記録」）");
-    expect(text).toContain('書かれていた内容: {"param":{}}');
-    expect(text).not.toContain("式の決まり");
   });
 });

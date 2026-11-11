@@ -14,10 +14,6 @@ People who start with RPA often do not know which of their work to automate firs
 
 The AI never asks for passwords, real customer names, amounts, or screenshots.
 
-### With an AI that cannot use MCP (Microsoft Copilot, ChatGPT in the browser…)
-
-When Writer's AI chat is set to copy into an AI chat, the same entrances copy the interview guide and open the AI chat. Paste and send it, and the AI interviews you in the same order. Ask it to "sum it up" (or use **Copy "sum it up"** in Writer) and it writes the record so far as JSON; copy it and come back to Writer to take it in. Writer works out the hours and the order. Talk more and take it in again: tasks with the same name are updated. "Continue with the AI" on the sheet copies the guide with the record so far.
-
 ## The numbers
 
 | Value | How |
@@ -63,4 +59,4 @@ spellsheet inventory export <id> out.xlsx [--english]
 ## Limits
 
 - Hours that were actually saved (from the runs of the flows made for a row) are not shown yet.
-- AIs that only chat (no MCP, [ai-chat.md](ai-chat.md)) cannot save an inventory.
+- The AI needs SpellSheet's MCP server: an AI that only chats cannot save an inventory.

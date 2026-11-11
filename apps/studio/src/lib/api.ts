@@ -62,20 +62,6 @@ import type { FlowRun } from "./runResult";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Drafts, ManualManifest, Mask } from "./manual";
 
-/** Why a pasted answer could not be read, written for the AI that wrote it. */
-export type AnswerProblem = {
-  path?: string;
-  message: string;
-  /** The node the problem is in, by its name (or type). */
-  step?: string;
-  /** What the answer has at `path`, as JSON (shortened). */
-  found?: string;
-  /** The answer stops before its JSON ends: ask the AI to go on, then read both together. */
-  cut?: boolean;
-};
-/** The flow a pasted answer made or changed, or the problems to send back (nothing changed then). */
-export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
-
 /** When a schedule fires (docs/schedules.md). Times are local, "08:00". */
 export type ScheduleWhen =
   | { kind: "daily"; at: string; days?: string[]; skipHolidays?: boolean }
@@ -344,10 +330,6 @@ export const inventoryApi = {
   /** A correction made on the sheet; returns the stock-take as it is now. */
   change: (patch: InventoryPatch) => call<InventoryView>("change_inventory", { patch }),
   remove: (id: string) => call<void>("delete_inventory", { id }),
-  /** The interview to paste into an AI chat that cannot reach SpellSheet. */
-  chatGuide: () => call<string>("inventory_chat_guide"),
-  /** The record such a chat wrote: a new stock-take, or into `id` (tasks matched by name). */
-  pasteAnswer: (text: string, id: string | null) => call<InventoryView>("paste_inventory_answer", { text, id }),
   /** Writes it as an Excel workbook to the Downloads folder; returns its path. */
   exportXlsx: (id: string, english: boolean) => call<string>("export_inventory", { id, english }),
 };
@@ -413,12 +395,6 @@ export const api = {
   takeOpenedFile: () => call<string | null>("take_opened_file"),
   /** Writer's screen has drawn: shows the (hidden) window and closes the start-up screen (splash.rs). */
   startupReady: () => call<void>("startup_ready"),
-  /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
-  saveAiGuide: () => call<string>("save_ai_guide"),
-  aiInstructions: () => call<string>("ai_instructions"),
-  /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
-  pasteAiAnswer: (text: string, into?: string, expectedRevision?: number) =>
-    call<PasteOutcome>("paste_ai_answer", { text, into, expectedRevision }),
   importFlow: (contents: string, onConflict?: ImportConflict) =>
     call<ImportOutcome>("import_flow", { contents, onConflict }),
   listFlows: () => call<FlowSummary[]>("list_flows"),
