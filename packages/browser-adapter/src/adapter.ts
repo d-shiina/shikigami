@@ -544,10 +544,15 @@ export class Adapter {
     mkdirSync(profile, { recursive: true });
     const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check"];
     if (this.options.forceHeadless) args.push("--headless=new");
-    if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+    // Linux is only for tests and CI, where the sandbox often cannot start (root, AppArmor).
+    if (process.platform === "linux") args.push("--no-sandbox");
     const child = spawn(executable, args, { detached: true, stdio: "ignore" });
     let failed: Error | undefined;
     child.on("error", (error) => (failed = error));
+    // Edge hands the window to a copy already running on the same profile and exits 0: keep waiting then.
+    child.on("exit", (code) => {
+      if (code) failed ??= new Error(`the browser exited with code ${code}`);
+    });
     child.unref();
     const until = Date.now() + Math.max(timeout, 15000);
     let last: unknown;
