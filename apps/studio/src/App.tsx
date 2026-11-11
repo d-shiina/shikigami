@@ -1,5 +1,4 @@
 import { DistributionDialog } from "./components/Distribution";
-import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
@@ -13,15 +12,13 @@ import { CommandPalette } from "./components/CommandPalette";
 import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { FlowCanvas } from "./components/FlowCanvas";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
-import { OutlinePanel } from "./components/Outline";
 
 import { FileSheet } from "./components/FileSheet";
 import { NeededFilesWatch } from "./components/FilePlaces";
 import { NodeEditor } from "./components/NodeEditor";
-import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
+import { ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
 import { ReviewFoot, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
 import { RunResultView } from "./components/RunResult";
@@ -43,7 +40,7 @@ import { SheetView } from "./components/sheet/SheetView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { WindowControls } from "./components/WindowControls";
-import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
+import type { View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { Hand } from "lucide-react";
@@ -63,8 +60,6 @@ function Attention() {
   return null;
 }
 
-/** The desk's left gutter, the files column and the gap after it. */
-const OUTLINE_BESIDE_FILES = 12 + 264 + 12;
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -198,7 +193,6 @@ function Editor({
   grip: Grip;
 }) {
   const hasFlow = useStudio((s) => s.flow !== null);
-  const outlineOpen = useStudio((s) => s.outlineOpen);
   const projectOpen = useProject((s) => s.panelOpen);
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
@@ -209,57 +203,20 @@ function Editor({
         <div className="@container relative min-h-0 flex-1">
           {report ? (
             report
-          ) : view === "story" || view === "chart" ? (
-            <SheetView mode={view === "chart" ? "chart" : "sheet"} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
-            <ReactFlowProvider>
-              <FlowCanvas />
-              {/*
-                The flow's files and its outline lie on the desk left of the sheet, one column:
-                the files above, the outline under them taking the rest of the height.
-              */}
-              {hasFlow && projectOpen && (
-                <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
-                  <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
-                    <ProjectPanel />
-                  </div>
-                  {outlineOpen && <OutlinePanel />}
-                </div>
-              )}
-              {/*
-                With the files folded away their button keeps its place at the top of the column,
-                and the outline, when open, hangs under it; nothing one panel does hides the other's button.
-              */}
-              {hasFlow && !projectOpen && (
-                <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
-                  <div className="flex w-max gap-2">
-                    <ProjectButton />
-                    {!outlineOpen && <OutlineButton />}
-                    {!outlineOpen && <SearchButton />}
-                  </div>
-                  {outlineOpen && <OutlinePanel />}
-                </div>
-              )}
-              {/* The outline unfolds under the files, so its button waits beside them. */}
-              {hasFlow && projectOpen && !outlineOpen && (
-                <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
-                  <OutlineButton />
-                  <SearchButton />
-                </div>
-              )}
-            </ReactFlowProvider>
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} />
+          )}
+          {/* The flow's files lie on the desk left of the paper, opened from the menu and closed from themselves. */}
+          {!report && view !== "variables" && hasFlow && projectOpen && (
+            <div className="absolute top-3 bottom-3 left-3 z-10 w-[264px]">
+              <ProjectPanel />
+            </div>
           )}
           {!report && view !== "variables" && hasFlow && <FlowSearch />}
           {hasFlow && <NeededFilesWatch />}
           <FileSheet />
-          {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
-          {!report && view === "flow" && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
-              <CanvasDock />
-            </div>
-          )}
         </div>
         {foot}
         <RunPausePanel />
@@ -333,7 +290,7 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   const result = view === "result";
   return (
     <Editor
-      view={result ? "flow" : view}
+      view={result ? "story" : view}
       onView={onView}
       report={result ? <RunResultView onView={onView} /> : undefined}
       right={fit.right && !result ? <Inspector /> : null}
@@ -386,7 +343,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "flow" || raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const agentOpen = useAgent((s) => s.open);
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
@@ -540,7 +497,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
   if (!state.flow || state.paletteOpen) return;
   // Buttons and links keep Tab for moving focus; the canvas and the page do not need it.
   const target = e.target as HTMLElement | null;
-  const onControl = target?.closest("button, a, [role=tab]") && !target.closest(".react-flow");
+  const onControl = target?.closest("button, a, [role=tab]");
   const key = e.key;
   const step = (delta: number) => {
     e.preventDefault();
@@ -561,7 +518,6 @@ function navigate(e: KeyboardEvent, state: StudioState) {
     state.changeBy(e.shiftKey ? -1 : 1);
   } else if (key === "Escape" && state.selection) state.select(null);
   else if ((key === "Escape" || key === "Backspace") && state.dive.length > 0) state.leaveCalls(state.dive.length - 1);
-  else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
 /**

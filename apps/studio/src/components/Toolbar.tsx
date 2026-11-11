@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Pencil, Redo2, Search, Send, StepForward, Undo2, Variable } from "lucide-react";
+import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Redo2, Files, Send, StepForward, Undo2, Variable } from "lucide-react";
 import { openMenu } from "../lib/contextMenu";
 import { FlowSwitch } from "./FlowSwitch";
 
@@ -9,22 +9,7 @@ import { t } from "../lib/i18n";
 import type { ReviewView } from "../lib/reviewView";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
-import { RecordButton } from "./RecordButton";
 import { RunStatus } from "./StatusBar";
-
-function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  const { label, children, className, ...rest } = props;
-  return (
-    <button
-      type="button"
-      title={label}
-      className={`grid h-8 min-w-8 place-items-center rounded-md px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
-}
 
 const PlayIcon = () => (
   <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true">
@@ -38,7 +23,7 @@ const CheckIcon = () => (
   </svg>
 );
 
-export type View = "story" | "chart" | "flow" | "variables" | "result";
+export type View = "story" | "chart" | "variables" | "result";
 
 /**
  * The sheet or its chart: the two ways to read a flow. On the review desk
@@ -49,7 +34,7 @@ export type View = "story" | "chart" | "flow" | "variables" | "result";
  */
 function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
   const place = useStudio((s) => s.place);
-  const others: Partial<Record<ReviewView, string>> = { flow: t.viewFlow, variables: t.vars.table.view, result: t.result.view };
+  const others: Partial<Record<ReviewView, string>> = { variables: t.vars.table.view, result: t.result.view };
   const other = others[view];
   const options: [ReviewView, string][] = [
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
@@ -72,40 +57,6 @@ function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: Rev
         </button>
       ))}
     </div>
-  );
-}
-
-/** Opens the search over the chart (also Ctrl+F). */
-export function SearchButton() {
-  const setOpen = useStudio((s) => s.setSearchOpen);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      title={t.search.placeholder}
-      aria-label={t.search.label}
-      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-sheet/95 text-slate-600 shadow-raised backdrop-blur hover:text-ink"
-    >
-      <Search size={14} aria-hidden="true" />
-    </button>
-  );
-}
-
-/** Opens the outline, which unfolds from the canvas corner this button sits in. */
-export function OutlineButton() {
-  const setOpen = useStudio((s) => s.setOutlineOpen);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      title={t.outline.title}
-      className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
-    >
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-        <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      </svg>
-      {t.outline.toggle}
-    </button>
   );
 }
 
@@ -279,7 +230,12 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
   const startRun = useStudio((s) => s.startRun);
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const openHandOff = useStudio((s) => s.openHandOff);
+  const canUndo = useStudio((s) => s.canUndo);
+  const canRedo = useStudio((s) => s.canRedo);
+  const undo = useStudio((s) => s.undo);
+  const redo = useStudio((s) => s.redo);
   const openFolder = useProjectMaybe((p) => p.open, null);
+  const setFiles = useProjectMaybe((p) => p.setPanelOpen, null);
   if (!flow) return null;
   return (
     <button
@@ -289,13 +245,16 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
       onClick={(e) => {
         const box = e.currentTarget.getBoundingClientRect();
         openMenu({ clientX: box.left, clientY: box.bottom + 4, preventDefault: () => {} }, [
-          { label: t.viewFlow, icon: Pencil, run: () => onView("flow") },
+          { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !canUndo, run: () => void undo() },
+          { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !canRedo, run: () => void redo() },
+          "-",
           { label: t.vars.table.view, icon: Variable, run: () => onView("variables") },
           place === "flows" && { label: t.result.view, icon: ClipboardCheck, run: () => onView("result") },
           "-",
           { label: t.toolbar.stepRun, icon: StepForward, disabled: !canRun, run: () => void startRun({ step: true }) },
           "-",
           { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
+          setFiles && { label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) },
           openFolder && { label: t.project.openFolder, icon: FolderOutput, run: () => void openFolder("", false) },
           { label: t.handOff.open, icon: Send, run: () => void openHandOff(flow.id) },
         ]);
@@ -304,45 +263,6 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
     >
       <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
     </button>
-  );
-}
-
-/**
- * Floating dock over the canvas, for the whole chart: add a step, record
- * steps, undo, redo.
- * What acts on one step sits on that step (StepTools on the chart).
- */
-export function CanvasDock() {
-  const flow = useStudio((s) => s.flow);
-  const canUndo = useStudio((s) => s.canUndo);
-  const canRedo = useStudio((s) => s.canRedo);
-  const undo = useStudio((s) => s.undo);
-  const redo = useStudio((s) => s.redo);
-  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
-  const inside = useStudio((s) => s.dive.length > 0);
-
-  // Inside a call the chart shows another flow: editing tools would act on the open one.
-  if (!flow || inside) return null;
-
-  return (
-    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
-      <button
-        type="button"
-        onClick={(e) => setPaletteOpen(true, null, e.currentTarget.getBoundingClientRect())}
-        className="flex items-center gap-2 rounded-md py-1.5 pr-2 pl-2.5 text-sm font-medium text-ink hover:bg-slate-100"
-      >
-        ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
-        <kbd className="rounded-sm border border-slate-200 px-1 font-sans text-[10px] text-slate-500 @max-[560px]:hidden">{t.shortcut}</kbd>
-      </button>
-      <RecordButton />
-      <span className="mx-1 h-5 w-px bg-slate-200" />
-      <DockButton label={`${t.undo} (Ctrl+Z)`} onClick={() => undo()} disabled={!canUndo}>
-        <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
-      </DockButton>
-      <DockButton label={`${t.redo} (Ctrl+Y)`} onClick={() => redo()} disabled={!canRedo}>
-        <Redo2 size={16} strokeWidth={1.75} aria-hidden="true" />
-      </DockButton>
-    </div>
   );
 }
 
@@ -358,7 +278,7 @@ function PaneToggle({ view }: { view: ReviewView }) {
   const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
   const showFlowProps = useStudio((s) => s.showFlowProps);
   // The sheet opens a step's settings under its line: only the board and the chart have a pane beside them.
-  if ((place !== "flows" && place !== "review") || (view !== "flow" && view !== "chart")) return null;
+  if ((place !== "flows" && place !== "review") || view !== "chart") return null;
   return (
     <button
       type="button"

@@ -209,9 +209,10 @@ export interface ProjectUi {
 }
 
 export function createProjectStore(api: ProjectApi, labels: ProjectUi): StoreApi<ProjectState> {
-  let panelOpen = true;
+  // The flow's files open from the menu: the sheet names the ones the flow reads.
+  let panelOpen = false;
   try {
-    panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) !== "closed";
+    panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) === "open";
   } catch {
     // Only a remembered preference.
   }

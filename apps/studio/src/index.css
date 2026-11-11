@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@xyflow/react/dist/style.css";
 
 /*
  * Theme taken from the logo: crisp white surfaces, the wordmark's deep navy
@@ -216,17 +215,6 @@
   --flow-decide-line: #b8941f;
 }
 
-/* React Flow's dark mode brings its own greys; keep the app's navy. */
-.react-flow.dark {
-  --xy-background-color: var(--color-desk);
-  --xy-controls-button-background-color: var(--color-sheet);
-  --xy-controls-button-background-color-hover: var(--color-slate-100);
-  --xy-controls-button-border-color: var(--color-slate-200);
-  --xy-controls-button-color: var(--color-ink);
-  --xy-edge-label-background-color: var(--color-paper);
-  --xy-attribution-background-color: transparent;
-}
-
 /*
  * The window is the app, not a page: a touchpad swipe must never pull the
  * whole screen down (WebView2's elastic overscroll). Panels and the chart
@@ -245,12 +233,11 @@ body {
   @apply bg-paper font-sans text-ink antialiased;
 }
 
-/* Form controls and React Flow otherwise pick their own fonts. */
+/* Form controls otherwise pick their own fonts. */
 button,
 input,
 select,
-textarea,
-.react-flow {
+textarea {
   font-family: inherit;
 }
 
@@ -273,10 +260,6 @@ textarea,
  * colour, so a loop inside a loop reads deeper; the others are a hairline
  * over the faintest wash of the sheet.
  */
-/* Clicks and the pointer go through to the pane and the lines beneath. */
-.react-flow__node-frame {
-  pointer-events: none !important;
-}
 .flow-frame {
   border-color: var(--color-slate-300);
   background-color: color-mix(in srgb, var(--color-sheet) 40%, transparent);
@@ -301,10 +284,6 @@ textarea,
 .flow-frame.flow-frame-running-here,
 .flow-edge-running-here {
   border-color: color-mix(in srgb, var(--color-accent-500) 65%, var(--color-slate-300)) !important;
-}
-/* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
-.react-flow__edgelabel-renderer {
-  z-index: 2;
 }
 /* The answer a line takes out of a decision (はい／いいえ): in the decision's yellow, so it reads as the hexagon's answer. */
 .flow-answer {
@@ -336,36 +315,6 @@ textarea,
     8px 8px 0 0 var(--color-slate-200);
 }
 
-.react-flow__edge-text {
-  font-size: 11px;
-}
-
-.react-flow__edge-textbg {
-  fill: var(--color-paper);
-}
-
-.react-flow__edge-path {
-  stroke: var(--color-slate-400);
-  stroke-width: 1.5;
-}
-
-.react-flow__attribution {
-  background: transparent;
-}
-
-/* Variable links can't be selected, but still take hover for their value tip. */
-.react-flow__edge.data-link {
-  pointer-events: visibleStroke;
-}
-
-/* The zoom buttons are a small sheet too. */
-.react-flow__controls {
-  border: 1px solid var(--color-slate-200);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  box-shadow: var(--shadow-raised);
-}
-
 /* Native controls (select arrows, scrollbars, date fields) follow the theme. */
 :root {
   color-scheme: light;
@@ -386,17 +335,6 @@ textarea,
   background-position: 0 0, 0 6px, 6px -6px, -6px 0;
 }
 
-/* A loop's line back, while its loop is pointed at: the dashes run round the way the flow goes. */
-@keyframes flow-round {
-  to {
-    stroke-dashoffset: -18;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .react-flow__edge-path {
-    animation: none !important;
-  }
-}
 /* How far a running node got (RunBar): it grows by itself, one step a second when motion is reduced. */
 @keyframes run-bar {
   from {

@@ -11,22 +11,15 @@ import {
   ClipboardPaste,
   Copy,
   CopyPlus,
-  Eraser,
   Eye,
   EyeOff,
   FoldVertical,
-  FolderOutput,
   LogIn,
   MessageSquareText,
-  Plus,
-  Redo2,
-  Scan,
   Scissors,
-  TableOfContents,
   Trash2,
   Play,
   StepForward,
-  Undo2,
   UnfoldVertical,
   Variable,
   Lock,
@@ -34,11 +27,10 @@ import {
 } from "lucide-react";
 import { openAsk, useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
-import { isActive, runBreakpoints, selectedIds, trailOf, WRAP_BLOCK } from "../store";
+import { isActive, selectedIds, WRAP_BLOCK } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { stepLabel, t } from "../lib/i18n";
 import { canStartAt } from "../lib/startAt";
-import { useProjectMaybe } from "../project";
 
 /** A call step as the chart shows it. */
 export type CallMenu = { key: string; canEnter: boolean; unfolded: boolean };
@@ -119,57 +111,6 @@ export function useStepMenu() {
       copyId,
       "-",
       { label: t.delete, icon: Trash2, shortcut: "Delete", danger: true, run: () => void store.getState().removeSelected() },
-    ];
-  };
-}
-
-/** Right-click on an empty slot: add a node there. */
-export function useSlotMenu() {
-  const store = useStudioApi();
-  return (parentId: string | null, block: string | null): MenuSpec[] => {
-    store.getState().select({ kind: "slot", parentId, block });
-    return [
-      { label: t.menu.addHere, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
-      { label: t.menu.paste, icon: ClipboardPaste, shortcut: "Ctrl+V", run: () => void store.getState().paste() },
-    ];
-  };
-}
-
-/** Right-click on the chart's background: what the dock and the corners offer. */
-export function usePaneMenu() {
-  const store = useStudioApi();
-  const openFile = useProjectMaybe((p) => p.open, null);
-  return (options: { fit: () => void; inside: boolean }): MenuSpec[] => {
-    const s = store.getState();
-    if (options.inside) {
-      return [
-        { label: t.menu.back, icon: Undo2, shortcut: "Esc", run: () => store.getState().leaveCalls(store.getState().dive.length - 1) },
-        "-",
-        { label: t.menu.fitView, icon: Scan, run: options.fit },
-      ];
-    }
-    // A run that has ended leaves its way on the chart until it is cleared.
-    const trail = trailOf(s);
-    const ended = trail !== null && !isActive(trail);
-    const breakpoints = runBreakpoints(s).length;
-    return [
-      { label: t.addStep, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
-      { label: t.menu.pasteNodes, icon: ClipboardPaste, shortcut: "Ctrl+V", run: () => void store.getState().paste() },
-      "-",
-      { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !s.canUndo, run: () => void store.getState().undo() },
-      { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !s.canRedo, run: () => void store.getState().redo() },
-      "-",
-      { label: t.menu.fitView, icon: Scan, run: options.fit },
-      "-",
-      s.flow && openFile && { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void openFile("", false) },
-      ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },
-      breakpoints > 0 && { label: t.clearBreakpoints(breakpoints), icon: CircleDot, run: () => store.getState().clearBreakpoints() },
-      {
-        label: s.outlineOpen ? t.menu.outlineClose : t.menu.outlineOpen,
-        icon: TableOfContents,
-        shortcut: "O",
-        run: () => store.getState().setOutlineOpen(!store.getState().outlineOpen),
-      },
     ];
   };
 }
