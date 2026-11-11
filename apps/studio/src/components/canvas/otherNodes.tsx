@@ -1,5 +1,6 @@
 // The other nodes of the chart: where branches join (and a loop ends), the
 // slot that adds a node, start and end, and the frame of a group.
+import { READING } from "../../lib/reading";
 import type { Node, NodeProps } from "@xyflow/react";
 import { CornerDownLeft, Plus } from "lucide-react";
 import {
@@ -141,6 +142,20 @@ export type TailData = SlotNodeData & { selected: boolean; areaOf?: (focused: st
 export function SlotNode({ id, data }: NodeProps<Node<TailData>>) {
   // An empty block or an empty flow, or the 「＋ ノード追加」 under the last node of a block (or the flow): each adds a node there.
   const focused = useFocus();
+  if (READING) {
+    // To read: nothing is added here. The line runs through; an empty block says that it does nothing.
+    const w = data.tail ? TAIL_W : NODE_W;
+    const h = data.tail ? TAIL_SIZE : SLOT_H;
+    return (
+      <div style={{ width: w, height: h }} className="relative flex items-center justify-center">
+        <FlowHandles />
+        <svg aria-hidden="true" width={w} height={h} className="absolute inset-0 overflow-visible">
+          <line x1={w / 2} x2={w / 2} y1={0} y2={h} stroke="var(--flow-edge)" strokeWidth={1.5} />
+        </svg>
+        {!data.tail && data.parentId !== null && <span className="relative rounded bg-[var(--xy-background-color)] px-1.5 text-[11.5px] text-slate-500">{t.flow.nothing}</span>}
+      </div>
+    );
+  }
   if (data.tail) {
     // The end of a block with nodes: on the line, inside the frame. Hidden, the line runs on through.
     const title = data.label ? t.flow.addAtBlockEnd(data.label) : t.menu.addHere;

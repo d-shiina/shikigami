@@ -14,6 +14,7 @@ export function Socket({ side, id, color, title, lit }: { side: "in" | "out"; id
       position={side === "in" ? Position.Left : Position.Right}
       title={title}
       isConnectable={false}
+      className="flow-socket"
       style={{
         width: 9,
         height: 9,

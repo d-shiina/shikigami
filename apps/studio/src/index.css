@@ -422,3 +422,40 @@ textarea,
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
+
+/*
+ * The chart as a figure to read (see lib/reading.ts): a ground a step darker
+ * than the nodes, firm edges on the nodes and frames, lines that read at a
+ * glance, and no sockets: nothing is wired by hand.
+ */
+:root {
+  --flow-read-ground: #e6e9ee;
+  --flow-read-dot: #c6ccd5;
+  --flow-read-line: #b3bac5;
+  --flow-read-edge: #6f7a89;
+}
+:root[data-theme="dark"] {
+  --flow-read-ground: #0a0b0c;
+  --flow-read-dot: #2a2e35;
+  --flow-read-line: #454b55;
+  --flow-read-edge: #8a94a1;
+}
+.flow-reading.canvas-bg {
+  --xy-background-color: var(--flow-read-ground);
+  --flow-edge: var(--flow-read-edge);
+  background-color: var(--flow-read-ground);
+}
+.flow-reading .flow-socket {
+  opacity: 0;
+}
+.flow-reading .react-flow__node-step > div {
+  border-color: var(--flow-read-line);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.08), 0 6px 14px -8px rgb(16 24 40 / 0.2);
+}
+.flow-reading .flow-frame {
+  border-color: var(--flow-read-line);
+  background-color: color-mix(in srgb, var(--color-sheet) 55%, transparent);
+}
+.flow-reading .flow-frame-loop {
+  background-color: color-mix(in srgb, var(--color-sheet) 30%, transparent);
+}

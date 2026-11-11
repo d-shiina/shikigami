@@ -293,11 +293,11 @@ export function StepNode({ data }: StepNodeProps) {
       {/* Still there once a run went through it, in the colour of the way it took. */}
       {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && (!data.runState || data.runState === "succeeded") && (
         <span
-          className={`pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${
+          className={`pointer-events-none absolute top-full left-1/2 z-10 mt-1.5 -translate-x-1/2 rounded bg-[var(--xy-background-color)] px-1.5 text-[11px] whitespace-nowrap ${
             data.runState ? "font-medium text-moegi-600" : "text-slate-500"
           }`}
         >
-          {TERMINAL_NOTE[data.step.type]!()}
+          {data.thenFinally && data.step.type === "control.fail" ? t.flow.failThenNote : TERMINAL_NOTE[data.step.type]!()}
         </span>
       )}
       {/* Read-only inside a call, but a run still stops there. */}

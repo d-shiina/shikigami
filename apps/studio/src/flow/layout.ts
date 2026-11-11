@@ -145,6 +145,8 @@ export type StepNodeData = {
   parentId: string | null;
   block: string | null;
   index: number;
+  /** A fail (break, continue) in a try that has a "最後に必ず": that runs before the flow stops. */
+  thenFinally?: boolean;
   /** The step is the head of a frame (a loop, if, …): drawn as the frame's top edge. */
   head?: HeadData;
   /** A case of a switch: drawn as the tab over its column. */
@@ -216,6 +218,8 @@ export type LayoutEdge = {
   source: string;
   target: string;
   label?: string;
+  /** From a fail (break, continue) that ends a column of a try to its "最後に必ず", which still runs before the flow stops. */
+  thenFinally?: boolean;
   /** A loop's line back from the end of its body to where its body starts (see LOOP_LINE_X). */
   loop?: boolean;
   /** For a loop's line back: the x it runs up at. */
@@ -477,7 +481,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "exit" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "exit" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt" | "thenFinally">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -678,6 +682,13 @@ class Builder {
         this.edge(from, placed.entry, lane.label || undefined, undefined, true, asks ? { owner: id, alt: { i, n: columns.length } } : undefined);
       }
       for (const e of placed.exits) this.edge(e, meet);
+      // A column that ends in a fail (break, continue) stops there, but the "最後に必ず" still runs first.
+      const last = lane.steps.at(-1);
+      if (after && ends(last) && last?.id) {
+        this.edge(last.id, meet, undefined, undefined, undefined, { thenFinally: true });
+        const node = this.nodes.find((n) => n.id === last.id);
+        if (node?.data.kind === "step") node.data.thenFinally = true;
+      }
       if (asks) {
         // Everything in this column is one way out of the branch, which lights in turn with its line.
         const place = { owner: id, i };

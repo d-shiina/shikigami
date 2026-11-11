@@ -44,6 +44,7 @@ import { ManualView } from "./components/ManualView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { WindowControls } from "./components/WindowControls";
+import { READING } from "./lib/reading";
 import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
@@ -225,7 +226,7 @@ function Editor({
                 The flow's files and its outline lie on the desk left of the sheet, one column:
                 the files above, the outline under them taking the rest of the height.
               */}
-              {hasFlow && projectOpen && (
+              {!READING && hasFlow && projectOpen && (
                 <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
                   <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
                     <ProjectPanel />
@@ -237,10 +238,10 @@ function Editor({
                 With the files folded away their button keeps its place at the top of the column,
                 and the outline, when open, hangs under it; nothing one panel does hides the other's button.
               */}
-              {hasFlow && !projectOpen && (
+              {hasFlow && (READING || !projectOpen) && (
                 <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
                   <div className="flex w-max gap-2">
-                    <ProjectButton />
+                    {!READING && <ProjectButton />}
                     {!outlineOpen && <OutlineButton />}
                     {!outlineOpen && <SearchButton />}
                   </div>
@@ -248,7 +249,7 @@ function Editor({
                 </div>
               )}
               {/* The outline unfolds under the files, so its button waits beside them. */}
-              {hasFlow && projectOpen && !outlineOpen && (
+              {!READING && hasFlow && projectOpen && !outlineOpen && (
                 <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
                   <OutlineButton />
                   <SearchButton />
@@ -260,7 +261,7 @@ function Editor({
           {hasFlow && <NeededFilesWatch />}
           <FileSheet />
           {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
-          {!report && view === "flow" && (
+          {!READING && !report && view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
             </div>
