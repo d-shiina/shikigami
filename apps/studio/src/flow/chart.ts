@@ -6,8 +6,9 @@
 // business flow is drawn on paper: a column for each app, time running down,
 // one row for each step, and one line through them.
 //
-// - A step is a tile in the column of the app it works on. Work on nothing
-//   outside (a calculation, a log) is a small tag where the line already is.
+// - A step is a mark on the line with its name beside it, in the column of
+//   the app it works on. Work on nothing outside (a calculation, a log) is a
+//   quieter mark where the line already is.
 // - What repeats, and what runs only for one answer, is a band across the
 //   columns it touches, named in words on the line where it starts. No lines
 //   go back or round: the band and its words say it.
@@ -28,21 +29,22 @@ import { BREAK, CASE, CONTINUE, FAIL, GROUP, IF, LOOP_TYPES, PARALLEL, SWITCH, T
 
 export type Defs = ReadonlyMap<string, StepTypeDef>;
 
-export const TILE_W = 236;
-export const TILE_H = 34;
+/** How wide a row's words may be. */
+export const TILE_W = 216;
+export const TILE_H = 28;
 /** A tag (work on nothing outside), a band's name, a way out. */
-export const TAG_H = 26;
+export const TAG_H = 24;
 /** The bar where the line parts into branches that run at the same time, and where they meet. */
-export const BAR_H = 4;
+export const BAR_H = 3;
 /** A guard: its question, and under it the answer that leaves the line and where it goes. */
-export const GUARD_H = 54;
-export const ROW_GAP = 14;
+export const GUARD_H = 46;
+export const ROW_GAP = 6;
 /** More room over a row the line crosses columns to reach. */
-export const CROSS = 12;
+export const CROSS = 10;
 /** Under the last row of a band, inside it. */
-const BAND_PAD = 12;
+const BAND_PAD = 8;
 /** Round a band, between it and the rows before and after. */
-const BAND_GAP = 6;
+const BAND_GAP = 8;
 /** Beside a band, for each band inside it. */
 export const NEST = 8;
 
@@ -57,7 +59,7 @@ export const FAIL_LANE = "@fail";
 /** `cols`: how many branches run side by side in it at the most. */
 export type Lane = { key: string; steps: Step[]; cols: number };
 
-/** Where a row is: its column, and `off` tiles to the side of the column's middle (branches side by side). */
+/** Where a row is: its column, and which of the places side by side in it (0 unless branches share the column). */
 type Place = { lane: number; off: number; y: number; h: number };
 
 export type Row = Place &
@@ -252,7 +254,6 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
         const branches = (blocks.branches ?? []).filter((b) => !b.disabled);
         y += BAND_GAP;
         put({ kind: "head", step, lane, off: 0, y, h: TAG_H, band: "together", block: "branches" });
-        y -= ROW_GAP - 6;
         const fork = put({ kind: "bar", step, lane, off: 0, y, h: BAR_H, over: [] });
         const top = y;
         const home = lane;
@@ -284,7 +285,7 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
           if (here.length < 2) return;
           l.cols = Math.max(l.cols, here.length);
           here.forEach(([a, b], k) => {
-            for (const r of rows.slice(a, b)) if (r.lane === index) r.off += k - (here.length - 1) / 2;
+            for (const r of rows.slice(a, b)) if (r.lane === index) r.off += k;
           });
         });
         continue;

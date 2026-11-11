@@ -69,7 +69,7 @@ describe("layoutChart", () => {
     const [a, b, c] = [chart.rows[3]!, chart.rows[4]!, chart.rows[5]!];
     // They start at the same height.
     expect(new Set([a.y, b.y, c.y]).size).toBe(1);
-    expect([a.lane, a.off, b.lane, b.off, c.lane, c.off]).toEqual([0, -0.5, 0, 0.5, 1, 0]);
+    expect([a.lane, a.off, b.lane, b.off, c.lane, c.off]).toEqual([0, 0, 0, 1, 1, 0]);
     expect(chart.lanes.map((l) => l.cols)).toEqual([2, 1]);
     // What follows waits for them all: each goes into the bar, and the bar goes on.
     expect(chart.links.filter((l) => l.to === 6).map((l) => l.from)).toEqual([3, 4, 5]);
