@@ -14,6 +14,7 @@ import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
+import { ReadChart } from "./components/chart/ReadChart";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
@@ -221,7 +222,7 @@ function Editor({
             <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
-              <FlowCanvas />
+              {READING ? <ReadChart /> : <FlowCanvas />}
               {/*
                 The flow's files and its outline lie on the desk left of the sheet, one column:
                 the files above, the outline under them taking the rest of the height.

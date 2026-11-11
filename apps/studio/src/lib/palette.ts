@@ -473,6 +473,8 @@ export function remember(recent: readonly string[], key: string): string[] {
 }
 
 const APP_GROUPS = new Set(SECTIONS.find((s) => s.id === "apps")?.groups ?? []);
+/** Whether a group is an app a node works on (a browser, Excel…), not work inside the flow. */
+export const isAppGroup = (group: string): boolean => (APP_GROUPS.has(group) && group !== "system") || groupExtension(group) !== undefined;
 
 /**
  * Where a node works, for its header: "ブラウザ", "デスクトップアプリ",

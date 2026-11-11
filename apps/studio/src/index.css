@@ -506,3 +506,43 @@ textarea,
   vertical-align: middle;
   max-width: 100%;
 }
+
+/* The chart to read (components/chart): columns of apps on a plain ground. */
+.flow-chart {
+  background-color: var(--flow-read-ground);
+}
+.flow-chart-tile {
+  border-color: var(--flow-read-card-line);
+  background-color: var(--color-sheet);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.06);
+}
+.flow-chart-tag,
+.flow-chart-head {
+  border-color: var(--flow-read-card-line);
+  background-color: var(--color-sheet);
+}
+.flow-chart-failed {
+  border-color: var(--color-shu-500);
+  background-color: var(--color-shu-50);
+  color: var(--color-shu-600);
+}
+.flow-chart-band {
+  border-color: var(--flow-read-panel-line);
+}
+/* What repeats is a stack of sheets: the same work, once for each. */
+.flow-chart-band-loop {
+  background-color: var(--flow-read-panel);
+  box-shadow:
+    4px 4px 0 -1px var(--flow-read-ground),
+    4px 4px 0 0 var(--flow-read-stack-line),
+    8px 8px 0 -1px var(--flow-read-ground),
+    8px 8px 0 0 var(--flow-read-stack-line);
+}
+/* What runs only for one answer is outlined, not filled: it may not happen. */
+.flow-chart-band-when {
+  border-style: dashed;
+  border-color: var(--flow-read-when-line);
+}
+.flow-chart-fail {
+  background-color: color-mix(in srgb, var(--color-shu-500) 4%, transparent);
+}

@@ -256,3 +256,19 @@ export function guardOutcome(stop: Step): string {
 export function onlyWhen(): { before: string; after: string } {
   return locale === "ja" ? { before: "", after: "のときだけ" } : { before: "only when", after: "" };
 }
+
+/** The words of the chart to read (components/chart). */
+export function chartWords() {
+  const ja = locale === "ja";
+  return {
+    /** After a band's question and answer: "はい のときだけ". */
+    onlyWhen: (answer: string) => (ja ? `${answer} のときだけ` : `only when ${answer}`),
+    other: ja ? "その他のとき" : "Otherwise",
+    always: ja ? "最後に必ず" : "Always at the end",
+    failed: ja ? "失敗したとき" : "On failure",
+    failEnd: ja ? "失敗として終える" : "Stop as failed",
+    yes: ja ? "はい" : "Yes",
+    no: ja ? "いいえ" : "No",
+    more: (n: number) => (ja ? `ほか ${n}` : `+${n}`),
+  };
+}
