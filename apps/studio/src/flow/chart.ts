@@ -16,11 +16,15 @@
 //   other side is simply what follows on the line.
 // - What runs when something fails stands in a column of its own, beside
 //   the rows it covers.
+// - What runs at the same time runs side by side: the line parts at a bar,
+//   each branch goes down the column of its app (branches on the same app
+//   stand beside each other in it), and they meet at a bar again, since what
+//   follows waits for them all.
 //
 // Pure geometry: what each row says is the component's (components/chart).
 import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { groupOf, isAppGroup } from "../lib/palette";
-import { BREAK, CASE, CONTINUE, FAIL, GROUP, IF, LOOP_TYPES, SWITCH, TRY } from "../lib/stepTypes";
+import { BREAK, CASE, CONTINUE, FAIL, GROUP, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 
 export type Defs = ReadonlyMap<string, StepTypeDef>;
 
@@ -28,6 +32,8 @@ export const TILE_W = 236;
 export const TILE_H = 34;
 /** A tag (work on nothing outside), a band's name, a way out. */
 export const TAG_H = 26;
+/** The bar where the line parts into branches that run at the same time, and where they meet. */
+export const BAR_H = 4;
 /** A guard: its question, and under it the answer that leaves the line and where it goes. */
 export const GUARD_H = 54;
 export const ROW_GAP = 14;
@@ -44,28 +50,37 @@ const WAIT_UNTIL = "wait.until";
 const STOPS: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 const stops = (step: Step | undefined): boolean => !!step && STOPS.has(step.type) && !step.disabled;
 
-export type BandKind = "loop" | "when" | "always" | "group";
+export type BandKind = "loop" | "when" | "always" | "group" | "together";
 /** The column of what runs when something fails. */
 export const FAIL_LANE = "@fail";
 
-export type Lane = { key: string; steps: Step[] };
+/** `cols`: how many branches run side by side in it at the most. */
+export type Lane = { key: string; steps: Step[]; cols: number };
 
-export type Row =
-  /** A step: a tile in its app's column, or (`quiet`) a tag for work on nothing outside. */
-  | { kind: "step"; step: Step; lane: number; y: number; h: number; quiet: boolean }
-  /** A break, continue or fail: where the line ends. */
-  | { kind: "stop"; step: Step; lane: number; y: number; h: number }
-  /** An if whose `block` side only stops: the question, and that way out. */
-  | { kind: "guard"; step: Step; lane: number; y: number; h: number; block: string; stop: Step }
-  /** Where a band starts: its name, on the line. `block` is the side of an if or the block of a try it is. */
-  | { kind: "head"; step: Step; lane: number; y: number; h: number; band: BandKind; block: string; child?: Step };
+/** Where a row is: its column, and `off` tiles to the side of the column's middle (branches side by side). */
+type Place = { lane: number; off: number; y: number; h: number };
+
+export type Row = Place &
+  (
+    | /** A step: a tile in its app's column, or (`quiet`) a tag for work on nothing outside. */ { kind: "step"; step: Step; quiet: boolean }
+    | /** A break, continue or fail: where the line ends. */ { kind: "stop"; step: Step }
+    | /** An if whose `block` side only stops: the question, and that way out. */ { kind: "guard"; step: Step; block: string; stop: Step }
+    | /** Where a band starts: its name, on the line. `block` is the side of an if or the block of a try it is. */ {
+        kind: "head";
+        step: Step;
+        band: BandKind;
+        block: string;
+        child?: Step;
+      }
+    | /** Where branches that run at the same time part or meet: as wide as the rows `over` it reaches. */ { kind: "bar"; step: Step; over: number[] }
+  );
 
 export type Band = {
   kind: BandKind;
   step: Step;
-  /** The columns it reaches across. */
-  from: number;
-  to: number;
+  /** The rows in it, from `first` up to (not including) `end` in `rows`: it reaches across the columns they are in. */
+  first: number;
+  end: number;
   top: number;
   bottom: number;
   /** How many bands deep the deepest band inside it is. */
@@ -116,9 +131,9 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
   };
   scan(steps);
   if (keys.length === 0) keys.push("");
-  const lanes: Lane[] = keys.map((key) => ({ key, steps: [] }));
+  const lanes: Lane[] = keys.map((key) => ({ key, steps: [], cols: 1 }));
   const failLane = fails ? lanes.length : null;
-  if (fails) lanes.push({ key: FAIL_LANE, steps: [] });
+  if (fails) lanes.push({ key: FAIL_LANE, steps: [], cols: 1 });
 
   const rows: Row[] = [];
   const bands: Band[] = [];
@@ -135,8 +150,8 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
 
   const put = (row: Row): number => {
     const index = rows.length;
-    // Room for the line to cross to another column over this row.
-    if (prev.some((from) => rows[from]!.lane !== row.lane)) {
+    // Room for the line to cross to another column over this row (not from a bar: it reaches over the column itself).
+    if (prev.some((from) => rows[from]!.lane !== row.lane && rows[from]!.kind !== "bar")) {
       y += CROSS;
       row.y += CROSS;
     }
@@ -149,20 +164,26 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
   /** The column the first row of `list` will be in. */
   const firstLane = (list: Step[]): number => {
     if (failing) return lane;
-    for (const step of list) {
-      if (step.disabled) continue;
-      const app = appOf(step, defs);
-      if (app) return keys.indexOf(app);
-      const inner = blocksOf(step).find(([name, l]) => l.length > 0 && !(step.type === TRY && name === "catch"));
-      return inner ? firstLane(inner[1]) : lane;
+    const step = list.find((s) => !s.disabled);
+    if (!step) return lane;
+    const app = appOf(step, defs);
+    if (app) return keys.indexOf(app);
+    const blocks = step.blocks ?? {};
+    if (step.type === IF) {
+      // A guard is in the column of what follows it.
+      const yes = blocks.then ?? [];
+      const no = blocks.else ?? [];
+      if (yes.length === 1 && stops(yes[0])) return firstLane(no);
+      if (no.length === 1 && stops(no[0])) return firstLane(yes);
     }
-    return lane;
+    const inner = blocksOf(step).find(([name, l]) => l.length > 0 && !(step.type === TRY && name === "catch"));
+    return inner ? firstLane(inner[1]) : lane;
   };
   const band = (kind: BandKind, step: Step, block: string, body: Step[], child?: Step) => {
     y += BAND_GAP;
     lane = firstLane(body);
     const first = rows.length;
-    const head = put({ kind: "head", step, lane, y, h: TAG_H, band: kind, block, ...(child ? { child } : {}) });
+    const head = put({ kind: "head", step, lane, off: 0, y, h: TAG_H, band: kind, block, ...(child ? { child } : {}) });
     const top = rows[head]!.y + TAG_H / 2;
     const mark = bands.length;
     depth += 1;
@@ -171,18 +192,9 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
     depth -= 1;
     // Every way through it stopped: what follows is still reached when it does not run (or runs again).
     if (prev.length === 0) prev = [head];
-    const inside = rows.slice(first);
     const bottom = y - ROW_GAP + BAND_PAD;
     const inner = bands.slice(mark).reduce((n, b) => Math.max(n, b.inner + 1), 0);
-    bands.splice(mark, 0, {
-      kind,
-      step,
-      from: Math.min(...inside.map((r) => r.lane)),
-      to: Math.max(...inside.map((r) => r.lane)),
-      top,
-      bottom,
-      inner,
-    });
+    bands.splice(mark, 0, { kind, step, first, end: rows.length, top, bottom, inner });
     y = bottom + ROW_GAP + BAND_GAP;
   };
   const walk = (list: Step[]) => {
@@ -221,7 +233,7 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
         const guard = only(yes) ? "then" : only(no) ? "else" : null;
         if (guard) {
           lane = firstLane(guard === "then" ? no : yes);
-          put({ kind: "guard", step, lane, y, h: GUARD_H, block: guard, stop: (guard === "then" ? yes : no)[0]! });
+          put({ kind: "guard", step, lane, off: 0, y, h: GUARD_H, block: guard, stop: (guard === "then" ? yes : no)[0]! });
           walk(guard === "then" ? no : yes);
         } else {
           if (yes.length > 0) band("when", step, "then", yes);
@@ -236,6 +248,47 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
         if ((blocks.default ?? []).length > 0) band("when", step, "default", blocks.default!);
         continue;
       }
+      if (step.type === PARALLEL) {
+        const branches = (blocks.branches ?? []).filter((b) => !b.disabled);
+        y += BAND_GAP;
+        put({ kind: "head", step, lane, off: 0, y, h: TAG_H, band: "together", block: "branches" });
+        y -= ROW_GAP - 6;
+        const fork = put({ kind: "bar", step, lane, off: 0, y, h: BAR_H, over: [] });
+        const top = y;
+        const home = lane;
+        const strands: [number, number][] = [];
+        const exits: number[] = [];
+        const firsts: number[] = [];
+        let bottom = y;
+        for (const branch of branches) {
+          y = top;
+          lane = firstLane([branch]);
+          prev = [fork];
+          const start = rows.length;
+          walk([branch]);
+          if (rows.length > start) {
+            strands.push([start, rows.length]);
+            firsts.push(start);
+          }
+          exits.push(...prev.filter((i) => i !== fork));
+          bottom = Math.max(bottom, y);
+        }
+        y = bottom;
+        lane = home;
+        prev = exits;
+        put({ kind: "bar", step, lane, off: 0, y, h: BAR_H, over: exits });
+        (rows[fork] as Extract<Row, { kind: "bar" }>).over = firsts;
+        // Branches in the same column stand beside each other in it.
+        lanes.forEach((l, index) => {
+          const here = strands.filter(([a, b]) => rows.slice(a, b).some((r) => r.lane === index));
+          if (here.length < 2) return;
+          l.cols = Math.max(l.cols, here.length);
+          here.forEach(([a, b], k) => {
+            for (const r of rows.slice(a, b)) if (r.lane === index) r.off += k - (here.length - 1) / 2;
+          });
+        });
+        continue;
+      }
       if (LOOP_TYPES.has(step.type) || step.type === WAIT_UNTIL) {
         band("loop", step, "body", blocksOf(step).flatMap(([, l]) => l));
         continue;
@@ -246,14 +299,14 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
         continue;
       }
       if (stops(step)) {
-        put({ kind: "stop", step, lane, y, h: TAG_H });
+        put({ kind: "stop", step, lane, off: 0, y, h: TAG_H });
         prev = [];
         continue;
       }
       const app = failing ? null : appOf(step, defs);
       if (app) lane = keys.indexOf(app);
       lanes[lane]!.steps.push(step);
-      put({ kind: "step", step, lane, y, h: app || failing ? TILE_H : TAG_H, quiet: !app && !failing });
+      put({ kind: "step", step, lane, off: 0, y, h: app || failing ? TILE_H : TAG_H, quiet: !app && !failing });
     }
   };
   walk(steps);

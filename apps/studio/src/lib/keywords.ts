@@ -270,5 +270,9 @@ export function chartWords() {
     yes: ja ? "はい" : "Yes",
     no: ja ? "いいえ" : "No",
     more: (n: number) => (ja ? `ほか ${n}` : `+${n}`),
+    /** Where branches part to run at the same time; `limit` when only so many run at once. */
+    together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
+    /** After a loop's name, when its rounds run at the same time. */
+    atOnce: (n: number) => (ja ? `${n} 件ずつ同時に` : `${n} at a time`),
   };
 }

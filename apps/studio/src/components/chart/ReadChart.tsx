@@ -1,6 +1,6 @@
 // The flow as a chart to read (see flow/chart.ts for what it shows and why).
 import type { Step } from "@spellsheet/schema";
-import { CircleX, LogOut, Repeat, StepForward, TriangleAlert, type LucideIcon } from "lucide-react";
+import { CircleX, LogOut, Repeat, Rows2, StepForward, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useStudio } from "../../context";
 import { type Band, CROSS, type Defs, FAIL_LANE, layoutChart, NEST, ROW_GAP, type Row, TAG_H, TILE_W } from "../../flow/chart";
@@ -19,6 +19,8 @@ const LANE_HEAD = 52;
 const TOP = 22;
 /** Between the app columns and the column of what runs on failure. */
 const FAIL_GAP = 20;
+/** Between branches side by side in one column. */
+const COL_GAP = 20;
 /** A corner of the line where it changes column. */
 const TURN = 8;
 
@@ -59,25 +61,37 @@ export function ReadChart() {
   if (!flow) return null;
   const words = chartWords();
 
-  // Columns: each as wide as a tile and the bands round it.
+  // Columns: each as wide as its tiles (branches side by side) and the bands round them.
   const side = 12 + NEST * chart.nest;
-  const laneW = TILE_W + 2 * side;
-  const laneX = (i: number) => PAD + i * laneW + (chart.failLane !== null && i === chart.failLane ? FAIL_GAP : 0);
-  const centre = (i: number) => laneX(i) + laneW / 2;
+  const widths = chart.lanes.map((l) => l.cols * TILE_W + (l.cols - 1) * COL_GAP + 2 * side);
+  const lefts: number[] = [];
+  chart.lanes.forEach((_, i) => lefts.push(i === 0 ? PAD : lefts[i - 1]! + widths[i - 1]! + (i === chart.failLane ? FAIL_GAP : 0)));
+  const laneX = (i: number) => lefts[i]!;
+  const centre = (r: { lane: number; off: number }) => laneX(r.lane) + widths[r.lane]! / 2 + r.off * (TILE_W + COL_GAP);
   const top = LANE_HEAD + TOP;
-  const width = laneX(chart.lanes.length - 1) + laneW + PAD;
+  const width = laneX(chart.lanes.length - 1) + widths.at(-1)! + PAD;
   const height = top + chart.height + PAD + 8;
   const picked = selection?.kind === "step" ? selection.stepId : null;
 
   const bandBox = (b: Band) => {
-    const inset = side - NEST * (b.inner + 1);
-    return { left: laneX(b.from) + inset, width: laneX(b.to) + laneW - inset - (laneX(b.from) + inset), top: top + b.top, height: b.bottom - b.top };
+    const xs = chart.rows.slice(b.first, b.end).filter((r) => r.lane !== chart.failLane || chart.rows[b.first]!.lane === chart.failLane).map(centre);
+    const room = TILE_W / 2 + NEST * (b.inner + 1);
+    const left = Math.min(...xs) - room;
+    return { left, width: Math.max(...xs) + room - left, top: top + b.top, height: b.bottom - b.top };
+  };
+  /** A bar: over the rows it reaches and its own place on the line. */
+  const barBox = (row: Extract<Row, { kind: "bar" }>) => {
+    const xs = [centre(row), ...row.over.map((i) => centre(chart.rows[i]!))];
+    const left = Math.min(...xs) - 28;
+    return { left, width: Math.max(...xs) + 28 - left };
   };
   const path = ({ from, to }: { from: number; to: number }): string => {
     const a = chart.rows[from]!;
     const b = chart.rows[to]!;
-    const x1 = centre(a.lane);
-    const x2 = centre(b.lane);
+    // A bar is as wide as the rows it reaches: the line into or out of it runs straight.
+    const under = a.kind === "bar" && b.kind !== "bar" ? barBox(a) : null;
+    const x1 = under && centre(b) >= under.left + 8 && centre(b) <= under.left + under.width - 8 ? centre(b) : centre(a);
+    const x2 = b.kind === "bar" ? x1 : centre(b);
     const y1 = top + a.y + a.h;
     const y2 = top + b.y;
     if (x1 === x2) return `M ${x1} ${y1} V ${y2}`;
@@ -96,7 +110,7 @@ export function ReadChart() {
           const Icon = fail ? TriangleAlert : lane.key ? groupIcon(lane.key) : null;
           const names = fail ? [] : targets(lane.steps);
           return (
-            <div key={lane.key} className={`absolute top-0 bottom-0 ${fail ? "flow-chart-fail" : ""}`} style={{ left: laneX(i), width: laneW }}>
+            <div key={lane.key} className={`absolute top-0 bottom-0 ${fail ? "flow-chart-fail" : ""}`} style={{ left: laneX(i), width: widths[i] }}>
               {i > 0 && !fail && <span className="absolute top-3 bottom-3 left-0 w-px bg-[var(--flow-read-panel-line)]" />}
               {(lane.key || fail) && (
                 <div className="sticky top-0 z-30 flex items-center justify-center gap-2 px-3" style={{ height: LANE_HEAD }}>
@@ -140,14 +154,17 @@ export function ReadChart() {
             return (
               <g key={i} fill="none" stroke="var(--color-shu-500)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
                 <path d={`M ${x - 8} ${top + b.top} H ${x} V ${top + b.bottom} H ${x - 8}`} />
-                <path d={`M ${x} ${out} H ${centre(to.lane) - TILE_W / 2}`} strokeDasharray="4 4" />
+                <path d={`M ${x} ${out} H ${centre(to) - TILE_W / 2}`} strokeDasharray="4 4" />
               </g>
             );
           })}
         </svg>
 
+        {chart.rows.map((row, i) =>
+          row.kind === "bar" ? <span key={i} className="absolute z-10 rounded-full bg-[var(--flow-read-edge)]" style={{ ...barBox(row), top: top + row.y, height: row.h }} /> : null,
+        )}
         {chart.rows.map((row, i) => (
-          <RowView key={i} row={row} defs={defs} x={centre(row.lane)} y={top + row.y} picked={picked} select={(stepId) => select({ kind: "step", stepId })} />
+          <RowView key={i} row={row} defs={defs} x={centre(row)} y={top + row.y} picked={picked} select={(stepId) => select({ kind: "step", stepId })} />
         ))}
       </div>
     </div>
@@ -163,6 +180,7 @@ function RowView({ row, defs, x, y, picked, select }: { row: Row; defs: Defs; x:
   const at = { left: x, top: y, height: row.h } as const;
   const ring = on ? "ring-2 ring-brand-500" : "";
 
+  if (row.kind === "bar") return null;
   if (row.kind === "step") {
     const group = def ? groupOf(def) : "other";
     const Icon = nodeIcon(row.step.type, group);
@@ -216,11 +234,16 @@ function RowView({ row, defs, x, y, picked, select }: { row: Row; defs: Defs; x:
       </button>
     );
   }
-  const text = row.band === "always" ? words.always : title(row.step, defs);
+  const p = (row.step.params ?? {}) as Record<string, unknown>;
+  const limit = typeof p.maxConcurrency === "number" ? p.maxConcurrency : undefined;
+  const atOnce = row.band === "loop" && typeof p.concurrency === "number" && p.concurrency > 1 ? p.concurrency : 0;
+  const text = row.band === "always" ? words.always : row.band === "together" ? (row.step.name ?? "").trim() || words.together(limit) : title(row.step, defs);
   return (
     <button type="button" title={tip} onClick={pick} style={at} className={`flow-chart-head absolute z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold whitespace-nowrap text-ink ${ring}`}>
       {row.band === "loop" && <Repeat size={13} strokeWidth={2} aria-hidden="true" className="text-slate-500" />}
+      {row.band === "together" && <Rows2 size={13} strokeWidth={2} aria-hidden="true" className="rotate-90 text-slate-500" />}
       {text}
+      {atOnce > 0 && <span className="font-normal text-slate-600">{words.atOnce(atOnce)}</span>}
     </button>
   );
 }
