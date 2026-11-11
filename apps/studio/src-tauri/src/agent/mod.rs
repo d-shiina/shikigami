@@ -1366,10 +1366,10 @@ pub fn agent_login_cancel(login: State<'_, AgentLogin>) {
 }
 
 /// Opens the sign-in page, or one of SpellSheet's own docs pages (the
-/// guide for AI chats), in the default browser. Nothing else.
+/// guides Writer links to), in the default browser. Nothing else.
 #[tauri::command]
 pub fn agent_open_url(url: String) -> CmdResult<()> {
-    if !is_sign_in_url(&url) && !is_docs_url(&url) && !is_chat_url(&url) {
+    if !is_sign_in_url(&url) && !is_docs_url(&url) {
         return Err(err("INVALID_INPUT", "開けない URL です"));
     }
     agent_open_any(&url)
@@ -1474,20 +1474,6 @@ fn open_own_screen(kind: AgentKind, program: &Path) -> CmdResult<()> {
 const DOCS_URL: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/");
 
 /// SpellSheet's own pages on GitHub (the guides Studio links to).
-/// The AI chats Writer opens for a person who copies requests into one
-/// (Microsoft Copilot, ChatGPT, … in the browser; apps/studio/src/lib/aiWay.ts).
-const CHAT_PAGES: &[&str] = &[
-    "https://m365.cloud.microsoft/chat",
-    "https://copilot.microsoft.com/",
-    "https://chatgpt.com/",
-    "https://gemini.google.com/app",
-    "https://claude.ai/new",
-];
-
-fn is_chat_url(url: &str) -> bool {
-    CHAT_PAGES.contains(&url)
-}
-
 fn is_docs_url(url: &str) -> bool {
     url.starts_with(DOCS_URL) && !url.contains(char::is_whitespace) && !url.contains("..")
 }
@@ -2105,14 +2091,6 @@ mod tests {
     }
 
     #[test]
-    fn opens_only_the_known_ai_chats() {
-        assert!(is_chat_url("https://chatgpt.com/"));
-        assert!(is_chat_url("https://m365.cloud.microsoft/chat"));
-        assert!(!is_chat_url("https://chatgpt.com/evil"));
-        assert!(!is_chat_url("https://example.com/"));
-    }
-
-    #[test]
     fn finds_the_sign_in_url_only_on_the_agents_pages() {
         assert_eq!(
             login_url(
@@ -2147,7 +2125,7 @@ mod tests {
         assert!(DOCS_URL.starts_with("https://github.com/"), "{DOCS_URL}");
         assert!(!is_sign_in_url(env!("CARGO_PKG_REPOSITORY")));
         assert!(!is_sign_in_url("https://claude.com/ x"));
-        assert!(is_docs_url(&format!("{DOCS_URL}ja/ai-chat.md")));
+        assert!(is_docs_url(&format!("{DOCS_URL}ja/inventory.md")));
         assert!(!is_docs_url(&format!("{DOCS_URL}../../x")));
         assert!(!is_docs_url(
             "https://github.com/someone/else/blob/main/docs/a.md"

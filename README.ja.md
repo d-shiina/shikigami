@@ -47,7 +47,6 @@ Writer の画面は日本語と英語に対応しています（左上の「Spel
 | [docs/architecture.md](docs/ja/architecture.md) | システム構成、フロー形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/ja/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
 | [docs/inventory.md](docs/ja/inventory.md) | 業務の棚卸し：AI が業務を聞き取り、時間を取られている仕事と、先に自動化するとよい仕事を出す |
-| [docs/ai-chat.md](docs/ja/ai-chat.md) | MCP を使えない AI のチャット（Microsoft Copilot など）でフローを作る：渡す仕様書、答えの貼り付け、人の手直し |
 | [docs/runner.md](docs/ja/runner.md) | 動かすだけの人の実行画面：確定されたフロー、入力変数から作るフォーム、結果とファイル |
 | [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・確定した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
 | [docs/schedules.md](docs/ja/schedules.md) | スケジュールとファイルのきっかけ、それを PC ごとに動かす Worker |

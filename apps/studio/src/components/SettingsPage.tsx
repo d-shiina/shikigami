@@ -9,8 +9,6 @@ import { useAgent } from "../agent";
 import { type BandSettings, loadBandSettings, saveBandSettings } from "../lib/bandSettings";
 import { t } from "../lib/i18n";
 import { AgentPicker } from "./AgentPane";
-import { CHAT_AIS, type ChatAi, useAiWay } from "../lib/aiWay";
-import { api } from "../lib/api";
 import { ApiKeyBox } from "./AgentApiKey";
 import { AboutSection, McpSetupRow } from "./AppMenu";
 import { DistributionSettings } from "./Distribution";
@@ -84,84 +82,11 @@ function RunSection() {
   );
 }
 
-const select = "h-7 min-w-0 rounded-lg border border-slate-300 bg-sheet px-1.5 text-[12px]";
-const plain = "flex h-7 items-center rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50";
-
 function AgentSection() {
   const info = useAgent((s) => s.info);
   const setOpen = useAgent((s) => s.setOpen);
-  const way = useAiWay((s) => s.way);
-  const setWay = useAiWay((s) => s.setWay);
-  const askAgain = useAiWay((s) => s.askAgain);
-  const chat = useAiWay((s) => s.chat);
-  const setChat = useAiWay((s) => s.setChat);
-  const autoRead = useAiWay((s) => s.autoRead);
-  const setAutoRead = useAiWay((s) => s.setAutoRead);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const c = t.aiChat.settings;
-  const paste = way === "paste";
-  const saveGuide = async () => {
-    try {
-      setSaved(await api.saveAiGuide());
-      setSaveError(null);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
-    }
-  };
   return (
     <SettingsGroup>
-      <SettingsRow label={c.way} hint={c.wayHint} htmlFor="settings-ai-way">
-        <div className="flex max-w-md items-center gap-2">
-          <select
-            id="settings-ai-way"
-            className={`${select} flex-1`}
-            value={paste ? "paste" : "agent"}
-            onChange={(e) => setWay(e.target.value === "paste" ? "paste" : "agent")}
-          >
-            <option value="agent">{c.agent}</option>
-            <option value="paste">{c.paste}</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => {
-              askAgain();
-              setOpen(true);
-            }}
-            className={plain}
-          >
-            {c.ask}
-          </button>
-        </div>
-      </SettingsRow>
-      {paste ? <>
-        <SettingsRow label={c.chat} htmlFor="settings-ai-chat">
-          <select id="settings-ai-chat" className={`${select} max-w-md`} value={chat} onChange={(e) => setChat(e.target.value as ChatAi)}>
-            {CHAT_AIS.map((ai) => (
-              <option key={ai.id} value={ai.id}>
-                {ai.id === "other" ? c.other : ai.name}
-              </option>
-            ))}
-          </select>
-        </SettingsRow>
-        <SettingsRow label={c.autoRead} hint={c.autoReadHint} htmlFor="settings-ai-autoread">
-          <input id="settings-ai-autoread" type="checkbox" checked={autoRead} onChange={(e) => setAutoRead(e.target.checked)} />
-        </SettingsRow>
-        <SettingsRow label={c.guide} hint={c.guideHint}>
-          <button type="button" onClick={() => void saveGuide()} className={plain}>
-            {c.saveGuide}
-          </button>
-          {saved && <p className="mt-1 text-[12px] break-all text-moegi-600">{t.paste.savedGuide(saved)}</p>}
-          {saveError && <p className="mt-1 text-[12px] text-shu-600">{saveError}</p>}
-        </SettingsRow>
-      </> : <AgentRows info={info} setOpen={setOpen} />}
-    </SettingsGroup>
-  );
-}
-
-function AgentRows({ info, setOpen }: { info: ReturnType<typeof useAgentInfo>; setOpen: (open: boolean) => void }) {
-  return (
-    <>
       <SettingsRow label={t.shell.agentPick} hint={t.shell.agentPickHint} htmlFor="settings-agent">
         <div className="flex max-w-md">
           <AgentPicker id="settings-agent" />
@@ -190,11 +115,9 @@ function AgentRows({ info, setOpen }: { info: ReturnType<typeof useAgentInfo>; s
         </SettingsRow>
       )}
       <McpSetupRow />
-    </>
+    </SettingsGroup>
   );
 }
-
-const useAgentInfo = () => useAgent((s) => s.info);
 
 export function SettingsPage() {
   const list = sections();

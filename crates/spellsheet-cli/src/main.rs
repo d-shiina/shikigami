@@ -190,19 +190,6 @@ fn real_main() -> Result<ExitCode> {
                 }
             }
         }
-        Command::AiGuide { dir, builtin } => {
-            let files = if *builtin {
-                contract::ai_guide()
-            } else {
-                spellsheet_core::chat::guide(runtime.registry())
-            };
-            std::fs::create_dir_all(dir)?;
-            for file in files {
-                let path = dir.join(&file.name);
-                std::fs::write(&path, &file.text)?;
-                println!("wrote {}", path.display());
-            }
-        }
         Command::Plugin(PluginCmd::List) => {
             let problems: Vec<_> = loaded.problems.iter().map(|p| p.to_json()).collect();
             let builtin = builtin_names();

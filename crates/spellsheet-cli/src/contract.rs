@@ -45,13 +45,6 @@ fn step_types() -> Value {
     json!({ "schemaVersion": spellsheet_core::SCHEMA_VERSION, "stepTypes": types })
 }
 
-/// The guide for AIs without MCP, for the built-in step types only. A copy
-/// is kept in docs/ai/ for people who download it from GitHub.
-pub fn ai_guide() -> Vec<spellsheet_core::chat::GuideFile> {
-    let runtime = spellsheet_adapters::runtime(&spellsheet_adapters::builtin());
-    spellsheet_core::chat::guide(runtime.registry())
-}
-
 /// Commands, arguments and flags of the `spellsheet` command line.
 fn command(cmd: &Command) -> Value {
     let args: Vec<Value> = cmd
@@ -120,41 +113,6 @@ mod tests {
                 "schemas/{name} changed: run `pnpm schema:generate`, check docs/compatibility.md and add a CHANGELOG.md entry"
             );
         }
-    }
-
-    #[test]
-    fn the_ai_guide_in_docs_is_up_to_date() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/ai");
-        for file in super::ai_guide() {
-            let actual = std::fs::read_to_string(dir.join(&file.name)).unwrap_or_default();
-            assert!(
-                actual == file.text,
-                "docs/ai/{} changed: run `pnpm schema:generate`",
-                file.name
-            );
-        }
-    }
-
-    /// The example in the instructions is an answer Studio takes in.
-    #[test]
-    fn the_example_answer_reads_and_validates() {
-        let files = super::ai_guide();
-        let text = &files[0].text;
-        let start = text.find("```json\n{\n  \"format\"").expect("example");
-        let answer = spellsheet_core::chat::read_answer(&text[start..]).expect("readable");
-        let runtime = spellsheet_adapters::runtime(&spellsheet_adapters::builtin());
-        let report =
-            spellsheet_core::Validator::new(runtime.registry().clone()).validate(&answer.flow);
-        // IDs are assigned when Studio takes it in.
-        let codes: Vec<&str> = report
-            .issues
-            .iter()
-            .map(|i| i.code.as_str())
-            .filter(|c| !matches!(*c, "INVALID_FLOW_ID" | "MISSING_STEP_ID"))
-            .collect();
-        // Only the parts are left, for the person to pick.
-        assert!(codes.iter().all(|c| *c == "PART_NOT_PICKED"), "{report:?}");
-        assert_eq!(codes.len(), 2);
     }
 
     /// Node names on screen are nouns ("文字入力", not "入力する"):

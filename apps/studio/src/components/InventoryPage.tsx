@@ -27,9 +27,6 @@ import {
   plain,
   consult,
   sendFresh,
-  PICK_KEY,
-  SHOW_EVENT,
-  showInventory,
   type TaskAssessment,
   type WorkTask,
   WORTH_MINUTES,
@@ -39,6 +36,7 @@ import { SheetNumber } from "./SheetNumber";
 
 /** How often the open sheet looks for what the AI saved (it writes from another process). */
 const POLL_MS = 1500;
+const PICK_KEY = "spellsheet.studio.inventory";
 const LEVELS: Level[] = ["high", "medium", "low"];
 const PERIODS: Period[] = ["day", "week", "month", "quarter", "year"];
 
@@ -49,18 +47,19 @@ function remembered(): string | null {
     return null;
   }
 }
-const remember = showInventory;
+function remember(id: string | null) {
+  try {
+    if (id) globalThis.localStorage?.setItem(PICK_KEY, id);
+    else globalThis.localStorage?.removeItem(PICK_KEY);
+  } catch {
+    // Only a remembered preference.
+  }
+}
 
 /** The stock-takes and the one shown, kept fresh while the page is open. */
 function useInventories() {
   const [list, setList] = useState<InventorySummary[] | null>(null);
   const [picked, setPicked] = useState<string | null>(remembered);
-  // Another place (a stock-take just taken in from the chat) asks for one while the page is open.
-  useEffect(() => {
-    const show = (e: Event) => setPicked((e as CustomEvent<string | null>).detail);
-    globalThis.addEventListener?.(SHOW_EVENT, show);
-    return () => globalThis.removeEventListener?.(SHOW_EVENT, show);
-  }, []);
   const [view, setView] = useState<InventoryView | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The one shown: the one picked while it exists, else the latest changed

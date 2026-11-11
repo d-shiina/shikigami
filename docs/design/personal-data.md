@@ -18,7 +18,6 @@
 | AI：Studio の AI チャット | AI の CLI の組込ツール（ファイル読み・シェル・Web）は切ってあり、SpellSheet の MCP ツールだけ（Claude Code `--tools ""`、Codex は shell 無効、Gemini は組込除外、Copilot は SpellSheet だけ）。登録済みパスワードを含む文面は送らない（`SECRET_IN_MESSAGE`） | MCP の結果に入る普通の値はそのまま AI に届く（下の行） |
 | AI：MCP のツール | 次の結果は**普通の値をそのまま返す**：`get_run_logs`（`variableChanged` の値）、`get_run_status` の出力、`test_step` の出力（`excel.readRange`・`mail.*`・`pdf.readText` などは本物の中身）、`inspect_page`（ページのツリーと文字、`image: true` なら画面の画像）、`inspect_ui`（窓の中身、OCR の文字）、`read_project_file`（input/ の CSV など）、`get_flow`（変数の初期値）。シークレットだけ伏せる。証跡（observation）は PC に保存 | ここが最大の経路。顧客の画面を見ながら作る・本物の Excel で試すと、その中身が AI の提供元に届く。どこまで渡ったかは `audit/mcp.jsonl` に呼び出しの記録はあるが、中身は残らない |
 | AI：Studio の外で使う Claude Code など | SpellSheet からは止められない。AI のクライアントが自分のツールで PC のファイルを読める | 利用者の設定次第 |
-| AI：MCP のない AI チャット（仕様書・貼り付け） | AI には仕様書と、「AI 向けにコピー」したフローだけ。秘密の初期値は含めない（#168） | 普通の変数の初期値・メモ・ノード名に書いた個人情報はそのまま渡る |
 | 実行記録 `runs/<run-id>/` | `events.jsonl` に変数の値（1000 文字で切る）、`report.json` に出力。秘密だけ `***` | 普通の値はすべて残る。`records.keepDays` / `keepRuns` で消せるが**既定は消さない** |
 | フローのフォルダーの `logs/` | 人が読むログ。変数の値の抜粋が入る。新しい 100 件を残す | `keepDays` が効かない（100 件まで残る）。共有ワークスペースだと他の人も見られる |
 | 失敗時の画面保存（#157） | 失敗したページ・窓を `logs/<時刻>_failed.png` に保存。パスワード欄だけ黒塗り。`records.failureScreenshots: false` で止められる | 顧客情報が写ったまま残る。既定はオン |

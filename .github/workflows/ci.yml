@@ -44,12 +44,12 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
             rust=true
           else
-            # --no-renames: a file moved out of docs/ai/ counts as removed there too.
+            # --no-renames: a file moved out of a watched path counts as removed there too.
             files=$(git diff --name-only --no-renames "$BASE"..."$HEAD")
             while IFS= read -r f; do
               case "$f" in
-                # Read by the Rust tests (contract.rs, expr/functions.rs).
-                docs/ai/*|docs/expressions.md) rust=true ;;
+                # Read by the Rust tests (expr/functions.rs).
+                docs/expressions.md) rust=true ;;
                 site/*|site-moved/*|apps/manual/*|apps/studio/src/*|docs/*) ;;
                 .github/ISSUE_TEMPLATE/*|.github/pull_request_template.md) ;;
                 */*) rust=true ;;

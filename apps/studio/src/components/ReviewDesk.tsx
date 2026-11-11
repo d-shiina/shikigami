@@ -179,7 +179,7 @@ type Marks = {
   notes: Record<string, string>;
   note(key: string, text: string): void;
 };
-/** What the person has seen and answered on the report; the AI chat answers the same questions (ChatHandoff). */
+/** What the person has seen and answered on the report. */
 export const useMarks = create<Marks>((set) => ({
   seen: {},
   answers: {},

@@ -1,10 +1,10 @@
 // What a person still has to do before a flow can run, when its author could
-// not: an AI in a chat window without MCP (Microsoft Copilot) cannot see the
-// screen, register a login or put files in the flow's folder. Studio lists
-// these apart from what the AI must fix, with the one button that does each,
-// and gives the AI's part as text to paste back into the chat.
+// not: the AI cannot register a login or put files in the flow's folder, and
+// may leave a screen part for the person to pick. Writer lists these apart
+// from what the AI must fix, with the one button that does each, and words
+// the AI's part as a request to fix it.
 import type { Flow, ProjectFiles, Step, StepTypeDef, ValidationIssue, ValidationReport } from "@spellsheet/schema";
-import type { AnswerProblem, SecretField } from "./api";
+import type { SecretField } from "./api";
 import { t } from "./i18n";
 import { missingImages } from "./imageParts";
 import { partRef } from "./parts";
@@ -173,62 +173,31 @@ export function unsetIssues(validation: ValidationReport | null | undefined): Va
   return (validation?.issues ?? []).filter((i) => i.severity === "error" && isUnset(i));
 }
 
-/** The flow as the AI writes it: the answer object, keeping step IDs and picked targets. */
-export function flowForChat(flow: Flow): string {
-  const content: Record<string, unknown> = { name: flow.name };
-  if (flow.description) content.description = flow.description;
-  // A secret's value never leaves Studio, even one wrongly saved as a default,
-  // and neither does the default of personal data (the bundle export drops
-  // them the same way).
-  if (flow.variables?.length) content.variables = flow.variables.map((v) => (v.secret || v.personal ? withoutDefault(v) : v));
-  if (flow.parts && Object.keys(flow.parts).length) content.parts = flow.parts;
-  content.steps = flow.steps ?? [];
-  if (flow.settings && Object.keys(flow.settings).length) content.settings = flow.settings;
-  return JSON.stringify({ format: "spellsheet.answer", summary: "", checks: [], flow: content }, null, 2);
-}
-
-function withoutDefault<T extends { default?: unknown }>(v: T): Omit<T, "default"> {
-  const { default: _value, ...rest } = v;
-  return rest;
-}
-
-const fence = (json: string) => "```json\n" + json + "\n```";
-
-/** To paste into the chat with a request: the current flow and how to answer. */
-export function handOffText(flow: Flow): string {
-  return `${t.todos.handOff}\n\n${fence(flowForChat(flow))}\n`;
-}
-
 /** Where an issue is, in words the AI can find in its own answer. */
 function where(path: string | undefined, name: string | undefined): string {
   return [path, name ? t.todos.stepNamed(name) : ""].filter(Boolean).join(" ");
 }
 
 /**
- * The problems for the AI, to paste back into the chat: where each is, what
- * is wrong, what was written there, and how to fix it, with the expression
- * rules when an expression is wrong. With `flow`, the problems are
- * validation issues of that flow (paths inside it) and the flow goes along,
- * so the AI fixes what Studio has, edits by the person included.
+ * The problems for the AI to fix in `flow`: where each is, what is wrong,
+ * what was written there, and how to fix it, with the expression rules when
+ * an expression is wrong. The AI reads the flow itself (edits by the person
+ * included) through MCP.
  */
-export function returnText(problems: (AnswerProblem | ValidationIssue)[], flow?: Flow): string {
-  const steps = new Map(flow ? [...walk(flow.steps ?? [])].map((s) => [s.id ?? "", s] as const) : []);
+export function fixText(problems: ValidationIssue[], flow: Flow): string {
+  const steps = new Map([...walk(flow.steps ?? [])].map((s) => [s.id ?? "", s] as const));
   const lines = problems.map((p, i) => {
-    const issue = p as ValidationIssue;
-    const answer = p as AnswerProblem;
-    const path = flow && p.path ? `/flow${p.path}` : p.path;
-    const name = (issue.stepId ? steps.get(issue.stepId)?.name : undefined) ?? answer.step;
-    const at = where(path, name);
+    const name = p.stepId ? steps.get(p.stepId)?.name : undefined;
+    const at = where(p.path, name);
     const out = [`${i + 1}. ${at ? `${at}: ` : ""}${p.message}`];
-    const written = answer.found ?? (flow ? writtenAt(flow, issue) : null);
+    const written = writtenAt(flow, p);
     if (written) out.push(`   ${t.todos.written}: ${written}`);
-    if (issue.hint) out.push(`   ${t.todos.fixHint}: ${issue.hint}`);
+    if (p.hint) out.push(`   ${t.todos.fixHint}: ${p.hint}`);
     return out.join("\n");
   });
-  const parts = [flow ? t.todos.returnLeadFlow : t.todos.returnLead, "", ...lines];
-  if (problems.some((p) => (p as ValidationIssue).code?.startsWith("EXPR_"))) {
+  const parts = [t.todos.fixRequestLead, "", ...lines];
+  if (problems.some((p) => p.code?.startsWith("EXPR_"))) {
     parts.push("", `${t.todos.rulesTitle}:`, ...t.todos.rules.map((rule) => `- ${rule}`));
   }
-  if (flow) parts.push("", fence(flowForChat(flow)));
   return parts.join("\n") + "\n";
 }

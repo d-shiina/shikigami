@@ -1,6 +1,6 @@
 import type { Flow, StepTypeDef, ValidationReport } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
-import { authorIssues, flowForChat, handOffText, isUnset, personTodos, returnText, todosByStep } from "./todos";
+import { authorIssues, fixText, isUnset, personTodos, todosByStep } from "./todos";
 
 const defs = new Map<string, StepTypeDef>([["excel.readRows", { type: "excel.readRows", pathParams: ["path"] } as unknown as StepTypeDef]]);
 
@@ -73,31 +73,10 @@ describe("text for the AI", () => {
   it("keeps what a person does out of what goes back to the AI", () => {
     const issues = authorIssues(validation);
     expect(issues.map((i) => i.code)).toEqual(["INVALID_PARAMS"]);
-    const text = returnText(issues, flow);
-    expect(text).toContain("1. /flow/steps/1/params");
+    const text = fixText(issues, flow);
+    expect(text).toContain("1. /steps/1/params");
     expect(text).toContain("'value' is required");
     expect(text).toContain("Set value.");
-    expect(text).toContain('"format": "spellsheet.answer"');
-  });
-
-  it("hands the flow over without what Writer owns", () => {
-    const answer = JSON.parse(flowForChat(flow)) as { flow: Record<string, unknown> };
-    expect(Object.keys(answer.flow)).toEqual(["name", "parts", "steps"]);
-    expect(handOffText(flow)).toContain("```json");
-  });
-
-  it("never hands a secret's value to the AI", () => {
-    const withSecret = { ...flow, variables: [{ name: "pw", type: "string", secret: true, default: "hunter2" }, { name: "n", type: "number", default: 3 }] } as Flow;
-    const text = flowForChat(withSecret);
-    expect(text).not.toContain("hunter2");
-    expect(text).toContain('"default": 3');
-  });
-
-  it("leaves out the default of personal data", () => {
-    const withPersonal = { ...flow, variables: [{ name: "顧客名", type: "string", personal: true, default: "山田花子" }] } as Flow;
-    const text = flowForChat(withPersonal);
-    expect(text).not.toContain("山田花子");
-    expect(text).toContain('"personal": true');
   });
 });
 

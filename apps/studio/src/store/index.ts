@@ -36,7 +36,6 @@ import type {
   RunEvidence,
   SecretInfo,
   SecretInput,
-  PasteOutcome,
   PickRequest,
   SecretRequest,
 } from "../lib/api";
@@ -416,11 +415,6 @@ export type StudioState = {
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
-  /**
-   * Takes in an AI's answer: a new flow, or with `into` the open flow's new
-   * content. Opens the flow it made; returns what happened, null on an error.
-   */
-  pasteAnswer(text: string, into: boolean): Promise<PasteOutcome | null>;
   setWorkspace(path: string, shared: boolean): Promise<void>;
   loadSecrets(): Promise<void>;
   /** Returns true when saved. */

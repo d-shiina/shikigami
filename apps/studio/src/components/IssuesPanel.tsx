@@ -1,11 +1,11 @@
 import type { Flow, StepTypeDef, ValidationIssue } from "@spellsheet/schema";
-import { Check, ClipboardCopy, FolderOpen, KeyRound, MousePointerClick } from "lucide-react";
-import { useState } from "react";
+import { Check, FolderOpen, KeyRound, MousePointerClick, Sparkles } from "lucide-react";
+import { flowBusy, openAsk, useAgentApiMaybe, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
 import { stepLabel, t } from "../lib/i18n";
 import { issueText } from "../lib/issueText";
 import { writtenAt } from "../lib/problemText";
-import { authorIssues, PERSON_CODES, returnText, type Todo, todoTitle } from "../lib/todos";
+import { authorIssues, fixText, PERSON_CODES, type Todo, todoTitle } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { useProjectMaybe } from "../project";
 import { findStep } from "../store";
@@ -13,7 +13,7 @@ import { findStep } from "../store";
 /**
  * The flow's checks, in the order a person deals with them: what only they
  * can do (pick a part, register a login, put a file), then what the author
- * (an AI) got wrong, with the text to send back, then the rest.
+ * (an AI) got wrong, to send back to it, then the rest.
  */
 export function IssuesPanel() {
   const flow = useStudio((s) => s.flow);
@@ -98,36 +98,31 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
   );
 }
 
-/** A button that copies text for the AI chat and says so for a moment. */
-export function CopyForAi({ text, label = t.todos.copyReturn, primary = false }: { text: string; label?: string; primary?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      setCopied(false);
+/** Sends the flow's problems to the AI to fix; with no AI set up yet, the AI pane shows how. */
+function AskAiFix({ issues, flow }: { issues: ValidationIssue[]; flow: Flow }) {
+  const agent = useAgentApiMaybe();
+  const name = useAgentMaybe((a) => a.info?.name ?? "AI", "AI");
+  const busy = useAgentMaybe((a) => flowBusy(a, flow.id), false);
+  if (!agent) return null;
+  const ask = () => {
+    const a = agent.getState();
+    if (!a.info?.available) {
+      openAsk(agent, { about: { id: flow.id, name: flow.name } });
+      return;
     }
+    void a.send(fixText(issues, flow), { id: flow.id, name: flow.name }, `${flow.name} ・ ${t.todos.fixTitle}`);
   };
   return (
-    <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => void copy()}
-        className={`flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] ${
-          primary ? "bg-primary text-on-primary hover:bg-primary-hover" : "border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50"
-        }`}
-      >
-        {copied ? <Check size={14} strokeWidth={1.75} aria-hidden="true" /> : <ClipboardCopy size={14} strokeWidth={1.75} aria-hidden="true" />}
-        {label}
-      </button>
-      {copied && (
-        <span role="status" className="text-[12px] text-moegi-600">
-          {t.todos.copied}
-        </span>
-      )}
-    </span>
+    <button
+      type="button"
+      disabled={busy}
+      onClick={ask}
+      title={busy ? t.pause.agentBusy(name) : undefined}
+      className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 enabled:hover:bg-slate-50 disabled:opacity-50"
+    >
+      <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
+      {t.todos.askFix(name)}
+    </button>
   );
 }
 
@@ -141,7 +136,7 @@ function AiIssues({ issues, flow, goTo }: { issues: ValidationIssue[]; flow: Flo
           </h3>
           <p className="mt-0.5 text-[12px] text-slate-600">{t.todos.fixLead}</p>
         </div>
-        <CopyForAi text={returnText(issues, flow)} />
+        <AskAiFix issues={issues} flow={flow} />
       </div>
       <IssueList issues={issues} goTo={goTo} />
     </section>
