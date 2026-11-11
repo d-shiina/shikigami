@@ -4,7 +4,7 @@
 // The person reads the order, corrects a number where the AI misheard (the
 // order is worked out again by Flow Core), writes it out for Excel, and has
 // the AI build the first flow from a row.
-import { ChevronDown, ChevronRight, FileSpreadsheet, MessageSquareText, Sparkles, Trash2, Workflow } from "lucide-react";
+import { AppWindow, ChevronDown, ChevronRight, Clock, Download, Flag, Hourglass, type LucideIcon, MessageSquareText, Sparkles, Trash2, Users, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentApi } from "../agent";
 import { useStudio } from "../context";
@@ -31,8 +31,9 @@ import {
   type WorkTask,
   WORTH_MINUTES,
 } from "../lib/inventory";
-import { SheetSubheading } from "./SheetHeading";
-import { SheetNumber } from "./SheetNumber";
+import { Highlight } from "./Highlight";
+import { DESK, PAPER } from "./sheet/paper";
+import { SheetHeading } from "./SheetHeading";
 
 /** How often the open sheet looks for what the AI saved (it writes from another process). */
 const POLL_MS = 1500;
@@ -127,94 +128,71 @@ export function InventoryPage() {
     }
   };
 
-  if (list === null) return <div className="h-full bg-paper" />;
+  if (list === null) return <div className={`h-full ${DESK}`} />;
+  const exportXlsx = async (id: string) => {
+    try {
+      const path = await inventoryApi.exportXlsx(id, locale === "en");
+      setNotice({ text: t.inventory.exported(path), path });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const remove = async (id: string, title: string) => {
+    const ok = await confirmAsk({ title: t.inventory.deleteTitle(title), body: t.inventory.deleteBody, confirm: t.inventory.delete, danger: true });
+    if (!ok) return;
+    try {
+      await inventoryApi.remove(id);
+      pick(null);
+      void load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
-    <div className="@container h-full overflow-y-auto bg-paper">
-      <div className="mx-auto max-w-[980px] px-6 py-6">
-        <header className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="mr-auto" />
-          {view && (
-            <>
-              <button
-                type="button"
-                onClick={() => void consult(agent, view.inventory)}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-ink hover:bg-slate-50"
-              >
-                <MessageSquareText size={14} strokeWidth={1.75} aria-hidden="true" />
-                {t.inventory.continueAi}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const path = await inventoryApi.exportXlsx(view.inventory.id, locale === "en");
-                    setNotice({ text: t.inventory.exported(path), path });
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : String(e));
-                  }
-                }}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-ink hover:bg-slate-50"
-              >
-                <FileSpreadsheet size={14} strokeWidth={1.75} aria-hidden="true" />
-                {t.inventory.exportXlsx}
-              </button>
-              <button
-                type="button"
-                aria-label={t.inventory.delete}
-                title={t.inventory.delete}
-                onClick={async () => {
-                  const ok = await confirmAsk({ title: t.inventory.deleteTitle(view.inventory.title), body: t.inventory.deleteBody, confirm: t.inventory.delete, danger: true });
-                  if (!ok) return;
-                  try {
-                    await inventoryApi.remove(view.inventory.id);
-                    pick(null);
-                    void load();
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : String(e));
-                  }
-                }}
-                className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-shu-50 hover:text-shu-600"
-              >
-                <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
-              </button>
-            </>
-          )}
-        </header>
+    <div className={`@container h-full overflow-y-auto px-5 py-7 ${DESK}`}>
+      <div className="mx-auto w-[980px] max-w-full">
         {list.length > 1 && <Others list={list} shown={view?.inventory.id ?? null} onPick={pick} />}
         {error && (
-          <p role="alert" className="mb-3 rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[13px] text-shu-600">
+          <p role="alert" className="mb-3 text-[13px] leading-[1.7] text-shu-600">
             {error}
           </p>
         )}
         {notice && (
-          <p role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-sheet px-3 py-2 text-[13px] text-ink">
-            <span className="min-w-0 flex-1 break-all">{notice.text}</span>
+          <p role="status" className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px] leading-[1.7] text-slate-600">
+            <span className="min-w-0 break-all">{notice.text}</span>
             {notice.path && (
-              <button type="button" onClick={() => void api.revealFile(notice.path ?? "")} className="text-brand-600 hover:underline">
+              <button type="button" onClick={() => void api.revealFile(notice.path ?? "")} className="font-medium text-primary hover:underline">
                 {t.project.menu.reveal}
               </button>
             )}
-            <button type="button" onClick={() => setNotice(null)} className="text-slate-500 hover:text-ink">
+            <button type="button" onClick={() => setNotice(null)} className="hover:text-ink hover:underline">
               {t.cancel}
             </button>
           </p>
         )}
-        {list.length === 0 ? <Empty onStart={start} /> : view ? <Sheet view={view} onChange={change} /> : <div className="h-96 rounded-lg border border-slate-200 bg-sheet shadow-sheet" />}
+        {list.length === 0 ? (
+          <Empty onStart={start} />
+        ) : view ? (
+          <Sheet view={view} onChange={change} onContinue={() => void consult(agent, view.inventory)} onExport={() => void exportXlsx(view.inventory.id)} onRemove={() => void remove(view.inventory.id, view.inventory.title)} />
+        ) : (
+          <div className={`h-96 ${PAPER}`} />
+        )}
       </div>
     </div>
   );
 }
 
+/** The other stock-takes, named on the desk above the paper; the one shown is underlined. */
 function Others({ list, shown, onPick }: { list: InventorySummary[]; shown: string | null; onPick: (id: string) => void }) {
   return (
-    <nav aria-label={t.inventory.others} className="mb-3 flex flex-wrap gap-1.5">
+    <nav aria-label={t.inventory.others} className="mb-4 flex flex-wrap gap-x-5 gap-y-1 border-b border-slate-300 px-1 text-[13px]">
       {list.map((i) => (
         <button
           key={i.id}
           type="button"
           aria-current={i.id === shown ? "page" : undefined}
           onClick={() => onPick(i.id)}
-          className={`h-7 max-w-64 truncate rounded-md border px-2.5 text-[12.5px] ${i.id === shown ? "border-slate-300 bg-sheet font-semibold text-ink" : "border-transparent text-slate-600 hover:bg-slate-100"}`}
+          className={`-mb-px max-w-64 truncate border-b-2 pt-1 pb-2 ${i.id === shown ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
         >
           {i.title}
         </button>
@@ -223,24 +201,25 @@ function Others({ list, shown, onPick }: { list: InventorySummary[]; shown: stri
   );
 }
 
+/** The paper's margins: the same as a flow's sheet. */
+const PAD = "px-6 @[52rem]:px-[72px]";
+
 /** No stock-take yet: what it is, and the one way to start. */
 function Empty({ onStart }: { onStart: () => void }) {
   const i = t.inventory;
   return (
-    <article className="rounded-lg border border-slate-200 bg-sheet px-8 py-9 shadow-sheet">
-      <h2 className="text-[18px] font-semibold text-ink">{i.emptyTitle}</h2>
-      <p className="mt-2 max-w-[640px] text-[13.5px] leading-relaxed text-slate-600">{i.emptyLead}</p>
-      <ol className="mt-5 grid gap-2 @[44rem]:grid-cols-4">
+    <article className={`${PAPER} ${PAD} pt-11 pb-14`}>
+      <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{i.emptyTitle}</h1>
+      <p className="mt-2 max-w-[680px] text-[14px] leading-relaxed text-slate-600">{i.emptyLead}</p>
+      <ol className="mt-6 border-y border-slate-200 py-3">
         {i.emptySteps.map((step, n) => (
-          <li key={step} className="rounded-lg border border-slate-200 bg-paper px-3 py-2.5 text-[13px] text-ink">
-            <div className="mb-1.5">
-              <SheetNumber n={n + 1} />
-            </div>
+          <li key={step} className="grid grid-cols-[28px_minmax(0,1fr)] py-1.5 text-[15px] leading-[1.6] text-ink">
+            <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{n + 1}</span>
             {step}
           </li>
         ))}
       </ol>
-      <button type="button" onClick={onStart} className="mt-6 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13.5px] font-medium text-on-primary hover:bg-primary-hover">
+      <button type="button" onClick={onStart} className="mt-6 flex h-9 items-center gap-1.5 rounded-[5px] bg-primary px-4 text-[13.5px] font-medium text-on-primary hover:bg-primary-hover">
         <Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />
         {i.start}
       </button>
@@ -248,22 +227,16 @@ function Empty({ onStart }: { onStart: () => void }) {
   );
 }
 
-const GROUP_TONE: Record<Group, string> = {
-  first: "bg-brand-50 text-brand-700",
-  later: "bg-slate-100 text-slate-700",
-  split: "bg-shu-50 text-shu-600",
-  unknown: "border border-dashed border-slate-300 text-slate-500",
-  notNow: "bg-slate-100 text-slate-500",
-};
-
+/** Which of the four groups a task is in: words only, the one to build first under the highlighter. */
 function GroupTag({ group }: { group: Group }) {
-  return <span className={`inline-block shrink-0 rounded px-1.5 text-[11.5px] leading-5 font-medium whitespace-nowrap ${GROUP_TONE[group]}`}>{t.inventory.groups[group]}</span>;
+  const text = t.inventory.groups[group];
+  return <span className={`shrink-0 text-[12px] whitespace-nowrap ${group === "first" ? "font-medium text-ink" : "text-slate-500"}`}>{group === "first" ? <Highlight>{text}</Highlight> : text}</span>;
 }
 
 type Change = (patch: Parameters<typeof inventoryApi.change>[0]) => Promise<void>;
 
 /** The stock-take on one sheet: who, the totals, the chart, and the work in the order to build it. */
-function Sheet({ view, onChange }: { view: InventoryView; onChange: Change }) {
+function Sheet({ view, onChange, onContinue, onExport, onRemove }: { view: InventoryView; onChange: Change; onContinue: () => void; onExport: () => void; onRemove: () => void }) {
   const i = t.inventory;
   const inv = view.inventory;
   const rows = ordered(view);
@@ -277,69 +250,97 @@ function Sheet({ view, onChange }: { view: InventoryView; onChange: Change }) {
   };
   const setTask = (taskId: string, fields: Record<string, unknown>) => onChange({ id: inv.id, tasks: [{ id: taskId, ...fields }] });
   const madeBy = inv.createdBy?.name;
+  const facts: [LucideIcon, string, React.ReactNode][] = [
+    ...(inv.about ? [[Users, i.about, inv.about] as [LucideIcon, string, React.ReactNode]] : []),
+    ...(inv.systems?.length ? [[AppWindow, i.systems, inv.systems.join("、")] as [LucideIcon, string, React.ReactNode]] : []),
+    [Clock, i.monthly, <span className="tabular-nums">{i.hoursMonth(hours(view.assessment.monthlyMinutes))}</span>],
+    [Hourglass, i.savable, <b className="font-semibold tabular-nums">{i.hoursMonth(hours(view.assessment.savableMinutes))}</b>],
+    [
+      Flag,
+      i.first,
+      first ? (
+        <>
+          <b className="font-semibold">{first.task.name}</b>
+          <button type="button" onClick={() => build(first.task)} className={`${LINK} text-[13px]`}>
+            <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" />
+            {i.build}
+          </button>
+        </>
+      ) : (
+        <span className="text-slate-500">{i.noFirst}</span>
+      ),
+    ],
+  ];
   return (
-    <article className="@container rounded-lg border border-slate-200 bg-sheet px-6 py-7 shadow-sheet @[48rem]:px-10 @[48rem]:py-9" data-inventory-sheet>
-      <header className="border-b border-slate-200 pb-4">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="text-[20px] font-semibold text-ink">{inv.title}</h2>
-          <span className={`rounded px-1.5 text-[11.5px] leading-5 font-medium ${inv.status === "done" ? "bg-moegi-100 text-moegi-600" : "bg-brand-50 text-brand-700"}`}>
-            {inv.status === "done" ? i.done : i.interviewing}
-          </span>
-          <span className="text-[12px] text-slate-500">{i.updated(relativeTime(inv.updatedAt))}</span>
-          {madeBy && <span className="text-[12px] text-slate-500">{i.madeBy(madeBy)}</span>}
+    <article className={`@container ${PAPER} pt-11 pb-14`} data-inventory-sheet>
+      <header className={PAD}>
+        <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{inv.title}</h1>
+            <p className="mt-2 flex flex-wrap gap-x-3 text-[12.5px] leading-[1.7] text-slate-500">
+              <span className={inv.status === "done" ? "" : "font-medium text-ink"}>{inv.status === "done" ? i.done : i.interviewing}</span>
+              <span>{i.updated(relativeTime(inv.updatedAt))}</span>
+              {madeBy && <span>{i.madeBy(madeBy)}</span>}
+            </p>
+          </div>
+          <p className="flex flex-wrap gap-x-4 gap-y-1 pt-2 text-[12.5px] leading-[1.7]">
+            <button type="button" onClick={onContinue} className={LINK}>
+              <MessageSquareText size={13} strokeWidth={1.75} aria-hidden="true" />
+              {i.continueAi}
+            </button>
+            <button type="button" onClick={onExport} className={QUIET}>
+              <Download size={13} strokeWidth={1.75} aria-hidden="true" />
+              {i.exportXlsx}
+            </button>
+            <button type="button" onClick={onRemove} className="inline-flex items-center gap-1 text-slate-600 hover:text-shu-600 hover:underline">
+              <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+              {i.delete}
+            </button>
+          </p>
         </div>
-        <dl className="mt-2 grid gap-x-6 gap-y-1 text-[13px] @[40rem]:grid-cols-[auto_1fr]">
-          {inv.about && (
-            <>
-              <dt className="text-slate-500">{i.about}</dt>
-              <dd className="text-ink">{inv.about}</dd>
-            </>
-          )}
-          {!!inv.systems?.length && (
-            <>
-              <dt className="text-slate-500">{i.systems}</dt>
-              <dd className="text-ink">{inv.systems.join("、")}</dd>
-            </>
-          )}
+        <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-3 border-y border-slate-200 py-5 text-[14px] @[40rem]:grid-cols-[224px_minmax(0,1fr)]">
+          {facts.map(([Icon, label, value]) => (
+            <div key={label} className="contents">
+              <dt className="flex items-center gap-2 self-start pt-px text-slate-500">
+                <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+                {label}
+              </dt>
+              <dd className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1 text-ink">{value}</dd>
+            </div>
+          ))}
         </dl>
       </header>
 
-      <section className="mt-5 grid gap-3 @[40rem]:grid-cols-3">
-        <Figure label={i.monthly} value={i.hoursMonth(hours(view.assessment.monthlyMinutes))} />
-        <Figure label={i.savable} value={i.hoursMonth(hours(view.assessment.savableMinutes))} strong />
-        <div className="rounded-lg border border-brand-100 bg-brand-50/60 px-4 py-3">
-          <div className="text-[12px] text-slate-600">{i.first}</div>
-          {first ? (
-            <>
-              <div className="mt-0.5 text-[14px] leading-snug font-semibold text-ink">{first.task.name}</div>
-              <button type="button" onClick={() => build(first.task)} className="mt-2 flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[12.5px] font-medium text-on-primary hover:bg-primary-hover">
-                <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" />
-                {i.build}
-              </button>
-            </>
-          ) : (
-            <div className="mt-0.5 text-[14px] text-slate-500">{i.noFirst}</div>
-          )}
-        </div>
-      </section>
+      {rows.length > 0 && (
+        <section className={`mt-10 ${PAD}`} aria-label={i.chartTitle}>
+          <h2 className="mb-4">
+            <SheetHeading n={1} size="chapter">
+              {i.chartTitle}
+            </SheetHeading>
+          </h2>
+          <Chart rows={rows} />
+        </section>
+      )}
 
-      {rows.length > 0 && <Chart rows={rows} />}
-
-      <section className="mt-6">
-        <p className="mb-1.5 text-[12px] text-slate-500">{i.editHint}</p>
+      <section className={`mt-10 ${PAD}`}>
+        <h2 className="mb-2">
+          <SheetHeading n={rows.length > 0 ? 2 : 1} size="chapter" aside={i.editHint}>
+            {i.list}
+          </SheetHeading>
+        </h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-[13px]">
+          <table className="w-full min-w-[760px] border-collapse text-[13.5px]">
             <thead>
               <tr className="border-b border-slate-300 text-left text-[12px] whitespace-nowrap text-slate-500">
-                <th className="w-10 py-2 pr-2 font-medium">{i.columns.rank}</th>
-                <th className="py-2 pr-3 font-medium">{i.columns.work}</th>
-                <th className="py-2 pr-3 font-medium">{i.columns.often}</th>
-                <th className="py-2 pr-3 text-right font-medium">{i.columns.minutes}</th>
-                <th className="py-2 pr-3 text-right font-medium">{i.columns.people}</th>
-                <th className="py-2 pr-3 text-right font-medium">{i.columns.share}</th>
-                <th className="py-2 pr-3 text-right font-medium">{i.columns.monthly}</th>
-                <th className="py-2 pr-3 text-right font-medium">{i.columns.savable}</th>
-                <th className="py-2 font-medium">{i.columns.ease}</th>
+                <th className="w-10 py-2 pr-2 font-normal">{i.columns.rank}</th>
+                <th className="py-2 pr-3 font-normal">{i.columns.work}</th>
+                <th className="py-2 pr-3 font-normal">{i.columns.often}</th>
+                <th className="py-2 pr-3 text-right font-normal">{i.columns.minutes}</th>
+                <th className="py-2 pr-3 text-right font-normal">{i.columns.people}</th>
+                <th className="py-2 pr-3 text-right font-normal">{i.columns.share}</th>
+                <th className="py-2 pr-3 text-right font-normal">{i.columns.monthly}</th>
+                <th className="py-2 pr-3 text-right font-normal">{i.columns.savable}</th>
+                <th className="py-2 font-normal">{i.columns.ease}</th>
               </tr>
             </thead>
             {rows.map(({ task, score }) => (
@@ -347,20 +348,14 @@ function Sheet({ view, onChange }: { view: InventoryView; onChange: Change }) {
             ))}
           </table>
         </div>
+        <p className="mt-5 text-[12px] leading-[1.7] text-slate-500">{i.formula}</p>
       </section>
-      <p className="mt-6 border-t border-slate-200 pt-3 text-[11.5px] leading-relaxed text-slate-500">{i.formula}</p>
     </article>
   );
 }
 
-function Figure({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="rounded-lg border border-slate-200 px-4 py-3">
-      <div className="text-[12px] text-slate-600">{label}</div>
-      <div className={`mt-0.5 text-[22px] leading-tight font-semibold tabular-nums ${strong ? "text-brand-600" : "text-ink"}`}>{value}</div>
-    </div>
-  );
-}
+const LINK = "inline-flex items-center gap-1 font-medium text-primary hover:underline";
+const QUIET = "inline-flex items-center gap-1 text-slate-600 hover:text-ink hover:underline";
 
 /** The tasks placed by ease (across) and the time they could save (up), in the four groups. */
 function Chart({ rows }: { rows: { task: WorkTask; score: TaskAssessment }[] }) {
@@ -388,17 +383,13 @@ function Chart({ rows }: { rows: { task: WorkTask; score: TaskAssessment }[] }) 
   const midX = left + 0.4 * pw;
   const midY = 8 + 0.5 * ph;
   const quad = (group: Group, x: number, y: number, anchor: "start" | "end") => (
-    <text x={x} y={y} textAnchor={anchor} className={`text-[11.5px] font-semibold ${group === "first" ? "fill-brand-700" : "fill-slate-500"}`}>
+    <text x={x} y={y} textAnchor={anchor} className={`text-[11.5px] ${group === "first" ? "fill-ink font-semibold" : "fill-slate-500"}`}>
       {i.groups[group]}
     </text>
   );
   return (
-    <section className="mt-6" aria-label={i.chartTitle}>
-      <h3 className="mb-2">
-        <SheetSubheading>{i.chartTitle}</SheetSubheading>
-      </h3>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={i.chartTitle}>
-        <rect x={midX} y={8} width={left + pw - midX} height={midY - 8} className="fill-brand-50" />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[760px]" role="img" aria-label={i.chartTitle}>
+        <rect x={midX} y={8} width={left + pw - midX} height={midY - 8} className="fill-(--sheet-marker)" opacity={0.45} />
         <rect x={left} y={8} width={pw} height={ph} fill="none" className="stroke-slate-300" />
         <line x1={midX} x2={midX} y1={8} y2={8 + ph} className="stroke-slate-300" strokeDasharray="3 3" />
         <line x1={left} x2={left + pw} y1={midY} y2={midY} className="stroke-slate-300" strokeDasharray="3 3" />
@@ -418,14 +409,13 @@ function Chart({ rows }: { rows: { task: WorkTask; score: TaskAssessment }[] }) 
         {placed.map((p) => (
           <g key={p.id}>
             <title>{`${p.label === "-" ? "" : `${p.label}. `}${p.name}`}</title>
-            <circle cx={p.x} cy={p.y} r={10} className={p.group === "first" ? "fill-brand-500" : p.group === "notNow" ? "fill-slate-300" : "fill-slate-500"} />
+            <circle cx={p.x} cy={p.y} r={10} className={p.group === "first" ? "fill-primary" : p.group === "notNow" ? "fill-slate-300" : "fill-slate-500"} />
             <text x={p.x} y={p.y + 4} textAnchor="middle" className="fill-white text-[11px] font-semibold">
               {p.label}
             </text>
           </g>
         ))}
-      </svg>
-    </section>
+    </svg>
   );
 }
 
@@ -442,15 +432,15 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
   return (
     <tbody className="border-b border-slate-200 align-top">
       <tr>
-        <td className="py-2.5 pr-2 text-[15px] font-semibold text-ink tabular-nums">{score.rank ?? ""}</td>
+        <td className="py-2.5 pr-2 text-[12px] leading-[21px] text-slate-400 tabular-nums">{score.rank ?? ""}</td>
         <td className="py-2 pr-3">
           <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-start gap-1 text-left">
             <Fold size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
-            <span className="font-medium text-ink">{task.name}</span>
+            <span className="font-semibold text-ink">{task.name}</span>
           </button>
           <div className="mt-1 ml-5 flex flex-wrap items-center gap-1.5">
             <GroupTag group={score.group} />
-            {flows.length > 0 && <Workflow size={13} strokeWidth={1.75} className="text-brand-500" aria-label={i.flows} />}
+            {flows.length > 0 && <Workflow size={13} strokeWidth={1.75} className="text-slate-500" aria-label={i.flows} />}
           </div>
         </td>
         <td className="whitespace-nowrap py-2 pr-3">
@@ -466,7 +456,7 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
           <NumberCell value={task.manualShare ?? null} shown={(v) => `${v}%`} min={0} max={100} whole onSave={(manualShare) => onSet({ manualShare })} />
         </td>
         <td className="whitespace-nowrap py-2.5 pr-3 text-right text-ink tabular-nums">{score.monthlyMinutes != null ? i.hours(hours(score.monthlyMinutes)) : <Unknown />}</td>
-        <td className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold text-brand-600 tabular-nums">{score.savableMinutes != null ? i.hours(hours(score.savableMinutes)) : <Unknown />}</td>
+        <td className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold text-ink tabular-nums">{score.savableMinutes != null ? i.hours(hours(score.savableMinutes)) : <Unknown />}</td>
         <td className="py-2">
           <LevelCell value={task.ease ?? null} label={i.columns.ease} onSave={(ease) => onSet({ ease })} />
         </td>
@@ -476,10 +466,10 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
           <td />
           <td colSpan={8} className="pr-2 pb-4">
             <Details task={task} missing={missing} />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <p className="mt-2.5 ml-5 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] leading-[1.7]">
               {score.group !== "notNow" && (
-                <button type="button" onClick={onBuild} className="flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-2.5 text-[12.5px] text-ink hover:bg-slate-50">
-                  <Sparkles size={13} strokeWidth={1.75} className="text-brand-500" aria-hidden="true" />
+                <button type="button" onClick={onBuild} className={LINK}>
+                  <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" />
                   {i.build}
                 </button>
               )}
@@ -491,13 +481,13 @@ function Row({ task, score, onSet, onBuild }: { task: WorkTask; score: TaskAsses
                     setPlace("flows");
                     void openFlow(f.id);
                   }}
-                  className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12.5px] text-brand-600 hover:bg-brand-50"
+                  className={QUIET}
                 >
                   <Workflow size={13} strokeWidth={1.75} aria-hidden="true" />
                   {i.openFlow(f.name ?? f.id)}
                 </button>
               ))}
-            </div>
+            </p>
           </td>
         </tr>
       )}
@@ -528,8 +518,8 @@ function Details({ task, missing }: { task: WorkTask; missing: string[] }) {
     [i.missing, missing.length ? missing.map((m) => i.missingFields[m] ?? m).join("、") : null],
   ];
   return (
-    <div className="ml-5 rounded-lg bg-paper px-4 py-3 text-[12.5px]">
-      {task.description && <p className="mb-2 text-[13px] leading-relaxed text-ink">{task.description}</p>}
+    <div className="ml-5 border-y border-slate-200 py-3 text-[13px] leading-[1.7]">
+      {task.description && <p className="mb-2 text-[14px] leading-[1.8] text-slate-700">{task.description}</p>}
       <dl className="grid gap-x-4 gap-y-1.5 @[40rem]:grid-cols-[9rem_1fr]">
         {lines
           .filter(([, value]) => value)
@@ -544,8 +534,8 @@ function Details({ task, missing }: { task: WorkTask; missing: string[] }) {
   );
 }
 
-const CELL = "rounded px-1 -mx-1 tabular-nums hover:bg-brand-50 focus-visible:bg-brand-50 focus-visible:outline-none";
-const INPUT = "h-7 w-20 rounded-md border border-brand-500 bg-sheet px-1.5 text-right text-[13px] tabular-nums text-ink focus:outline-none";
+const CELL = "-mx-1 rounded-[3px] px-1 tabular-nums hover:bg-(--sheet-marker) focus-visible:bg-(--sheet-marker) focus-visible:outline-none";
+const INPUT = "h-7 w-20 rounded-[4px] border border-primary bg-sheet px-1.5 text-right text-[13px] tabular-nums text-ink focus:outline-none";
 
 /** A number that turns into a field on click; Enter or leaving it saves, Esc puts it back. */
 function NumberCell({
@@ -626,7 +616,7 @@ function OftenCell({ value, onSave }: { value: Frequency | null; onSave: (f: Fre
           value={editing.per}
           aria-label={t.inventory.columns.often}
           onChange={(e) => setEditing({ ...editing, per: e.target.value as Period })}
-          className="h-7 rounded-md border border-brand-500 bg-sheet px-1 text-[13px] text-ink"
+          className="h-7 rounded-[4px] border border-primary bg-sheet px-1 text-[13px] text-ink"
         >
           {PERIODS.map((p) => (
             <option key={p} value={p}>
@@ -663,7 +653,7 @@ function LevelCell({ value, label, onSave }: { value: Level | null; label: strin
       aria-label={label}
       title={t.inventory.editHint}
       onChange={(e) => e.target.value && onSave(e.target.value as Level)}
-      className={`h-7 rounded-md border border-transparent bg-transparent px-1 text-[13px] hover:border-slate-300 focus:border-brand-500 focus:outline-none ${value ? "text-ink" : "text-slate-400"}`}
+      className={`h-7 rounded-[4px] border border-transparent bg-transparent px-1 text-[13.5px] hover:border-slate-300 focus:border-primary focus:outline-none ${value ? "text-ink" : "text-slate-400"}`}
     >
       {!value && <option value="">{t.inventory.unknownValue}</option>}
       {LEVELS.map((l) => (

@@ -1903,6 +1903,7 @@ export const ja = {
     hours: (h: string) => `${h} 時間`,
     perMonth: "/月",
     chartTitle: "減らせそうな時間と作りやすさ",
+    list: "業務の一覧",
     chartX: "作りやすさ",
     chartY: "減らせそうな時間",
     chartLow: "低",

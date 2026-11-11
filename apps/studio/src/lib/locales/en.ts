@@ -1903,6 +1903,7 @@ export const en: Dict = {
     hours: (h: string) => `${h} h`,
     perMonth: "/month",
     chartTitle: "Time to save and ease",
+    list: "The work",
     chartX: "Ease",
     chartY: "Time to save",
     chartLow: "Low",

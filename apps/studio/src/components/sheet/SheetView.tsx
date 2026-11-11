@@ -26,6 +26,7 @@ import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
 import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
+import { PAPER } from "./paper";
 
 const CHIP = "mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink";
 
@@ -557,9 +558,6 @@ function Export({
   const doc = useMemo(() => buildManual(flow, defs, manifest, subflows, masks, drafts), [flow, defs, manifest, subflows, masks, drafts]);
   return <ExportDialog doc={doc} flowId={flow.id} made={madeLine(manifest)} shotAt={shotLine(manifest, doc)} edition={editionOf(published, versions, day)} when={when} masks={masks} onClose={onClose} />;
 }
-
-/** The paper every way of reading the flow lies on: its outline, its corners, and the flow's name at its top. */
-const PAPER = "rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]";
 
 /** The last request to show a step that was answered: one is answered once, whichever sheet is up. */
 let revealed = 0;
