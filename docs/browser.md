@@ -75,26 +75,41 @@ A link with `target="_blank"` or a button that opens a window adds a tab to the 
 { "type": "browser.closeTab" }
 ```
 
-### Using a browser the person opened (`browser.attach`)
+### Sites that sign in with the company account (the SSO Edge, `browser.attach`)
 
-Some sites only open in the person's own browser: SSO with the PC's sign-in, client certificates, a required extension. `browser.attach` takes over an Edge or Chrome that is already open instead of starting a new one, and later steps on the same `context` work in it. It reaches only `127.0.0.1`, and when the run ends it lets go of the browser without closing it.
+Sites that sign in with the company account (SSO: Microsoft Entra ID, Okta, the PC's Windows sign-in), need a client certificate or a required extension do not let in the fresh browser `browser.open` starts. With `browser.attach`, SpellSheet starts the **SSO Edge**, and later steps on the same `context` work in it.
 
-The browser has to be started with a debugging port. Chrome 136 and later ignore the port on the everyday profile ([Chrome's announcement](https://developer.chrome.com/blog/remote-debugging-port)), and Edge is expected to do the same, so give it a profile folder of its own and sign in there once (a shortcut with these arguments is the easiest):
+The SSO Edge is Edge started with a debugging port (9222 by default) and a profile folder of its own (`%LOCALAPPDATA%\SpellSheet\edge-profile`). It opens as a window separate from the everyday Edge, and its sign-in stays in that folder, so the person signs in only the first time. It starts with one empty tab: open the site with `browser.open` on the same `context`, and wait for the first sign-in with `browser.waitForHuman`:
+
+```jsonc
+{ "type": "browser.attach", "name": "Use the SSO Edge", "params": { "context": "sso" } },
+{ "type": "browser.open", "name": "Open the attendance system", "params": { "context": "sso", "url": "https://kintai.example.com/" } },
+{ "type": "browser.waitForHuman", "params": { "context": "sso", "message": "Sign in with your company account in the Edge window that opened", "until": { "role": "heading", "name": "Attendance" } } }
+```
+
+An SSO Edge started by a run closes when the run ends (so its port does not stay open).
+
+When you ask the AI for a flow and the site goes to a company sign-in, the AI asks how to sign in on a card in the AI chat. Choose "SSO Edge" and the AI starts that Edge, checks the site in it and guides the first sign-in.
+
+A browser the person started works too. When a browser already waits on the port, `browser.attach` uses it instead of starting one, and `title` / `url` pick a tab. When the run ends it lets go of that browser without closing it. Chrome 136 and later ignore the port on the everyday profile ([Chrome's announcement](https://developer.chrome.com/blog/remote-debugging-port)), so start it with a profile folder of its own:
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\SpellSheet\edge-profile"
 ```
 
 ```jsonc
-{ "type": "browser.attach", "params": { "title": "Attendance" } }
+{ "type": "browser.attach", "params": { "title": "Attendance", "start": false } }
 ```
+
+With `start: false`, the step does not start a browser and fails with `BROWSER_NOT_RUNNING` when none is there.
 
 Notes:
 
-- While the browser waits on the port, any program on this PC can drive it. Open it this way only for the work that needs it
-- The workspace's allowed sites (policy) are checked by `browser.open`; tabs the person already opened are not checked
-- Not for unattended runs (nobody starts the browser): use `browser.open` with `session` there
+- While a browser waits on the port, any program on this PC can drive it. The SSO Edge is open only during the run
+- Only `127.0.0.1` is reached. The workspace's allowed sites (policy) are checked by `browser.open`; tabs the person already opened are not checked
+- The first time, and when the sign-in expires, someone has to be at the PC to sign in. Unattended runs use `browser.open` with `session`
 - JS dialogs in that browser are answered by the run while it is attached
+- Whether the PC's Windows sign-in carries over to the SSO Edge (a PC joined to Entra ID) depends on the company's settings. If it does not, sign in once the first time
 - **Not yet tried on a Windows PC with Edge** (tested with Chromium)
 
 ### Edge IE mode

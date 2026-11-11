@@ -11,6 +11,10 @@
             "minimum": 1,
             "maximum": 65535
           },
+          "start": {
+            "type": "boolean",
+            "default": true
+          },
           "title": {
             "type": "string",
             "minLength": 1

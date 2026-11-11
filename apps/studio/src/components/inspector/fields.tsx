@@ -36,6 +36,8 @@ export type JsonSchema = {
   enum?: unknown[];
   oneOf?: JsonSchema[];
   description?: string;
+  /** What the step does when the param is left out (shown on checkboxes). */
+  default?: unknown;
   properties?: Record<string, JsonSchema>;
   required?: string[];
   items?: JsonSchema | { type?: string | string[] };

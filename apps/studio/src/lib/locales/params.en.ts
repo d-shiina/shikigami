@@ -174,7 +174,7 @@ export const paramsEn = {
     "browser.select": { value: "Option" },
     "browser.getAttribute": { name: "Attribute" },
     "browser.runScript": { script: "Script", args: "Values to pass", frame: "Frame" },
-    "browser.attach": { title: "Tab title" },
+    "browser.attach": { title: "Tab title", start: "Start the SSO Edge" },
     "browser.switchTab": { title: "Tab title" },
     "browser.scroll": { to: "Scroll to" },
     "browser.screenshot": { path: "Save to" },

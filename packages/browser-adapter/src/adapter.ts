@@ -5,8 +5,10 @@
 // concurrent runs) using different context names never share cookies or
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { get as httpGet } from "node:http";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import { chromium } from "playwright-core";
@@ -29,6 +31,8 @@ export interface AdapterOptions {
   timeoutMs?: number;
   /** Tests: a script plays the person, so steps that need one run headless too. */
   scriptedHuman?: boolean;
+  /** Profile folder of the Edge browser.attach starts for SSO (default %LOCALAPPDATA%\SpellSheet\edge-profile). */
+  ssoProfileDir?: string;
 }
 
 interface Common {
@@ -63,6 +67,8 @@ interface Session {
   onDialog?: () => void;
   /** Set when the context is a browser the person started (browser.attach): never closed, only let go. */
   attached?: Browser;
+  /** browser.attach started this browser itself (the SSO Edge): closed when the run ends. */
+  started?: boolean;
   /** The last dialog nobody asked for (dismissed); reported in the next failure. */
   unanswered?: DialogSeen;
   headless: boolean;
@@ -135,12 +141,36 @@ function debuggerUrl(port: number, timeout: number): Promise<string> {
   });
 }
 
+/** Where Edge (or Chrome) is installed, for the SSO Edge browser.attach starts. */
+export function browserExecutable(options: AdapterOptions, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  if (options.executablePath) return options.executablePath;
+  if (process.platform !== "win32") {
+    try {
+      return chromium.executablePath();
+    } catch {
+      return undefined;
+    }
+  }
+  const chrome = options.channel === "chrome";
+  const tail = chrome ? join("Google", "Chrome", "Application", "chrome.exe") : join("Microsoft", "Edge", "Application", "msedge.exe");
+  const roots = [env["ProgramFiles(x86)"], env.ProgramFiles, env.LOCALAPPDATA].filter((r): r is string => !!r);
+  return roots.map((root) => join(root, tail)).find((file) => existsSync(file));
+}
+
+/** The SSO Edge's own profile folder: kept between runs, so its sign-in is too. */
+export function ssoProfileDir(options: AdapterOptions, env: NodeJS.ProcessEnv = process.env): string {
+  if (options.ssoProfileDir) return options.ssoProfileDir;
+  const base = env.LOCALAPPDATA || join(homedir(), ".spellsheet");
+  return join(base, "SpellSheet", "edge-profile");
+}
+
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
   const headlessEnv = env.SPELLSHEET_BROWSER_HEADLESS;
   const noDisplay = process.platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY;
   return {
     channel: env.SPELLSHEET_BROWSER_CHANNEL || (process.platform === "win32" ? "msedge" : undefined),
     executablePath: env.SPELLSHEET_BROWSER_PATH || undefined,
+    ssoProfileDir: env.SPELLSHEET_SSO_PROFILE || undefined,
     forceHeadless: headlessEnv === "1" || headlessEnv === "true" || noDisplay,
     slowMo: env.SPELLSHEET_BROWSER_SLOWMO ? Number(env.SPELLSHEET_BROWSER_SLOWMO) : undefined,
   };
@@ -436,14 +466,18 @@ export class Adapter {
   }
 
   /**
-   * Takes over a browser the person started with a debugging port
-   * (`msedge --remote-debugging-port=9222`): its tabs, logins and
-   * extensions. Only this PC (127.0.0.1) is reached. The browser is never
-   * closed; the run lets go of it when it ends.
+   * Takes over a browser started with a debugging port: its tabs, logins
+   * and extensions. Only this PC (127.0.0.1) is reached. When nothing
+   * listens on the port, starts the SSO Edge (`start`, on by default): Edge
+   * with the port and its own profile folder, kept between runs so the
+   * person signs in there once. A browser the person started is never
+   * closed (the run lets go of it); the SSO Edge started here is closed
+   * when the run ends.
    */
   private async attach(params: Params): Promise<unknown> {
     const port = params.port === undefined ? 9222 : Number(params.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new AdapterError("INVALID_PARAMS", "port must be a port number such as 9222");
+    const start = params.start !== false;
     const key = this.key(params);
     const existing = this.sessions.get(key);
     if (existing && !existing.attached) {
@@ -452,35 +486,87 @@ export class Adapter {
       });
     }
     let session = existing;
+    let started = false;
     if (!session || !session.attached?.isConnected()) {
       let browser: Browser;
       try {
         // Ask the browser for its address directly: a proxy set for the PC
         // (HTTP_PROXY) must never be asked to reach 127.0.0.1.
-        const endpoint = await debuggerUrl(port, this.limit(params));
+        let endpoint: string;
+        try {
+          endpoint = await debuggerUrl(port, Math.min(this.limit(params), 2000));
+        } catch (error) {
+          if (!start) throw error;
+          endpoint = await this.startSsoBrowser(port, this.limit(params));
+          started = true;
+        }
         browser = await chromium.connectOverCDP(endpoint, { timeout: this.limit(params) });
       } catch (error) {
+        if (error instanceof AdapterError) throw error;
         throw new AdapterError("BROWSER_NOT_RUNNING", `no browser is waiting on port ${port}: ${(error as Error).message.split("\n")[0]}`, {
           retryable: true,
           details: {
             port,
-            hint: `Start Edge with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=${port} --user-data-dir="%LOCALAPPDATA%\\SpellSheet\\edge-profile" (Edge and Chrome ignore the port on their everyday profile), sign in there once, and leave it open. See docs/browser.md "Using a browser the person opened".`,
+            hint: `Leave out start: false to let SpellSheet start the SSO Edge, or start Edge with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=${port} --user-data-dir="%LOCALAPPDATA%\\SpellSheet\\edge-profile" (Edge and Chrome ignore the port on their everyday profile), sign in there once, and leave it open. See docs/browser.md "Sites that sign in with the company account".`,
           },
         });
       }
       const context = browser.contexts()[0] ?? (await browser.newContext());
       const pages = context.pages();
       const page = pages.find((p) => !p.url().startsWith("devtools://")) ?? (await context.newPage());
-      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], filledFields: [], attached: browser };
+      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], filledFields: [], attached: browser, started };
       for (const p of pages) this.watchTab(created, p);
       context.on("page", (p) => this.watchTab(created, p));
       session = created;
       this.sessions.set(key, session);
     }
-    if (params.title !== undefined || params.url !== undefined) {
+    // A browser just started has only its empty tab: nothing to pick.
+    if (!started && (params.title !== undefined || params.url !== undefined)) {
       return await this.switchTab({ ...params, index: undefined });
     }
-    return { url: session.page.url(), title: await session.page.title() };
+    const out: Record<string, unknown> = { url: session.page.url(), title: await session.page.title() };
+    if (started) out.started = true;
+    return out;
+  }
+
+  /**
+   * Starts Edge with a debugging port and the SSO profile folder, and waits
+   * until it answers on the port. Its address, as debuggerUrl gives it.
+   */
+  private async startSsoBrowser(port: number, timeout: number): Promise<string> {
+    const executable = browserExecutable(this.options);
+    if (!executable) {
+      throw new AdapterError("BROWSER_LAUNCH_FAILED", "Microsoft Edge was not found on this PC", {
+        details: { hint: "Install Microsoft Edge, or set SPELLSHEET_BROWSER_PATH to the browser to start." },
+      });
+    }
+    const profile = ssoProfileDir(this.options);
+    mkdirSync(profile, { recursive: true });
+    const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check"];
+    if (this.options.forceHeadless) args.push("--headless=new");
+    if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+    const child = spawn(executable, args, { detached: true, stdio: "ignore" });
+    let failed: Error | undefined;
+    child.on("error", (error) => (failed = error));
+    child.unref();
+    const until = Date.now() + Math.max(timeout, 15000);
+    let last: unknown;
+    while (Date.now() < until) {
+      if (failed) break;
+      try {
+        return await debuggerUrl(port, 1000);
+      } catch (error) {
+        last = error;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new AdapterError("BROWSER_LAUNCH_FAILED", `the SSO Edge did not open port ${port}: ${(failed ?? (last as Error | undefined))?.message ?? "no answer"}`, {
+      details: {
+        port,
+        profile,
+        hint: "Close the Edge window that uses the SpellSheet profile (it may be open without the port) and run again, or give another `port`.",
+      },
+    });
   }
 
   private target(params: Params): { page: Page; locator: Locator } {
@@ -1404,6 +1490,14 @@ export class Adapter {
 
   private async closeSession(session: Session): Promise<SavedSession[]> {
     if (session.attached) {
+      if (session.started) {
+        // The SSO Edge this run started: close it so its port does not stay open.
+        // Its profile folder stays, and with it the sign-in.
+        const cdp = await session.attached.newBrowserCDPSession().catch(() => undefined);
+        await cdp?.send("Browser.close").catch(() => {});
+        await session.attached.close().catch(() => {});
+        return [];
+      }
       // The person's browser stays as it is: only the connection goes.
       session.context.removeAllListeners("page");
       for (const page of session.context.pages()) page.removeAllListeners("dialog");

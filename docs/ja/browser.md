@@ -75,26 +75,41 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 { "type": "browser.closeTab" }
 ```
 
-### 人が開いたブラウザを使う（`browser.attach`）
+### 社内のアカウントでサインインするサイト（SSO 用の Edge、`browser.attach`）
 
-PC のサインインでの SSO、クライアント証明書、必須の拡張機能など、人のブラウザでしか開けないサイトがあります。`browser.attach` は新しくブラウザを起動する代わりに、もう開いている Edge・Chrome を使い、同じ `context` の後のノードはその中で動きます。つなぐ先は `127.0.0.1` だけで、実行が終わるとブラウザは閉じずに手を離します。
+社内のアカウントでのサインイン（SSO：Microsoft Entra ID・Okta・PC の Windows のサインインなど）、クライアント証明書、必須の拡張機能が要るサイトは、`browser.open` が起動する新しいブラウザでは入れません。`browser.attach` を使うと、SpellSheet が **SSO 用の Edge** を起動し、同じ `context` の後のノードはその中で動きます。
 
-ブラウザはデバッグ用のポートを付けて起動しておきます。Chrome 136 以降はふだんのプロファイルではこのポートを無視し（[Chrome の告知](https://developer.chrome.com/blog/remote-debugging-port)）、Edge も同じになる見込みなので、専用のプロファイルのフォルダーを付け、そこで一度サインインしておきます（この引数のショートカットを作るのが簡単です）：
+SSO 用の Edge は、デバッグ用のポート（既定 9222）と専用のプロファイルのフォルダー（`%LOCALAPPDATA%\SpellSheet\edge-profile`）を付けて起動する Edge です。ふだんの Edge とは別のウィンドウで開き、サインインの状態はこのフォルダーに残るので、サインインは初回だけです。起動したときは空のタブが 1 つなので、続けて同じ `context` の `browser.open` でサイトを開きます。初回のサインインは `browser.waitForHuman` で人を待ちます：
+
+```jsonc
+{ "type": "browser.attach", "name": "SSO 用の Edge を使う", "params": { "context": "sso" } },
+{ "type": "browser.open", "name": "勤怠システムを開く", "params": { "context": "sso", "url": "https://kintai.example.com/" } },
+{ "type": "browser.waitForHuman", "params": { "context": "sso", "message": "開いた Edge で会社のアカウントにサインインしてください", "until": { "role": "heading", "name": "勤怠" } } }
+```
+
+実行が起動した SSO 用の Edge は、実行が終わると閉じます（ポートを開けたままにしないため）。
+
+AI にフローを頼んだときは、サイトが社内のアカウントでのサインインに移ると、AI がサインインの方法を AI チャットのカードで尋ねます。「SSO 用の Edge」を選ぶと、AI はその Edge を起動してサイトを確かめ、初回のサインインを案内します。
+
+人が自分で起動したブラウザを使うこともできます。そのポートでブラウザが待っていれば、`browser.attach` は新しく起動せずにそれを使い、`title` / `url` でタブを選びます。実行が終わってもそのブラウザは閉じずに手を離します。Chrome 136 以降はふだんのプロファイルではポートを無視するので（[Chrome の告知](https://developer.chrome.com/blog/remote-debugging-port)）、専用のプロファイルのフォルダーを付けて起動します：
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\SpellSheet\edge-profile"
 ```
 
 ```jsonc
-{ "type": "browser.attach", "params": { "title": "勤怠" } }
+{ "type": "browser.attach", "params": { "title": "勤怠", "start": false } }
 ```
+
+`start: false` にすると、ブラウザがないときに起動せず `BROWSER_NOT_RUNNING` で失敗します。
 
 注意：
 
-- ポートで待っている間は、この PC のどのプログラムからもそのブラウザを操作できます。必要な作業のときだけこの開き方をします
-- ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
-- 無人実行には使えません（ブラウザを起動する人がいない）。無人では `browser.open` の `session` を使います
+- ポートで待っている間は、この PC のどのプログラムからもそのブラウザを操作できます。SSO 用の Edge は実行の間だけ開きます
+- つなぐ先は `127.0.0.1` だけです。ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
+- 初回とサインインの期限が切れたときは、サインインする人が PC の前に必要です。無人実行では `browser.open` の `session` を使います
 - つないでいる間、そのブラウザの JS のダイアログには実行が答えます
+- SSO 用の Edge で Windows のサインインがそのまま効くか（Entra ID に参加した PC）は、会社の設定によります。効かないときは初回に一度サインインします
 - **Windows の PC の Edge ではまだ試していません**（Chromium で確認）
 
 ### Edge の IE モード

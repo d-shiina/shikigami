@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -67,10 +68,37 @@ describe("browser.attach", () => {
     expect(person.exitCode).toBeNull();
   });
 
-  it("says how to start the browser when nothing listens", async () => {
+  it("says how to start the browser when nothing listens and start is off", async () => {
     const adapter = new Adapter({ timeoutMs: 1000 });
-    const err = await failure(adapter.call("attach", { runId: "run_none", port: 1, timeoutMs: 1000 }));
+    const err = await failure(adapter.call("attach", { runId: "run_none", port: 1, start: false, timeoutMs: 1000 }));
     expect(err.code).toBe("BROWSER_NOT_RUNNING");
     expect(String(err.details?.hint)).toContain("--remote-debugging-port=1");
+  });
+
+  it("starts the SSO Edge with its own profile when nothing listens, and closes it when the run ends", async () => {
+    const free = await new Promise<number>((resolve) => {
+      const server = createServer().listen(0, "127.0.0.1", () => {
+        const { port: p } = server.address() as { port: number };
+        server.close(() => resolve(p));
+      });
+    });
+    const profile = join(mkdtempSync(join(tmpdir(), "spellsheet-sso-")), "edge-profile");
+    const adapter = new Adapter({ timeoutMs: 15000, executablePath: executable, forceHeadless: true, ssoProfileDir: profile });
+    const run = { runId: "run_sso", context: "sso" };
+    // A tab to pick does not exist in a browser just started: the empty tab is used.
+    const tab = (await adapter.call("attach", { ...run, port: free, title: "勤怠" })) as { started?: boolean };
+    expect(tab.started).toBe(true);
+    expect(existsSync(profile)).toBe(true);
+    await adapter.call("open", { ...run, url: page("勤怠システム") });
+    expect(await adapter.call("getText", { ...run, target: { role: "heading" } })).toBe("勤怠システム");
+    await adapter.call("closeRun", { runId: run.runId });
+
+    // Closed with the run, so its port is not left open.
+    let open = true;
+    for (let i = 0; i < 50 && open; i++) {
+      open = await fetch(`http://127.0.0.1:${free}/json/version`).then(() => true).catch(() => false);
+      if (open) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(open).toBe(false);
   });
 });

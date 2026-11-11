@@ -180,7 +180,7 @@ export const paramsJa = {
     "browser.select": { value: "選ぶ項目" },
     "browser.getAttribute": { name: "属性" },
     "browser.runScript": { script: "スクリプト", args: "渡す値", frame: "フレーム" },
-    "browser.attach": { title: "タブのタイトル" },
+    "browser.attach": { title: "タブのタイトル", start: "SSO 用の Edge の起動" },
     "browser.switchTab": { title: "タブのタイトル" },
     "browser.scroll": { to: "スクロール先" },
     "browser.screenshot": { path: "保存先" },

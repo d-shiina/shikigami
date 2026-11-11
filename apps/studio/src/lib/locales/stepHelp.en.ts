@@ -4,7 +4,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "browser.click": { summary: "Click a button or link on the page", words: "press button link" },
   "browser.download": { summary: "Click to download a file and save it", words: "download save csv export file" },
   "browser.upload": { summary: "Attach a file to a form on the page", words: "upload attach file browse send" },
-  "browser.attach": { summary: "Use the Edge or Chrome a person has open (with its sign-ins, certificates, extensions)", words: "attach connect existing open browser sso certificate extension" },
+  "browser.attach": { summary: "Use the SSO Edge (its own profile, signed in once) or the Edge or Chrome a person has open", words: "attach connect existing open browser sso single sign-on company entra okta sign in login certificate extension" },
   "browser.check": { summary: "Check or uncheck a checkbox (the same state however often it runs)", words: "check uncheck checkbox radio agree tick" },
   "browser.navigate": { summary: "Go back, go forward or reload the page", words: "back forward reload refresh" },
   "browser.hover": { summary: "Move the mouse over an element (menus that open on hover…)", words: "hover mouseover menu tooltip" },
