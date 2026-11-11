@@ -9,10 +9,8 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { ValidationIssue } from "@spellsheet/schema";
-import type { AgentApi, AgentChoice, AgentEvent, AnswerProblem, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, InstallStep, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentChoice, AgentEvent, ChoiceOption, AgentInfo, AgentKind, AgentRequest, InstallEvent, InstallStep, LoginEvent } from "./lib/api";
 import { ApiError } from "./lib/api";
-import type { ChangeLine } from "./lib/changes";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
@@ -57,41 +55,7 @@ export type ChatItem =
       message: string | null;
       /** Failed because the agent is signed out or its login expired. */
       needsLogin: boolean;
-      /** In the paste way: the request went to an AI chat by the clipboard, and its answer comes back here. */
-      handoff?: Handoff;
     };
-
-/**
- * A request copied for an AI chat that cannot reach SpellSheet itself
- * (lib/aiWay.ts), and what became of the answer the person brought back.
- */
-export type Handoff = {
-  /** What was copied; empty when the person brings an answer from a chat begun elsewhere. */
-  prompt: string;
-  /** What the AI wrote so far, when its reply was cut short: read together with the rest. */
-  partial?: string;
-  result?: HandoffResult;
-};
-
-export type HandoffResult =
-  /** Taken in as a new flow or as the new content of the conversation's flow. */
-  | { kind: "taken"; flowId: string; name: string; isNew: boolean; revision: number; changes: ChangeLine[]; forAi: ValidationIssue[]; checks: number; questions?: string[] }
-  /** Not taken in: what the AI has to fix (nothing changed). */
-  | { kind: "problems"; problems: AnswerProblem[] }
-  /** A stock-take from an interview (Chat.interview), taken in. */
-  | { kind: "inventory"; id: string; title: string; tasks: number; first: string | null };
-
-/** What the paste way needs from Writer, given to the store (tests give their own). */
-export type PasteHelpers = {
-  /** Whether requests go to an AI chat by the clipboard now. */
-  active(): boolean;
-  /** The whole request for the AI chat: instructions, the flow, the person's words. */
-  /** `chatId`: the conversation it is for (the screens added to it go too). */
-  compose(message: string, flow: AgentRequest["flow"] | null, chatId: string): Promise<string>;
-  copy(text: string): Promise<void>;
-  /** Opens the AI chat in the browser, when Writer knows where it is. */
-  open(): void;
-};
 
 export type Chat = {
   id: string;
@@ -113,11 +77,6 @@ export type Chat = {
   /** What the person is writing here and has not sent. */
   draft: string;
   updatedAt: number;
-  /**
-   * The paste way's 業務の棚卸し: the AI chat interviews the person, and what
-   * comes back is a stock-take (`inventoryId` once one is taken in), not a flow.
-   */
-  interview?: { inventoryId: string | null };
 };
 
 /** Signing the agent in from the pane. */
@@ -181,19 +140,6 @@ export type AgentState = {
   cancelInstall(): Promise<void>;
   onInstallEvent(event: InstallEvent): void;
   onEvent(event: AgentEvent): void;
-  /** Copies `prompt` as it is for the AI chat (a request to fix, to go on), shown as `label`. */
-  handOffAs(chatId: string, label: string, prompt: string, partial?: string): Promise<boolean>;
-  /**
-   * The paste way's 業務の棚卸し: a new conversation that copies `guide` (the
-   * interview) for the AI chat; its answers are stock-takes, into `inventoryId` when given.
-   */
-  interview(label: string, guide: string, inventoryId: string | null): Promise<boolean>;
-  /** The stock-take an interview's answers now go into. */
-  setInterview(chatId: string, inventoryId: string): void;
-  /** Waits for an answer from an AI chat begun elsewhere. */
-  expectAnswer(chatId: string): void;
-  /** What became of the answer brought back for a request. */
-  settleHandoff(chatId: string, itemId: string, change: Partial<Handoff>): void;
   /** A conversation that had no flow made one. */
   adoptFlow(chatId: string, flow: FlowLabel): void;
 };
@@ -226,7 +172,7 @@ const CHATS_KEY = "spellsheet.studio.agentChats";
 const OLD_SESSION_KEY = "spellsheet.studio.agentSession";
 const KEEP = 30;
 
-type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt" | "interview"> & { items?: ChatItem[] };
+type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt"> & { items?: ChatItem[] };
 /** Messages kept per conversation across restarts. */
 const KEEP_ITEMS = 60;
 
@@ -235,7 +181,11 @@ function load(): Saved[] {
     const raw = globalThis.localStorage?.getItem(CHATS_KEY);
     if (raw) {
       const saved = JSON.parse(raw) as Saved[];
-      if (Array.isArray(saved)) return saved.filter((c) => typeof c?.id === "string");
+      if (Array.isArray(saved))
+        // Conversations copied to an AI chat by older versions (the paste way, no longer offered) are left out.
+        return saved
+          .filter((c) => typeof c?.id === "string" && c.sessionId)
+          .map((c) => (c.items ? { ...c, items: c.items.filter((i) => !(i.role === "ai" && "handoff" in i)) } : c));
     }
     const old = globalThis.localStorage?.getItem(OLD_SESSION_KEY);
     if (old) return [{ id: "chat_earlier", flowId: null, title: t.agent.earlier, sessionId: old, updatedAt: 0 }];
@@ -248,10 +198,10 @@ function load(): Saved[] {
 function save(chats: Chat[]) {
   try {
     const keep: Saved[] = chats
-      .filter((c) => c.sessionId || c.items.some((i) => i.role === "ai" && i.handoff))
+      .filter((c) => c.sessionId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, KEEP)
-      .map(({ id, flowId, title, sessionId, agent, updatedAt, interview, items }) => ({ id, flowId, title, sessionId, agent, updatedAt, interview, items: items.slice(-KEEP_ITEMS) }));
+      .map(({ id, flowId, title, sessionId, agent, updatedAt, items }) => ({ id, flowId, title, sessionId, agent, updatedAt, items: items.slice(-KEEP_ITEMS) }));
     globalThis.localStorage?.setItem(CHATS_KEY, JSON.stringify(keep));
     globalThis.localStorage?.removeItem(OLD_SESSION_KEY);
   } catch {
@@ -320,7 +270,7 @@ function blank(flow: FlowLabel | null): Chat {
 /** Nothing said and nothing to continue: no need to keep it in the list. */
 const empty = (c: Chat) => c.items.length === 0 && !c.sessionId && !isBusy(c) && !c.draft.trim();
 
-export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<AgentState> {
+export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
   return createStore<AgentState>()((set, get) => {
     const chat = (id: string) => get().chats.find((c) => c.id === id);
     // The conversation is kept as it grows, so closing Writer mid-reply loses little.
@@ -360,39 +310,8 @@ export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<
     const early = new Map<string, AgentEvent[]>();
     // Which agent ran each turn: the person may switch agents while one runs.
     const turnAgent = new Map<string, AgentKind>();
-    /**
-     * The paste way: copies the request for the AI chat and adds the card that
-     * takes its answer back. `raw` copies `text` as it is.
-     */
-    const handOff = async (chatId: string, text: string, flow: AgentRequest["flow"] | null, raw = false, partial?: string): Promise<boolean> => {
-      if (!paste) return false;
-      const id = nextId("item");
-      const first = !(chat(chatId)?.items ?? []).some((i) => i.role === "ai" && i.handoff);
-      set({ open: true });
-      try {
-        const prompt = raw ? text : await paste.compose(text, flow, chatId);
-        await paste.copy(prompt);
-        update(chatId, (c) => ({
-          ...c,
-          updatedAt: Date.now(),
-          items: [...c.items, { role: "ai", id, turnId: "", parts: [], status: "done", preparing: null, message: null, needsLogin: false, handoff: partial ? { prompt, partial } : { prompt } }],
-        }));
-      } catch (e) {
-        update(chatId, (c) => ({
-          ...c,
-          items: [...c.items, { role: "ai", id, turnId: "", parts: [], status: "failed", preparing: null, message: errorText(e), needsLogin: false }],
-        }));
-        return false;
-      }
-      // Once per conversation: after that the chat is already open.
-      if (first) paste.open();
-      save(get().chats);
-      return true;
-    };
     // Sends the message already shown as the last person item and adds the reply.
     const dispatch = async (chatId: string, text: string, flow: AgentRequest["flow"] | null): Promise<boolean> => {
-      // An interview's messages go as they are: they are answers, not flow requests.
-      if (paste?.active()) return handOff(chatId, text, flow, Boolean(chat(chatId)?.interview));
       // The reply shows at once, so the person sees the message was taken
       // while the agent starts (which can take a while: a dev build first
       // rebuilds the MCP server). It has no turn until the agent is running.
@@ -601,44 +520,6 @@ export function createAgentStore(api: AgentApi, paste?: PasteHelpers): StoreApi<
         // The same message again: replace the failed reply instead of repeating the message.
         update(chatId, (c) => ({ ...c, items: items.slice(0, index + 1) }));
         return dispatch(chatId, last.prompt ?? last.text, last.flow);
-      },
-
-      async handOffAs(chatId, label, prompt, partial) {
-        if (!chat(chatId)) return false;
-        const person: ChatItem = { role: "person", id: nextId("item"), text: label, context: null, flow: null };
-        update(chatId, (c) => ({ ...c, items: [...c.items, person] }));
-        return handOff(chatId, prompt, null, true, partial);
-      },
-
-      async interview(label, guide, inventoryId) {
-        const fresh: Chat = { ...blank(null), title: label, interview: { inventoryId } };
-        show(fresh.id, [fresh, ...get().chats]);
-        return get().handOffAs(fresh.id, label, guide);
-      },
-
-      setInterview(chatId, inventoryId) {
-        update(chatId, (c) => ({ ...c, interview: { inventoryId } }));
-        save(get().chats);
-      },
-
-      expectAnswer(chatId) {
-        if (!chat(chatId)) return;
-        set({ open: true });
-        show(chatId);
-        update(chatId, (c) => ({
-          ...c,
-          updatedAt: Date.now(),
-          items: [...c.items, { role: "ai", id: nextId("item"), turnId: "", parts: [], status: "done", preparing: null, message: null, needsLogin: false, handoff: { prompt: "" } }],
-        }));
-      },
-
-      settleHandoff(chatId, itemId, change) {
-        update(chatId, (c) => ({
-          ...c,
-          updatedAt: Date.now(),
-          items: c.items.map((i) => (i.id === itemId && i.role === "ai" && i.handoff ? { ...i, handoff: { ...i.handoff, ...change } } : i)),
-        }));
-        save(get().chats);
       },
 
       adoptFlow(chatId, flow) {
@@ -943,17 +824,6 @@ export function openAsk(api: StoreApi<AgentState>, options: { fresh?: FlowLabel 
     box.focus();
     box.setSelectionRange(box.value.length, box.value.length);
   });
-}
-
-/**
- * Opens the pane waiting for an AI chat's answer the person brings from
- * elsewhere: into the conversation about `flow`, or a new one for a new flow.
- */
-export function expectAnswerFor(api: StoreApi<AgentState>, flow: FlowLabel | null) {
-  const a = api.getState();
-  if (flow) a.focus(flow);
-  else a.newChat(null);
-  a.expectAnswer(api.getState().current);
 }
 
 /** The store when the AI pane is around, else null (parts also drawn in tests). */

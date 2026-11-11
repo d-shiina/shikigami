@@ -53,31 +53,6 @@ pub fn change_inventory(
     Ok(view(saved))
 }
 
-/// The interview to paste into an AI chat that cannot reach SpellSheet.
-#[tauri::command]
-pub fn inventory_chat_guide() -> &'static str {
-    inventory::CHAT_GUIDE
-}
-
-/// Takes in the stock-take such an AI chat wrote: as a new one, or into `id`
-/// (its tasks matched by name). Made by the chat, as save_work_inventory is.
-#[tauri::command]
-pub fn paste_inventory_answer(
-    state: State<'_, AppState>,
-    text: String,
-    id: Option<InventoryId>,
-) -> CmdResult<InventoryView> {
-    let root = state.service.store().root();
-    let existing = id.map(|id| inventory::load(root, &id)).transpose()?;
-    let patch = inventory::answer_patch(&text, existing.as_ref())?;
-    let saved = inventory::change(
-        root,
-        &patch,
-        spellsheet_core::Actor::new(spellsheet_core::ActorKind::Chat),
-    )?;
-    Ok(view(saved))
-}
-
 #[tauri::command]
 pub fn delete_inventory(state: State<'_, AppState>, id: InventoryId) -> CmdResult<()> {
     Ok(inventory::delete(state.service.store().root(), &id)?)

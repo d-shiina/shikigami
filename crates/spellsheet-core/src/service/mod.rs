@@ -370,68 +370,6 @@ impl FlowService {
         self.insert_new(flow, actor, "import flow", Remarks::default())
     }
 
-    /// Takes in an answer an AI wrote in a chat window without MCP (see
-    /// [`crate::chat`]), pasted by a person: a new flow, or, with `into`,
-    /// the new content of that flow as one undoable edit. The AI's summary
-    /// and checks go to the journal, so the review desk shows the change
-    /// like an MCP edit. Step IDs the AI made up are replaced.
-    pub fn apply_answer(
-        &self,
-        answer: crate::chat::ChatAnswer,
-        into: Option<&FlowId>,
-        expected_revision: Option<u64>,
-        actor: Actor,
-    ) -> CoreResult<EditOutcome> {
-        let note = ChangeNote {
-            summary: answer.summary,
-            checks: answer.checks,
-            observations: Vec::new(),
-        };
-        let mut flow = answer.flow;
-        let mut seen = std::collections::HashSet::new();
-        fn fix_ids(steps: &mut [Step], seen: &mut std::collections::HashSet<StepId>) {
-            for step in steps {
-                if !step.id.is_well_formed() || !seen.insert(step.id.clone()) {
-                    step.id = StepId::generate();
-                    seen.insert(step.id.clone());
-                }
-                for block in step.blocks.values_mut() {
-                    fix_ids(block, seen);
-                }
-            }
-        }
-        fix_ids(&mut flow.steps, &mut seen);
-        match into {
-            Some(id) => {
-                let current = self.get(id)?;
-                flow.id = current.id.clone();
-                if flow.name.trim().is_empty() {
-                    flow.name = current.name.clone();
-                }
-                // What the AI does not see stays as it is.
-                flow.metadata = current.metadata.clone();
-                flow.requires = current.requires.clone();
-                crate::requires::sync(&mut flow, self.registry());
-                let label = "paste AI answer".to_owned();
-                self.match_content(id, &flow, expected_revision, actor, label, note.remarks())
-            }
-            None => {
-                flow.id = FlowId::generate();
-                if flow.name.trim().is_empty() {
-                    flow.name = "AI が作成したフロー".into();
-                }
-                flow.revision = 0;
-                let now = now();
-                flow.metadata = crate::model::Metadata {
-                    created_at: Some(now),
-                    updated_at: Some(now),
-                    ..crate::model::Metadata::default()
-                };
-                self.insert_new(flow, actor, "paste AI answer", note.remarks())
-            }
-        }
-    }
-
     pub fn duplicate(
         &self,
         id: &FlowId,

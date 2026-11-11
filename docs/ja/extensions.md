@@ -6,7 +6,7 @@
 
 - プラグインは **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Writer や実行は落ちず、そのノードがエラーになるだけです。
 - 追加したノードは組込のノードと同じく、パレットに並び、設定欄はプラグインが宣言した内容から作られ、検証・再試行・タイムアウト・シークレットの伏せ字も同じように扱われます。
-- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema`、Writer の「仕様書を保存」にプラグインが載ります。
+- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema` にプラグインが載ります。
 
 仕組みの設計は [design/plugins.md](design/plugins.md) にあります（コード上の名前は「plugin」です）。
 

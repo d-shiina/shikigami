@@ -81,8 +81,9 @@ impl Actor {
 pub enum ActorKind {
     Studio,
     Mcp,
-    /// An AI in a chat window without MCP (Microsoft Copilot, ...): a
-    /// person pasted its answer into Studio. Reviewed like an MCP edit.
+    /// An AI in a chat window without MCP, whose answer a person pasted
+    /// into Writer. Writer no longer takes such answers in; kept so that
+    /// history written by older versions still reads (reviewed like MCP).
     Chat,
     Cli,
     System,

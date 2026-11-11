@@ -179,21 +179,4 @@ export const sharingActions = ({ api, set, get, applyOutcome, reloadCurrent, mut
     cancelImport() {
       set({ pendingImport: null });
     },
-
-
-    async pasteAnswer(text, into) {
-      const flow = into ? get().flow : null;
-      try {
-        const result = await api.pasteAiAnswer(text, flow?.id, flow?.revision);
-        if (result.outcome) {
-          applyOutcome(result.outcome);
-          set({ selection: null, error: null, ...(flow ? {} : { history: [], versions: [] }) });
-          await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions(), get().loadCalled()]);
-        }
-        return result;
-      } catch (e) {
-        set({ error: message(e) });
-        return null;
-      }
-    },
   }) satisfies Partial<StudioState>;

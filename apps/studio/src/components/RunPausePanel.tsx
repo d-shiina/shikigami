@@ -5,9 +5,7 @@
 import { Play, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { flowBusy, useAgent } from "../agent";
-import { pasteWay, useAskable } from "../lib/aiWay";
 import { useStudio } from "../context";
-import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
 import { fixRequest } from "../lib/fixRequest";
 import { plain, sentence } from "../lib/sentence";
@@ -171,7 +169,9 @@ export function RunPausePanel() {
   const setReviewing = useStudio((s) => s.setReviewing);
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
-  const { ready: agentAvailable, name: agentName } = useAskable();
+  const agentAvailable = useAgent((s) => s.info?.available === true);
+  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const openAgent = useAgent((s) => s.setOpen);
   const agentBusy = useAgent((s) => flowBusy(s, flow?.id));
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
@@ -213,9 +213,11 @@ export function RunPausePanel() {
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
         const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: pause.stepId }, `${owner.name} ・ ${t.pause.fixContext}`);
-        setTold(sent ? (pasteWay() ? t.pause.copiedFor(agentName) : t.pause.asked(agentName)) : t.pause.notSent(agentName));
+        setTold(sent ? t.pause.asked(agentName) : t.pause.notSent(agentName));
       } else {
-        setTold(await clipboardAi.ask(text));
+        // No AI to ask yet: the AI pane shows how to set one up.
+        openAgent(true);
+        setTold(t.aiSetUpFirst);
       }
     } catch (e) {
       setTold(t.pause.askFailed(e instanceof Error ? e.message : String(e)));
@@ -265,7 +267,7 @@ export function RunPausePanel() {
                   ? t.pause.agentBusy(agentName)
                   : agentAvailable
                     ? t.pause.askTitle(agentName)
-                    : t.pause.copyTitle
+                    : t.pause.setUpTitle
               }
             >
               <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />

@@ -19,54 +19,6 @@ fn studio() -> Actor {
 }
 
 #[test]
-fn a_pasted_answer_is_reviewed_like_an_ai_edit() {
-    let (_dir, svc) = service();
-    let chat = Actor::named(ActorKind::Chat, "Copilot");
-    let answer = crate::chat::read_answer(
-        r#"```json
-{ "format": "spellsheet.answer", "summary": "挨拶する", "checks": ["宛名はこれでよいですか？"],
-  "flow": { "name": "挨拶", "steps": [
-    { "id": "step1", "type": "log.message", "params": { "message": "a" } },
-    { "type": "log.message", "params": { "message": "b" } } ] } }
-```"#,
-    )
-    .unwrap();
-    let made = svc.apply_answer(answer, None, None, chat.clone()).unwrap();
-    let flow = made.flow;
-    assert!(flow.id.is_well_formed());
-    // Made-up IDs are replaced, missing ones assigned.
-    assert!(flow.steps.iter().all(|s| s.id.is_well_formed()));
-    let history = svc.history(&flow.id, 5).unwrap();
-    assert_eq!(history[0].actor.kind, ActorKind::Chat);
-    assert_eq!(history[0].summary.as_deref(), Some("挨拶する"));
-    assert_eq!(history[0].checks, vec!["宛名はこれでよいですか？"]);
-
-    // Pasting into the open flow keeps its ID and the IDs the AI kept.
-    let kept = flow.steps[0].id.clone();
-    let text = format!(
-        r#"{{ "summary": "締めの挨拶を追加", "flow": {{ "name": "挨拶", "steps": [
-                {{ "id": "{kept}", "type": "log.message", "params": {{ "message": "a" }} }},
-                {{ "type": "log.message", "params": {{ "message": "c" }} }} ] }} }}"#
-    );
-    let answer = crate::chat::read_answer(&text).unwrap();
-    let edited = svc
-        .apply_answer(answer, Some(&flow.id), Some(flow.revision), chat.clone())
-        .unwrap();
-    assert_eq!(edited.flow.id, flow.id);
-    assert_eq!(edited.flow.steps[0].id, kept);
-    assert_eq!(edited.flow.steps[1].params["message"], "c");
-    assert!(edited.can_undo);
-    let history = svc.history(&flow.id, 5).unwrap();
-    let last = history.iter().max_by_key(|e| e.revision).unwrap();
-    assert_eq!(last.summary.as_deref(), Some("締めの挨拶を追加"));
-    assert_eq!(last.actor.kind, ActorKind::Chat);
-
-    // Only a person publishes.
-    let publish = svc.publish(&flow.id, PublishInput::default(), chat);
-    assert!(publish.is_err());
-}
-
-#[test]
 fn unattended_runs_use_the_published_version_only() {
     let (_dir, svc) = service();
     let sub = svc

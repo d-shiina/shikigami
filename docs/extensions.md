@@ -6,7 +6,7 @@ Plugins add features and nodes to SpellSheet after the fact: a cloud AI-OCR serv
 
 - An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Writer and runs keep going; only its node fails.
 - Its nodes work like built-in ones: they are listed in the palette, their settings form is built from what the extension declares, and validation, retries, timeouts and secret masking apply as usual.
-- AI clients get them too: MCP `list_step_types` / `get_step_schema` and Writer's "save the spec" include extension nodes.
+- AI clients get them too: MCP `list_step_types` / `get_step_schema` include extension nodes.
 
 Writer shows them as **Plugins**; the code calls them plugins and extensions, and this page says extension for one installable package. The design is in [design/plugins.md](design/plugins.md) (Japanese).
 
