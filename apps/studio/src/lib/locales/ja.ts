@@ -2161,6 +2161,9 @@ export const ja = {
   flowCreated: "フローを作成",
   flowDeleted: "フローを削除",
   sheetView: {
+    waiting: (n: number) => `確認待ちの変更 ${n} 件`,
+    was: "：変更前は ",
+    nothing: "なし",
     stopped: "止めています",
     start: "動かす",
     addBelow: "下に手順を追加",

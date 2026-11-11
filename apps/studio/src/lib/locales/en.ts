@@ -2161,6 +2161,9 @@ export const en: Dict = {
   flowCreated: "Created the flow",
   flowDeleted: "Deleted the flow",
   sheetView: {
+    waiting: (n: number) => `${n} change${n === 1 ? "" : "s"} to look at`,
+    was: ": was ",
+    nothing: "nothing",
     stopped: "Switched off",
     start: "Switch on",
     addBelow: "Add a step below",

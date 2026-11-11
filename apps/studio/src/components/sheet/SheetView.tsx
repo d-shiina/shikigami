@@ -2,7 +2,7 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { CircleCheck, CirclePause, Clock, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Split, Trash2 } from "lucide-react";
+import { CircleCheck, CirclePause, Clock, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -13,6 +13,11 @@ import { describeWhen } from "../../lib/schedule";
 import { type Part, paramShown, plain } from "../../lib/sentence";
 import type { Step } from "@spellsheet/schema";
 import { findStep, isActive } from "../../store";
+import { revertBlocker, touchedSteps } from "../../store/history";
+import { actorLabel, describe, formatValue, relativeTime } from "../../lib/changes";
+import { extensionParamTitle } from "../../lib/extensions";
+import { usePendingReview } from "../Timeline";
+import type { HistoryEntry, StepTypeDef } from "@spellsheet/schema";
 import { menuFor } from "../../lib/contextMenu";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
@@ -36,7 +41,7 @@ function Entry({ shown, value, onChange }: { shown: string; value: string | numb
   const [draft, setDraft] = useState<string | null>(null);
   if (draft === null) {
     return (
-      <button type="button" title={t.sheetView.change} onClick={() => setDraft(String(value))} className={`${CHIP} cursor-text hover:border-slate-400`}>
+      <button type="button" title={t.sheetView.change} onClick={() => setDraft(String(value))} className={`${CHIP} cursor-text leading-[1.45] hover:border-slate-400`}>
         {shown}
       </button>
     );
@@ -146,12 +151,90 @@ function LastRun({ manifest, running, onRun }: { manifest: ManualManifest | null
   );
 }
 
-function StepRow({ step, ctx }: { step: ManualStep; ctx: RowCtx }) {
+/** The flow's own steps said in these items. */
+const stepIds = (items: ManualItem[]): string[] =>
+  items.flatMap((i) => (i.kind === "scene" ? i.steps.map((x) => x.stepId) : i.kind === "action" ? [i.step.stepId] : "items" in i ? stepIds(i.items) : []));
+
+/** A change that waits to be looked at, by the step it touched. */
+type Change = { entry: HistoryEntry; added: boolean };
+
+/**
+ * In the margin beside a step someone else changed (the AI, a command): who
+ * changed it and when, what was there before, and the two answers to it.
+ * Nothing is drawn on the step itself: the sheet always shows the flow as it is now.
+ */
+function ChangeNote({ change, step, defs }: { change: Change; step: ManualStep; defs: ReadonlyMap<string, StepTypeDef> }) {
+  const stepId = step.stepId;
+  const type = useStudio((s) => findStep(s.flow?.steps ?? [], stepId)?.type ?? "");
+  /** A setting as the step's form names it. */
+  const named = (field: string) => t.paramNames.for[type]?.[field] ?? extensionParamTitle(type, field) ?? t.paramNames.labels[field] ?? field;
+  const flow = useStudio((s) => s.flow);
+  const history = useStudio((s) => s.history);
+  const approve = useStudio((s) => s.approve);
+  const revert = useStudio((s) => s.revert);
+  const { entry, added } = change;
+  const blocker = revertBlocker(entry, history);
+  const diffs = added
+    ? []
+    : describe(entry, flow, defs)
+        .filter((l) => l.stepId === stepId)
+        .flatMap((l) => l.diffs);
+  return (
+    <div className="flex gap-2 text-[12.5px] leading-[1.7] text-slate-600" data-change={entry.revision}>
+      <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" className="mt-[4px] shrink-0 text-primary" />
+      <div className="min-w-0">
+        <p>
+          <span className="mr-1.5 text-slate-400 tabular-nums">{step.number}</span>
+          <span className="text-ink">{t.story.by(actorLabel(entry), added)}</span>
+          <span className="text-slate-400"> · {relativeTime(entry.at)}</span>
+        </p>
+        {entry.summary && <p>{entry.summary}</p>}
+        {diffs.map((d) => (
+          <p key={d.field} className="break-words">
+            {named(d.field)}
+            {t.sheetView.was}
+            {d.before === undefined ? t.sheetView.nothing : formatValue(d.before)}
+          </p>
+        ))}
+        <p className="mt-0.5 flex gap-3">
+          <button type="button" onClick={() => approve(entry.revision)} className="font-medium text-primary hover:underline">
+            {t.approve}
+          </button>
+          <button type="button" disabled={blocker !== null} title={blocker ?? undefined} onClick={() => void revert(entry)} className="text-slate-600 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-400">
+            {t.revert}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** The changes that wait on these steps, each in the margin. */
+function ChangeNotes({ steps, ctx }: { steps: ManualStep[]; ctx: RowCtx }) {
+  return (
+    <>
+      {steps.flatMap((step) =>
+        step.callPath.length > 0
+          ? []
+          : (ctx.changes.get(step.stepId) ?? []).map((c) => (
+              <Aside key={`${step.key}:${c.entry.revision}`}>
+                <ChangeNote change={c} step={step} defs={ctx.defs} />
+              </Aside>
+            )),
+      )}
+    </>
+  );
+}
+
+/** `notes`: false on a screen's steps, whose changes are said together before the screen's picture. */
+function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; notes?: boolean }) {
   const picked = ctx.picked === step.stepId;
   const onPick = ctx.onPick;
   const own = step.callPath.length === 0 ? ctx.stepOf(step.stepId) : undefined;
   return (
-    <li className="grid grid-cols-[28px_minmax(0,1fr)] py-2.5" onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
+    <li className="py-2.5" onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
+      {notes && <ChangeNotes steps={[step]} ctx={ctx} />}
+      <div className="grid grid-cols-[28px_minmax(0,1fr)]">
       <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{step.number}</span>
       <div className="min-w-0">
         <button type="button" onClick={() => onPick(step)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
@@ -184,6 +267,7 @@ function StepRow({ step, ctx }: { step: ManualStep; ctx: RowCtx }) {
             </div>
           </div>
         )}
+      </div>
       </div>
     </li>
   );
@@ -248,6 +332,9 @@ type RowCtx = {
   /** The flow's own step (not one of a called flow). */
   stepOf: (id: string) => Step | undefined;
   onValue: (stepId: string, key: string, value: string | number) => void;
+  /** What waits to be looked at, by step. */
+  changes: ReadonlyMap<string, Change[]>;
+  defs: ReadonlyMap<string, StepTypeDef>;
   /** Switches a step off, or on again. */
   onStop: (stepId: string, stop: boolean) => void;
   /** A new step under the picked one, and the picked one taken out. */
@@ -261,6 +348,7 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
   if (item.kind === "scene") {
     return (
       <>
+        <ChangeNotes steps={item.steps} ctx={ctx} />
         {item.shot && (
           <Aside>
             <Figure scene={item} pictures={ctx.pictures} />
@@ -279,7 +367,7 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
                 ))}
               {s && (
                 <ol>
-                  <StepRow step={s} ctx={ctx} />
+                  <StepRow step={s} ctx={ctx} notes={false} />
                 </ol>
               )}
             </li>
@@ -368,6 +456,9 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [masking, setMasking] = useState<ManualShot | null>(null);
   const [whole, setWhole] = useState<ManualShot | null>(null);
+  const pending = usePendingReview();
+  const place = useStudio((s) => s.place);
+  const approveAll = useStudio((s) => s.approveAll);
   const subflows = useSubflows(flow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
@@ -398,12 +489,22 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
   const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts, { stopped: true }) : null), [flow, defs, manifest, subflows, masks, drafts]);
+  const changes = useMemo(() => {
+    const map = new Map<string, Change[]>();
+    for (const entry of pending) {
+      const added = new Set((entry.ops ?? []).flatMap((op) => (op.op === "addStep" && op.step.id ? [op.step.id] : [])));
+      for (const id of touchedSteps(entry)) map.set(id, [...(map.get(id) ?? []), { entry, added: added.has(id) }]);
+    }
+    return map;
+  }, [pending]);
   if (!flow || !doc) return null;
 
   const pictures: Pictures = { urls, want, masks, onWhole: setWhole, onMask: setMasking };
   const ctx: RowCtx = {
     pictures,
     picked: selection?.kind === "step" ? selection.stepId : null,
+    changes,
+    defs,
     stepOf: (id) => findStep(flow.steps ?? [], id) ?? undefined,
     onValue: (stepId, key, value) => void updateStep(stepId, { params: { [key]: value } }),
     onStop: (stepId, stop) => void updateStep(stepId, { disabled: stop }),
@@ -436,7 +537,11 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
                     className="grid w-full grid-cols-[18px_minmax(0,1fr)] text-left hover:text-ink"
                   >
                     <span className="text-slate-400 tabular-nums">{c.number}</span>
-                    {c.title}
+                    <span>
+                      {c.title}
+                      {/* Something in it waits to be looked at. */}
+                      {stepIds(c.items).some((id) => changes.has(id)) && <span aria-hidden="true" className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle" />}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -470,6 +575,20 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
           )}
         </article>
       </div>
+      {/* What waits to be looked at, counted once at the foot of the desk; on the review desk its own foot says it. */}
+      {place === "flows" && pending.length > 0 && (
+        <div className="pointer-events-none sticky bottom-0 z-10 mt-6 flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-4 rounded-[6px] bg-sheet py-2 pr-2 pl-4 text-[13px] text-ink shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]">
+            <span className="flex items-center gap-2">
+              <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" className="text-primary" />
+              {t.sheetView.waiting(pending.length)}
+            </span>
+            <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover">
+              {t.approveAll}
+            </button>
+          </div>
+        </div>
+      )}
       {masking && (
         <MaskEditor
           shot={masking}
