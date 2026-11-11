@@ -93,7 +93,11 @@ export const errorsJa: Record<string, ErrorText> = {
   FILE_CHOOSER_NOT_SHOWN: { what: "ファイルの選択画面が表示されませんでした", todo: "ファイルの入力欄か、ファイルの選択画面を開くボタンを対象にしてください" },
   BROWSER_NOT_RUNNING: {
     what: "接続するブラウザが開いていません",
-    todo: "Edge を SpellSheet 用のショートカットから起動してから実行してください（手順はドキュメントの「人が開いたブラウザを使う」）",
+    todo: "「使う Edge」を「ふだんの Edge」か「SSO 用の Edge」にするか、Edge をデバッグ用のポート付きで起動してから実行してください（手順はドキュメントの「社内のアカウントでサインインするサイト」）",
+  },
+  EXTENSION_NOT_CONNECTED: {
+    what: "Edge の SpellSheet 拡張機能が応答しませんでした",
+    todo: "Edge に SpellSheet の拡張機能を追加し、最初に開く画面で「許可」を選んでから実行してください。拡張機能を使えないときは「使う Edge」を「SSO 用の Edge」にします",
   },
   CONTEXT_IN_USE: { what: "このブラウザの区分では、すでに別のブラウザを開いています", todo: "「既存ブラウザへの接続」には、別の「ブラウザの区分」の名前を設定してください" },
   DIALOG_NOT_SHOWN: { what: "確認のダイアログ（OK・キャンセル）が表示されませんでした", todo: "このノードでダイアログが表示されない場合は「表示されるダイアログへの応答」の設定を解除してください" },

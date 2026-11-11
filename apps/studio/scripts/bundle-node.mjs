@@ -91,6 +91,8 @@ function stageAdapter() {
     }
     cpSync(src, join(dest, "node_modules", dep), { recursive: true, dereference: true });
   }
+  // The Edge extension, for adding by hand until it is in Edge Add-ons (docs/browser.md).
+  cpSync(join(root, "packages/edge-extension"), join(outDir, "edge-extension"), { recursive: true });
   console.log(`bundled browser adapter: ${dest}`);
 }
 

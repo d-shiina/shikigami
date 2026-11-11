@@ -75,25 +75,56 @@ A link with `target="_blank"` or a button that opens a window adds a tab to the 
 { "type": "browser.closeTab" }
 ```
 
-### Using a browser the person opened (`browser.attach`)
+### Sites that sign in with the company account (`browser.attach`)
 
-Some sites only open in the person's own browser: SSO with the PC's sign-in, client certificates, a required extension. `browser.attach` takes over an Edge or Chrome that is already open instead of starting a new one, and later steps on the same `context` work in it. It reaches only `127.0.0.1`, and when the run ends it lets go of the browser without closing it.
+Sites that sign in with the company account (SSO: Microsoft Entra ID, Okta, the PC's Windows sign-in), need a client certificate or a required extension do not let in the fresh browser `browser.open` starts. With `browser.attach` the run works in an Edge that is already signed in, and later steps on the same `context` work in it. `edge` picks which Edge.
 
-The browser has to be started with a debugging port. Chrome 136 and later ignore the port on the everyday profile ([Chrome's announcement](https://developer.chrome.com/blog/remote-debugging-port)), and Edge is expected to do the same, so give it a profile folder of its own and sign in there once (a shortcut with these arguments is the easiest):
+| `edge` | Edge used | What the person does the first time |
+|---|---|---|
+| `everyday` (default) | **The everyday Edge**, through the SpellSheet extension | Adds the extension and chooses "Allow" on the page it opens |
+| `sso` | **The SSO Edge**: SpellSheet starts Edge with a profile of its own | Signs in once in that Edge |
+| `port` | An Edge or Chrome the person started with a debugging port | Starts the browser |
+
+```jsonc
+{ "type": "browser.attach", "name": "Use the everyday Edge", "params": { "context": "edge" } },
+{ "type": "browser.open", "name": "Open the attendance system", "params": { "context": "edge", "url": "https://kintai.example.com/" } },
+{ "type": "browser.waitForHuman", "params": { "context": "edge", "message": "Sign in with your company account in Edge", "until": { "role": "heading", "name": "Attendance" } } }
+```
+
+The new tab `browser.attach` opens is empty: open the site with `browser.open` on the same `context`, and wait with `browser.waitForHuman` where a sign-in page can show. With `title` / `url`, the step uses an open tab whose title or address contains that text instead of a new one.
+
+When you ask the AI for a flow and the site goes to a company sign-in, the AI asks on a card in the AI chat which browser to use.
+
+#### The everyday Edge (`edge: "everyday"`)
+
+Edge does not accept the debugging port on the everyday profile ([a change from Chrome 136](https://developer.chrome.com/blog/remote-debugging-port); Edge does the same). The SpellSheet extension drives tabs with Edge's extension API (`chrome.debugger`) instead.
+
+- **Adding the extension**: until it is in Edge Add-ons, load the `edge-extension` folder in SpellSheet's install folder (turn on "Developer mode" in `edge://extensions`, then "Load unpacked" and pick the folder). In a company, IT can also deploy it by policy
+- **Allowing it once**: the first run opens "Allow SpellSheet to work in this Edge?" in Edge. Choose "Allow" and it does not ask again (it allows this PC's SpellSheet only)
+- While a run works in Edge, a bar at the top says the browser is being debugged. Choosing "Cancel" on it stops the run in that tab
+- Only the tabs the run opens, tabs opened from them and the tab named by `title` / `url` are reached. The tabs and the browser stay open when the run ends
+- When Edge is closed, it starts with the everyday profile. The extension cannot open `data:` addresses
+- When the extension does not answer, the step fails with `EXTENSION_NOT_CONNECTED`
+
+#### The SSO Edge (`edge: "sso"`)
+
+For PCs where extensions are not allowed. SpellSheet starts Edge with a debugging port (`port`, 9222 by default) and a profile folder of its own (`%LOCALAPPDATA%\SpellSheet\edge-profile`). It opens as a window separate from the everyday Edge, and its sign-in stays in that folder, so the person signs in only the first time. An SSO Edge started by a run closes when the run ends (so its port does not stay open). When a browser already waits on the port, the step uses it instead of starting one.
+
+If the company only allows sign-in from a managed browser, the SSO Edge may be refused. Then sign in to this Edge's profile with the company account (add it from the profile button), or use the everyday Edge.
+
+#### A browser the person started (`edge: "port"`)
+
+Uses a browser the person started with a debugging port and a profile folder of its own. A flow that only sets `port` works this way too. With no browser there, the step fails with `BROWSER_NOT_RUNNING`.
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\SpellSheet\edge-profile"
 ```
 
-```jsonc
-{ "type": "browser.attach", "params": { "title": "Attendance" } }
-```
-
 Notes:
 
-- While the browser waits on the port, any program on this PC can drive it. Open it this way only for the work that needs it
-- The workspace's allowed sites (policy) are checked by `browser.open`; tabs the person already opened are not checked
-- Not for unattended runs (nobody starts the browser): use `browser.open` with `session` there
+- While connected through the extension or a port, the tabs can be driven from this PC. The run connects only while it runs
+- Only `127.0.0.1` is reached. The workspace's allowed sites (policy) are checked by `browser.open`; tabs the person already opened are not checked
+- The first time, and when the sign-in expires, someone has to be at the PC. Unattended runs use `browser.open` with `session`
 - JS dialogs in that browser are answered by the run while it is attached
 - **Not yet tried on a Windows PC with Edge** (tested with Chromium)
 

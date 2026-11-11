@@ -6,6 +6,7 @@
     "resources": {
       "bundled/node": "node",
       "bundled/browser-adapter": "browser-adapter",
+      "bundled/edge-extension": "edge-extension",
       "bundled/ocr": "ocr"
     },
     "windows": {

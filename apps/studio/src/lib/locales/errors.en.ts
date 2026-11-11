@@ -72,7 +72,11 @@ export const errorsEn: Record<string, ErrorText> = {
   FILE_CHOOSER_NOT_SHOWN: { what: "No file picker appeared", todo: "Point at the file input, or the button that opens the file picker" },
   BROWSER_NOT_RUNNING: {
     what: "The browser to use is not open",
-    todo: 'Open Edge with the debugging-port shortcut, then run again (docs: "Using a browser the person opened")',
+    todo: 'Set "Edge to use" to "Everyday Edge" or "SSO Edge", or start Edge with a debugging port, then run again (docs: "Sites that sign in with the company account")',
+  },
+  EXTENSION_NOT_CONNECTED: {
+    what: "The SpellSheet extension of Edge did not answer",
+    todo: 'Add the SpellSheet extension to Edge and choose "Allow" on the page it opens the first time, then run again. If extensions are not allowed, set "Edge to use" to "SSO Edge"',
   },
   CONTEXT_IN_USE: { what: "This browser context already has another browser open", todo: "Give Use open browser its own context name" },
   DIALOG_NOT_SHOWN: { what: "No dialog (OK / Cancel) appeared", todo: "If this node shows no dialog, clear its dialog setting" },

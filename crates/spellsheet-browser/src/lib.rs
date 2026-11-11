@@ -536,16 +536,19 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: ATTACH,
             method: "attach",
             label: "既存ブラウザへの接続",
-            description: "Uses a browser the person started on this PC instead of opening a new one: its tabs, logins, client certificates and extensions (for sites only reachable from the person's browser, e.g. with SSO). The browser must be started with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=9222 --user-data-dir=\"%LOCALAPPDATA%\\SpellSheet\\edge-profile\" (Edge and Chrome ignore the port on their everyday profile; sign in there once). Only 127.0.0.1 is reached. Later steps on the same `context` work in it; `title` / `url` pick a tab as in browser.switchTab (default: the first tab). The browser is never closed: the run lets go of it when it ends. Output: { url, title }. Fails with BROWSER_NOT_RUNNING when nothing listens on `port`. Not for unattended runs: use browser.open with `session` there.",
+            description: "Works in an Edge with the person's own sign-ins instead of the fresh browser browser.open starts: for sites that sign in with the company account (SSO: Microsoft Entra ID, Okta, the PC's Windows sign-in), a client certificate or a required extension. `edge` says which Edge. \"everyday\" (default): the person's everyday Edge, through the SpellSheet extension (Edge ignores the debugging port on its everyday profile); the run opens its own tab there, or with `title` / `url` uses the open tab they name; the first time, the person adds the extension and chooses Allow; fails with EXTENSION_NOT_CONNECTED when the extension does not answer. \"sso\": the SSO Edge: SpellSheet starts Edge with a debugging port (`port`, default 9222) and its own profile folder (%LOCALAPPDATA%\\SpellSheet\\edge-profile), kept between runs, so the person signs in there once; it closes when the run ends. \"port\": only a browser the person started with --remote-debugging-port (the default when `port` is given); fails with BROWSER_NOT_RUNNING when nothing listens. A new tab is empty: open the site with browser.open on the same `context`, which then works in that Edge; the first time, follow with browser.waitForHuman on the sign-in page. The run never closes the person's browser or their tabs; it lets go when it ends. Only 127.0.0.1 is reached. Output: { url, title, started? }. Needs the person at the PC the first time and whenever the sign-in expires.",
             params: json!({
-                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "ブラウザを起動したときの --remote-debugging-port（既定 9222）" },
+                "edge": { "enum": ["everyday", "sso", "port"], "description": "使う Edge（既定 everyday＝ふだんの Edge）" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "sso・port のときのデバッグ用のポート（既定 9222）" },
                 "title": { "type": "string", "minLength": 1, "description": "使うタブのタイトルの一部" },
                 "url": { "type": "string", "minLength": 1, "description": "使うタブのアドレスの一部" }
             }),
             required: &[],
             has_output: true,
             examples: vec![
+                json!({ "type": ATTACH, "name": "ふだんの Edge を使う", "params": {} }),
                 json!({ "type": ATTACH, "name": "開いている Edge の勤怠システムを使う", "params": { "title": "勤怠" } }),
+                json!({ "type": ATTACH, "name": "SSO 用の Edge を使う", "params": { "edge": "sso" } }),
             ],
             ..Def::default()
         },

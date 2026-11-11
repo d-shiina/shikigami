@@ -6,6 +6,13 @@
       "params": {
         "type": "object",
         "properties": {
+          "edge": {
+            "enum": [
+              "everyday",
+              "sso",
+              "port"
+            ]
+          },
           "port": {
             "type": "integer",
             "minimum": 1,

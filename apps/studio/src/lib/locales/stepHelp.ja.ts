@@ -7,7 +7,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "browser.click": { summary: "ページのボタンやリンクをクリック", words: "押す ボタン リンク 選ぶ" },
   "browser.download": { summary: "ボタンを押してファイルをダウンロードし、保存する", words: "ダウンロード 保存 CSV 出力 落とす ファイル" },
   "browser.upload": { summary: "ページのフォームにファイルを添付する", words: "アップロード 添付 ファイル 送る 参照 ファイルを添付" },
-  "browser.attach": { summary: "人が開いている Edge・Chrome をそのまま使う（ログイン・証明書・拡張機能ごと）", words: "接続 既存 開いている ブラウザ アタッチ SSO 証明書 拡張機能 開いているブラウザを使う" },
+  "browser.attach": { summary: "ふだんの Edge（拡張機能を通して）か SSO 用の Edge を、サインインしたまま使う", words: "接続 既存 開いている ブラウザ アタッチ SSO シングルサインオン 社内 Entra Okta サインイン ログイン 証明書 拡張機能 開いているブラウザを使う" },
   "browser.check": { summary: "チェックボックスのチェックを付ける・外す（何度流しても同じ状態になる）", words: "チェック チェックボックス ラジオ 同意 オン オフ 付ける 外す" },
   "browser.navigate": { summary: "前のページに戻る・次に進む・読み込み直す", words: "戻る 進む 再読み込み 更新 リロード バック" },
   "browser.hover": { summary: "部品にマウスを乗せる（乗せると開くメニューなど）", words: "ホバー マウスオーバー 乗せる メニュー ツールチップ マウスを乗せる" },

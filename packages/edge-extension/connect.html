@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>SpellSheet</title>
+    <style>
+      :root { color-scheme: light dark; --ink: #1e2a4a; --paper: #ffffff; --muted: #5b6478; --line: #d9dde6; }
+      @media (prefers-color-scheme: dark) { :root { --ink: #e8ecf5; --paper: #161b26; --muted: #a3abbd; --line: #2e3647; } }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--paper); color: var(--ink);
+        font-family: "Yu Gothic UI", "Segoe UI", "Noto Sans JP", sans-serif; }
+      main { max-width: 32rem; padding: 2rem; }
+      h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+      p { line-height: 1.7; color: var(--muted); margin: 0 0 1rem; }
+      .actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+      button { font: inherit; padding: 0.5rem 1.25rem; border-radius: 0.5rem; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+      button.primary { background: #1e2a4a; border-color: #1e2a4a; color: #fff; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="waiting"><p data-ja="SpellSheet に接続しています…" data-en="Connecting to SpellSheet…"></p></section>
+      <section id="ask" hidden>
+        <h1 data-ja="SpellSheet にこの Edge の操作を許可しますか" data-en="Allow SpellSheet to work in this Edge?"></h1>
+        <p data-ja="許可すると、この PC の SpellSheet のフローが、このブラウザのサインインのままタブを開いて操作できます。操作するのはフローが開いたタブと、フローが指定したタブだけです。操作している間は、上に「デバッグを開始しました」と表示されます。"
+           data-en="SpellSheet flows on this PC can then open and use tabs in this browser with your sign-ins. They use only the tabs they open and the tab the flow names. While they do, a bar at the top says the browser is being debugged."></p>
+        <p data-ja="SpellSheet のフローを動かしていないのにこの画面が出たときは、許可しないでください。"
+           data-en="If you did not run a SpellSheet flow, do not allow it."></p>
+        <div class="actions">
+          <button id="allow" class="primary" data-ja="許可" data-en="Allow"></button>
+          <button id="deny" data-ja="許可しない" data-en="Don't allow"></button>
+        </div>
+      </section>
+      <section id="failed" hidden>
+        <h1 data-ja="SpellSheet に接続できませんでした" data-en="Could not connect to SpellSheet"></h1>
+        <p id="reason"></p>
+        <p data-ja="SpellSheet でフローを実行し直してください。" data-en="Run the flow again in SpellSheet."></p>
+      </section>
+      <section id="denied" hidden>
+        <p data-ja="許可しませんでした。このタブは閉じてかまいません。" data-en="Not allowed. You can close this tab."></p>
+      </section>
+    </main>
+    <script src="connect.js" type="module"></script>
+  </body>
+</html>

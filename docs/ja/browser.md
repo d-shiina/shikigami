@@ -75,25 +75,56 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 { "type": "browser.closeTab" }
 ```
 
-### 人が開いたブラウザを使う（`browser.attach`）
+### 社内のアカウントでサインインするサイト（`browser.attach`）
 
-PC のサインインでの SSO、クライアント証明書、必須の拡張機能など、人のブラウザでしか開けないサイトがあります。`browser.attach` は新しくブラウザを起動する代わりに、もう開いている Edge・Chrome を使い、同じ `context` の後のノードはその中で動きます。つなぐ先は `127.0.0.1` だけで、実行が終わるとブラウザは閉じずに手を離します。
+社内のアカウントでのサインイン（SSO：Microsoft Entra ID・Okta・PC の Windows のサインインなど）、クライアント証明書、必須の拡張機能が要るサイトは、`browser.open` が起動する新しいブラウザでは入れません。`browser.attach` を使うと、サインインしたままの Edge で動き、同じ `context` の後のノードはその中で動きます。使う Edge は `edge` で選びます。
 
-ブラウザはデバッグ用のポートを付けて起動しておきます。Chrome 136 以降はふだんのプロファイルではこのポートを無視し（[Chrome の告知](https://developer.chrome.com/blog/remote-debugging-port)）、Edge も同じになる見込みなので、専用のプロファイルのフォルダーを付け、そこで一度サインインしておきます（この引数のショートカットを作るのが簡単です）：
+| `edge` | 使う Edge | 初回に人がすること |
+|---|---|---|
+| `everyday`（既定） | **ふだんの Edge**。SpellSheet の拡張機能を通して操作します | 拡張機能を追加し、最初に開く画面で「許可」を選ぶ |
+| `sso` | **SSO 用の Edge**。SpellSheet が専用のプロファイルの Edge を起動します | その Edge で一度サインインする |
+| `port` | 人がデバッグ用のポート付きで起動した Edge・Chrome | ブラウザを起動しておく |
+
+```jsonc
+{ "type": "browser.attach", "name": "ふだんの Edge を使う", "params": { "context": "edge" } },
+{ "type": "browser.open", "name": "勤怠システムを開く", "params": { "context": "edge", "url": "https://kintai.example.com/" } },
+{ "type": "browser.waitForHuman", "params": { "context": "edge", "message": "Edge で会社のアカウントにサインインしてください", "until": { "role": "heading", "name": "勤怠" } } }
+```
+
+`browser.attach` が開く新しいタブは空なので、続けて同じ `context` の `browser.open` でサイトを開きます。サインインの画面が出ることがあるときは `browser.waitForHuman` で人を待ちます。`title` / `url` を付けると、新しいタブの代わりに、もう開いているタブのうちタイトル・アドレスにその文字を含むものを使います。
+
+AI にフローを頼んだときは、サイトが社内のアカウントでのサインインに移ると、AI が使うブラウザを AI チャットのカードで尋ねます。
+
+#### ふだんの Edge（`edge: "everyday"`）
+
+Edge は、ふだんのプロファイルではデバッグ用のポートを受け付けません（[Chrome 136 からの変更](https://developer.chrome.com/blog/remote-debugging-port)、Edge も同じ）。そこで SpellSheet の拡張機能が、Edge の拡張機能の仕組み（`chrome.debugger`）でタブを操作します。
+
+- **拡張機能の追加**：Edge アドオンに載るまでは、SpellSheet のインストール先の `edge-extension` フォルダーを読み込みます（`edge://extensions` で「開発者モード」をオンにし、「展開して読み込み」でそのフォルダーを選びます）。会社では、IT 部門がポリシーで配ることもできます
+- **初回の許可**：最初に実行したとき、Edge に「SpellSheet にこの Edge の操作を許可しますか」の画面が開きます。「許可」を選ぶと、次からは聞かれません（この PC の SpellSheet だけを許可します）
+- 実行の間、Edge の上に「デバッグを開始しました」の帯が出ます。帯の「キャンセル」を押すと、そのタブでは実行が続けられません
+- 操作するのは、実行が開いたタブ・そこから開いたタブ・`title` / `url` で指定したタブだけです。実行が終わっても、タブとブラウザは閉じません
+- Edge が閉じていれば、ふだんのプロファイルで起動します。拡張機能から `data:` のアドレスは開けません
+- 拡張機能が応答しないときは `EXTENSION_NOT_CONNECTED` で失敗します
+
+#### SSO 用の Edge（`edge: "sso"`）
+
+拡張機能を使えない PC 向けです。SpellSheet が、デバッグ用のポート（`port`、既定 9222）と専用のプロファイルのフォルダー（`%LOCALAPPDATA%\SpellSheet\edge-profile`）を付けて Edge を起動します。ふだんの Edge とは別のウィンドウで開き、サインインはこのフォルダーに残るので、サインインは初回だけです。実行が起動した SSO 用の Edge は、実行が終わると閉じます（ポートを開けたままにしないため）。そのポートでブラウザがもう待っていれば、新しく起動せずにそれを使います。
+
+会社が「管理されたブラウザからのサインインだけを許す」設定にしていると、SSO 用の Edge ではサインインできないことがあります。その場合は、この Edge のプロファイルに会社のアカウントでサインインする（右上のプロファイルから追加）か、ふだんの Edge を使います。
+
+#### 人が起動したブラウザ（`edge: "port"`）
+
+人がデバッグ用のポートと専用のプロファイルのフォルダーを付けて起動したブラウザを使います。`port` だけを書いたフローもこの動きになります。ブラウザがなければ `BROWSER_NOT_RUNNING` で失敗します。
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\SpellSheet\edge-profile"
 ```
 
-```jsonc
-{ "type": "browser.attach", "params": { "title": "勤怠" } }
-```
-
 注意：
 
-- ポートで待っている間は、この PC のどのプログラムからもそのブラウザを操作できます。必要な作業のときだけこの開き方をします
-- ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
-- 無人実行には使えません（ブラウザを起動する人がいない）。無人では `browser.open` の `session` を使います
+- 拡張機能やポートでつないでいる間は、ほかのプログラムからもそのタブを操作できる状態になります。つなぐのは実行の間だけです
+- つなぐ先は `127.0.0.1` だけです。ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
+- 初回とサインインの期限が切れたときは、PC の前に人が必要です。無人実行では `browser.open` の `session` を使います
 - つないでいる間、そのブラウザの JS のダイアログには実行が答えます
 - **Windows の PC の Edge ではまだ試していません**（Chromium で確認）
 
