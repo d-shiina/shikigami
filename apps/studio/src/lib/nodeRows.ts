@@ -1,6 +1,7 @@
 // What a flow node shows, Blender-style: one "項目 : 値" row per parameter,
 // plus output rows for the variables the step writes. Display only; the
 // layout uses the same rows to size nodes, so both always agree.
+import { READING } from "./reading";
 import { extensionChoiceLabel, extensionParamTitle } from "./extensions";
 import type { Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { BINDS, CALL, FOR_EACH, REPEAT, TRY, VARIABLE_SET } from "./stepTypes";
@@ -12,7 +13,7 @@ import { locale, t } from "./i18n";
 export const NODE_HEAD_H = 38;
 export const ROW_H = 28;
 export const NODE_PAD_B = 8;
-export const MAX_PARAM_ROWS = 5;
+export const MAX_PARAM_ROWS = READING ? 99 : 5;
 
 /** A node setting's name for people; `type` picks the node's own name for it (a `path` saved to or read from). */
 export const paramLabel = (key: string, type?: string) =>
@@ -239,9 +240,28 @@ export const INNER_PAD = 8;
 /** Height of a call's unfolded list of `lines` steps. */
 export const innerHeight = (lines: number) => (lines > 0 ? lines * INNER_LINE_H + INNER_PAD * 2 : 0);
 
+/** Room for a setting's value beside its label, in a node as wide as the chart's (NODE_W). */
+const VALUE_W = 180;
+/** A wrapped line of a value, when it takes more than one. */
+export const VALUE_LINE_H = 20;
+const textWidth = (s: string, px: number) => [...s].reduce((w, ch) => w + ((ch.codePointAt(0) ?? 0) >= 0x2e80 ? px : px * 0.6), 0);
+
+/** To read, a value shows whole: how many lines it takes. Otherwise one, cut short. */
+export function rowLines(row: Row): number {
+  if (!READING || row.kind !== "param" || row.unset) return 1;
+  const text = row.file ? row.file.path : (row.full ?? row.value);
+  // Each variable in it is a chip, a little wider than its name.
+  const room = textWidth(text, 12.5) * 1.1 + row.refs.length * 24 + (row.file ? 14 : 0);
+  return Math.min(10, Math.max(1, Math.ceil(room / VALUE_W)));
+}
+export const rowHeight = (row: Row): number => {
+  const lines = rowLines(row);
+  return lines === 1 ? ROW_H : lines * VALUE_LINE_H + (ROW_H - VALUE_LINE_H);
+};
+
 /** `extra` is room the node needs beyond its rows (a call's unfolded steps). */
 export const nodeHeight = (step: Step, def: StepTypeDef | undefined, extra = 0) =>
-  NODE_HEAD_H + (step.type === CALL ? CALL_BAR_H : 0) + nodeRows(step, def).length * ROW_H + NODE_PAD_B + extra;
+  NODE_HEAD_H + (step.type === CALL ? CALL_BAR_H : 0) + nodeRows(step, def).reduce((h, row) => h + rowHeight(row), 0) + NODE_PAD_B + extra;
 
 /** Every variable name a flow can mention: declared ones and loop elements. */
 export function knownVariables(variables: VariableDef[] | undefined, steps: Step[]): Map<string, VariableDef["type"]> {

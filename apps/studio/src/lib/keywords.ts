@@ -2,6 +2,7 @@
 // never shows it (people read 繰り返し・条件分岐), but the palette finds a
 // node by it, since the AI and the docs use those words. Block labels spell
 // out the condition in plain words, so a loop says what it walks over.
+import { READING } from "./reading";
 import type { Step } from "@spellsheet/schema";
 import { blockName, locale } from "./i18n";
 
@@ -169,6 +170,9 @@ export function branchQuestion(step: Step): string {
     const value = plainExpr(p.value);
     return value ? (ja ? `${value} は？` : `${value}?`) : ja ? "値は？" : "Which value?";
   }
+  // To read: the name the step was given says what is asked; its head keeps the expression.
+  const name = READING ? (step.name ?? "").trim().replace(/[？?]$/, "") : "";
+  if (name) return `${name}${ja ? "？" : "?"}`;
   const condition = plainExpr(p.condition);
   return condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?";
 }
@@ -235,3 +239,6 @@ function plainExpr(value: unknown): string {
   const m = /^\{\{\s*([\s\S]*?)\s*\}\}$/.exec(s);
   return m ? (m[1] ?? "") : s;
 }
+
+/** To read: an if with a name asks by its name in its decision, so its head shows the expression instead of the name. */
+export const asksByName = (step: Step): boolean => READING && step.type === "control.if" && !!(step.name ?? "").trim();

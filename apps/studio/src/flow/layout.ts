@@ -9,6 +9,8 @@ import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";
+import { READING } from "../lib/reading";
+import { asksByName } from "../lib/keywords";
 import { NODE_HEAD_H, nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -81,8 +83,8 @@ export const DECIDE_H = 28;
 /** The pointed ends of a decision: how far each runs in from its side. */
 export const DECIDE_POINT = 12;
 /** How wide a decision is: as wide as its question, with room for its pointed ends. */
-export function decideWidth(question: string): number {
-  return Math.ceil(Math.min(Math.max(textWidth(question, 12) + 2 * DECIDE_POINT + 2 * 10, 96), NODE_W - 20));
+export function decideWidth(question: string, max = NODE_W - 20): number {
+  return Math.ceil(Math.min(Math.max(textWidth(question, 12) + 2 * DECIDE_POINT + 2 * 10, 96), max));
 }
 /** Between the head (or the end of a wait's block) and the decision. */
 const DECIDE_GAP = 28;
@@ -393,9 +395,9 @@ function textWidth(s: string, px: number): number {
 function headWidth(step: Step, defs: Defs): number {
   const name = step.name ?? "";
   // An if or a switch asks in the decision under its head, not in the head.
-  const summary = asksUnderHead(step) ? "" : headSummary(step);
+  const summary = asksUnderHead(step) && !asksByName(step) ? "" : headSummary(step);
   let w = 12 + 15 + 8 + textWidth(typeTitle(step, defs.get(step.type)), 12.5) + 8 + 22 + 12;
-  if (name) w += 8 + textWidth(name, 12.5);
+  if (name && !asksByName(step)) w += 8 + textWidth(name, 12.5);
   if (summary) w += 8 + 12 + textWidth(summary, 11.5);
   if (step.type === SWITCH) w += 8 + 80;
   if (OPTIONAL_BLOCKS[step.type] && !step.blocks?.[OPTIONAL_BLOCKS[step.type]!]?.length) w += 8 + 110;
@@ -629,7 +631,8 @@ class Builder {
     const from = asks ? `join:${id}:decide` : id;
     if (asks) {
       const question = branchQuestion(step);
-      const width = decideWidth(question);
+      // To read, the whole question shows: an if has two columns under it to be as wide as.
+      const width = decideWidth(question, READING ? 2 * NODE_W - 20 : undefined);
       this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
       this.edge(id, from);
     }
@@ -676,8 +679,10 @@ class Builder {
         const { right, ticks } = attempt as { right: number; ticks: { x: number; y: number }[] };
         const fail = `join:${id}:fail`;
         const top = ticks[0]?.y ?? bodyY;
-        this.nodes.push({ id: fail, type: "join", position: { x: right + FAIL_X - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
-        this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: right + FAIL_X, ticks } });
+        // Clear of the widest thing in "実行": the frame of a loop there reaches further right than a node.
+        const railX = Math.max(right, ...ticks.map((t) => t.x)) + FAIL_X;
+        this.nodes.push({ id: fail, type: "join", position: { x: railX - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
+        this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: railX, ticks } });
       } else {
         this.edge(from, placed.entry, lane.label || undefined, undefined, true, asks ? { owner: id, alt: { i, n: columns.length } } : undefined);
       }

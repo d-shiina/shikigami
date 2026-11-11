@@ -459,3 +459,11 @@ textarea,
 .flow-reading .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-sheet) 30%, transparent);
 }
+.flow-read-value > .truncate {
+  overflow: visible;
+  white-space: normal;
+}
+.flow-read-value > .nodrag {
+  vertical-align: middle;
+  max-width: 100%;
+}

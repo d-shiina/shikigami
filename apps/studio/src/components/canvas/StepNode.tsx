@@ -17,7 +17,7 @@ import {
 import { useMemo } from "react";
 import { useStudio } from "../../context";
 import { CASE_H, HEAD_H, NODE_W, type StepNodeData } from "../../flow/layout";
-import { headSummary } from "../../lib/keywords";
+import { asksByName, headSummary } from "../../lib/keywords";
 import { listToText } from "../../lib/listText";
 import { nodeIcon } from "../../lib/nodeIcons";
 import { t } from "../../lib/i18n";
@@ -381,14 +381,15 @@ export function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; 
   const id = data.step.id ?? "";
   const branch = data.step.type === IF || data.step.type === SWITCH;
   // An if or a switch asks in its decision under the head, unless it is folded.
-  const summary = branch && !head.collapsed ? "" : headSummary(data.step);
+  const byName = asksByName(data.step);
+  const summary = branch && !head.collapsed && !byName ? "" : headSummary(data.step);
   const editable = !data.readOnly;
   const Fold = head.collapsed ? ChevronRight : ChevronDown;
   return (
     <div style={{ height: HEAD_H - 2 }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
       <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
       <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
-      {data.step.name && <span className="min-w-0 shrink truncate text-[12.5px] font-medium text-ink">{data.step.name}</span>}
+      {data.step.name && !byName && <span className="min-w-0 shrink truncate text-[12.5px] font-medium text-ink">{data.step.name}</span>}
       {summary && (
         <span className="min-w-0 shrink truncate rounded bg-slate-100 px-1.5 font-mono text-[11.5px] leading-[20px] text-ink">{summary}</span>
       )}
