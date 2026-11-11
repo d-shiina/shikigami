@@ -25,7 +25,8 @@ const MAX = 36;
 
 function text(value: unknown): string {
   const s = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
-  return s.length > MAX ? `${s.slice(0, MAX - 1)}…` : s;
+  // To read, nothing is cut short.
+  return s.length > MAX && !READING ? `${s.slice(0, MAX - 1)}…` : s;
 }
 
 /** The label of `block` of `step`, falling back to the registry's `label`. */

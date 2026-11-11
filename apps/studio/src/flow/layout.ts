@@ -386,7 +386,7 @@ function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
  * up to HEAD_MAX, past which the name and summary are cut and the whole
  * sentence is in the head's tooltip.
  */
-const HEAD_MAX = 520;
+const HEAD_MAX = READING ? 760 : 520;
 function textWidth(s: string, px: number): number {
   let w = 0;
   for (const ch of s) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? px : px * 0.6;
