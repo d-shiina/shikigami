@@ -39,7 +39,7 @@ jobs:
     name: Writer (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Version and tag
         id: version
@@ -118,8 +118,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -140,13 +140,13 @@ jobs:
       # The installer ships the CLI (MCP server), Node.js and the browser
       # adapter next to Writer, so browser steps work without Node.js.
       - run: pnpm studio:bundle-cli
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: target/node-dist
           key: node-dist-${{ hashFiles('apps/studio/scripts/bundle-node.mjs') }}
       - run: pnpm studio:bundle-node
       # The accurate (medium) models must be in the installer.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: target/ocr-dist
           key: ocr-dist-${{ runner.os }}-${{ hashFiles('apps/studio/scripts/bundle-ocr.mjs') }}
@@ -202,7 +202,7 @@ jobs:
 
       # Every run keeps the installers for 14 days, so a trial build can be
       # installed by hand before tagging.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installers-${{ steps.version.outputs.version }}
           path: |
