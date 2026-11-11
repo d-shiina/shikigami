@@ -1,7 +1,5 @@
 // What a node shows inside: its settings as rows, the variables it reads
 // and writes as chips, and the values they had in the last runs.
-import { READING } from "../../lib/reading";
-import { rowHeight, VALUE_LINE_H } from "../../lib/nodeRows";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -172,22 +170,6 @@ export function NodeRow({ row, vars, run, stepId, sheet }: { row: Row; vars: Map
           values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
         />
         <Socket side="out" id={outHandle(row.variable)} color={color} title={t.flow.writes(row.variable)} lit={lit} />
-      </div>
-    );
-  }
-  if (READING && !row.unset) {
-    // To read: the whole value, on as many lines as it takes.
-    const text = row.file ? row.file.path : (row.full ?? row.value);
-    return (
-      <div style={{ height: rowHeight(row), paddingBlock: (ROW_H - VALUE_LINE_H) / 2 }} className="flex gap-2 px-3 text-[12.5px]">
-        <span style={{ lineHeight: `${VALUE_LINE_H}px` }} className="w-[72px] shrink-0 truncate text-[12px] text-slate-500">
-          {row.label}
-        </span>
-        <span style={{ lineHeight: `${VALUE_LINE_H}px` }} className="flow-read-value min-w-0 flex-1 overflow-hidden [overflow-wrap:anywhere] text-ink">
-          {row.file && <span className="mr-1.5 inline-block h-2 w-2 rounded-[2px]" style={{ background: ROLE_VAR[row.file.role] ?? "var(--color-slate-400)" }} />}
-          {secretName(row.raw) && <KeyRound size={12} className="mr-1 inline-block align-[-1px] text-slate-500" aria-label={t.flow.secretMark} />}
-          <ValueText value={text} refs={row.refs} color={typeColor} run={run} stepId={stepId} />
-        </span>
       </div>
     );
   }

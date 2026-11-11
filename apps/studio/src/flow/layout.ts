@@ -9,8 +9,6 @@ import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";
-import { READING } from "../lib/reading";
-import { asksByName, guardOutcome } from "../lib/keywords";
 import { NODE_HEAD_H, nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -83,8 +81,8 @@ export const DECIDE_H = 28;
 /** The pointed ends of a decision: how far each runs in from its side. */
 export const DECIDE_POINT = 12;
 /** How wide a decision is: as wide as its question, with room for its pointed ends. */
-export function decideWidth(question: string, max = NODE_W - 20): number {
-  return Math.ceil(Math.min(Math.max(textWidth(question, 12) + 2 * DECIDE_POINT + 2 * 10, 96), max));
+export function decideWidth(question: string): number {
+  return Math.ceil(Math.min(Math.max(textWidth(question, 12) + 2 * DECIDE_POINT + 2 * 10, 96), NODE_W - 20));
 }
 /** Between the head (or the end of a wait's block) and the decision. */
 const DECIDE_GAP = 28;
@@ -110,54 +108,10 @@ const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
 export const asksUnderHead = (step: Step): boolean => step.type === IF || step.type === SWITCH;
 /** Loops that decide after their block has run, not before. */
 const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
-/**
- * A loop drawn going round: its decision, the line back and the line out.
- * To read (lib/reading.ts), a loop that decides first is its panel and its
- * head alone: the panel says what is repeated and the head says how, so the
- * line just runs in at the top and out at the bottom.
- */
-const circles = (step: Step): boolean => CIRCLING.has(step.type) && !(READING && !CHECKS_AFTER.has(step.type));
-/** To read, an if or a switch is its decision alone: no head over it and no frame round it. */
-const bare = (step: Step): boolean => READING && decides(step);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
 const STOPPING: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 /** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
 const ends = (step: Step | undefined): boolean => !!step && STOPPING.has(step.type) && !step.disabled;
-
-/**
- * How an if is drawn to read (lib/reading.ts). The work itself stays on one
- * straight line, and only a real choice between two pieces of work parts it:
- * - "guard": one side only stops (out of the loop, on to its next round, or
- *   failed). The question sits on the line with that way out beside it, and
- *   the other side is simply what follows on the line.
- * - "when": one side is empty. The other is a panel on the line, named by the
- *   question and the answer it runs for.
- * - "fork": both sides do work: the decision, and a column for each.
- */
-export type IfShape = { kind: "fork" } | { kind: "when"; block: string } | { kind: "guard"; block: string; stop: Step; rest: string };
-export function ifShape(step: Step): IfShape | null {
-  if (!READING || step.type !== IF) return null;
-  const yes = step.blocks?.then ?? [];
-  const no = step.blocks?.else ?? [];
-  const stops = (l: Step[]) => l.length === 1 && ends(l[0]);
-  if (stops(yes)) return { kind: "guard", block: "then", stop: yes[0]!, rest: "else" };
-  if (stops(no)) return { kind: "guard", block: "else", stop: no[0]!, rest: "then" };
-  if (yes.length > 0 && no.length === 0) return { kind: "when", block: "then" };
-  if (no.length > 0 && yes.length === 0) return { kind: "when", block: "else" };
-  return { kind: "fork" };
-}
-/** Whether a step asks in a decision of its own under its head (an if read as a "when" panel asks in its head). */
-const decides = (step: Step): boolean => asksUnderHead(step) && ifShape(step)?.kind !== "when";
-/** Beside a guard's question: the line to its way out, the answer on it, and the way out itself. */
-const GUARD_ARM = 16 + 8 + 16;
-/** A guard: its question on the line, as wide either side as the way out to its right needs. */
-function guardSize(step: Step, shape: IfShape & { kind: "guard" }): { w: number; h: number; width: number; answer: string; outcome: string } {
-  const width = decideWidth(branchQuestion(step), 2 * NODE_W - 20);
-  const answer = laneLabel(step, shape.block, "");
-  const outcome = guardOutcome(shape.stop);
-  const arm = GUARD_ARM + textWidth(answer, 11.5) + 16 + 10 + 14 + 6 + textWidth(outcome, 12) + 10;
-  return { w: Math.max(NODE_W, Math.ceil(width + 2 * arm)), h: DECIDE_H, width, answer, outcome };
-}
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /** Beside the blocks of a step: room for its frame to sit inside the frame of a step around it. */
 const BLOCK_ROOM = 16;
@@ -191,8 +145,6 @@ export type StepNodeData = {
   parentId: string | null;
   block: string | null;
   index: number;
-  /** A fail (break, continue) in a try that has a "最後に必ず": that runs before the flow stops. */
-  thenFinally?: boolean;
   /** The step is the head of a frame (a loop, if, …): drawn as the frame's top edge. */
   head?: HeadData;
   /** A case of a switch: drawn as the tab over its column. */
@@ -208,8 +160,6 @@ export type JoinNodeData = {
   through?: boolean;
   /** A loop's decision (see DECIDE_H): what it asks. */
   question?: string;
-  /** To read: a guard (see ifShape): the answer that leaves the line here, and where it goes. */
-  guard?: { answer: string; outcome: string; type: string };
   /** A loop's decision: how wide it is (see decideWidth). */
   width?: number;
   /** A loop's decision that comes after its block (a wait's), not before. */
@@ -266,8 +216,6 @@ export type LayoutEdge = {
   source: string;
   target: string;
   label?: string;
-  /** From a fail (break, continue) that ends a column of a try to its "最後に必ず", which still runs before the flow stops. */
-  thenFinally?: boolean;
   /** A loop's line back from the end of its body to where its body starts (see LOOP_LINE_X). */
   loop?: boolean;
   /** For a loop's line back: the x it runs up at. */
@@ -291,7 +239,7 @@ export type LayoutEdge = {
   /** One of the ways out of a branch's decision: its place among them, which light in turn (only one is taken). */
   alt?: { i: number; n: number };
   /** Into a try's "失敗したとき": the line its ticks join, and where each tick leaves a step of "実行" (see CATCH_DROP). */
-  bracket?: { x: number; ticks: { x: number; y: number }[]; span?: { top: number; bottom: number } };
+  bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -389,11 +337,6 @@ function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
   }
   const fanOut = FAN_OUT_BLOCKS[step.type];
   const optional = OPTIONAL_BLOCKS[step.type];
-  // To read, an if with one side empty is the other side alone.
-  const shape = ifShape(step);
-  if (shape?.kind === "when") return result.filter((l) => l.name === shape.block).map((l) => ({ ...l, label: "", tail: false }));
-  // To read, nothing is added: a block ends at its last node.
-  if (READING) for (const lane of result) lane.tail = false;
   // Nothing runs after a break, continue or fail: no "+" to add at the end of its block.
   for (const lane of result) if (ends(lane.steps.at(-1))) lane.tail = false;
   return result.flatMap((lane) =>
@@ -437,25 +380,18 @@ function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
  * up to HEAD_MAX, past which the name and summary are cut and the whole
  * sentence is in the head's tooltip.
  */
-const HEAD_MAX = READING ? 760 : 520;
+const HEAD_MAX = 520;
 function textWidth(s: string, px: number): number {
   let w = 0;
   for (const ch of s) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? px : px * 0.6;
   return w;
 }
 function headWidth(step: Step, defs: Defs): number {
-  const shape = ifShape(step);
-  if (shape?.kind === "when") {
-    // The answer on the line, the question before it and "のときだけ" after (see FrameHead): as wide either side as the longer.
-    const side = Math.max(12 + textWidth(branchQuestion(step), 12) + 22 + 6, 6 + 80 + 12);
-    const w = 2 * (side + (textWidth(laneLabel(step, shape.block, ""), 11.5) + 18) / 2);
-    return Math.ceil(Math.min(w, HEAD_MAX));
-  }
   const name = step.name ?? "";
   // An if or a switch asks in the decision under its head, not in the head.
-  const summary = asksUnderHead(step) && !asksByName(step) ? "" : headSummary(step);
+  const summary = asksUnderHead(step) ? "" : headSummary(step);
   let w = 12 + 15 + 8 + textWidth(typeTitle(step, defs.get(step.type)), 12.5) + 8 + 22 + 12;
-  if (name && !asksByName(step)) w += 8 + textWidth(name, 12.5);
+  if (name) w += 8 + textWidth(name, 12.5);
   if (summary) w += 8 + 12 + textWidth(summary, 11.5);
   if (step.type === SWITCH) w += 8 + 80;
   if (OPTIONAL_BLOCKS[step.type] && !step.blocks?.[OPTIONAL_BLOCKS[step.type]!]?.length) w += 8 + 110;
@@ -491,48 +427,10 @@ function frameParts(step: Step, ls: Lane[]): { columns: Lane[]; after: Lane | nu
   return { columns: after ? ls.filter((l) => l !== after) : ls, after };
 }
 
-/** To read: between the bracket down the side of a try's steps and its "失敗したとき". */
-const BRACKET_GAP = 56;
-/** To read: where the line leaves that bracket, under its top. */
-export const BRACKET_OUT = 20;
-
-/**
- * A try as it is read (lib/reading.ts): not a frame. Its steps stay on the
- * line they are on, since they are the work itself; "最後に必ず" follows on
- * the same line, since it always runs; and "失敗したとき" stands to their
- * right, reached from a bracket down the side of the steps it covers.
- */
-function readTryParts(ls: Lane[], defs: Defs, extra: Extra, collapsed: Collapsed) {
-  const size = (l: Lane | undefined) => (l && l.steps.length > 0 ? measureList(l.steps, defs, extra, collapsed) : null);
-  const attempt = ls.find((l) => l.name === "try");
-  const caught = ls.find((l) => l.name === "catch");
-  const after = ls.find((l) => l.name === "finally");
-  const ts = attempt ? measureList(attempt.steps, defs, extra, collapsed) : SLOT;
-  const cs = size(caught);
-  const as = size(after);
-  const side = cs ? FAIL_X + BRACKET_GAP + cs.w : 0;
-  const columnsH = Math.max(ts.h, cs ? CATCH_DROP + cs.h : 0);
-  const w = Math.max(ts.w, as?.w ?? 0) + 2 * side;
-  const h = columnsH + JOIN_GAP + JOIN_SIZE + (as ? GAP_Y + as.h + JOIN_GAP + JOIN_SIZE : 0);
-  return { attempt, caught: cs ? caught : undefined, after: as ? after : undefined, ts, cs, as, columnsH, w, h };
-}
-
 function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Size {
   const ls = lanes(step, defs, collapsed);
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
-  if (READING && step.type === TRY) {
-    const { w, h } = readTryParts(ls, defs, extra, collapsed);
-    return { w, h };
-  }
-  const shape = ifShape(step);
-  if (shape?.kind === "guard") {
-    const g = guardSize(step, shape);
-    const rest = step.blocks?.[shape.rest] ?? [];
-    if (rest.length === 0) return { w: g.w, h: g.h };
-    const m = measureList(rest, defs, extra, collapsed);
-    return { w: Math.max(g.w, m.w), h: g.h + GAP_Y + m.h };
-  }
   const { columns, after } = frameParts(step, ls);
   const ms = columns.map((l) => {
     const m = measureList(l.steps, defs, extra, collapsed, l.tail);
@@ -546,11 +444,9 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
     w = Math.max(w, m.w);
     inner += JOIN_GAP + JOIN_SIZE + GAP_Y + m.h;
   }
-  const circling = circles(step);
-  const h = bare(step)
-    ? DECIDE_H + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
-    : !circling
-    ? own.h + (decides(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
+  const circling = CIRCLING.has(step.type);
+  const h = !circling
+    ? own.h + (asksUnderHead(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : CHECKS_AFTER.has(step.type)
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
       : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM + FOOT_H;
@@ -581,7 +477,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "exit" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt" | "thenFinally">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "exit" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -597,48 +493,6 @@ class Builder {
   }
 
   /** Places a list centred in [x, x + span); returns its entry node id and the ids that flow into the next step. */
-  private readTry(id: string, y: number, cx: number, ls: Lane[]): { entry: string; exits: string[] } {
-    const r = readTryParts(ls, this.defs, this.extra, this.collapsed);
-    const before = this.nodes.length;
-    const tried = this.list(r.attempt?.steps ?? [], y, cx - r.ts.w / 2, r.ts.w, id, "try", "");
-    const meet = `join:${id}:then`;
-    const meetY = y + r.columnsH + JOIN_GAP;
-    this.nodes.push({ id: meet, type: "join", position: { x: cx - JOIN_SIZE / 2, y: meetY }, data: { kind: "join", parentId: id, shown: false, through: true } });
-    for (const e of tried.exits) this.edge(e, meet);
-    const endsIn = (lane: Lane | undefined, exits: string[]) => {
-      for (const e of exits) this.edge(e, meet);
-      const last = lane?.steps.at(-1);
-      if (r.after && ends(last) && last?.id) {
-        this.edge(last.id, meet, undefined, undefined, undefined, { thenFinally: true });
-        const node = this.nodes.find((n) => n.id === last.id);
-        if (node?.data.kind === "step") node.data.thenFinally = true;
-      }
-    };
-    endsIn(r.attempt, []);
-    if (r.caught && r.cs) {
-      // Clear of the widest thing among the steps: the frame of a loop reaches further right than a node.
-      const rights = this.nodes.slice(before).flatMap((n) => {
-        if (n.data.kind !== "step" || n.data.parentId !== id) return [];
-        return [n.position.x + (n.data.head ? n.data.head.width : NODE_W)];
-      });
-      const railX = Math.max(cx + r.ts.w / 2, ...rights) + FAIL_X;
-      const fail = `join:${id}:fail`;
-      const caught = this.list(r.caught.steps, y + CATCH_DROP, railX + BRACKET_GAP, r.cs.w, id, "catch", r.caught.label);
-      this.nodes.push({ id: fail, type: "join", position: { x: railX - JOIN_SIZE / 2, y: y + BRACKET_OUT - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: caught.entry } });
-      this.edge(fail, caught.entry, r.caught.label || undefined, undefined, undefined, { failure: true, bracket: { x: railX, ticks: [], span: { top: y, bottom: y + r.ts.h } } });
-      endsIn(r.caught, caught.exits);
-      const joined = this.nodes.find((n) => n.id === meet);
-      if (joined?.data.kind === "join" && caught.exits.length > 0) joined.data = { ...joined.data, shown: true, through: false };
-    }
-    if (!r.after || !r.as) return { entry: tried.entry, exits: [meet] };
-    const always = this.list(r.after.steps, meetY + JOIN_SIZE + GAP_Y, cx - r.as.w / 2, r.as.w, id, "finally", r.after.label);
-    this.edge(meet, always.entry, r.after.label || undefined);
-    const join = `join:${id}`;
-    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: y + r.h - JOIN_SIZE }, data: { kind: "join", parentId: id, shown: false, through: true } });
-    for (const e of always.exits) this.edge(e, join);
-    return { entry: tried.entry, exits: [join] };
-  }
-
   list(
     steps: Step[],
     y: number,
@@ -732,33 +586,13 @@ class Builder {
       return { entry: id, exits: [id] };
     }
 
-    if (READING && step.type === TRY) return this.readTry(id, y, cx, ls);
-    const shape = ifShape(step);
-    if (shape?.kind === "guard") {
-      const g = guardSize(step, shape);
-      const decide = `join:${id}:decide`;
-      this.nodes.push({
-        id: decide,
-        type: "join",
-        position: { x: cx - g.width / 2, y },
-        data: { kind: "join", parentId: id, shown: false, question: branchQuestion(step), width: g.width, guard: { answer: g.answer, outcome: g.outcome, type: shape.stop.type } },
-      });
-      const rest = step.blocks?.[shape.rest] ?? [];
-      if (rest.length === 0) return { entry: decide, exits: [decide] };
-      const m = measureList(rest, this.defs, this.extra, this.collapsed);
-      const placed = this.list(rest, y + g.h + GAP_Y, cx - m.w / 2, m.w, id, shape.rest, "");
-      this.edge(decide, placed.entry);
-      return { entry: decide, exits: placed.exits };
-    }
-
     const { columns, after } = frameParts(step, ls);
     const sizes = columns.map((l) => {
       const m = measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail);
       return catches(step, l) ? { w: m.w, h: m.h + CATCH_DROP } : m;
     });
     const afterSize = after ? measureList(after.steps, this.defs, this.extra, this.collapsed, after.tail) : null;
-    const isLoop = circles(step);
-    const plain = bare(step);
+    const isLoop = CIRCLING.has(step.type);
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (columns.length - 1);
     let laneX = x + (span - total) / 2;
     const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
@@ -772,15 +606,13 @@ class Builder {
       right += short / 2;
     }
     const height = measure(step, this.defs, this.extra, this.collapsed).h;
-    if (!plain) {
-      this.nodes.push({
-        id,
-        type: "step",
-        position: { x: left, y },
-        data: { ...base, head: { width: right - left, lineX: cx - left, collapsed: false, count: countInside(step), ...extras } },
-      });
-      this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
-    }
+    this.nodes.push({
+      id,
+      type: "step",
+      position: { x: left, y },
+      data: { ...base, head: { width: right - left, lineX: cx - left, collapsed: false, count: countInside(step), ...extras } },
+    });
+    this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
 
     // Where the frame is left, on its bottom edge: a loop's only lets its line
     // out (its body goes round instead), a frame's columns meet there (a dot),
@@ -789,16 +621,15 @@ class Builder {
     const join = `join:${id}`;
     if (isLoop) return this.loop(step, id, y, cx, left, right, own.h, columns[0]!, sizes[0] ?? SLOT, joinY);
     // An if or a switch asks its question in a decision under its head, and its columns leave from there.
-    const asks = decides(step);
+    const asks = asksUnderHead(step);
     const from = asks ? `join:${id}:decide` : id;
     if (asks) {
       const question = branchQuestion(step);
-      // To read, the whole question shows: an if has two columns under it to be as wide as.
-      const width = decideWidth(question, READING ? 2 * NODE_W - 20 : undefined);
-      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: plain ? y : y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
-      if (!plain) this.edge(id, from);
+      const width = decideWidth(question);
+      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
+      this.edge(id, from);
     }
-    const bodyY = plain ? y + DECIDE_H + GAP_Y : y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;
+    const bodyY = y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;
     const columnsH = Math.max(...sizes.map((m) => m.h));
     // A try's columns meet before its "finally", which runs after them.
     const meet = after ? `join:${id}:then` : join;
@@ -841,21 +672,12 @@ class Builder {
         const { right, ticks } = attempt as { right: number; ticks: { x: number; y: number }[] };
         const fail = `join:${id}:fail`;
         const top = ticks[0]?.y ?? bodyY;
-        // Clear of the widest thing in "実行": the frame of a loop there reaches further right than a node.
-        const railX = Math.max(right, ...ticks.map((t) => t.x)) + FAIL_X;
-        this.nodes.push({ id: fail, type: "join", position: { x: railX - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
-        this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: railX, ticks } });
+        this.nodes.push({ id: fail, type: "join", position: { x: right + FAIL_X - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
+        this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: right + FAIL_X, ticks } });
       } else {
         this.edge(from, placed.entry, lane.label || undefined, undefined, true, asks ? { owner: id, alt: { i, n: columns.length } } : undefined);
       }
       for (const e of placed.exits) this.edge(e, meet);
-      // A column that ends in a fail (break, continue) stops there, but the "最後に必ず" still runs first.
-      const last = lane.steps.at(-1);
-      if (after && ends(last) && last?.id) {
-        this.edge(last.id, meet, undefined, undefined, undefined, { thenFinally: true });
-        const node = this.nodes.find((n) => n.id === last.id);
-        if (node?.data.kind === "step") node.data.thenFinally = true;
-      }
       if (asks) {
         // Everything in this column is one way out of the branch, which lights in turn with its line.
         const place = { owner: id, i };
@@ -871,7 +693,7 @@ class Builder {
       for (const e of placed.exits) this.edge(e, join);
     }
     this.depth -= 1;
-    return { entry: plain ? from : id, exits: [join] };
+    return { entry: id, exits: [join] };
   }
 
   /** A loop's body, its decision (see DECIDE_H), its line back and its way out on the frame's bottom edge. */

@@ -5,7 +5,7 @@
 // on the report.
 import { create } from "zustand";
 
-export type ReviewView = "report" | "flow" | "story" | "variables" | "result";
+export type ReviewView = "report" | "flow" | "story" | "chart" | "variables" | "result";
 
 export const useReviewView = create<{ view: ReviewView; setView: (view: ReviewView) => void }>((set) => ({
   view: "report",

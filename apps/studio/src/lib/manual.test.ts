@@ -230,4 +230,29 @@ describe("words with holes", () => {
     const parts = humanize([{ text: "「{{ order['注文番号'] }} を出荷」ボタンを押す" }], new Map([["order", "注文"]]));
     expect(parts).toEqual([{ text: "「" }, { code: "注文の「注文番号」" }, { text: " を出荷」ボタンを押す" }]);
   });
+
+  it("reads a flow that is one try as its work, with what it does on failure and at the end after it", () => {
+    const step = (id: string, type: string, name: string, blocks?: Record<string, unknown[]>) => ({ id, type, name, params: {}, ...(blocks ? { blocks } : {}) });
+    const guarded = {
+      ...flow,
+      steps: [
+        step("t", "control.try", "", {
+          try: [step("a", "browser.click", "検索する"), step("l", "control.repeat", "3 回繰り返す", { body: [step("b", "browser.click", "次へ")] })],
+          catch: [step("c", "control.fail", "失敗として終える")],
+          finally: [step("d", "browser.close", "ブラウザを閉じる")],
+        }),
+      ],
+    } as unknown as Flow;
+    const doc = buildManual(guarded, defs, null);
+    expect(doc.chapters.map((c) => [c.title, c.role])).toEqual([
+      ["検索する", undefined],
+      ["3 回繰り返す", undefined],
+      [doc.chapters[2]?.title, "failure"],
+      [doc.chapters[3]?.title, "end"],
+    ]);
+    // Numbered through the sheet, not from 1 in each chapter.
+    const numbers = (items: ManualItem[]): number[] =>
+      items.flatMap((i) => (i.kind === "scene" ? i.steps.map((s) => s.number) : i.kind === "action" ? [i.step.number] : "items" in i ? numbers(i.items) : []));
+    expect(doc.chapters.flatMap((c) => numbers(c.items))).toEqual([1, 2, 3, 4]);
+  });
 });

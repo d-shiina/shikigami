@@ -1,6 +1,5 @@
 // The node of one step, and the head of a group (繰り返し・分岐) drawn as a
 // frame around its steps.
-import { READING } from "../../lib/reading";
 import { CASE, IF, SWITCH } from "../../lib/stepTypes";
 import { type Node, type NodeProps, NodeToolbar, Position } from "@xyflow/react";
 import {
@@ -17,8 +16,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useStudio } from "../../context";
-import { CASE_H, HEAD_H, NODE_W, ifShape, type StepNodeData } from "../../flow/layout";
-import { asksByName, branchQuestion, headSummary, laneLabel, onlyWhen } from "../../lib/keywords";
+import { CASE_H, HEAD_H, NODE_W, type StepNodeData } from "../../flow/layout";
+import { headSummary } from "../../lib/keywords";
 import { listToText } from "../../lib/listText";
 import { nodeIcon } from "../../lib/nodeIcons";
 import { t } from "../../lib/i18n";
@@ -294,11 +293,11 @@ export function StepNode({ data }: StepNodeProps) {
       {/* Still there once a run went through it, in the colour of the way it took. */}
       {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && (!data.runState || data.runState === "succeeded") && (
         <span
-          className={`pointer-events-none absolute top-full left-1/2 z-10 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${READING ? "rounded-md border border-slate-200 bg-sheet px-2 leading-[18px]" : ""} ${
+          className={`pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${
             data.runState ? "font-medium text-moegi-600" : "text-slate-500"
           }`}
         >
-          {data.thenFinally && data.step.type === "control.fail" ? t.flow.failThenNote : TERMINAL_NOTE[data.step.type]!()}
+          {TERMINAL_NOTE[data.step.type]!()}
         </span>
       )}
       {/* Read-only inside a call, but a run still stops there. */}
@@ -382,41 +381,14 @@ export function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; 
   const id = data.step.id ?? "";
   const branch = data.step.type === IF || data.step.type === SWITCH;
   // An if or a switch asks in its decision under the head, unless it is folded.
-  const byName = asksByName(data.step);
-  const summary = branch && !head.collapsed && !byName ? "" : headSummary(data.step);
+  const summary = branch && !head.collapsed ? "" : headSummary(data.step);
   const editable = !data.readOnly;
   const Fold = head.collapsed ? ChevronRight : ChevronDown;
-  const shape = head.collapsed ? null : ifShape(data.step);
-  if (shape?.kind === "when") {
-    // To read, an if with one side empty: its panel is named by the question and the answer it runs for.
-    const words = onlyWhen();
-    return (
-      // The answer sits on the line itself, as a fork's do: the question before it, "のときだけ" after.
-      <div
-        style={{ height: HEAD_H - 2, width: 2 * head.lineX }}
-        className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 text-[12px]"
-        title={plain(sentence(data.step, data.def))}
-      >
-        <span className="flex min-w-0 items-center justify-end gap-1.5 pl-3">
-          {words.before && <span className="shrink-0 whitespace-nowrap text-slate-600">{words.before}</span>}
-          <span className="flow-answer min-w-0 truncate rounded-full border px-2.5 leading-[22px] font-medium text-ink">{branchQuestion(data.step)}</span>
-        </span>
-        <span className="flow-answer rounded-md border px-2 text-[11.5px] leading-[20px] font-medium text-ink">{laneLabel(data.step, shape.block, "")}</span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          {words.after && <span className="shrink-0 whitespace-nowrap text-slate-600">{words.after}</span>}
-          <NodeStatus data={data} />
-        </span>
-      </div>
-    );
-  }
   return (
     <div style={{ height: HEAD_H - 2 }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
       <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
-      {/* To read, a frame with a name of its own is called by it: the name says what the kind's label would only classify. */}
-      {!(READING && data.step.name) && <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>}
-      {data.step.name && !byName && (
-        <span className={`min-w-0 shrink truncate text-[12.5px] text-ink ${READING ? "font-semibold" : "font-medium"}`}>{data.step.name}</span>
-      )}
+      <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
+      {data.step.name && <span className="min-w-0 shrink truncate text-[12.5px] font-medium text-ink">{data.step.name}</span>}
       {summary && (
         <span className="min-w-0 shrink truncate rounded bg-slate-100 px-1.5 font-mono text-[11.5px] leading-[20px] text-ink">{summary}</span>
       )}

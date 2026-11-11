@@ -14,7 +14,6 @@ import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
-import { ReadChart } from "./components/chart/ReadChart";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
@@ -41,11 +40,10 @@ import { FlowsPage } from "./components/FlowsPage";
 import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
 import { Sidebar } from "./components/Sidebar";
 import { AiButton, Brand, SearchBar } from "./components/ShellBar";
-import { ManualView } from "./components/ManualView";
+import { SheetView } from "./components/sheet/SheetView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { WindowControls } from "./components/WindowControls";
-import { READING } from "./lib/reading";
 import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
@@ -213,18 +211,18 @@ function Editor({
         <div className="@container relative min-h-0 flex-1">
           {report ? (
             report
-          ) : view === "story" ? (
-            <ManualView onView={onView} />
+          ) : view === "story" || view === "chart" ? (
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
-              {READING ? <ReadChart /> : <FlowCanvas />}
+              <FlowCanvas />
               {/*
                 The flow's files and its outline lie on the desk left of the sheet, one column:
                 the files above, the outline under them taking the rest of the height.
               */}
-              {!READING && hasFlow && projectOpen && (
+              {hasFlow && projectOpen && (
                 <div className="absolute top-3 bottom-3 left-3 z-10 flex w-[264px] flex-col gap-3">
                   <div className={outlineOpen ? "min-h-0 flex-[1_1_55%]" : "min-h-0 flex-1"}>
                     <ProjectPanel />
@@ -236,10 +234,10 @@ function Editor({
                 With the files folded away their button keeps its place at the top of the column,
                 and the outline, when open, hangs under it; nothing one panel does hides the other's button.
               */}
-              {hasFlow && (READING || !projectOpen) && (
+              {hasFlow && !projectOpen && (
                 <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col gap-3">
                   <div className="flex w-max gap-2">
-                    {!READING && <ProjectButton />}
+                    <ProjectButton />
                     {!outlineOpen && <OutlineButton />}
                     {!outlineOpen && <SearchButton />}
                   </div>
@@ -247,7 +245,7 @@ function Editor({
                 </div>
               )}
               {/* The outline unfolds under the files, so its button waits beside them. */}
-              {!READING && hasFlow && projectOpen && !outlineOpen && (
+              {hasFlow && projectOpen && !outlineOpen && (
                 <div className="absolute top-3 z-10 flex gap-2" style={{ left: OUTLINE_BESIDE_FILES }}>
                   <OutlineButton />
                   <SearchButton />
@@ -259,7 +257,7 @@ function Editor({
           {hasFlow && <NeededFilesWatch />}
           <FileSheet />
           {/* Clear of the zoom controls in the bottom-right corner. The 手順書 shows it only while editing. */}
-          {!READING && !report && view === "flow" && (
+          {!report && view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
             </div>
@@ -390,7 +388,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" || raw === "result" ? raw : "flow"));
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "flow" || raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
   const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);

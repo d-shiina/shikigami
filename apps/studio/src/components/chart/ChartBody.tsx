@@ -1,5 +1,5 @@
 // The flow as a chart to read (see flow/chart.ts for what it shows and why).
-// It is drawn on the sheet's paper in the sheet's own terms: a hairline down
+// It is drawn on the sheet's paper (components/sheet/SheetView.tsx) in the sheet's own terms: a hairline down
 // each column, a mark on it for each step and the step's name beside it.
 import type { Step } from "@spellsheet/schema";
 import {
@@ -92,7 +92,11 @@ const BAND_ICON: Partial<Record<Band["kind"], LucideIcon>> = {
   together: Columns2,
 };
 
-export function ReadChart() {
+/**
+ * The chart itself, as wide and as high as it is: what lies under a sheet's
+ * heading when the sheet is read as a chart.
+ */
+export function ChartBody() {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
@@ -168,143 +172,125 @@ export function ReadChart() {
   };
 
   return (
-    <div className="flow-chart absolute inset-0 overflow-auto px-5 py-7">
-      {/* The same paper as the sheet, under the same heading: only what is under the heading differs. */}
-      <div
-        className="mx-auto w-fit rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]"
-        style={{ minWidth: Math.min(width, 720) }}
-      >
-        <header style={{ padding: `${PAD + 4}px ${PAD}px 0`, maxWidth: width }}>
-          <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">
-            {flow.name}
-          </h1>
-          {flow.description && (
-            <p className="mt-2 text-[14px] leading-relaxed text-slate-600">
-              {flow.description}
-            </p>
-          )}
-        </header>
-        <div className="flow-chart-body relative" style={{ width, height }}>
-          {/* The columns: what each is, over a hairline. */}
-          {chart.lanes.map((lane, i) => {
-            const fail = lane.key === FAIL_LANE;
-            const Icon = fail
-              ? TriangleAlert
-              : lane.key
-                ? groupIcon(lane.key)
-                : null;
-            const names = fail ? [] : targets(lane.steps);
-            if (!lane.key) return null;
-            return (
-              <div
-                key={lane.key}
-                className="absolute flex items-center gap-2 border-b border-slate-200"
-                style={{
-                  left: lefts[i],
-                  width: widths[i],
-                  top: HEAD_GAP,
-                  height: LANE_HEAD,
-                }}
-              >
-                {Icon && (
-                  <Icon
-                    size={15}
-                    strokeWidth={1.75}
-                    aria-hidden="true"
-                    className="shrink-0"
-                    style={{
-                      color: fail
-                        ? "var(--color-shu-600)"
-                        : (CATEGORY_COLOR[lane.key] ?? CATEGORY_COLOR.other),
-                    }}
-                  />
-                )}
-                <span
-                  className={`text-[13.5px] font-semibold whitespace-nowrap ${fail ? "text-shu-600" : "text-ink"}`}
-                >
-                  {fail ? words.failed : groupLabel(lane.key)}
-                </span>
-                {names.length > 0 && (
-                  <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">
-                    {names.slice(0, 2).join(" · ")}
-                    {names.length > 2 ? ` ${words.more(names.length - 2)}` : ""}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-
-          {/* The bands: what repeats, and what runs only sometimes. Outer ones first, so inner ones lie on them. */}
-          {chart.bands.map((b, i) => (
-            <div
-              key={i}
-              className={`flow-chart-band-${b.kind} absolute rounded-[10px]`}
-              style={bandBox(b)}
-            />
-          ))}
-
-          <svg
-            className="pointer-events-none absolute inset-0"
-            width={width}
-            height={height}
-            aria-hidden="true"
+    <div className="flow-chart-body relative" style={{ width, height }}>
+      {/* The columns: what each is, over a hairline. */}
+      {chart.lanes.map((lane, i) => {
+        const fail = lane.key === FAIL_LANE;
+        const Icon = fail
+          ? TriangleAlert
+          : lane.key
+            ? groupIcon(lane.key)
+            : null;
+        const names = fail ? [] : targets(lane.steps);
+        if (!lane.key) return null;
+        return (
+          <div
+            key={lane.key}
+            className="absolute flex items-center gap-2 border-b border-slate-200"
+            style={{
+              left: lefts[i],
+              width: widths[i],
+              top: HEAD_GAP,
+              height: LANE_HEAD,
+            }}
           >
-            {chart.links.map((l) => (
-              <path
-                key={`${l.from}-${l.to}`}
-                d={path(l)}
-                fill="none"
-                stroke="var(--chart-line)"
-                strokeWidth={1.5}
+            {Icon && (
+              <Icon
+                size={15}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                className="shrink-0"
+                style={{
+                  color: fail
+                    ? "var(--color-shu-600)"
+                    : (CATEGORY_COLOR[lane.key] ?? CATEGORY_COLOR.other),
+                }}
               />
-            ))}
-            {/* A failure anywhere in these rows goes to the column beside them. */}
-            {chart.brackets.map((b, i) => {
-              const x = lefts[chart.failLane!]! - COL_GAP / 2;
-              const to = chart.rows[b.to]!;
-              const out = top + to.y + mid(to);
-              return (
-                <g
-                  key={i}
-                  fill="none"
-                  stroke="var(--color-shu-500)"
-                  strokeWidth={1.25}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path
-                    d={`M ${x - 6} ${top + b.top + 4} H ${x} V ${top + b.bottom - 4} H ${x - 6}`}
-                  />
-                  <path
-                    d={`M ${x} ${out} H ${lineX(to) - 8}`}
-                    strokeDasharray="3 4"
-                  />
-                </g>
-              );
-            })}
-          </svg>
+            )}
+            <span
+              className={`text-[13.5px] font-semibold whitespace-nowrap ${fail ? "text-shu-600" : "text-ink"}`}
+            >
+              {fail ? words.failed : groupLabel(lane.key)}
+            </span>
+            {names.length > 0 && (
+              <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">
+                {names.slice(0, 2).join(" · ")}
+                {names.length > 2 ? ` ${words.more(names.length - 2)}` : ""}
+              </span>
+            )}
+          </div>
+        );
+      })}
 
-          {chart.rows.map((row, i) =>
-            row.kind === "bar" ? (
-              <span
-                key={i}
-                className="absolute rounded-full bg-slate-400"
-                style={{ ...barBox(row), top: top + row.y, height: row.h }}
+      {/* The bands: what repeats, and what runs only sometimes. Outer ones first, so inner ones lie on them. */}
+      {chart.bands.map((b, i) => (
+        <div
+          key={i}
+          className={`flow-chart-band-${b.kind} absolute rounded-[10px]`}
+          style={bandBox(b)}
+        />
+      ))}
+
+      <svg
+        className="pointer-events-none absolute inset-0"
+        width={width}
+        height={height}
+        aria-hidden="true"
+      >
+        {chart.links.map((l) => (
+          <path
+            key={`${l.from}-${l.to}`}
+            d={path(l)}
+            fill="none"
+            stroke="var(--chart-line)"
+            strokeWidth={1.5}
+          />
+        ))}
+        {/* A failure anywhere in these rows goes to the column beside them. */}
+        {chart.brackets.map((b, i) => {
+          const x = lefts[chart.failLane!]! - COL_GAP / 2;
+          const to = chart.rows[b.to]!;
+          const out = top + to.y + mid(to);
+          return (
+            <g
+              key={i}
+              fill="none"
+              stroke="var(--color-shu-500)"
+              strokeWidth={1.25}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path
+                d={`M ${x - 6} ${top + b.top + 4} H ${x} V ${top + b.bottom - 4} H ${x - 6}`}
               />
-            ) : (
-              <RowView
-                key={i}
-                row={row}
-                defs={defs}
-                x={lineX(row)}
-                y={top + row.y}
-                picked={picked}
-                select={(stepId) => select({ kind: "step", stepId })}
+              <path
+                d={`M ${x} ${out} H ${lineX(to) - 8}`}
+                strokeDasharray="3 4"
               />
-            ),
-          )}
-        </div>
-      </div>
+            </g>
+          );
+        })}
+      </svg>
+
+      {chart.rows.map((row, i) =>
+        row.kind === "bar" ? (
+          <span
+            key={i}
+            className="absolute rounded-full bg-slate-400"
+            style={{ ...barBox(row), top: top + row.y, height: row.h }}
+          />
+        ) : (
+          <RowView
+            key={i}
+            row={row}
+            defs={defs}
+            x={lineX(row)}
+            y={top + row.y}
+            picked={picked}
+            select={(stepId) => select({ kind: "step", stepId })}
+          />
+        ),
+      )}
     </div>
   );
 }

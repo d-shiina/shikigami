@@ -99,6 +99,8 @@ export type ManualItem =
 export type Chapter = {
   number: number;
   title: string;
+  /** Not a part of the work: what is done when the work fails, or always at its end (a try round all of the flow). */
+  role?: "failure" | "end";
   /** 「2 と同時に進めます」 */
   alongside: number[];
   items: ManualItem[];
@@ -570,7 +572,14 @@ export function buildManual(
     missing,
     depth: 0,
   };
-  const parts = chapterParts(flow.steps ?? []);
+  // A flow that is one try round all its work reads as that work: what it
+  // does on failure and at the end is said after it, not as a frame round it.
+  const top = (flow.steps ?? []).filter((s) => !s.disabled);
+  const loud = top.filter((s) => !QUIET.has(s.type));
+  const guard = loud.length === 1 && loud[0]?.type === TRY ? loud[0] : null;
+  const parts = chapterParts(guard ? top.flatMap((s) => (s === guard ? (s.blocks?.try ?? []) : [s])) : top);
+  // Steps are numbered through the whole sheet, so a number names one step.
+  const next = { n: 0 };
   const chapters: Chapter[] = [];
   let parallelSet: number[] = [];
   for (const part of parts) {
@@ -582,7 +591,7 @@ export function buildManual(
       parallelSet = [];
       continue;
     }
-    const ctx: Ctx = { ...base, next: { n: 0 } };
+    const ctx: Ctx = { ...base, next };
     // A chapter that is one group (and some quiet work) reads as the group itself.
     const main = part.steps.filter((s) => !QUIET.has(s.type));
     const steps =
@@ -594,6 +603,13 @@ export function buildManual(
     const number = chapters.length + 1;
     if (part.parallel) parallelSet.push(number);
     chapters.push({ number, title: chapterTitle(part.steps, ctx), alongside: [], items: list, ...countScreens(list) });
+  }
+  for (const [block, role, title] of [
+    ["catch", "failure", t.manual.onFailure],
+    ["finally", "end", t.manual.atTheEnd],
+  ] as const) {
+    const list = guard ? items(guard.blocks?.[block] ?? [], [], { ...base, next }) : [];
+    if (list.length > 0) chapters.push({ number: chapters.length + 1, title, role, alongside: [], items: list, ...countScreens(list) });
   }
   const pictures = chapters.reduce((n, c) => n + countPictures(c.items), 0);
   const vars = flow.variables ?? [];

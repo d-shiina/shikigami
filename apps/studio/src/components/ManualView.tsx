@@ -44,7 +44,7 @@ import { SheetNumber } from "./SheetNumber";
 type View = "flow" | "story" | "variables";
 
 /** The flows `flow.call` nodes run, read once per flow (nested calls too). */
-function useSubflows(flow: Flow | null): Map<string, Flow> {
+export function useSubflows(flow: Flow | null): Map<string, Flow> {
   const [flows, setFlows] = useState<Map<string, Flow>>(new Map());
   useEffect(() => {
     let live = true;
@@ -76,7 +76,7 @@ function duration(ms: number): string {
   return s < 60 ? t.manual.seconds(s) : t.manual.minutes(Math.floor(s / 60), s % 60);
 }
 
-function madeLine(manifest: ManualManifest | null): string | null {
+export function madeLine(manifest: ManualManifest | null): string | null {
   if (!manifest) return null;
   const when = new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
     month: "short",
@@ -107,7 +107,7 @@ function shotLine(manifest: ManualManifest | null, doc: ManualDoc): string {
 }
 
 /** Loads pictures as data URLs, each once. */
-function usePictures(flowId: string | undefined, runId: string | undefined) {
+export function usePictures(flowId: string | undefined, runId: string | undefined) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const asked = useRef(new Set<string>());
   useEffect(() => {
@@ -858,7 +858,8 @@ function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Re
   );
 }
 
-function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[]; ctx: Ctx }) {
+/** `small`: in a sheet's margin, where the picture is a third as wide, the numbers are smaller too. */
+export function ShotFrame({ shot, marks, ctx, small = false }: { shot: ManualShot; marks: SceneMark[]; ctx: Pick<Ctx, "urls" | "want" | "masks" | "onWhole">; small?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -891,17 +892,21 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[];
             <span
               key={m.number ?? `wait-${i}`}
               title={m.number === null ? t.manual.waitsHere : undefined}
-              className={`absolute rounded-[4px] border-[2.5px] ${
+              className={`absolute rounded-[4px] ${small ? "border-2" : "border-[2.5px]"} ${
                 m.number === null ? "border-dashed border-slate-600" : "border-primary shadow-[0_0_0_3px_rgb(10_111_168/0.2)]"
               }`}
               style={{ left: (m.rect.x - crop.x) * k - 3, top: (m.rect.y - crop.y) * k - 3, width: m.rect.width * k + 6, height: m.rect.height * k + 6 }}
             >
               <i
-                className={`absolute top-1/2 -left-[30px] -mt-[10.5px] grid h-[21px] w-[21px] place-items-center rounded-full text-[12px] font-bold not-italic shadow-[0_0_0_2px_white] ${
+                style={small ? { left: Math.max(-8, 4 - (m.rect.x - crop.x) * k) } : undefined}
+                className={`absolute grid place-items-center rounded-full font-bold not-italic ${
+                  // Small, the number sits on the mark's corner: beside it, it would cover the next field or fall off the picture's edge.
+                  small ? "-top-[8px] size-[14px] text-[9.5px] shadow-[0_0_0_1.5px_white]" : "top-1/2 -left-[30px] -mt-[10.5px] h-[21px] w-[21px] text-[12px] shadow-[0_0_0_2px_white]"
+                } ${
                   m.number === null ? "bg-slate-600 text-white" : "bg-primary text-on-primary"
                 }`}
               >
-                {m.number ?? <Clock size={12} />}
+                {m.number ?? <Clock size={small ? 9 : 12} />}
               </i>
             </span>
           ))}
@@ -944,7 +949,7 @@ function useFit(shot: ManualShot, maxWidth: number, maxHeight: number): number {
   return Math.min(1, maxWidth / shot.width, maxHeight / shot.height);
 }
 
-function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string | undefined; mask: Mask | undefined; onClose: () => void }) {
+export function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string | undefined; mask: Mask | undefined; onClose: () => void }) {
   const k = useFit(shot, window.innerWidth * 0.9, window.innerHeight * 0.85);
   return (
     <Overlay onClose={onClose} label={t.manual.whole}>
@@ -957,7 +962,7 @@ function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string
 }
 
 /** Draw boxes over a picture to blur or black out what it shows. */
-function MaskEditor({
+export function MaskEditor({
   shot,
   url,
   mask,

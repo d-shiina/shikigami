@@ -2,7 +2,6 @@
 // never shows it (people read 繰り返し・条件分岐), but the palette finds a
 // node by it, since the AI and the docs use those words. Block labels spell
 // out the condition in plain words, so a loop says what it walks over.
-import { READING } from "./reading";
 import type { Step } from "@spellsheet/schema";
 import { blockName, locale } from "./i18n";
 
@@ -25,8 +24,7 @@ const MAX = 36;
 
 function text(value: unknown): string {
   const s = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
-  // To read, nothing is cut short.
-  return s.length > MAX && !READING ? `${s.slice(0, MAX - 1)}…` : s;
+  return s.length > MAX ? `${s.slice(0, MAX - 1)}…` : s;
 }
 
 /** The label of `block` of `step`, falling back to the registry's `label`. */
@@ -171,9 +169,6 @@ export function branchQuestion(step: Step): string {
     const value = plainExpr(p.value);
     return value ? (ja ? `${value} は？` : `${value}?`) : ja ? "値は？" : "Which value?";
   }
-  // To read: the name the step was given says what is asked; its head keeps the expression.
-  const name = READING ? (step.name ?? "").trim().replace(/[？?]$/, "") : "";
-  if (name) return `${name}${ja ? "？" : "?"}`;
   const condition = plainExpr(p.condition);
   return condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?";
 }
@@ -241,20 +236,12 @@ function plainExpr(value: unknown): string {
   return m ? (m[1] ?? "") : s;
 }
 
-/** To read: an if with a name asks by its name in its decision, so its head shows the expression instead of the name. */
-export const asksByName = (step: Step): boolean => READING && step.type === "control.if" && !!(step.name ?? "").trim();
-
-/** To read, beside a guard (flow/layout.ts ifShape): where the flow goes when it leaves the line there. */
+/** On the chart to read, beside a guard (flow/chart.ts): where the flow goes when it leaves the line there. */
 export function guardOutcome(stop: Step): string {
   const ja = locale === "ja";
   if (stop.type === "control.continue") return ja ? "次の回へ進む" : "On to the next round";
   if (stop.type === "control.break") return ja ? "繰り返しを抜ける" : "Leave the loop";
   return ja ? "失敗として終える" : "Stop as failed";
-}
-
-/** To read, in the head of an if with one side empty: "はい のときだけ". */
-export function onlyWhen(): { before: string; after: string } {
-  return locale === "ja" ? { before: "", after: "のときだけ" } : { before: "only when", after: "" };
 }
 
 /** The words of the chart to read (components/chart). */

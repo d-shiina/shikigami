@@ -75,7 +75,6 @@ import {
   FrameNode,
 } from "./canvas/otherNodes";
 import { type RunValues, NO_RUN } from "./canvas/values";
-import { READING } from "../lib/reading";
 import { PROJECT_W, FocusOn, FollowInside, Follow, DiveBar } from "./canvas/viewport";
 
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode, join: JoinNode, terminal: TerminalNode };
@@ -343,7 +342,7 @@ export function FlowCanvas() {
           // Only a running node keeps time: the others stay as they were.
           clock: states[id] === "running" ? clockKey(path, id) : undefined,
           frameRun: frameRun.get(id),
-          readOnly: inside || READING,
+          readOnly: inside,
           breakpoint: breakpoints.includes(id),
           owner: flow?.id ?? "",
           pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
@@ -473,7 +472,7 @@ export function FlowCanvas() {
         owner: e.owner,
         selectedId,
         split: e.split,
-        insert: READING || inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
+        insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
         hover: setHoveredEdge,
       } satisfies BlockEdgeData,
@@ -482,15 +481,15 @@ export function FlowCanvas() {
       style: {
         stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
         strokeWidth: trail ? 2.5 : 1.5,
-        ...(e.loop || e.thenFinally || trail === "now" ? { strokeDasharray: "5 4" } : {}),
+        ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
-      markerEnd: (READING && !e.loop) || plainJoins.has(e.target) || e.target.startsWith("end:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
+      markerEnd: plainJoins.has(e.target) || e.target.startsWith("end:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, the way into a loop's body).
       zIndex: trail ? 1 : 0,
     };
   });
-  if (!READING) edges.push(...linkEdges);
+  edges.push(...linkEdges);
   // Only what changed is redrawn (see keepSame).
   const keptNodes = useRef(new Map<string, Node>());
   const keptEdges = useRef(new Map<string, Edge>());
@@ -507,7 +506,7 @@ export function FlowCanvas() {
   return (
     <ReactFlow
       key={`${root.id}/${callKey(path)}`}
-      className={`canvas-bg ${READING ? "flow-reading" : ""} ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
+      className={`canvas-bg ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
       colorMode={theme}
       nodes={chartNodes}
       edges={chartEdges}
@@ -515,7 +514,7 @@ export function FlowCanvas() {
       edgeTypes={edgeTypes}
       nodesConnectable={false}
       ref={wrapper}
-      {...(inside || READING ? {} : fileDrop.attrs)}
+      {...(inside ? {} : fileDrop.attrs)}
       onInit={(flow) => {
         flowRef.current = flow;
         // Fit the chart, but never shrink it below reading size: a long
@@ -598,7 +597,7 @@ export function FlowCanvas() {
           const call = calls.get(id);
           return stepMenu(data.step, {
             owner: flow.id,
-            readOnly: inside || READING,
+            readOnly: inside,
             call: call && { key: call.key, canEnter: Boolean(call.callee), unfolded: call.unfolded },
           });
         })(event)
@@ -635,7 +634,7 @@ export function FlowCanvas() {
         focus.set((at && frameAt(layout.frames, at.x, at.y)?.id) ?? null);
       }}
     >
-      {!READING && <Background gap={24} size={1.2} color="var(--color-slate-200)" />}
+      <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       <BranchLight layout={layout} />
       <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}

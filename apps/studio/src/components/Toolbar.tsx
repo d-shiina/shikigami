@@ -36,10 +36,11 @@ const CheckIcon = () => (
   </svg>
 );
 
-export type View = "story" | "flow" | "variables" | "result";
+export type View = "story" | "chart" | "flow" | "variables" | "result";
 
 /**
- * Flow chart, procedure or variables: three ways to read the same flow. On
+ * The sheet, the chart to read, the board the flow is put together on, or
+ * its variables: ways to see the same flow. On
  * the review desk the AI's report comes first, as one more way to read it.
  */
 function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
@@ -48,8 +49,9 @@ function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: Rev
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
     // A finished run of the flow on paper, with its earlier runs (not on the review desk).
     ...(place === "flows" ? [["result", t.result.view] as [ReviewView, string]] : []),
-    ["flow", t.viewFlow],
     ["story", t.viewStory],
+    ["chart", t.viewChart],
+    ["flow", t.viewFlow],
     ["variables", t.vars.table.view],
   ];
   return (
