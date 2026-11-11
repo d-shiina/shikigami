@@ -21,7 +21,7 @@ const chatTitle = (c: Chat) => c.title || t.agent.untitled;
 /**
  * Asking the AI, under the sheet: one field at the foot of the work, with what
  * the AI is doing (or asking) on a line over it. The whole conversation opens
- * upward from the field and closes again. From its header it can be moved into a column on the
+ * upward from the field, over the work (the paper keeps its room), and closes again. From its header it can be moved into a column on the
  * right instead (`width` given): then the conversation is always in view while it is open.
  * `desk`: the work above is a paper on the desk, so the field floats on the desk too.
  */
@@ -95,13 +95,13 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
   if (column && (!open || width === 0)) return null;
   return (
     <div
-      className={column ? "flex h-full shrink-0 flex-col bg-sheet" : `shrink-0 px-5 pt-1 pb-3 ${desk ? "flow-chart" : "bg-sheet"}`}
+      className={column ? "flex h-full shrink-0 flex-col bg-sheet" : `relative z-30 shrink-0 px-5 pt-1 pb-3 ${desk ? "flow-chart" : "bg-sheet"}`}
       style={column ? { width } : undefined}
       data-agent-dock
     >
-      <div className={column ? "flex min-h-0 flex-1 flex-col" : "mx-auto flex w-full max-w-[760px] flex-col gap-2"}>
+      <div className={column ? "flex min-h-0 flex-1 flex-col" : "relative mx-auto w-full max-w-[760px]"}>
         {open ? (
-          <div className={column ? "flex min-h-0 flex-1 flex-col" : `flex max-h-[min(58vh,560px)] min-h-0 flex-col ${CARD}`}>
+          <div className={column ? "flex min-h-0 flex-1 flex-col" : `absolute inset-x-0 bottom-full mb-2 flex max-h-[min(58vh,560px)] min-h-0 flex-col ${CARD}`}>
             <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-2 pl-2">
               <ChatSwitcher chat={chat} />
               <button
@@ -158,7 +158,7 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
             </div>
           </div>
         ) : asking ? (
-          <div className={`max-h-[40vh] overflow-y-auto px-4 py-3 ${CARD}`}>
+          <div className={`absolute inset-x-0 bottom-full mb-2 max-h-[40vh] overflow-y-auto px-4 py-3 ${CARD}`}>
             <Item item={asking} onChoose={(answer) => void submit(answer)} />
           </div>
         ) : null}
