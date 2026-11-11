@@ -112,7 +112,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const busy = useFlowBusy();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const lines = describe(entry, flow, defs);
-  const blocker = revertBlocker(entry, history);
+  const blocker = busy ? t.sheetView.aiWorking : revertBlocker(entry, history);
   return (
     <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-sheet">
       <div className="mb-2 flex items-center gap-2">
@@ -151,6 +151,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
 
 function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
   const flow = useStudio((s) => s.flow);
+  const busy = useFlowBusy();
   const stepTypes = useStudio((s) => s.stepTypes);
   const revert = useStudio((s) => s.revert);
   const history = useStudio((s) => s.history);
@@ -172,7 +173,7 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
               {entry.kind === "create" ? t.flowCreated : entry.kind === "delete" ? t.flowDeleted : entry.label}
             </span>}
         </div>
-        {revertBlocker(entry, history) === null && (
+        {!busy && revertBlocker(entry, history) === null && (
           <button
             type="button"
             onClick={() => revert(entry)}

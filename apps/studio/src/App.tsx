@@ -683,12 +683,14 @@ export function App() {
         else void s.duplicateSelected();
         return;
       }
+      // As the menu's entries: nothing is taken back under the AI while it is still at work on the flow.
+      const aiBusy = flowBusy(agentStore.getState(), store.getState().flow?.id);
       if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
-        void store.getState().undo();
+        if (!aiBusy) void store.getState().undo();
       } else if (mod && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
         e.preventDefault();
-        void store.getState().redo();
+        if (!aiBusy) void store.getState().redo();
       } else if (e.key === "Delete") {
         void store.getState().removeSelected();
       } else if (!mod) {
