@@ -2,7 +2,8 @@
 // a collapsible section, a text field that commits on blur, a path field.
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ChevronRight, CircleHelp, FolderOpen, X } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { useBusy } from "../../lib/busy";
+import { pickPath, usePickerOpen } from "../../lib/picker";
 import { useProjectMaybe } from "../../project";
 import { t } from "../../lib/i18n";
 import { useFileDropTarget } from "../FileDrag";
@@ -88,9 +89,13 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
   const files = useProjectMaybe((s) => s.files, null);
   const copyIn = useProjectMaybe((s) => s.copyIn, null);
   const listId = useMemo(() => `files-${Math.random().toString(36).slice(2)}`, []);
-  const browse = async () => {
+  const picking = usePickerOpen();
+  const [busy, once] = useBusy();
+  // Once: until the copy below is done too, so a second click does not pick again over it.
+  const browse = () => once(() => browseNow());
+  const browseNow = async () => {
     const dir = files?.dir ?? "";
-    const picked = await invoke<string | null>("runner_pick", { kind: folder ? "folder" : "file", start: dir || null }).catch(() => null);
+    const picked = await pickPath(folder ? "folder" : "file", dir);
     if (!picked) return;
     const norm = (p: string) => p.replace(/\\/g, "/");
     const inside = dir && norm(picked).toLowerCase().startsWith(`${norm(dir).toLowerCase()}/`);
@@ -125,8 +130,9 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
       <button
         type="button"
         title={t.props.browseTitle}
+        disabled={picking || busy}
         onClick={() => void browse()}
-        className="flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-sheet px-2 text-[11px] text-slate-700 hover:bg-slate-50"
+        className="flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-sheet px-2 text-[11px] text-slate-700 hover:bg-slate-50 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-sheet"
       >
         <FolderOpen size={13} strokeWidth={1.75} aria-hidden="true" />
         {t.props.browse}

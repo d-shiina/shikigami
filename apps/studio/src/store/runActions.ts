@@ -79,12 +79,14 @@ export const runActions = ({ api, set, get }: StoreContext) => {
 
     async startRun(options) {
       const flow = get().flow;
-      if (!flow) return;
+      // One start at a time: the run is known only once the command returns,
+      // so a double click on 「実行」 started the flow twice.
+      if (!flow || get().startingRun) return;
       if (!options?.inputs && missingInputs(flow, options?.startAt ? options.startValues : undefined).length > 0) {
         set({ askInputs: { flowId: flow.id, options: options ?? {} } });
         return;
       }
-      set({ askInputs: null });
+      set({ askInputs: null, startingRun: true });
       try {
         const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
         // From the runs before this one (a run counts once it has ended).
@@ -120,6 +122,8 @@ export const runActions = ({ api, set, get }: StoreContext) => {
         if (whole && ended?.runId === runId && ended.status === "succeeded") showResult(flow.id, runId);
       } catch (e) {
         set({ error: message(e) });
+      } finally {
+        set({ startingRun: false });
       }
     },
 

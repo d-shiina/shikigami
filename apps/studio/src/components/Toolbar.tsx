@@ -148,6 +148,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
   const startRun = useStudio((s) => s.startRun);
+  const starting = useStudio((s) => s.startingRun);
   const stopRun = useStudio((s) => s.stopRun);
   const followRun = useStudio((s) => s.followRun);
   const setFollowRun = useStudio((s) => s.setFollowRun);
@@ -204,7 +205,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
           <button
             type="button"
             onClick={() => startRun()}
-            disabled={errors > 0}
+            disabled={errors > 0 || starting}
             title={errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
             className="group flex h-7 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >

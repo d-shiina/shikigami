@@ -61,6 +61,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { FlowRun } from "./runResult";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Drafts, ManualManifest, Mask } from "./manual";
+import { pickPath } from "./picker";
 
 /** When a schedule fires (docs/schedules.md). Times are local, "08:00". */
 export type ScheduleWhen =
@@ -309,7 +310,7 @@ export const extensionsApi = {
   registry: () => call<RegistryOffer>("fetch_extension_registry"),
   restart: () => call<void>("restart_for_extensions"),
   /** A zip file picked in the file dialog, or null. */
-  pickZip: () => call<string | null>("runner_pick", { kind: "file", start: null }),
+  pickZip: () => pickPath("file"),
 };
 
 /** The pictures behind a flow's 手順書 (src-tauri/src/manual.rs). */

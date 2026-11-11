@@ -166,6 +166,13 @@ export type StudioState = {
   resultFor: { flowId: string; runId: string; seq: number } | null;
   /** A run waiting for values of inputs with no default (「実行に必要な入力」). */
   askInputs: { flowId: string; options: RunOptions } | null;
+  /** From 「実行」 until the run has its id: a second 「実行」 (a double click, F5 twice) starts nothing. */
+  startingRun: boolean;
+  /**
+   * While 確定・公開・公開をやめる・差し戻し・すべて元に戻す is on its way: a
+   * second click (a double click) does nothing, so nothing is published twice.
+   */
+  deciding: boolean;
   /** The last 「ノードの単体実行」 (only that node ran), until another node is run alone. */
   stepTest: StepTest | null;
   /** Results of nodes run alone, by flow and variable: the next node run alone reads them. */
@@ -460,6 +467,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       trying: null,
       resultFor: null,
       askInputs: null,
+      startingRun: false,
+      deciding: false,
       stepTest: null,
       tested: {},
       followRun: true,

@@ -13,6 +13,7 @@ import { api, type ScheduleView } from "../lib/api";
 import { describeWhen } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { deleteFlowsAsk } from "../lib/ask";
+import { useBusy } from "../lib/busy";
 import { t } from "../lib/i18n";
 import { consult } from "../lib/inventory";
 import { projectApi } from "../project";
@@ -432,12 +433,16 @@ export function FlowsPage() {
   ];
   const view = useTableView(columns, { storageKey: SORT_KEY, initialSort: { column: "updated", descending: true } });
 
-  const submit = async (e: React.FormEvent) => {
+  // Once: Enter twice or a double click on 「作成」 made two flows.
+  const [makingFlow, once] = useBusy();
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setPlace("flows");
-    await create(name.trim() || t.defaultFlowName);
-    setName("");
-    setCreating(false);
+    void once(async () => {
+      setPlace("flows");
+      await create(name.trim() || t.defaultFlowName);
+      setName("");
+      setCreating(false);
+    });
   };
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -529,7 +534,7 @@ export function FlowsPage() {
               placeholder={t.newFlowPrompt}
               className="h-7 w-80 rounded-lg border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
             />
-            <button type="submit" className="h-7 rounded-lg bg-primary px-3 text-[13px] text-on-primary">
+            <button type="submit" disabled={makingFlow} className="h-7 rounded-lg bg-primary px-3 text-[13px] text-on-primary disabled:opacity-50">
               {l.create}
             </button>
           </form>

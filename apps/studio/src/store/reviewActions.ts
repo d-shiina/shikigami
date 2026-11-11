@@ -7,8 +7,18 @@ import { revertBlocker, pendingReview, groupRevertBlocker } from "./history";
 import type { StudioState } from "./index";
 import { saveReviewed } from "./persist";
 
-export const reviewActions = ({ api, set, get }: StoreContext) =>
-  ({
+export const reviewActions = ({ api, set, get }: StoreContext) => {
+  /** Runs one decision at a time (`deciding`); a click while one is on its way answers `busy`. */
+  const deciding = async <T>(busy: T, work: () => Promise<T>): Promise<T> => {
+    if (get().deciding) return busy;
+    set({ deciding: true });
+    try {
+      return await work();
+    } finally {
+      set({ deciding: false });
+    }
+  };
+  return {
     async loadHistory() {
       const id = get().flow?.id;
       if (!id) return;
@@ -39,58 +49,66 @@ export const reviewActions = ({ api, set, get }: StoreContext) =>
       set({ reviewed });
     },
 
-    async approveAll() {
-      const flow = get().flow;
-      if (!flow) return;
-      get().markAllReviewed();
-      try {
-        await api.submitReview(flow.id, { revision: flow.revision ?? 0, verdict: "approved" });
-        set({ notice: t.approved });
-      } catch (e) {
-        // Marked here anyway; Core refuses only when the flow moved on (REVISION_CONFLICT).
-        set({ error: message(e) });
-      }
-      await get().loadTimeline(flow.id);
-    },
-
-    async approveAndPublish() {
-      const flow = get().flow;
-      if (!flow) return;
-      try {
-        const published = await api.approveAndPublish(flow.id, flow.revision ?? 0);
+    approveAll() {
+      return deciding(undefined, async () => {
+        const flow = get().flow;
+        if (!flow) return;
         get().markAllReviewed();
-        set({ notice: t.approvedPublished(published.version), published, error: null });
-        await get().loadVersions();
-      } catch (e) {
-        set({ error: publishMessage(e) });
-      }
-      await get().loadTimeline(flow.id);
+        try {
+          await api.submitReview(flow.id, { revision: flow.revision ?? 0, verdict: "approved" });
+          set({ notice: t.approved });
+        } catch (e) {
+          // Marked here anyway; Core refuses only when the flow moved on (REVISION_CONFLICT).
+          set({ error: message(e) });
+        }
+        await get().loadTimeline(flow.id);
+      });
     },
 
-    async publish(version) {
-      const flow = get().flow;
-      if (!flow) return;
-      try {
-        const published = await api.publishFlow(
-          flow.id,
-          version == null ? { expectedRevision: flow.revision ?? 0, note: "" } : { version, note: "" },
-        );
-        set({ notice: t.publishDone(published.version), published, error: null });
-        await get().loadVersions();
-      } catch (e) {
-        set({ error: publishMessage(e) });
-      }
+    approveAndPublish() {
+      return deciding(undefined, async () => {
+        const flow = get().flow;
+        if (!flow) return;
+        try {
+          const published = await api.approveAndPublish(flow.id, flow.revision ?? 0);
+          get().markAllReviewed();
+          set({ notice: t.approvedPublished(published.version), published, error: null });
+          await get().loadVersions();
+        } catch (e) {
+          set({ error: publishMessage(e) });
+        }
+        await get().loadTimeline(flow.id);
+      });
     },
 
-    async unpublish() {
-      const flow = get().flow;
-      if (!flow) return;
-      try {
-        await api.unpublishFlow(flow.id);
-        set({ notice: t.unpublished, published: null, error: null });
-      } catch (e) {
-        set({ error: message(e) });
-      }
+    publish(version) {
+      return deciding(undefined, async () => {
+        const flow = get().flow;
+        if (!flow) return;
+        try {
+          const published = await api.publishFlow(
+            flow.id,
+            version == null ? { expectedRevision: flow.revision ?? 0, note: "" } : { version, note: "" },
+          );
+          set({ notice: t.publishDone(published.version), published, error: null });
+          await get().loadVersions();
+        } catch (e) {
+          set({ error: publishMessage(e) });
+        }
+      });
+    },
+
+    unpublish() {
+      return deciding(undefined, async () => {
+        const flow = get().flow;
+        if (!flow) return;
+        try {
+          await api.unpublishFlow(flow.id);
+          set({ notice: t.unpublished, published: null, error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      });
     },
 
     async loadApprovals() {
@@ -156,23 +174,25 @@ export const reviewActions = ({ api, set, get }: StoreContext) =>
       }
     },
 
-    async sendBack(reason, steps) {
-      const flow = get().flow;
-      if (!flow) return false;
-      try {
-        await api.submitReview(flow.id, {
-          revision: flow.revision ?? 0,
-          verdict: "rejected",
-          reason: reason.trim(),
-          steps: steps.filter((n) => n.note.trim()).map((n) => ({ ...n, note: n.note.trim() })),
-        });
-        set({ notice: t.sentBack });
-        await get().loadTimeline(flow.id);
-        return true;
-      } catch (e) {
-        set({ error: message(e) });
-        return false;
-      }
+    sendBack(reason, steps) {
+      return deciding(false, async () => {
+        const flow = get().flow;
+        if (!flow) return false;
+        try {
+          await api.submitReview(flow.id, {
+            revision: flow.revision ?? 0,
+            verdict: "rejected",
+            reason: reason.trim(),
+            steps: steps.filter((n) => n.note.trim()).map((n) => ({ ...n, note: n.note.trim() })),
+          });
+          set({ notice: t.sentBack });
+          await get().loadTimeline(flow.id);
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      });
     },
 
     async loadTimeline(id) {
@@ -199,20 +219,22 @@ export const reviewActions = ({ api, set, get }: StoreContext) =>
       }
     },
 
-    async revertAll() {
-      const group = pendingReview(get());
-      if (group.length === 0) return;
-      const blocker = groupRevertBlocker(group, get().history);
-      if (blocker) {
-        set({ error: blocker });
-        return;
-      }
-      // Newest first, so each inverse meets the state its own edit left.
-      const ok = await get().applyOps(group.flatMap((e) => e.inverse ?? []));
-      if (ok) {
-        get().markAllReviewed();
-        set({ notice: t.reverted });
-      }
+    revertAll() {
+      return deciding(undefined, async () => {
+        const group = pendingReview(get());
+        if (group.length === 0) return;
+        const blocker = groupRevertBlocker(group, get().history);
+        if (blocker) {
+          set({ error: blocker });
+          return;
+        }
+        // Newest first, so each inverse meets the state its own edit left.
+        const ok = await get().applyOps(group.flatMap((e) => e.inverse ?? []));
+        if (ok) {
+          get().markAllReviewed();
+          set({ notice: t.reverted });
+        }
+      });
     },
 
     async loadInbox() {
@@ -233,4 +255,5 @@ export const reviewActions = ({ api, set, get }: StoreContext) =>
       for (const [id, h] of pairs) if (latest(h) >= latest(histories[id])) histories[id] = h;
       set({ histories });
     },
-  }) satisfies Partial<StudioState>;
+  } satisfies Partial<StudioState>;
+};

@@ -1031,6 +1031,7 @@ export function ReviewActions({
   const approveAndPublish = useStudio((s) => s.approveAndPublish);
   const published = useStudio((s) => s.published);
   const revertAll = useStudio((s) => s.revertAll);
+  const deciding = useStudio((s) => s.deciding);
   const flow = useStudio((s) => s.flow);
   const [hint, setHint] = useState<"keep" | "sendBack" | "revert" | null>(null);
   if (pending.length === 0) return null;
@@ -1085,7 +1086,7 @@ export function ReviewActions({
           <button
             type="button"
             onClick={() => void revertAll()}
-            disabled={blocker !== null}
+            disabled={blocker !== null || deciding}
             title={blocker ?? `${t.desk.allEdits(pending.length)}\n${t.desk.revertTitle}`}
             {...hover("revert")}
             className="flex items-center gap-1 text-[12px] whitespace-nowrap text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
@@ -1106,7 +1107,7 @@ export function ReviewActions({
         <button
           type="button"
           onClick={() => void approveAndPublish()}
-          disabled={empty}
+          disabled={empty || deciding}
           title={empty ? t.desk.emptyFlow : t.desk.keepTitle}
           {...hover("keep")}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold whitespace-nowrap text-on-primary enabled:hover:bg-primary-hover disabled:opacity-50"

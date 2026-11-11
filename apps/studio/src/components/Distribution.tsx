@@ -6,12 +6,12 @@
 // what changed, what this PC needs, nothing published until a person here
 // publishes it).
 import type { DistributedFlow, DistributionFolder, DistributionView } from "@spellsheet/schema";
-import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, FolderSync, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { relativeTime } from "../lib/changes";
 import { t } from "../lib/i18n";
+import { pickPath, usePickerOpen } from "../lib/picker";
 import { Modal } from "./HandOff";
 import { SettingsGroup, SettingsRow, settingsInput } from "./settingsLayout";
 
@@ -230,8 +230,9 @@ export function DistributionSettings() {
       setPath("");
     }
   };
+  const picking = usePickerOpen();
   const browse = async () => {
-    const picked = await invoke<string | null>("runner_pick", { kind: "folder", start: path || null }).catch(() => null);
+    const picked = await pickPath("folder", path);
     if (picked) setPath(picked);
   };
   return (
@@ -268,7 +269,12 @@ export function DistributionSettings() {
         <input aria-label={d.name} value={name} onChange={(e) => setName(e.target.value)} placeholder={d.namePlaceholder} className={settingsInput} />
         <div className="flex min-w-0 items-center gap-2">
           <input aria-label={d.path} value={path} onChange={(e) => setPath(e.target.value)} placeholder={d.pathPlaceholder} className={`${settingsInput} min-w-0 flex-1 font-mono text-[12px]`} />
-          <button type="button" onClick={() => void browse()} className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-sheet px-2 text-[12px] text-slate-700 hover:bg-slate-50">
+          <button
+            type="button"
+            disabled={picking}
+            onClick={() => void browse()}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-sheet px-2 text-[12px] text-slate-700 hover:bg-slate-50 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-sheet"
+          >
             <FolderOpen size={13} strokeWidth={1.75} aria-hidden="true" />
             {t.props.browse}
           </button>

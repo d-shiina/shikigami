@@ -3,6 +3,7 @@ import { isErrorPayload, type ProjectFiles, type RunEventEnvelope, type RunRepor
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ApiError, type RunRecord } from "../lib/api";
+import { pickPath } from "../lib/picker";
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -32,7 +33,7 @@ export const runnerApi = {
   /** With its app, or the folder (`""`) in Explorer. */
   open: (id: string, path: string) => call<void>("open_project_file", { id, path, reveal: false }),
   /** The file or folder dialog for a `format: file` / `folder` input; null when cancelled. */
-  pick: (kind: "file" | "folder", start: string) => call<string | null>("runner_pick", { kind, start: start || null }),
+  pick: (kind: "file" | "folder", start: string) => pickPath(kind, start),
   /** Opens the run window (from Studio). */
   openWindow: () => call<void>("open_runner"),
   onEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>

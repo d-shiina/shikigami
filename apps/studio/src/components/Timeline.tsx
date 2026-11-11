@@ -188,6 +188,7 @@ export function Timeline() {
   const history = useStudio((s) => s.history);
   const pending = usePendingReview();
   const approveAll = useStudio((s) => s.approveAll);
+  const deciding = useStudio((s) => s.deciding);
   const pendingRevs = new Set(pending.map((e) => e.revision));
   const entries = [...history].reverse();
 
@@ -202,7 +203,7 @@ export function Timeline() {
               <span className="ml-1 text-shu-600">{pending.length}</span>
             </h3>
             {pending.length > 1 && (
-              <button type="button" onClick={() => void approveAll()} className="ml-auto text-xs text-slate-500 hover:text-ink">
+              <button type="button" disabled={deciding} onClick={() => void approveAll()} className="ml-auto text-xs text-slate-500 hover:text-ink disabled:cursor-default disabled:opacity-50">
                 {t.approveAll}
               </button>
             )}

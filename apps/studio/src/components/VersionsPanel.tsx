@@ -75,6 +75,7 @@ function PublishedCard() {
   const published = useStudio((s) => s.published);
   const publish = useStudio((s) => s.publish);
   const unpublish = useStudio((s) => s.unpublish);
+  const deciding = useStudio((s) => s.deciding);
   const [confirm, setConfirm] = useState(false);
   const health = useFlowHealth();
   // What unattended runs would trip over: said before publishing, not after.
@@ -118,7 +119,8 @@ function PublishedCard() {
               void publish();
             }}
             onBlur={() => setPublishAnyway(false)}
-            className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+            disabled={deciding}
+            className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover disabled:cursor-default disabled:opacity-50"
           >
             {publishAnyway ? t.publishWarn.anyway : t.publishCurrent}
           </button>
@@ -126,7 +128,8 @@ function PublishedCard() {
         {published && (
           <button
             type="button"
-            className={confirm ? "text-xs font-semibold text-shu-600" : "text-xs text-slate-500 hover:text-shu-600"}
+            className={`${confirm ? "text-xs font-semibold text-shu-600" : "text-xs text-slate-500 hover:text-shu-600"} disabled:cursor-default disabled:opacity-50`}
+            disabled={deciding}
             onClick={() => {
               if (!confirm) return setConfirm(true);
               setConfirm(false);
@@ -147,6 +150,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
   const restoreVersion = useStudio((s) => s.restoreVersion);
   const published = useStudio((s) => s.published?.version === version.number);
   const publish = useStudio((s) => s.publish);
+  const deciding = useStudio((s) => s.deciding);
   const [diff, setDiff] = useState<FlowDiff | null>(null);
   const [confirm, setConfirm] = useState(false);
   const revision = flow?.revision ?? 0;
@@ -203,7 +207,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
             {confirm ? t.confirmRestoreAgain : t.restore}
           </button>
           {!published && (
-            <button type="button" className="text-slate-500 hover:text-moegi-500" onClick={() => void publish(version.number)}>
+            <button type="button" disabled={deciding} className="text-slate-500 hover:text-moegi-500 disabled:cursor-default disabled:opacity-50" onClick={() => void publish(version.number)}>
               {t.publishThis}
             </button>
           )}

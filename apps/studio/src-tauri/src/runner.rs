@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 use spellsheet_core::{ErrorPayload, Flow, FlowId, FlowService, RunId};
 use spellsheet_runtime::record::{list_runs, read_report};
 use spellsheet_runtime::{RunOptions, RunOrigin, RunStatus, RunTrigger};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use time::OffsetDateTime;
 
 use crate::AppState;
@@ -170,14 +170,71 @@ pub async fn runner_run(
     track_run(app, &state, id, handle, RUNNER_EVENT, None)
 }
 
-/// The file or folder picker of a `format: file` / `folder` input. `start`
-/// is the path in the field, so the dialog opens next to it. `None` when
-/// the person cancels.
+/// Tells every window whether a file or folder dialog is open (`bool`), so
+/// each 「参照…」 button stays off while one is: in Writer and in Runner alike.
+const PICKER_EVENT: &str = "picker-open";
+
+/// Whether a file or folder dialog is open. The dialog is its own process
+/// (dialog.ps1), not modal to Writer's window, so Writer's buttons still
+/// take clicks while it is open.
+static PICKER_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Holds [`PICKER_OPEN`] while a dialog is open; dropping it lets the next one open.
+struct PickerOpen(AppHandle);
+
+impl PickerOpen {
+    /// `None` when a dialog is open already.
+    fn take(app: &AppHandle) -> Option<Self> {
+        if !claim_picker() {
+            return None;
+        }
+        let _ = app.emit(PICKER_EVENT, true);
+        Some(Self(app.clone()))
+    }
+}
+
+impl Drop for PickerOpen {
+    fn drop(&mut self) {
+        release_picker();
+        let _ = self.0.emit(PICKER_EVENT, false);
+    }
+}
+
+/// Marks a dialog open; false when one is open already.
+fn claim_picker() -> bool {
+    !PICKER_OPEN.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+fn release_picker() {
+    PICKER_OPEN.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether a file or folder dialog is open now (a window opened while one is).
 #[tauri::command]
-pub async fn runner_pick(kind: String, start: Option<String>) -> CmdResult<Option<String>> {
+pub fn picker_open() -> bool {
+    PICKER_OPEN.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// The file or folder picker of a `format: file` / `folder` input, and of
+/// every 「参照…」 button. `start` is the path in the field, so the dialog
+/// opens next to it. `None` when the person cancels. One at a time: while a
+/// dialog is open another click is refused (`PICKER_OPEN`), whichever
+/// window it comes from.
+#[tauri::command]
+pub async fn runner_pick(
+    app: AppHandle,
+    kind: String,
+    start: Option<String>,
+) -> CmdResult<Option<String>> {
     if kind != "file" && kind != "folder" {
         return Err(err("INVALID_INPUT", format!("cannot pick a {kind}")));
     }
+    let Some(_open) = PickerOpen::take(&app) else {
+        return Err(err(
+            "PICKER_OPEN",
+            "a file or folder dialog is open already",
+        ));
+    };
     let folder = start
         .map(|p| std::path::PathBuf::from(spellsheet_core::project::expand_env(&p)))
         .and_then(|p| {
@@ -301,6 +358,19 @@ mod tests {
         );
         let hooks = include_str!("../windows/installer-hooks.nsh");
         assert!(hooks.contains(r#"!define RUNNER_APPID "${BUNDLEID}.runner""#));
+    }
+
+    #[test]
+    fn one_file_dialog_at_a_time() {
+        assert!(claim_picker());
+        assert!(picker_open());
+        // A second click (in this window or the other one) opens nothing.
+        assert!(!claim_picker());
+        assert!(!claim_picker());
+        release_picker();
+        assert!(!picker_open());
+        assert!(claim_picker());
+        release_picker();
     }
 
     #[test]
