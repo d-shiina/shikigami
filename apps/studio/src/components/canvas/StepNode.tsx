@@ -1,5 +1,6 @@
 // The node of one step, and the head of a group (繰り返し・分岐) drawn as a
 // frame around its steps.
+import { READING } from "../../lib/reading";
 import { CASE, IF, SWITCH } from "../../lib/stepTypes";
 import { type Node, type NodeProps, NodeToolbar, Position } from "@xyflow/react";
 import {
@@ -293,7 +294,7 @@ export function StepNode({ data }: StepNodeProps) {
       {/* Still there once a run went through it, in the colour of the way it took. */}
       {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && (!data.runState || data.runState === "succeeded") && (
         <span
-          className={`pointer-events-none absolute top-full left-1/2 z-10 mt-1.5 -translate-x-1/2 rounded bg-[var(--xy-background-color)] px-1.5 text-[11px] whitespace-nowrap ${
+          className={`pointer-events-none absolute top-full left-1/2 z-10 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${READING ? "rounded-md border border-slate-200 bg-sheet px-2 leading-[18px]" : ""} ${
             data.runState ? "font-medium text-moegi-600" : "text-slate-500"
           }`}
         >

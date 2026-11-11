@@ -635,7 +635,7 @@ export function FlowCanvas() {
         focus.set((at && frameAt(layout.frames, at.x, at.y)?.id) ?? null);
       }}
     >
-      <Background gap={24} size={1.2} color={READING ? "var(--flow-read-dot)" : "var(--color-slate-200)"} />
+      {!READING && <Background gap={24} size={1.2} color="var(--color-slate-200)" />}
       <BranchLight layout={layout} />
       <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}

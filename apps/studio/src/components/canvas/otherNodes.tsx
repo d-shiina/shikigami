@@ -152,7 +152,7 @@ export function SlotNode({ id, data }: NodeProps<Node<TailData>>) {
         <svg aria-hidden="true" width={w} height={h} className="absolute inset-0 overflow-visible">
           <line x1={w / 2} x2={w / 2} y1={0} y2={h} stroke="var(--flow-edge)" strokeWidth={1.5} />
         </svg>
-        {!data.tail && data.parentId !== null && <span className="relative rounded bg-[var(--xy-background-color)] px-1.5 text-[11.5px] text-slate-500">{t.flow.nothing}</span>}
+        {!data.tail && data.parentId !== null && <span className="relative rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] text-slate-600">{t.flow.nothing}</span>}
       </div>
     );
   }
