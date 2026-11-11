@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { systemFacts } from "./systemFacts";
 
 const defs = new Map<string, StepTypeDef>([
-  ["excel.readRange", { type: "excel.readRange", risk: "safe" } as StepTypeDef],
-  ["excel.writeRange", { type: "excel.writeRange", risk: "caution" } as StepTypeDef],
+  ["excel.readRange", { type: "excel.readRange", risk: "safe" } as unknown as StepTypeDef],
+  ["excel.writeRange", { type: "excel.writeRange", risk: "caution" } as unknown as StepTypeDef],
 ]);
 
 const flow: Flow = {
