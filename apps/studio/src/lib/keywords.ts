@@ -261,5 +261,24 @@ export function chartWords() {
     together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
     /** After a loop's name, when its rounds run at the same time. */
     atOnce: (n: number) => (ja ? `${n} 件ずつ同時に` : `${n} at a time`),
+    /** What the system does at a step (lib/systemFacts.ts): the name of each kind, then its value. */
+    facts: {
+      connect: ja ? "接続先" : "Connects to",
+      launch: ja ? "起動" : "Starts",
+      target: ja ? "対象" : "Works on",
+      read: ja ? "読み取り" : "Reads",
+      write: ja ? "書き込み" : "Writes",
+      secret: ja ? "シークレット" : "Secret",
+      wait: ja ? "待機" : "Waits",
+      retry: ja ? "再試行" : "Retries",
+      take: ja ? "受け取り" : "Takes",
+      give: ja ? "引き渡し" : "Gives",
+    },
+    upTo: (seconds: number) => (ja ? `最大 ${seconds} 秒` : `up to ${seconds} s`),
+    attempts: (n: number) => (ja ? `${n} 回まで` : `up to ${n} times`),
+    fromStep: (n: string) => (ja ? `${n} から` : `from ${n}`),
+    toSteps: (n: string) => (ja ? `${n} へ` : `to ${n}`),
+    atStart: ja ? "開始時の入力" : "given at the start",
+    flowOutput: ja ? "フローの出力" : "the flow's output",
   };
 }

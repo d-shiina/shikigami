@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, PanelRight, Pause, Redo2, Files, Send, StepForward, Undo2, Variable } from "lucide-react";
+import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, Variable } from "lucide-react";
 import { openMenu } from "../lib/contextMenu";
 import { FlowSwitch } from "./FlowSwitch";
 
@@ -214,7 +214,6 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
           </button>
         </>
       )}
-      <PaneToggle view={view} />
     </div>
   );
 }
@@ -230,6 +229,7 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
   const startRun = useStudio((s) => s.startRun);
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const openHandOff = useStudio((s) => s.openHandOff);
+  const showFlowProps = useStudio((s) => s.showFlowProps);
   const canUndo = useStudio((s) => s.canUndo);
   const canRedo = useStudio((s) => s.canRedo);
   const undo = useStudio((s) => s.undo);
@@ -253,6 +253,7 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
           "-",
           { label: t.toolbar.stepRun, icon: StepForward, disabled: !canRun, run: () => void startRun({ step: true }) },
           "-",
+          { label: t.shell.flowSettings, icon: Settings2, run: showFlowProps },
           { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
           setFiles && { label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) },
           openFolder && { label: t.project.openFolder, icon: FolderOutput, run: () => void openFolder("", false) },
@@ -266,29 +267,3 @@ function More({ onView, canRun }: { onView: (view: ReviewView) => void; canRun: 
   );
 }
 
-/**
- * Shows or closes the right pane, at the right end of the bar as Linear and VS
- * Code keep theirs. Picking a node opens the pane by itself; this keeps the
- * flow's settings open with nothing picked, or closes the pane for the room.
- * The 変数 table edits in place and has no pane, so it has no button.
- */
-function PaneToggle({ view }: { view: ReviewView }) {
-  const place = useStudio((s) => s.place);
-  const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
-  const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
-  const showFlowProps = useStudio((s) => s.showFlowProps);
-  // The sheet opens a step's settings under its line: only the board and the chart have a pane beside them.
-  if ((place !== "flows" && place !== "review") || view !== "chart") return null;
-  return (
-    <button
-      type="button"
-      onClick={() => (open ? setInspectorOpen(false) : showFlowProps())}
-      aria-pressed={open}
-      title={open ? t.shell.paneHide : t.shell.paneShow}
-      aria-label={open ? t.shell.paneHide : t.shell.paneShow}
-      className={`grid h-7 w-7 place-items-center rounded-md ${open ? "bg-slate-100 text-ink" : "text-slate-500 hover:bg-slate-100 hover:text-ink"}`}
-    >
-      <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />
-    </button>
-  );
-}

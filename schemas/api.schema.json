@@ -4914,6 +4914,19 @@
             "null"
           ]
         },
+        "next": {
+          "description": "The task to build next: the highest ranked one that has no flow yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "built": {
+          "description": "Ranked tasks that already have a flow.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
         "incomplete": {
           "description": "Tasks that still miss something to be placed.",
           "type": "integer",
@@ -4925,6 +4938,7 @@
         "tasks",
         "monthlyMinutes",
         "savableMinutes",
+        "built",
         "incomplete"
       ]
     },

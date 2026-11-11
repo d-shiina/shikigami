@@ -7,6 +7,8 @@ const defs = new Map([
   def("browser.click", "browser"),
   def("excel.appendRows", "office"),
   def("variable.set", "variable"),
+  def("desktop.launch", "windows"),
+  def("desktop.click", "windows"),
   def("control.forEach", "control"),
   def("control.if", "control"),
   def("control.continue", "control"),
@@ -80,5 +82,25 @@ describe("layoutChart", () => {
     expect(chart.lanes.map((l) => l.cols)).toEqual([2, 1]);
     // What follows waits for them all: each goes into the bar, and the bar goes on.
     expect(chart.links.filter((l) => l.to === 6).map((l) => l.from)).toEqual([3, 4, 5]);
+  });
+
+  it("gives each window of a desktop app a column, with the program's steps in its first window", () => {
+    const on = (window: Record<string, string>): Step => ({ ...s("desktop.click"), params: { target: { window, element: { id: "ok" } } } }) as Step;
+    const chart = layoutChart(
+      [
+        { ...s("desktop.launch"), params: { path: "C:\\Program Files\\Hanbai\\hanbai.exe" } } as Step,
+        on({ title: "販売管理", process: "hanbai.exe" }),
+        on({ title: "登録しました", process: "hanbai.exe" }),
+        on({ process: "HANBAI.EXE" }),
+        // A part of the flow names no window: it stays where the step before it worked.
+        { ...s("desktop.click"), params: { target: { part: "save" } } } as Step,
+      ],
+      defs,
+    );
+    expect(chart.lanes.map((l) => [l.group, l.name])).toEqual([
+      ["windows", "販売管理"],
+      ["windows", "登録しました"],
+    ]);
+    expect(chart.rows.map((r) => r.lane)).toEqual([0, 0, 1, 0, 0]);
   });
 });

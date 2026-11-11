@@ -4,7 +4,6 @@ import { summarize } from "../lib/review";
 import type { StoreContext } from "./context";
 import type { StudioState } from "./index";
 import { pendingReview } from "./history";
-import { INSPECTOR_KEY, saveFlag } from "./persist";
 import { callKey, diveChain } from "./run";
 
 export const uiActions = ({ set, get }: StoreContext) =>
@@ -56,13 +55,11 @@ export const uiActions = ({ set, get }: StoreContext) =>
 
 
     setInspectorOpen(open) {
-      saveFlag(INSPECTOR_KEY, open);
       // Closing puts the selection down too, or the pane would stay for it.
       set(open ? { inspectorOpen: true } : { inspectorOpen: false, selection: null, range: null });
     },
 
     showFlowProps() {
-      saveFlag(INSPECTOR_KEY, true);
       set({ inspectorOpen: true, selection: null, range: null, extractOpen: false, extractName: "" });
     },
 

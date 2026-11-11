@@ -192,7 +192,6 @@ export type ProjectState = {
   dismiss(): void;
 };
 
-const PANEL_KEY = "spellsheet.studio.project";
 const AUTOSAVE_MS = 400;
 
 function message(e: unknown): string {
@@ -209,13 +208,8 @@ export interface ProjectUi {
 }
 
 export function createProjectStore(api: ProjectApi, labels: ProjectUi): StoreApi<ProjectState> {
-  // The flow's files open from the menu: the sheet names the ones the flow reads.
-  let panelOpen = false;
-  try {
-    panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) === "open";
-  } catch {
-    // Only a remembered preference.
-  }
+  // The flow's files open from the menu, and start closed each time: the sheet names the ones the flow reads.
+  const panelOpen = false;
   return createStore<ProjectState>()((set, get) => {
     let autosave: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
@@ -249,11 +243,6 @@ export function createProjectStore(api: ProjectApi, labels: ProjectUi): StoreApi
       notice: null,
       setPanelOpen(open) {
         set({ panelOpen: open });
-        try {
-          globalThis.localStorage?.setItem(PANEL_KEY, open ? "open" : "closed");
-        } catch {
-          // Only a remembered preference.
-        }
       },
       async load(id) {
         if (id === get().flowId) return;

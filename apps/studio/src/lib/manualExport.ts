@@ -20,7 +20,7 @@ import {
   type Scene,
   overviewRows,
 } from "./manual";
-import type { Part } from "./sentence";
+import { brief, type Part } from "./sentence";
 
 export type ExportOptions = {
   /** Blur table cells and input fields (the picture's `regions`). */
@@ -77,7 +77,13 @@ const esc = (text: string) =>
 
 function parts(list: Part[] | null): string {
   if (!list) return "";
-  return list.map((p) => ("text" in p ? esc(p.text) : `<span class="v">${esc(p.code)}</span>`)).join("");
+  return list
+    .map((p) => {
+      if ("text" in p) return esc(p.text);
+      const cut = brief(p.code);
+      return `<span class="v">${esc(cut ? `${cut.text}… ${t.sheetView.chars(cut.length)}` : p.code)}</span>`;
+    })
+    .join("");
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

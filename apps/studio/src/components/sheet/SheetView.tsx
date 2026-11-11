@@ -10,7 +10,7 @@ import { locale, t } from "../../lib/i18n";
 import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
 import { sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
-import { type Part, paramShown, plain } from "../../lib/sentence";
+import { brief, type Part, paramShown, plain } from "../../lib/sentence";
 import type { Flow, Step } from "@spellsheet/schema";
 import { findStep, isActive, trailOf } from "../../store";
 import type { RunState } from "../../store/run";
@@ -26,6 +26,7 @@ import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
 import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
+import { PAPER } from "./paper";
 
 const CHIP = "mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink";
 
@@ -61,11 +62,29 @@ function Entry({ shown, value, onChange }: { shown: string; value: string | numb
 }
 
 /** A sentence with the values it names set apart, as on a form. With `step`, the ones written out in full can be changed in place. */
-function Words({ parts, step, onValue }: { parts: Part[]; step?: Step; onValue?: (key: string, value: string | number) => void }) {
+function Words({ parts, step, onValue, onOpen }: { parts: Part[]; step?: Step; onValue?: (key: string, value: string | number) => void; onOpen?: () => void }) {
   return (
     <>
       {parts.map((p, i) => {
         if ("text" in p) return <span key={i}>{p.text}</span>;
+        // A page of HTML or a long script is not read in a sentence: its first words, and the rest in the step's settings.
+        const cut = brief(p.code);
+        if (cut) {
+          const words = (
+            <>
+              {cut.text}…<span className="ml-1.5 text-[12px] text-slate-500">{t.sheetView.chars(cut.length)}</span>
+            </>
+          );
+          return onOpen ? (
+            <button key={i} type="button" title={t.sheetView.openLong} onClick={onOpen} className={`${CHIP} leading-[1.45] hover:border-slate-400`}>
+              {words}
+            </button>
+          ) : (
+            <span key={i} className={CHIP}>
+              {words}
+            </span>
+          );
+        }
         const key = step && onValue ? paramShown(step, p.code) : null;
         if (key && step && onValue) return <Entry key={i} shown={p.code} value={step.params?.[key] as string | number} onChange={(v) => onValue(key, v)} />;
         return (
@@ -76,6 +95,12 @@ function Words({ parts, step, onValue }: { parts: Part[]; step?: Step; onValue?:
       })}
     </>
   );
+}
+
+/** A value as a note in the margin gives it: a long one by its first words. */
+function short(value: string): string {
+  const cut = brief(value);
+  return cut ? `${cut.text}… ${t.sheetView.chars(cut.length)}` : value;
 }
 
 function Value({ icon: Icon, children }: { icon?: LucideIcon; children: React.ReactNode }) {
@@ -203,7 +228,7 @@ function ChangeNote({ change, step, defs }: { change: Change; step: ManualStep; 
           <p key={d.field} className="break-words">
             {named(d.field)}
             {t.sheetView.was}
-            {d.before === undefined ? t.sheetView.nothing : formatValue(d.before)}
+            {d.before === undefined ? t.sheetView.nothing : short(formatValue(d.before))}
           </p>
         ))}
         <p className="mt-0.5 flex gap-3">
@@ -306,7 +331,7 @@ function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; n
         {failed && <p className="mt-0.5 text-[13px] leading-[1.7] text-shu-600">{failed}</p>}
         {step.how && plain(step.how) !== step.text && (
           <p className="mt-0.5 text-[14px] leading-[1.8] text-slate-700">
-            <Words parts={step.how} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} />
+            <Words parts={step.how} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} onOpen={() => (picked ? undefined : onPick(step.stepId))} />
           </p>
         )}
         {step.note && <p className="mt-1 text-[12.5px] leading-[1.7] text-slate-500">{step.note}</p>}
@@ -558,13 +583,11 @@ function Export({
   return <ExportDialog doc={doc} flowId={flow.id} made={madeLine(manifest)} shotAt={shotLine(manifest, doc)} edition={editionOf(published, versions, day)} when={when} masks={masks} onClose={onClose} />;
 }
 
-/** The paper every way of reading the flow lies on: its outline, its corners, and the flow's name at its top. */
-const PAPER = "rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]";
-
 /** The last request to show a step that was answered: one is answered once, whichever sheet is up. */
 let revealed = 0;
 
-export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
+/** `onSheet`: asked from the chart, to read a step where its settings open (the sheet). */
+export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?: () => void }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const startRun = useStudio((s) => s.startRun);
@@ -736,8 +759,8 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
             </ol>
           </nav>
         )}
-        {/* As a chart the paper is as wide as the chart (so it cannot be measured against, and keeps the plain margins). */}
-        <article className={`min-w-0 ${PAPER} ${chart ? "w-fit" : "@container/paper w-[980px] max-w-full"}`}>
+        {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
+        <article className={`${PAPER} ${chart ? "w-fit min-w-[min(980px,calc(100cqw-40px))]" : "@container/paper w-[980px] max-w-full min-w-0"}`}>
           <header className={`flow-root px-10 pt-11 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]`}>
             <div className={MARGIN}>
               {!chart && (
@@ -751,7 +774,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
             </div>
           </header>
           {chart ? (
-            <ChartBody numbers={numbers} run={run} />
+            <ChartBody numbers={numbers} run={run} onOpen={onSheet} />
           ) : (
             <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
               <div className={MARGIN}>
