@@ -51,6 +51,13 @@ describe("layoutChart", () => {
     expect(chart.bands.map((b) => b.kind)).toEqual(["when"]);
   });
 
+  it("draws no way to a catch whose steps are all switched off", () => {
+    const chart = layoutChart([s("control.try", { try: [s("browser.click")], catch: [{ ...s("log.message"), disabled: true }] })], defs);
+    expect(chart.brackets).toEqual([]);
+    expect(chart.failLane).toBeNull();
+    expect(chart.rows).toHaveLength(1);
+  });
+
   it("stands what runs on failure in a column of its own, beside the rows it covers", () => {
     const chart = layoutChart([s("control.try", { try: [s("browser.click"), s("browser.click")], catch: [s("control.fail")], finally: [s("browser.click")] })], defs);
     expect(chart.lanes.at(-1)?.key).toBe(FAIL_LANE);

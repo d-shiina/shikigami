@@ -126,7 +126,7 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
       const app = appOf(step, defs);
       if (app && !keys.includes(app)) keys.push(app);
       for (const [name, inner] of blocksOf(step)) {
-        if (step.type === TRY && name === "catch") fails ||= inner.length > 0;
+        if (step.type === TRY && name === "catch") fails ||= inner.some((c) => !c.disabled);
         else scan(inner);
       }
     }
@@ -218,7 +218,8 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
           const to = rows.length;
           walk(caught);
           failing = false;
-          brackets.push({ top, bottom: after - ROW_GAP, to });
+          // Nothing to go to when every step of the catch is switched off.
+          if (rows.length > to) brackets.push({ top, bottom: after - ROW_GAP, to });
           prev = [...tried, ...prev];
           y = Math.max(after, y);
           lane = back;

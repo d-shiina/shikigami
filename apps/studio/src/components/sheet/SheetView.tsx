@@ -561,6 +561,9 @@ function Export({
 /** The paper every way of reading the flow lies on: its outline, its corners, and the flow's name at its top. */
 const PAPER = "rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]";
 
+/** The last request to show a step that was answered: one is answered once, whichever sheet is up. */
+let revealed = 0;
+
 export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -623,16 +626,18 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   useEffect(() => {
     if (at) desk.current?.querySelector(`[data-step="${at}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [at]);
-  // A link to a step (a log line, a result, a variable's use) brings it into sight, opened.
+  // A link to a step (a log line, a result, a variable's use) and a step the AI just added are brought
+  // into sight. A step inside a called flow is shown by the call that holds it.
   const reveal = useStudio((s) => s.reveal);
-  const ready = doc !== null;
   useEffect(() => {
-    if (!reveal || !ready || mode !== "sheet") return;
-    const s = selection?.kind === "step" ? selection.stepId : null;
-    if (s === reveal.stepId) desk.current?.querySelector(`[data-step="${reveal.stepId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Only when asked: not again as the step is opened and closed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reveal?.seq, ready, mode]);
+    if (!reveal || !doc || reveal.seq === revealed) return;
+    const at = (id: string) => desk.current?.querySelector(`[data-step="${CSS.escape(id)}"]`);
+    const row = mode === "sheet" ? (at(reveal.stepId) ?? (reveal.inside ? at(reveal.inside.split("/")[0] ?? "") : null)) : null;
+    // Not on the paper yet (the flow with the new step is still to come): looked for again when it is.
+    if (mode === "sheet" && !row) return;
+    revealed = reveal.seq;
+    row?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [reveal, doc, mode]);
   const numbers = useMemo(() => {
     const map = new Map<string, number>();
     const walk = (items: ManualItem[]) => {
