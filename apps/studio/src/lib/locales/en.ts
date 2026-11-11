@@ -722,6 +722,15 @@ export const en: Dict = {
     reload: "Reload",
   },
   agent: {
+    setUp: "Set up",
+    moveRight: "Move to the right",
+    moveBelow: "Move under the work",
+    closeTalk: "Close the conversation",
+    openTalk: "Open the conversation",
+    noTalk: "No conversation yet. Ask the AI in the field below.",
+    needsSetup: "An AI needs to be set up first",
+    askEdit: "Ask the AI to change this flow",
+    askNew: "Ask the AI for a new flow",
     reportReady: "The change is ready to review",
     openReport: "Open the review",
     tools: {
@@ -2103,6 +2112,9 @@ export const en: Dict = {
   flowCreated: "Created the flow",
   flowDeleted: "Deleted the flow",
   sheetView: {
+    noSteps: "There are no steps yet",
+    noStepsChart: "There are no steps yet. The chart appears here once there are.",
+    aiWorking: "The AI is still working. You can look at the changes when it is done",
     onFailure: "On failure",
     waiting: (n: number) => `${n} change${n === 1 ? "" : "s"} to look at`,
     was: ": was ",
@@ -2317,6 +2329,8 @@ export const en: Dict = {
     openSettings: "Open settings",
   },
   toolbar: {
+    backToSheet: "Back to the sheet",
+    aiBusy: "The AI is still working on this flow. Run it when the AI is done",
     unset: (n: number) => `${n} not set`,
     fillUnset: "Fill in the empty fields to run",
     issuesTitle: "Open the check results",

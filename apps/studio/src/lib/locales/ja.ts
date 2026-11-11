@@ -722,6 +722,15 @@ export const ja = {
     reload: "再読み込み",
   },
   agent: {
+    setUp: "設定する",
+    moveRight: "右に移す",
+    moveBelow: "下に移す",
+    closeTalk: "会話を閉じる",
+    openTalk: "会話を開く",
+    noTalk: "まだ会話はありません。下の欄から AI に頼めます。",
+    needsSetup: "使う AI の設定が必要です",
+    askEdit: "AI に修正を依頼",
+    askNew: "AI に新しいフローを依頼",
     reportReady: "変更の確認ができます",
     openReport: "確認のレポートを開く",
     tools: {
@@ -2103,6 +2112,9 @@ export const ja = {
   flowCreated: "フローを作成",
   flowDeleted: "フローを削除",
   sheetView: {
+    noSteps: "まだ手順がありません",
+    noStepsChart: "まだ手順がありません。手順ができると、ここに図が出ます。",
+    aiWorking: "AI が作成・変更の途中です。終わると確認できます",
     onFailure: "失敗時",
     waiting: (n: number) => `確認待ちの変更 ${n} 件`,
     was: "：変更前は ",
@@ -2317,6 +2329,8 @@ export const ja = {
     openSettings: "設定を開く",
   },
   toolbar: {
+    backToSheet: "シートに戻る",
+    aiBusy: "AI がこのフローを作成・変更している途中です。終わってから実行できます",
     unset: (n: number) => `未設定 ${n} 件`,
     fillUnset: "未設定の欄を埋めると実行できます",
     issuesTitle: "検証結果を開く",

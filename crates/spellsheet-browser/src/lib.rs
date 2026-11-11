@@ -527,8 +527,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["url"],
             has_output: true,
             examples: vec![
-                json!({ "type": OPEN, "name": "受注システムを開く", "params": { "url": "{{ siteUrl }}" } }),
-                json!({ "type": OPEN, "name": "受注システムを開く（ログインを保持）", "params": { "url": "{{ siteUrl }}", "session": "受注システム" } }),
+                json!({ "type": OPEN, "name": "受注システムを開く", "params": { "url": "{{ サイトのURL }}" } }),
+                json!({ "type": OPEN, "name": "受注システムを開く（ログインを保持）", "params": { "url": "{{ サイトのURL }}", "session": "受注システム" } }),
             ],
             ..Def::default()
         },
@@ -567,7 +567,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 json!({ "type": CLICK, "name": "ログインする", "params": { "target": { "role": "button", "name": "ログイン" } } }),
                 json!({ "type": CLICK, "name": "削除して確認に OK", "params": { "target": { "role": "button", "name": "削除" }, "dialog": "accept" } }),
                 json!({ "type": CLICK, "name": "フレームの中の検索", "params": { "target": { "role": "button", "name": "検索", "frame": { "name": "main" } } } }),
-                json!({ "type": CLICK, "name": "明細の行を開く", "params": { "target": { "role": "row", "name": "{{ order.id }}" }, "double": true } }),
+                json!({ "type": CLICK, "name": "明細の行を開く", "params": { "target": { "role": "row", "name": "{{ 受注.id }}" }, "double": true } }),
             ],
             ..Def::default()
         },
@@ -584,7 +584,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": DOWNLOAD, "name": "受注の CSV を落とす", "params": { "target": { "role": "button", "name": "CSV出力" }, "path": "input/受注.csv" }, "saveAs": "csv" }),
+                json!({ "type": DOWNLOAD, "name": "受注の CSV を落とす", "params": { "target": { "role": "button", "name": "CSV出力" }, "path": "input/受注.csv" }, "saveAs": "CSVファイル" }),
                 json!({ "type": DOWNLOAD, "name": "請求書を落とす（サイトの名前のまま）", "params": { "target": { "role": "link", "name": "請求書" }, "folder": "output" } }),
             ],
             ..Def::default()
@@ -644,7 +644,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["target", "name"],
             has_output: true,
             examples: vec![
-                json!({ "type": GET_ATTRIBUTE, "name": "請求書のリンク先", "params": { "target": { "role": "link", "name": "請求書" }, "name": "href" }, "saveAs": "invoiceUrl" }),
+                json!({ "type": GET_ATTRIBUTE, "name": "請求書のリンク先", "params": { "target": { "role": "link", "name": "請求書" }, "name": "href" }, "saveAs": "請求書のURL" }),
             ],
             ..Def::default()
         },
@@ -662,15 +662,15 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["script"],
             has_output: true,
             examples: vec![
-                json!({ "type": RUN_SCRIPT, "name": "画面の受注件数を読む", "params": { "script": "return window.app.orders.length;" }, "saveAs": "orderCount" }),
+                json!({ "type": RUN_SCRIPT, "name": "画面の受注件数を読む", "params": { "script": "return window.app.orders.length;" }, "saveAs": "受注件数" }),
                 json!({ "type": RUN_SCRIPT, "name": "選んだ行の受注番号を集める", "params": {
                     "script": "return [...element.querySelectorAll('tr.selected')].map(tr => tr.dataset.code);",
                     "target": { "role": "table", "name": "受注" }
-                }, "saveAs": "codes" }),
+                }, "saveAs": "コード一覧" }),
                 json!({ "type": RUN_SCRIPT, "name": "検索 API を呼ぶ", "params": {
                     "script": "const res = await fetch('/api/orders?code=' + encodeURIComponent(args.code)); return await res.json();",
-                    "args": { "code": "{{ order.code }}" }
-                }, "saveAs": "detail" }),
+                    "args": { "code": "{{ 受注.code }}" }
+                }, "saveAs": "明細" }),
             ],
             ..Def::default()
         },
@@ -718,7 +718,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             examples: vec![
                 json!({ "type": FILL, "name": "ユーザー名を入力", "params": { "target": { "label": "ユーザー名" }, "value": { "secret": "受注システム", "field": "username" } } }),
                 json!({ "type": FILL, "name": "パスワードを入力", "params": { "target": { "label": "パスワード" }, "value": { "secret": "受注システム", "field": "password" } } }),
-                json!({ "type": FILL, "name": "検索語を入力", "params": { "target": { "label": "検索" }, "value": "{{ keyword }}" } }),
+                json!({ "type": FILL, "name": "検索語を入力", "params": { "target": { "label": "検索" }, "value": "{{ 検索語 }}" } }),
             ],
             secret_params: &["value"],
             ..Def::default()
@@ -791,7 +791,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": GET_TEXT, "params": { "target": { "role": "heading", "nth": 0 } }, "saveAs": "title" }),
+                json!({ "type": GET_TEXT, "params": { "target": { "role": "heading", "nth": 0 } }, "saveAs": "ページの題名" }),
             ],
             ..Def::default()
         },
@@ -804,7 +804,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &[],
             has_output: true,
             examples: vec![
-                json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "role": "table", "name": "受注" } }, "saveAs": "orders" }),
+                json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "role": "table", "name": "受注" } }, "saveAs": "受注一覧" }),
             ],
             ..Def::default()
         },
@@ -830,7 +830,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["path"],
             has_output: true,
             examples: vec![
-                json!({ "type": SCREENSHOT, "params": { "path": "{{ outDir }}\\受注一覧.png", "fullPage": true } }),
+                json!({ "type": SCREENSHOT, "params": { "path": "{{ 出力先 }}\\受注一覧.png", "fullPage": true } }),
             ],
             ..Def::default()
         },
@@ -843,7 +843,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": IS_VISIBLE, "name": "ログイン画面か確かめる", "params": { "target": { "label": "パスワード" } }, "saveAs": "needsLogin" }),
+                json!({ "type": IS_VISIBLE, "name": "ログイン画面か確かめる", "params": { "target": { "label": "パスワード" } }, "saveAs": "ログインが必要" }),
             ],
             ..Def::default()
         },

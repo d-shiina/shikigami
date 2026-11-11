@@ -556,8 +556,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             RiskLevel::Interactive,
             vec![
                 json!({ "type": CREATE_DRAFT, "name": "請求書メールの下書き", "params": {
-                    "to": ["{{ order.メール }}"], "subject": "請求書送付のご案内（{{ order.受注番号 }}）",
-                    "body": "{{ order.顧客名 }} 様\n\n請求書をお送りします。", "attachments": ["{{ invoice.path }}"]
+                    "to": ["{{ 受注.メール }}"], "subject": "請求書送付のご案内（{{ 受注.受注番号 }}）",
+                    "body": "{{ 受注.顧客名 }} 様\n\n請求書をお送りします。", "attachments": ["{{ 請求書.path }}"]
                 } }),
             ],
         ),
@@ -581,7 +581,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ),
             RiskLevel::Safe,
             vec![
-                json!({ "type": LIST, "name": "未読の請求書メール", "params": { "subjectContains": "請求書", "unreadOnly": true }, "saveAs": "mails" }),
+                json!({ "type": LIST, "name": "未読の請求書メール", "params": { "subjectContains": "請求書", "unreadOnly": true }, "saveAs": "メール一覧" }),
             ],
         ),
         (
@@ -599,7 +599,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ),
             RiskLevel::Interactive,
             vec![
-                json!({ "type": SAVE_ATTACHMENTS, "params": { "id": "{{ mail.id }}", "folder": "C:\\work\\受信請求書", "nameContains": ".pdf" }, "saveAs": "files" }),
+                json!({ "type": SAVE_ATTACHMENTS, "params": { "id": "{{ メール.id }}", "folder": "C:\\work\\受信請求書", "nameContains": ".pdf" }, "saveAs": "ファイル一覧" }),
             ],
         ),
         (
@@ -616,7 +616,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ),
             RiskLevel::Interactive,
             vec![
-                json!({ "type": MOVE, "name": "処理済みに移す", "params": { "id": "{{ mail.id }}", "folder": "受信トレイ/処理済み" } }),
+                json!({ "type": MOVE, "name": "処理済みに移す", "params": { "id": "{{ メール.id }}", "folder": "受信トレイ/処理済み" } }),
             ],
         ),
         (
@@ -631,7 +631,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 &["id"],
             ),
             RiskLevel::Interactive,
-            vec![json!({ "type": MARK_READ, "params": { "id": "{{ mail.id }}" } })],
+            vec![json!({ "type": MARK_READ, "params": { "id": "{{ メール.id }}" } })],
         ),
         (
             DELETE,
@@ -640,7 +640,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             "Moves the message `id` (from mail.list) to Deleted Items (it can still be taken back from there). Output: null.",
             schema(mailbox(json!({ "id": id.clone() })), &["id"]),
             RiskLevel::Dangerous,
-            vec![json!({ "type": DELETE, "params": { "id": "{{ mail.id }}" } })],
+            vec![json!({ "type": DELETE, "params": { "id": "{{ メール.id }}" } })],
         ),
         (
             REPLY,
@@ -660,8 +660,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ),
             RiskLevel::Interactive,
             vec![
-                json!({ "type": REPLY, "name": "受付の返信を書く", "params": { "id": "{{ mail.id }}", "body": "{{ mail.from }} 様\n\nご依頼を受け付けました。" }, "saveAs": "reply" }),
-                json!({ "type": SEND_DRAFT, "params": { "id": "{{ reply.id }}" } }),
+                json!({ "type": REPLY, "name": "受付の返信を書く", "params": { "id": "{{ メール.id }}", "body": "{{ メール.from }} 様\n\nご依頼を受け付けました。" }, "saveAs": "返信メール" }),
+                json!({ "type": SEND_DRAFT, "params": { "id": "{{ 返信メール.id }}" } }),
             ],
         ),
         (
@@ -682,7 +682,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ),
             RiskLevel::Interactive,
             vec![
-                json!({ "type": FORWARD, "name": "経理に回す", "params": { "id": "{{ mail.id }}", "to": ["keiri@example.co.jp"], "body": "請求書が届いたので回します。" }, "saveAs": "fwd" }),
+                json!({ "type": FORWARD, "name": "経理に回す", "params": { "id": "{{ メール.id }}", "to": ["keiri@example.co.jp"], "body": "請求書が届いたので回します。" }, "saveAs": "転送メール" }),
             ],
         ),
         (
@@ -697,7 +697,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 &["id"],
             ),
             RiskLevel::Dangerous,
-            vec![json!({ "type": SEND_DRAFT, "params": { "id": "{{ fwd.id }}" } })],
+            vec![json!({ "type": SEND_DRAFT, "params": { "id": "{{ 転送メール.id }}" } })],
         ),
         (
             SEND,
@@ -726,12 +726,12 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             RiskLevel::Dangerous,
             vec![
                 json!({ "type": SEND, "name": "請求書を送る", "params": {
-                    "to": ["{{ order.メール }}"], "subject": "請求書送付のご案内（{{ order.受注番号 }}）",
-                    "body": "{{ order.顧客名 }} 様\n\n請求書をお送りします。", "attachments": ["{{ invoice.path }}"]
+                    "to": ["{{ 受注.メール }}"], "subject": "請求書送付のご案内（{{ 受注.受注番号 }}）",
+                    "body": "{{ 受注.顧客名 }} 様\n\n請求書をお送りします。", "attachments": ["{{ 請求書.path }}"]
                 } }),
                 json!({ "type": SEND, "name": "Microsoft 365 で完了を知らせる", "params": {
                     "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
-                    "to": ["keiri@example.co.jp"], "subject": "本日の処理が終わりました", "body": "件数：{{ len(orders) }}"
+                    "to": ["keiri@example.co.jp"], "subject": "本日の処理が終わりました", "body": "件数：{{ len(受注一覧) }}"
                 } }),
                 json!({ "type": SEND, "name": "社内のメールサーバーで送る", "params": {
                     "via": "smtp", "server": "smtp.example.co.jp", "from": "robot@example.co.jp",

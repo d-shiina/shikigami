@@ -166,8 +166,8 @@ fn read_text_def() -> StepTypeDef {
         binds_variables: vec![],
         risk: RiskLevel::Safe,
         examples: vec![
-            json!({ "type": types::READ_TEXT, "params": { "path": "input/請求書.pdf" }, "saveAs": "invoice" }),
-            json!({ "type": types::READ_TEXT, "params": { "path": "{{ pdfPath }}", "password": { "secret": "請求書PDF", "field": "password" } }, "saveAs": "invoice" }),
+            json!({ "type": types::READ_TEXT, "params": { "path": "input/請求書.pdf" }, "saveAs": "請求書" }),
+            json!({ "type": types::READ_TEXT, "params": { "path": "{{ PDFの場所 }}", "password": { "secret": "請求書PDF", "field": "password" } }, "saveAs": "請求書" }),
         ],
         resources: vec![ResourceDef::file("path")],
         secret_params: vec!["password".into()],
@@ -454,7 +454,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
                 &["files", "to"],
                 false,
                 vec![
-                    json!({ "type": types::MERGE, "params": { "files": ["input/表紙.pdf", "{{ invoice.path }}"], "to": "output/請求書一式.pdf" }, "saveAs": "merged" }),
+                    json!({ "type": types::MERGE, "params": { "files": ["input/表紙.pdf", "{{ 請求書.path }}"], "to": "output/請求書一式.pdf" }, "saveAs": "結合したPDF" }),
                 ],
             ),
             PageKind::Merge,
@@ -506,7 +506,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
                 &["path", "folder"],
                 true,
                 vec![
-                    json!({ "type": types::SPLIT, "params": { "path": "input/まとめて読み取り.pdf", "folder": "work/分割" }, "saveAs": "files" }),
+                    json!({ "type": types::SPLIT, "params": { "path": "input/まとめて読み取り.pdf", "folder": "work/分割" }, "saveAs": "ファイル一覧" }),
                 ],
             ),
             PageKind::Split,

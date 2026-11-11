@@ -535,8 +535,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 examples: vec![
                     json!({ "type": FILL_TEMPLATE, "name": "請求書を作る", "params": {
                         "template": "templates/請求書.docx",
-                        "path": "output/請求書_{{ order.受注番号 }}.docx",
-                        "values": { "宛名": "{{ order.顧客名 }}", "金額": "{{ order.金額 }}", "明細": "{{ order.明細 }}" }
+                        "path": "output/請求書_{{ 受注.受注番号 }}.docx",
+                        "values": { "宛名": "{{ 受注.顧客名 }}", "金額": "{{ 受注.金額 }}", "明細": "{{ 受注.明細 }}" }
                     } }),
                 ],
                 resources: vec![ResourceDef::file("template"), ResourceDef::file("path")],
@@ -562,7 +562,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 binds_variables: vec![],
                 risk: RiskLevel::Safe,
                 examples: vec![
-                    json!({ "type": READ_TEXT, "params": { "path": "input/契約書.docx" }, "saveAs": "contractText" }),
+                    json!({ "type": READ_TEXT, "params": { "path": "input/契約書.docx" }, "saveAs": "契約書の本文" }),
                 ],
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],
@@ -627,7 +627,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 binds_variables: vec![],
                 risk: RiskLevel::Safe,
                 examples: vec![
-                    json!({ "type": READ_TABLES, "name": "見積書の明細を読む", "params": { "path": "input/見積書.docx", "table": 1 }, "saveAs": "items" }),
+                    json!({ "type": READ_TABLES, "name": "見積書の明細を読む", "params": { "path": "input/見積書.docx", "table": 1 }, "saveAs": "明細一覧" }),
                 ],
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],

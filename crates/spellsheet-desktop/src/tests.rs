@@ -102,14 +102,14 @@ fn examples_validate_and_targets_are_checked() {
             spellsheet_core::ops::assign_missing_ids(&mut step);
             let mut s = Flow::new("example");
             s.variables = [
-                "customerCode",
-                "orderNo",
-                "outDir",
-                "total",
-                "confirmShown",
-                "scrolled",
-                "orders",
-                "status",
+                "顧客コード",
+                "受注番号",
+                "出力先",
+                "合計",
+                "確認画面が出た",
+                "スクロールできた",
+                "受注一覧",
+                "状態",
             ]
             .iter()
             .map(|n| VariableDef::new(*n, VarType::Any))

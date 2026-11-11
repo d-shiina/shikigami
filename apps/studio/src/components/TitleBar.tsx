@@ -8,6 +8,7 @@ import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
 import type { Place } from "../store";
+import { PLACES, useWaiting } from "./ShellBar";
 import { FlowActions, FlowTitle, type View } from "./Toolbar";
 
 const PAGE_TITLE: Partial<Record<Place, () => string>> = {
@@ -20,6 +21,32 @@ const PAGE_TITLE: Partial<Record<Place, () => string>> = {
   extensions: () => t.extensions.place,
   inventory: () => t.inventory.place,
 };
+
+/** The other places, named in the bar of the list of flows. What waits on the person is counted. */
+function Places() {
+  const setPlace = useStudio((s) => s.setPlace);
+  const { inbox, asks, enterReview } = useWaiting();
+  return (
+    <nav className="flex shrink-0 items-center gap-0.5" aria-label={t.shell.places}>
+      {PLACES.filter(([place]) => place !== "library").map(([place, Icon, label]) => {
+        const count = place === "review" ? inbox.length : place === "secrets" ? asks : 0;
+        return (
+          <button
+            key={place}
+            type="button"
+            title={label()}
+            onClick={() => (place === "review" ? enterReview() : setPlace(place))}
+            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12.5px] text-slate-600 hover:bg-slate-100 hover:text-ink"
+          >
+            <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+            <span className="@max-[860px]/title:hidden">{label()}</span>
+            {count > 0 && <span className="rounded-full bg-shu-50 px-1.5 text-[11px] font-medium text-shu-600 tabular-nums">{count}</span>}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export function TitleBar({ view, onView }: { view: View; onView: (view: View) => void }) {
   const place = useStudio((s) => s.place);
@@ -51,9 +78,25 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
           <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">{t.drafting.tag}</span>
         </div>
       ) : (
-        page && <span className="truncate text-[13px] font-bold">{page}</span>
+        page &&
+        // Every place starts from the list of flows, so each one says the way back there, as an open flow's bar does.
+        (place === "library" ? (
+          <span className="truncate text-[13px] font-bold">{page}</span>
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button type="button" onClick={() => setPlace("library")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+              {t.flows}
+            </button>
+            <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
+              /
+            </span>
+            <span className="truncate text-[13px] font-bold">{page}</span>
+          </div>
+        ))
       )}
       <span data-tauri-drag-region className="min-w-4 flex-1 self-stretch" />
+      {/* From the list of flows, every other place is one press away: they are not kept in a menu only. */}
+      {!editing && !drafting && (place === "library" || place === "flows") && <Places />}
       {editing &&
         (place === "review" ? <FlowActions view={reviewView} onView={setReviewView} /> : <FlowActions view={view} onView={(v) => v !== "report" && onView(v)} />)}
     </header>

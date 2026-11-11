@@ -1351,7 +1351,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             examples: vec![
                 json!({ "type": LAUNCH, "name": "請求システムを起動", "params": { "path": "C:\\Program Files\\Billing\\billing.exe" } }),
-                json!({ "type": LAUNCH, "params": { "path": "notepad.exe", "args": ["{{ outDir }}\\memo.txt"] } }),
+                json!({ "type": LAUNCH, "params": { "path": "notepad.exe", "args": ["{{ 出力先 }}\\memo.txt"] } }),
             ],
             secret_params: &[],
             input: false,
@@ -1380,7 +1380,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target", "value"],
             has_output: false,
             examples: vec![
-                json!({ "type": SET_VALUE, "name": "顧客コードを入力", "params": { "target": customer, "value": "{{ customerCode }}" } }),
+                json!({ "type": SET_VALUE, "name": "顧客コードを入力", "params": { "target": customer, "value": "{{ 顧客コード }}" } }),
                 json!({ "type": SET_VALUE, "name": "パスワードを入力", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "txtPassword" } }, "value": { "secret": "請求システム", "field": "password" } } }),
             ],
             secret_params: &["value"],
@@ -1395,7 +1395,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": GET_VALUE, "name": "合計を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "lblTotal" } } }, "saveAs": "total" }),
+                json!({ "type": GET_VALUE, "name": "合計を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "lblTotal" } } }, "saveAs": "合計" }),
             ],
             secret_params: &[],
             input: false,
@@ -1427,7 +1427,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target"],
             has_output: false,
             examples: vec![
-                json!({ "type": MOUSE_CLICK, "name": "行をダブルクリック", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } }, "double": true } }),
+                json!({ "type": MOUSE_CLICK, "name": "行をダブルクリック", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ 受注番号 }}" } }, "double": true } }),
                 json!({ "type": MOUSE_CLICK, "name": "保存ボタン（画像）を押す", "params": { "target": citrix } }),
                 json!({ "type": MOUSE_CLICK, "name": "「検索」を押す", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "検索" } } } }),
             ],
@@ -1443,8 +1443,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target", "text"],
             has_output: false,
             examples: vec![
-                json!({ "type": TYPE, "params": { "target": customer, "text": "{{ customerCode }}" } }),
-                json!({ "type": TYPE, "name": "顧客コード欄に入力", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "顧客コード" }, "offset": { "x": 150, "y": 0 } }, "text": "{{ customerCode }}" } }),
+                json!({ "type": TYPE, "params": { "target": customer, "text": "{{ 顧客コード }}" } }),
+                json!({ "type": TYPE, "name": "顧客コード欄に入力", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "顧客コード" }, "offset": { "x": 150, "y": 0 } }, "text": "{{ 顧客コード }}" } }),
             ],
             secret_params: &["text"],
             input: true,
@@ -1487,8 +1487,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": IS_VISIBLE, "name": "確認ダイアログが出たか", "params": { "target": { "window": { "process": "billing.exe", "title": "確認" } } }, "saveAs": "confirmShown" }),
-                json!({ "type": IS_VISIBLE, "name": "エラーアイコンが出たか", "params": { "target": { "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\エラー.png" } } }, "saveAs": "confirmShown" }),
+                json!({ "type": IS_VISIBLE, "name": "確認ダイアログが出たか", "params": { "target": { "window": { "process": "billing.exe", "title": "確認" } } }, "saveAs": "確認画面が出た" }),
+                json!({ "type": IS_VISIBLE, "name": "エラーアイコンが出たか", "params": { "target": { "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\エラー.png" } } }, "saveAs": "確認画面が出た" }),
             ],
             secret_params: &[],
             input: false,
@@ -1567,11 +1567,11 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &[],
             has_output: true,
             examples: vec![
-                json!({ "type": READ_TEXT, "name": "請求書の明細を読む", "params": { "file": "{{ outDir }}\\請求書.png", "table": true }, "saveAs": "invoice" }),
-                json!({ "type": READ_TEXT, "name": "手書きの金額欄を読む", "params": { "file": "{{ outDir }}\\伝票.png", "accurate": true, "textKind": "amount" }, "saveAs": "amount" }),
-                json!({ "type": READ_TEXT, "name": "手書きの担当者名を読む", "params": { "file": "{{ outDir }}\\伝票.png", "accurate": true, "candidates": ["山田 太郎", "佐藤 花子", "鈴木 一郎"] }, "saveAs": "staff" }),
-                json!({ "type": READ_TEXT, "name": "合計欄を読む", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 620, "y": 410, "width": 180, "height": 32 } } }, "saveAs": "total" }),
-                json!({ "type": READ_TEXT, "name": "請求書画像を読む", "params": { "file": "{{ outDir }}\\請求書.png" }, "saveAs": "total" }),
+                json!({ "type": READ_TEXT, "name": "請求書の明細を読む", "params": { "file": "{{ 出力先 }}\\請求書.png", "table": true }, "saveAs": "請求書" }),
+                json!({ "type": READ_TEXT, "name": "手書きの金額欄を読む", "params": { "file": "{{ 出力先 }}\\伝票.png", "accurate": true, "textKind": "amount" }, "saveAs": "金額" }),
+                json!({ "type": READ_TEXT, "name": "手書きの担当者名を読む", "params": { "file": "{{ 出力先 }}\\伝票.png", "accurate": true, "candidates": ["山田 太郎", "佐藤 花子", "鈴木 一郎"] }, "saveAs": "担当者" }),
+                json!({ "type": READ_TEXT, "name": "合計欄を読む", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 620, "y": 410, "width": 180, "height": 32 } } }, "saveAs": "合計" }),
+                json!({ "type": READ_TEXT, "name": "請求書画像を読む", "params": { "file": "{{ 出力先 }}\\請求書.png" }, "saveAs": "合計" }),
             ],
             secret_params: &[],
             input: false,
@@ -1585,7 +1585,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target", "path"],
             has_output: true,
             examples: vec![
-                json!({ "type": SCREENSHOT, "name": "画面を記録", "params": { "target": { "window": { "process": "billing.exe" } }, "path": "{{ outDir }}\\請求画面.png" } }),
+                json!({ "type": SCREENSHOT, "name": "画面を記録", "params": { "target": { "window": { "process": "billing.exe" } }, "path": "{{ 出力先 }}\\請求画面.png" } }),
                 json!({ "type": SCREENSHOT, "name": "保存ボタンの画像を切り出す", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 860, "y": 640, "width": 90, "height": 30 } }, "path": "C:\\RPA\\images\\保存ボタン.png" } }),
             ],
             secret_params: &[],
@@ -1605,7 +1605,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": SCROLL, "name": "一覧を 1 ページ下へ", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "lstOrders" } }, "direction": "down" }, "saveAs": "scrolled" }),
+                json!({ "type": SCROLL, "name": "一覧を 1 ページ下へ", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "lstOrders" } }, "direction": "down" }, "saveAs": "スクロールできた" }),
                 json!({ "type": SCROLL, "name": "備考欄が見えるまでスクロール", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "txtNote" } } } }),
             ],
             secret_params: &[],
@@ -1642,7 +1642,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             examples: vec![
                 json!({ "type": DRAG, "name": "明細を 1 行目へ移す", "params": {
-                    "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } },
+                    "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ 受注番号 }}" } },
                     "to": { "window": { "process": "billing.exe" }, "element": { "role": "row", "nth": 0 } }
                 } }),
             ],
@@ -1675,8 +1675,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["target"],
             has_output: true,
             examples: vec![
-                json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "gridOrders" } } }, "saveAs": "orders" }),
-                json!({ "type": GET_TABLE, "params": { "target": { "window": { "title": "販売管理" } }, "maxRows": 100 }, "saveAs": "orders" }),
+                json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "gridOrders" } } }, "saveAs": "受注一覧" }),
+                json!({ "type": GET_TABLE, "params": { "target": { "window": { "title": "販売管理" } }, "maxRows": 100 }, "saveAs": "受注一覧" }),
             ],
             secret_params: &[],
             input: false,
@@ -1694,7 +1694,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             examples: vec![
                 json!({ "type": SELECT_MENU, "name": "名前を付けて保存", "params": { "target": { "window": { "process": "notepad.exe" } }, "path": ["ファイル", "名前を付けて保存"] } }),
-                json!({ "type": SELECT_MENU, "name": "行の右クリックメニューで削除", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } }, "path": ["削除"] } }),
+                json!({ "type": SELECT_MENU, "name": "行の右クリックメニューで削除", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ 受注番号 }}" } }, "path": ["削除"] } }),
             ],
             secret_params: &[],
             input: false,

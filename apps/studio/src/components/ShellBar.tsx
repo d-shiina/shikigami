@@ -62,7 +62,7 @@ const MenuLabel = ({ children }: { children: React.ReactNode }) => <div classNam
 const MenuRule = () => <div className="my-1 h-px bg-slate-200" />;
 
 /** What waits on the person, and the way to the first of it. Sent-back flows wait on the AI, not on the person. */
-function useWaiting() {
+export function useWaiting() {
   const inbox = useInbox().filter((i) => !i.waiting);
   const asks = useStudio((s) => s.secretRequests.length);
   const flow = useStudio((s) => s.flow);
@@ -261,7 +261,7 @@ export function SearchBar() {
   );
 }
 
-const PLACES: [Place, LucideIcon, () => string][] = [
+export const PLACES: [Place, LucideIcon, () => string][] = [
   ["library", LayoutList, () => t.flows],
   ["review", Inbox, () => t.awaitingReview],
   ["inventory", ClipboardList, () => t.inventory.place],

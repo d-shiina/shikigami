@@ -794,10 +794,10 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
         control::IF => vec![json!({
             "type": "control.if",
             "name": "高額かどうか",
-            "params": { "condition": "invoice.amount >= 100000" },
+            "params": { "condition": "請求書.amount >= 100000" },
             "blocks": {
-                "then": [ { "type": "log.message", "params": { "message": "高額: {{ invoice.no }}" } } ],
-                "else": [ { "type": "log.message", "params": { "message": "通常: {{ invoice.no }}" } } ]
+                "then": [ { "type": "log.message", "params": { "message": "高額: {{ 請求書.no }}" } } ],
+                "else": [ { "type": "log.message", "params": { "message": "通常: {{ 請求書.no }}" } } ]
             }
         })],
         control::SWITCH => vec![json!({
@@ -807,16 +807,16 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             "blocks": {
                 "cases": [
                     { "type": "control.case", "params": { "values": ["A", "B"] }, "blocks": { "body": [
-                        { "type": "log.message", "params": { "message": "通常品: {{ order.no }}" } }
+                        { "type": "log.message", "params": { "message": "通常品: {{ 受注.no }}" } }
                     ] } },
                     { "type": "control.case", "params": { "values": ["C"] }, "blocks": { "body": [
-                        { "type": "log.message", "params": { "message": "取り寄せ: {{ order.no }}" } }
+                        { "type": "log.message", "params": { "message": "取り寄せ: {{ 受注.no }}" } }
                     ] } },
-                    { "type": "control.case", "name": "10 万円以上", "params": { "condition": "order.amount >= 100000" }, "blocks": { "body": [
-                        { "type": "log.message", "params": { "message": "高額: {{ order.no }}" } }
+                    { "type": "control.case", "name": "10 万円以上", "params": { "condition": "受注.amount >= 100000" }, "blocks": { "body": [
+                        { "type": "log.message", "params": { "message": "高額: {{ 受注.no }}" } }
                     ] } }
                 ],
-                "default": [ { "type": "log.message", "params": { "level": "warn", "message": "不明な区分: {{ order.kind }}" } } ]
+                "default": [ { "type": "log.message", "params": { "level": "warn", "message": "不明な区分: {{ 受注.kind }}" } } ]
             }
         })],
         control::CASE => vec![json!({
@@ -827,33 +827,33 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
         control::WHILE => vec![json!({
             "type": "control.while",
             "name": "10 件になるまで",
-            "params": { "condition": "count < 10", "maxIterations": 500 },
+            "params": { "condition": "件数 < 10", "maxIterations": 500 },
             "blocks": { "body": [
-                { "type": "variable.set", "params": { "name": "count", "expression": "count + 1" } }
+                { "type": "variable.set", "params": { "name": "件数", "expression": "件数 + 1" } }
             ] }
         })],
         control::REPEAT => vec![json!({
             "type": "control.repeat",
             "name": "3回試す",
-            "params": { "count": 3, "indexVar": "i" },
-            "blocks": { "body": [ { "type": "log.message", "params": { "message": "{{ i + 1 }} 回目" } } ] }
+            "params": { "count": 3, "indexVar": "番号" },
+            "blocks": { "body": [ { "type": "log.message", "params": { "message": "{{ 番号 + 1 }} 回目" } } ] }
         })],
         control::FOR_EACH => vec![
             json!({
                 "type": "control.forEach",
                 "name": "請求書ごとに処理",
-                "params": { "items": "invoices", "itemVar": "invoice", "indexVar": "i" },
+                "params": { "items": "請求書一覧", "itemVar": "請求書", "indexVar": "番号" },
                 "blocks": { "body": [
-                    { "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }
+                    { "type": "variable.set", "params": { "name": "合計", "expression": "合計 + 請求書.amount" } }
                 ] }
             }),
             json!({
                 "type": "control.forEach",
                 "name": "請求書を4件ずつ同時に処理",
-                "params": { "items": "invoices", "itemVar": "invoice", "concurrency": 4, "collect": "taxed" },
-                "saveAs": "taxedAmounts",
+                "params": { "items": "請求書一覧", "itemVar": "請求書", "concurrency": 4, "collect": "税込金額" },
+                "saveAs": "税込金額一覧",
                 "blocks": { "body": [
-                    { "type": "variable.set", "params": { "name": "taxed", "expression": "round(invoice.amount * 1.1)" } }
+                    { "type": "variable.set", "params": { "name": "税込金額", "expression": "round(請求書.amount * 1.1)" } }
                 ] }
             }),
         ],
@@ -874,9 +874,9 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             "blocks": { "branches": [
                 { "type": "control.group", "name": "帳票を出力して待つ", "blocks": { "body": [
                     { "type": "flow.delay", "params": { "ms": 1000 } },
-                    { "type": "variable.set", "params": { "name": "reportReady", "value": true } }
+                    { "type": "variable.set", "params": { "name": "報告書ができた", "value": true } }
                 ] } },
-                { "type": "variable.set", "name": "その間に別の作業", "params": { "name": "otherDone", "value": true } }
+                { "type": "variable.set", "name": "その間に別の作業", "params": { "name": "ほかが終わった", "value": true } }
             ] }
         })],
         control::GROUP => vec![json!({
@@ -888,23 +888,23 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
         control::CONTINUE => vec![json!({ "type": "control.continue" })],
         control::FAIL => vec![json!({
             "type": "control.fail",
-            "params": { "message": "請求書 {{ invoice.no }} の金額が不正です", "code": "INVALID_AMOUNT" }
+            "params": { "message": "請求書 {{ 請求書.no }} の金額が不正です", "code": "INVALID_AMOUNT" }
         })],
         builtin::VARIABLE_SET => vec![
-            json!({ "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }),
-            json!({ "type": "variable.set", "params": { "name": "greeting", "value": "こんにちは {{ user.name }}" } }),
+            json!({ "type": "variable.set", "params": { "name": "合計", "expression": "合計 + 請求書.amount" } }),
+            json!({ "type": "variable.set", "params": { "name": "あいさつ", "value": "こんにちは {{ 利用者.name }}" } }),
         ],
         builtin::LOG_MESSAGE => vec![json!({
             "type": "log.message",
-            "params": { "level": "info", "message": "合計 {{ total }} 円" }
+            "params": { "level": "info", "message": "合計 {{ 合計 }} 円" }
         })],
         control::WAIT_UNTIL => vec![json!({
             "type": "wait.until",
             "name": "転記が終わるまで待つ",
-            "params": { "condition": "status == 'done'", "intervalMs": 2000 },
+            "params": { "condition": "状態 == 'done'", "intervalMs": 2000 },
             "timeoutMs": 600000,
             "blocks": { "check": [
-                { "type": "log.message", "name": "状態を読む（実際は読み取りノードに saveAs: status）", "params": { "message": "確認中: {{ status }}" } }
+                { "type": "log.message", "name": "状態を読む（実際は読み取りノードに saveAs: 状態）", "params": { "message": "確認中: {{ 状態 }}" } }
             ] }
         })],
         builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],
@@ -913,7 +913,7 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             "name": "請求書を 1 件登録する",
             "params": {
                 "flow": "scn_01a1814aaad57038862e86f745a5310a",
-                "inputs": { "invoice": "{{ invoice }}", "dryRun": false },
+                "inputs": { "invoice": "{{ 請求書 }}", "dryRun": false },
                 "outputs": { "registeredNo": "invoiceNo" }
             }
         })],

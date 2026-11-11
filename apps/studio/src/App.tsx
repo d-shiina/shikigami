@@ -1,7 +1,7 @@
 import { DistributionDialog } from "./components/Distribution";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
-import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
+import { activity, AgentContext, createAgentStore, flowBusy, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { AskDialog } from "./components/AskDialog";
@@ -47,6 +47,7 @@ import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
+import { useAgentPlace } from "./lib/agentPlace";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
@@ -193,6 +194,7 @@ function Editor({
   grip: Grip;
 }) {
   const hasFlow = useStudio((s) => s.flow !== null);
+  const place = useStudio((s) => s.place);
   const projectOpen = useProject((s) => s.panelOpen);
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
@@ -206,7 +208,7 @@ function Editor({
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
-            <SheetView mode={view === "chart" ? "chart" : "sheet"} onSheet={() => onView("story")} />
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} onSheet={() => onView("story")} onHistory={place === "flows" ? () => onView("result") : undefined} />
           )}
           {/* The flow's files lie on the desk left of the paper, opened from the menu and closed from themselves. */}
           {!report && view !== "variables" && hasFlow && projectOpen && (
@@ -345,6 +347,7 @@ function Shell() {
   const place = useStudio((s) => s.place);
   const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const agentOpen = useAgent((s) => s.open);
+  const agentPlace = useAgentPlace();
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
   const openName = useStudio((s) => s.flow?.name ?? "");
@@ -372,7 +375,7 @@ function Shell() {
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
   const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
-  const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
+  const shown = { agent: agentOpen && agentPlace === "right", right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
@@ -471,14 +474,16 @@ function Shell() {
             <HumanBanner />
             <Banner />
             {work}
+            {/* Asking the AI is under the work in every place (it makes new flows too): on the desk where a paper lies on one. */}
+            {agentPlace === "below" && <AgentPane desk={(place === "flows" && ((hasFlow && view !== "result" && view !== "variables") || drafting)) || place === "review" || place === "inventory"} />}
           </div>
-          {/* The AI's chat floats on the window's ground beside the work: it is not part of any
-              place (it makes new flows too), so it is not in the work's frame. Kept mounted while
-              closed, so an unsent draft survives (it draws nothing then). */}
-          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
-            <AgentPane width={fit.agent} />
-            {fit.agent > 0 && grip("agent")}
-          </div>
+          {/* Moved there by the person: the AI's conversation in a column of its own beside the work. */}
+          {agentPlace === "right" && fit.agent > 0 && (
+            <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+              <AgentPane desk={false} width={fit.agent} />
+              {grip("agent")}
+            </div>
+          )}
         </div>
       </div>
       {dialogs}
@@ -524,10 +529,11 @@ function navigate(e: KeyboardEvent, state: StudioState) {
  * out), F9 breakpoint on the selected step. F10 / F11 start a run that
  * pauses before its first step.
  */
-function debugKey(e: KeyboardEvent, state: StudioState) {
+function debugKey(e: KeyboardEvent, state: StudioState, aiBusy: boolean) {
   const run = state.run;
   const paused = run?.status === "paused";
-  const runnable = state.flow && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
+  // As the bar's button: a flow the AI is still making is not run by hand.
+  const runnable = state.flow && (state.flow.steps ?? []).length > 0 && !aiBusy && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
   if (e.key === "F9") {
     if (state.selection?.kind === "step") state.toggleBreakpoint(state.selection.stepId);
   } else if (e.key === "F5") {
@@ -648,7 +654,7 @@ export function App() {
       if (e.key === "F5" || e.key === "F9" || e.key === "F10" || e.key === "F11") {
         // Run and step like a debugger, instead of reloading the window.
         e.preventDefault();
-        debugKey(e, store.getState());
+        debugKey(e, store.getState(), flowBusy(agentStore.getState(), store.getState().flow?.id));
         return;
       }
       if (mod && e.key === ",") {
@@ -682,12 +688,14 @@ export function App() {
         else void s.duplicateSelected();
         return;
       }
+      // As the menu's entries: nothing is taken back under the AI while it is still at work on the flow.
+      const aiBusy = flowBusy(agentStore.getState(), store.getState().flow?.id);
       if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
-        void store.getState().undo();
+        if (!aiBusy) void store.getState().undo();
       } else if (mod && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
         e.preventDefault();
-        void store.getState().redo();
+        if (!aiBusy) void store.getState().redo();
       } else if (e.key === "Delete") {
         void store.getState().removeSelected();
       } else if (!mod) {
