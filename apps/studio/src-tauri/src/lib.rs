@@ -303,6 +303,7 @@ pub fn run() {
             runner::runner_run,
             runner::open_runner,
             runner::runner_pick,
+            runner::picker_open,
             tray::set_tray_labels,
             attention::call_attention,
             attention::clear_attention,

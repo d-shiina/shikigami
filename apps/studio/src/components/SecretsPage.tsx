@@ -10,6 +10,7 @@ import { useStudio } from "../context";
 import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
 import { relativeTime } from "../lib/changes";
 import { confirmAsk } from "../lib/ask";
+import { useBusy } from "../lib/busy";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
@@ -142,6 +143,7 @@ function SecretForm({
   const removeSecret = useStudio((s) => s.removeSecret);
   const openFlow = useOpenFlow();
   const [draft, setDraft] = useState(initial);
+  const [saving, once] = useBusy();
   const [confirming, setConfirming] = useState(false);
   const edit = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const fields = KIND_FIELDS[draft.kind];
@@ -154,20 +156,22 @@ function SecretForm({
     <form
       className="space-y-5"
       autoComplete="off"
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
-        const ok = await saveSecret({
-          name: draft.name.trim(),
-          kind: draft.kind,
-          username: fields.includes("username") && !fromWindows ? draft.username : undefined,
-          password: draft.password === "" || fromWindows ? undefined : draft.password,
-          // Back from Credential Manager: an empty address keeps the values here again.
-          windowsCredential: fromWindows ? draft.windowsCredential.trim() : initial.store === "windows" ? "" : undefined,
-          totp: draft.totp === "" || !fields.includes("totp") ? undefined : draft.totp,
-          sites: draft.sites.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
-          description: draft.description,
+        void once(async () => {
+          const ok = await saveSecret({
+            name: draft.name.trim(),
+            kind: draft.kind,
+            username: fields.includes("username") && !fromWindows ? draft.username : undefined,
+            password: draft.password === "" || fromWindows ? undefined : draft.password,
+            // Back from Credential Manager: an empty address keeps the values here again.
+            windowsCredential: fromWindows ? draft.windowsCredential.trim() : initial.store === "windows" ? "" : undefined,
+            totp: draft.totp === "" || !fields.includes("totp") ? undefined : draft.totp,
+            sites: draft.sites.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+            description: draft.description,
+          });
+          if (ok) onDone();
         });
-        if (ok) onDone();
       }}
     >
       {/* Where this is, and the way back to the list. */}
@@ -354,7 +358,7 @@ function SecretForm({
         <button type="button" className="h-8 rounded-lg px-3 text-[13px] text-slate-600 hover:bg-slate-100" onClick={onDone}>
           {t.cancel}
         </button>
-        <button type="submit" className={`h-8 ${settingsPrimary}`}>
+        <button type="submit" disabled={saving} className={`h-8 ${settingsPrimary}`}>
           {t.secretSave}
         </button>
       </div>

@@ -541,6 +541,33 @@ describe("studio store", () => {
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
   });
 
+  it("starts one run for a double click on 「実行」 (F5 twice), and another once it has started", async () => {
+    let started!: (id: string) => void;
+    const run = vi.fn(() => new Promise<string>((resolve) => (started = resolve)));
+    const store = createStudioStore(fakeApi({ run, stepTimes: vi.fn(async () => ({})) }));
+    await store.getState().open("scn_a");
+    const first = store.getState().startRun();
+    expect(store.getState().startingRun).toBe(true);
+    await store.getState().startRun();
+    await store.getState().startRun({ step: true });
+    expect(run).toHaveBeenCalledTimes(1);
+    started("run_1");
+    await first;
+    expect(store.getState().startingRun).toBe(false);
+    expect(store.getState().run?.runId).toBe("run_1");
+  });
+
+  it("starts again after a start that failed", async () => {
+    const run = vi.fn().mockRejectedValueOnce(new ApiError({ code: "X", message: "だめ" })).mockResolvedValueOnce("run_2");
+    const store = createStudioStore(fakeApi({ run, stepTimes: vi.fn(async () => ({})) }));
+    await store.getState().open("scn_a");
+    await store.getState().startRun();
+    expect(store.getState().startingRun).toBe(false);
+    await store.getState().startRun();
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(store.getState().run?.runId).toBe("run_2");
+  });
+
   it("asks for inputs with no default before it runs, and runs with the values entered", async () => {
     const run = vi.fn(async () => "run_1");
     const withInputs: Flow = {
@@ -840,6 +867,29 @@ describe("studio store", () => {
       await store.getState().approveAndPublish();
       expect(store.getState().notice).toBe(t.approvedPublished(3));
       expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("publishes once for a double click on 「確定」 or 「公開」", async () => {
+      let done!: (p: PublishedState) => void;
+      const approveAndPublish = vi.fn(() => new Promise<PublishedState>((resolve) => (done = resolve)));
+      const publishFlow = vi.fn(async () => ({ version: 4 }) as PublishedState);
+      const store = createStudioStore(
+        fakeApi({ approveAndPublish, publishFlow, listVersions: vi.fn(async () => []), publishedState: vi.fn(async () => null), reviewTimeline: vi.fn(async () => ({}) as ReviewTimeline) }),
+      );
+      await store.getState().open("scn_a");
+      const first = store.getState().approveAndPublish();
+      expect(store.getState().deciding).toBe(true);
+      await store.getState().approveAndPublish();
+      // Another decision waits too: it would publish over the one on its way.
+      await store.getState().publish();
+      expect(await store.getState().sendBack("違う", [])).toBe(false);
+      expect(approveAndPublish).toHaveBeenCalledTimes(1);
+      expect(publishFlow).not.toHaveBeenCalled();
+      done({ version: 3, name: "v3", revision: 1, publishedAt: "", publishedBy: { kind: "studio" }, matchesCurrent: true } as PublishedState);
+      await first;
+      expect(store.getState().deciding).toBe(false);
+      await store.getState().publish();
+      expect(publishFlow).toHaveBeenCalledTimes(1);
     });
 
     it("answers an AI's approval request and re-reads the list", async () => {

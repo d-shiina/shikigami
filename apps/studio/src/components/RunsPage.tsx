@@ -8,6 +8,7 @@ import { useStudio } from "../context";
 import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen, type ScreenLock } from "../lib/api";
 import { agentErrorText } from "../lib/agentError";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
+import { useBusy } from "../lib/busy";
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, RowMenuButton, SearchBox, SelectionBar, StatusBadge, Switch, type Tone, toneDot, useTableView, ViewMenu } from "./DataTable";
@@ -302,6 +303,8 @@ function InputFields({ vars, values, onChange }: { vars: InputVar[]; values: Rec
 
 function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSaved: (list: ScheduleList) => void; onCancel: () => void }) {
   const summaries = useStudio((s) => s.summaries);
+  // Once: a new schedule saved twice (Enter twice, a double click) became two schedules.
+  const [saving, once] = useBusy();
   // Only a published version runs unattended: the others are listed, but cannot be chosen.
   const [published, setPublished] = useState<Set<string> | null>(null);
   useEffect(() => {
@@ -343,15 +346,17 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
   return (
     <form
       className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4"
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
-        const problem = whenProblem(draft.when);
-        if (problem) return setError(problem);
-        try {
-          onSaved(await api.saveSchedule(draft));
-        } catch (err) {
-          setError(message(err));
-        }
+        void once(async () => {
+          const problem = whenProblem(draft.when);
+          if (problem) return setError(problem);
+          try {
+            onSaved(await api.saveSchedule(draft));
+          } catch (err) {
+            setError(message(err));
+          }
+        });
       }}
     >
       <Labeled label={r.flow}>
@@ -401,7 +406,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
         <button type="button" className="rounded-lg px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={onCancel}>
           {r.cancel}
         </button>
-        <button type="submit" className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover">
+        <button type="submit" disabled={saving} className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover disabled:opacity-50">
           {r.save}
         </button>
       </div>

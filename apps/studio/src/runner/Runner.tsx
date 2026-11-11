@@ -9,6 +9,7 @@ import { WindowControls } from "../components/WindowControls";
 import { ApiError, api } from "../lib/api";
 import { useAttention } from "../lib/attention";
 import { relativeTime } from "../lib/changes";
+import { useBusy } from "../lib/busy";
 import { explainError } from "../lib/errorText";
 import { t } from "../lib/i18n";
 import { plain, sentence } from "../lib/sentence";
@@ -197,24 +198,27 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const text = (step: { name?: string; type: string; params?: Record<string, unknown> }) =>
     step.name?.trim() || plain(sentence(step as never, defs.find((d) => d.type === step.type)));
 
-  const start = async () => {
-    if (!item) return;
-    const { inputs, errors } = collect(fields, values);
-    setErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-    setProblem(null);
-    setReport(null);
-    setFiles([]);
-    setRun({ runId: null, startedAt: Date.now() });
-    try {
-      const runId = await backend.run(item.flow.id, inputs);
-      setRun({ runId, startedAt: Date.now() });
-    } catch (e) {
-      setRun(null);
-      const err = e as { code?: string; message?: string };
-      setProblem(err.code ? explainError({ code: err.code, message: err.message ?? "" }).what : message(e));
-    }
-  };
+  // Once: a double click or Enter twice before the button went away started the flow twice.
+  const [, once] = useBusy();
+  const start = () =>
+    once(async () => {
+      if (!item) return;
+      const { inputs, errors } = collect(fields, values);
+      setErrors(errors);
+      if (Object.keys(errors).length > 0) return;
+      setProblem(null);
+      setReport(null);
+      setFiles([]);
+      setRun({ runId: null, startedAt: Date.now() });
+      try {
+        const runId = await backend.run(item.flow.id, inputs);
+        setRun({ runId, startedAt: Date.now() });
+      } catch (e) {
+        setRun(null);
+        const err = e as { code?: string; message?: string };
+        setProblem(err.code ? explainError({ code: err.code, message: err.message ?? "" }).what : message(e));
+      }
+    });
   const stop = () => {
     const runId = run?.runId;
     if (!runId) return;

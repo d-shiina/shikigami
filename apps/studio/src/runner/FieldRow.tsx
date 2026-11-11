@@ -1,7 +1,9 @@
 // One field of a form made from a flow's inputs: the run window's, and
 // Studio's ask before a run when an input has no default.
 import { FileText, FolderOpen } from "lucide-react";
+import { useBusy } from "../lib/busy";
 import { t } from "../lib/i18n";
+import { usePickerOpen } from "../lib/picker";
 import { choiceLabel, type Field } from "./form";
 
 const INPUT = "w-full rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-primary focus:outline-none";
@@ -25,6 +27,9 @@ export function FieldRow({
   hint?: string;
 }) {
   const id = `in-${field.name}`;
+  // The 「参照…」 button is off while a file or folder dialog is open.
+  const picking = usePickerOpen();
+  const [busy, once] = useBusy();
   if (field.kind === "checkbox") {
     return (
       <label htmlFor={id} className="flex items-center gap-2 text-[13px]">
@@ -62,13 +67,14 @@ export function FieldRow({
         <button
           type="button"
           title={kind === "file" ? t.runner.browseFile : t.runner.browseFolder}
+          disabled={picking || busy}
           onClick={() =>
-            void onPick(kind, text).then(
+            void once(() => onPick(kind, text)).then(
               (path) => path && onChange(path),
               () => {},
             )
           }
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[12.5px] font-semibold hover:bg-slate-50"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[12.5px] font-semibold hover:bg-slate-50 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-sheet"
         >
           {kind === "file" ? <FileText size={14} aria-hidden="true" /> : <FolderOpen size={14} aria-hidden="true" />}
           {t.runner.browse}

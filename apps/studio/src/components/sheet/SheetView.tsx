@@ -612,6 +612,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   const run = useStudio(trailOf);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
+  const deciding = useStudio((s) => s.deciding);
   const subflows = useSubflows(flow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
@@ -795,7 +796,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
               <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" className="text-primary" />
               {t.sheetView.waiting(pending.length)}
             </span>
-            <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover">
+            <button type="button" disabled={deciding} onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover disabled:cursor-default disabled:opacity-50">
               {t.approveAll}
             </button>
           </div>

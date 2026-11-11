@@ -7,6 +7,8 @@ import type { ConfigFile, ConfigItem, ConfigType, Flow, Step } from "@spellsheet
 import { Calendar, FileCog, FileText, Folder, Hash, List, type LucideIcon, Plus, ScrollText, ToggleLeft, Type, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { portable } from "../lib/filePlaces";
+import { useBusy } from "../lib/busy";
+import { pickPath, usePickerOpen } from "../lib/picker";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -97,12 +99,15 @@ function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: un
  * the setting fits everyone who runs the flow.
  */
 function FolderInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
-  const browse = async () => {
-    const picked = await invoke<string | null>("runner_pick", { kind: "folder", start: value || null }).catch(() => null);
-    if (!picked) return;
-    const sync = await invoke<{ profile: string | null }>("sync_folders").catch(() => ({ profile: null }));
-    onChange(portable(picked, sync.profile));
-  };
+  const picking = usePickerOpen();
+  const [busy, once] = useBusy();
+  const browse = () =>
+    once(async () => {
+      const picked = await pickPath("folder", value);
+      if (!picked) return;
+      const sync = await invoke<{ profile: string | null }>("sync_folders").catch(() => ({ profile: null }));
+      onChange(portable(picked, sync.profile));
+    });
   return (
     <div className="flex gap-1">
       <input data-value className={field} placeholder="\\server\\share" value={value} onChange={(e) => onChange(e.target.value)} />
@@ -110,8 +115,9 @@ function FolderInput({ value, onChange }: { value: string; onChange: (value: unk
         type="button"
         title={t.props.browseTitle}
         aria-label={t.props.browseTitle}
+        disabled={picking || busy}
         onClick={() => void browse()}
-        className="h-8 shrink-0 rounded-lg border border-slate-200 px-2 text-[12px] text-slate-600 hover:bg-slate-50"
+        className="h-8 shrink-0 rounded-lg border border-slate-200 px-2 text-[12px] text-slate-600 hover:bg-slate-50 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
       >
         {t.props.browse}
       </button>

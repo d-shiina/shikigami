@@ -16,6 +16,7 @@ import { chooseAsk } from "../lib/ask";
 import { type CloudSide, folderNameOf, serviceOf } from "../lib/cloudPlaces";
 import { placeChange, placeName, portable } from "../lib/filePlaces";
 import { t } from "../lib/i18n";
+import { pickPath as pick, usePickerOpen } from "../lib/picker";
 import { ProjectContext, projectApi, useProjectMaybe } from "../project";
 import { CloudPlaceDialog } from "./CloudPlace";
 import { stepName } from "./ProjectPanel";
@@ -26,8 +27,6 @@ interface SyncFolders {
   profile: string | null;
   folders: { name: string; path: string }[];
 }
-
-const pick = (kind: "file" | "folder", start: string | null) => invoke<string | null>("runner_pick", { kind, start }).catch(() => null);
 
 const syncFolders = () => invoke<SyncFolders>("sync_folders").catch((): SyncFolders => ({ profile: null, folders: [] }));
 
@@ -114,6 +113,7 @@ export function NeededFiles() {
   const select = useStudio((s) => s.select);
   const needed = useNeededFiles();
   const place = usePlace();
+  const picking = usePickerOpen();
   // The file whose cloud dialog is open.
   const [cloud, setCloud] = useState<string | null>(null);
   if (!flow || needed.length === 0) return null;
@@ -163,8 +163,8 @@ export function NeededFiles() {
             {t.places.readBy(n.stepIds.map((id) => t.quote(nameOf(id))).join(""))}
           </button>
           <div className="mt-1.5 grid gap-1">
-            <Choice icon={FileInput} label={t.places.put} title={t.places.putTitle(n.path)} onClick={() => void put(n.path)} />
-            <Choice icon={Server} label={t.places.fileServer} title={t.places.fileServerTitle} onClick={() => void place("fileServer", n.path)} />
+            <Choice icon={FileInput} label={t.places.put} title={t.places.putTitle(n.path)} disabled={picking} onClick={() => void put(n.path)} />
+            <Choice icon={Server} label={t.places.fileServer} title={t.places.fileServerTitle} disabled={picking} onClick={() => void place("fileServer", n.path)} />
             <Choice icon={Cloud} label={t.places.cloud} title={t.places.cloudTitle} onClick={() => setCloud(n.path)} />
           </div>
         </div>
@@ -183,13 +183,14 @@ export function NeededFiles() {
   );
 }
 
-function Choice({ icon: Icon, label, title, onClick }: { icon: typeof Server; label: string; title: string; onClick: () => void }) {
+function Choice({ icon: Icon, label, title, disabled, onClick }: { icon: typeof Server; label: string; title: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       title={title}
+      disabled={disabled}
       onClick={onClick}
-      className="flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-2 text-left text-[12px] text-slate-700 hover:border-brand-500 hover:text-brand-500"
+      className="flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-sheet px-2 text-left text-[12px] text-slate-700 hover:border-brand-500 hover:text-brand-500 disabled:cursor-default disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-700"
     >
       <Icon size={13} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
       {label}
@@ -202,6 +203,7 @@ export function OutputPlaceMenu() {
   const [open, setOpen] = useState(false);
   const [cloud, setCloud] = useState(false);
   const place = usePlace();
+  const picking = usePickerOpen();
   return (
     <span className="relative">
       <button
@@ -227,12 +229,14 @@ export function OutputPlaceMenu() {
               <button
                 key={where}
                 type="button"
+                // The folder dialog is open already (from another 「参照…」).
+                disabled={where === "fileServer" && picking}
                 onClick={() => {
                   setOpen(false);
                   if (where === "cloud") setCloud(true);
                   else void place(where, null);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-slate-100"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-slate-100 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
                 {label}

@@ -11,8 +11,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useStudioApi } from "../context";
 import { type ExtensionList, type ExtensionPreview, type ExtensionSummary, extensionsApi, type InstalledExtension, type RegistryEntry, type RegistryOffer } from "../lib/api";
 import { confirmAsk } from "../lib/ask";
+import { useBusy } from "../lib/busy";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
+import { usePickerOpen } from "../lib/picker";
 import { EXTENSION_ICONS } from "../lib/nodeIcons";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, RowMenuButton, SearchBox, SelectionBar, StatusBadge, Switch, type Tone, toneDot, useTableView, ViewMenu } from "./DataTable";
 
@@ -142,20 +144,20 @@ function Preview({ preview, busy, onConfirm, onCancel }: { preview: ExtensionPre
 /** Where to install from: a zip, a URL or a GitHub repository. */
 function SourceForm({ initial, onPreview, onCancel }: { initial: string; onPreview: (p: ExtensionPreview) => void; onCancel: () => void }) {
   const [source, setSource] = useState(initial);
-  const [busy, setBusy] = useState(false);
+  // Once at a time: Enter in the field while 「確認」 is still going staged the plugin twice.
+  const [busy, once] = useBusy();
+  const picking = usePickerOpen();
   const [error, setError] = useState<{ text: string; problems: string[] } | null>(null);
-  const check = async (from = source) => {
-    if (!from.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      onPreview(await extensionsApi.stage(from));
-    } catch (e) {
-      setError({ text: message(e), problems: problemsOf(e) });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const check = (from = source) =>
+    once(async () => {
+      if (!from.trim()) return;
+      setError(null);
+      try {
+        onPreview(await extensionsApi.stage(from));
+      } catch (e) {
+        setError({ text: message(e), problems: problemsOf(e) });
+      }
+    });
   useEffect(() => {
     if (initial) void check(initial);
     // Only for the source given when opened (from the catalog).
@@ -177,7 +179,8 @@ function SourceForm({ initial, onPreview, onCancel }: { initial: string; onPrevi
           />
           <button
             type="button"
-            className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-700 hover:bg-slate-100"
+            className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+            disabled={picking || busy}
             onClick={async () => {
               const picked = await extensionsApi.pickZip().catch(() => null);
               if (picked) {
