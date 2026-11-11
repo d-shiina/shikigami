@@ -1080,7 +1080,6 @@ export const ja = {
     continueNote: "ここから次の回へ進みます",
     failNote: "フローはここでエラーで止まります",
     failThenNote: "「最後に必ず」を実行してから、エラーで止まります",
-    nothing: "何もしない",
     inside: (n: number) => `中に ${n} ノード`,
     /** A case that matches nothing yet. */
     caseEmpty: "（値なし）",

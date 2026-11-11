@@ -1080,7 +1080,6 @@ export const en: Dict = {
     continueNote: "Goes on to the next round here",
     failNote: "The flow stops here with an error",
     failThenNote: "Runs \u201cAlways at the end\u201d, then stops with an error",
-    nothing: "Does nothing",
     inside: (n: number) => `${n} node${n === 1 ? "" : "s"} inside`,
     /** A case that matches nothing yet. */
     caseEmpty: "(no value)",

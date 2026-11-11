@@ -110,6 +110,15 @@ const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
 export const asksUnderHead = (step: Step): boolean => step.type === IF || step.type === SWITCH;
 /** Loops that decide after their block has run, not before. */
 const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
+/**
+ * A loop drawn going round: its decision, the line back and the line out.
+ * To read (lib/reading.ts), a loop that decides first is its panel and its
+ * head alone: the panel says what is repeated and the head says how, so the
+ * line just runs in at the top and out at the bottom.
+ */
+const circles = (step: Step): boolean => CIRCLING.has(step.type) && !(READING && !CHECKS_AFTER.has(step.type));
+/** To read, an if or a switch is its decision alone: no head over it and no frame round it. */
+const bare = (step: Step): boolean => READING && asksUnderHead(step);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
 const STOPPING: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 /** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
@@ -164,6 +173,8 @@ export type JoinNodeData = {
   through?: boolean;
   /** A loop's decision (see DECIDE_H): what it asks. */
   question?: string;
+  /** To read: the expression a decision checks, noted over it when the decision says it in words. */
+  note?: string;
   /** A loop's decision: how wide it is (see decideWidth). */
   width?: number;
   /** A loop's decision that comes after its block (a wait's), not before. */
@@ -480,8 +491,10 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
     w = Math.max(w, m.w);
     inner += JOIN_GAP + JOIN_SIZE + GAP_Y + m.h;
   }
-  const circling = CIRCLING.has(step.type);
-  const h = !circling
+  const circling = circles(step);
+  const h = bare(step)
+    ? DECIDE_H + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
+    : !circling
     ? own.h + (asksUnderHead(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : CHECKS_AFTER.has(step.type)
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
@@ -672,7 +685,8 @@ class Builder {
       return catches(step, l) ? { w: m.w, h: m.h + CATCH_DROP } : m;
     });
     const afterSize = after ? measureList(after.steps, this.defs, this.extra, this.collapsed, after.tail) : null;
-    const isLoop = CIRCLING.has(step.type);
+    const isLoop = circles(step);
+    const plain = bare(step);
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (columns.length - 1);
     let laneX = x + (span - total) / 2;
     const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
@@ -686,13 +700,15 @@ class Builder {
       right += short / 2;
     }
     const height = measure(step, this.defs, this.extra, this.collapsed).h;
-    this.nodes.push({
-      id,
-      type: "step",
-      position: { x: left, y },
-      data: { ...base, head: { width: right - left, lineX: cx - left, collapsed: false, count: countInside(step), ...extras } },
-    });
-    this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
+    if (!plain) {
+      this.nodes.push({
+        id,
+        type: "step",
+        position: { x: left, y },
+        data: { ...base, head: { width: right - left, lineX: cx - left, collapsed: false, count: countInside(step), ...extras } },
+      });
+      this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
+    }
 
     // Where the frame is left, on its bottom edge: a loop's only lets its line
     // out (its body goes round instead), a frame's columns meet there (a dot),
@@ -707,10 +723,12 @@ class Builder {
       const question = branchQuestion(step);
       // To read, the whole question shows: an if has two columns under it to be as wide as.
       const width = decideWidth(question, READING ? 2 * NODE_W - 20 : undefined);
-      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
-      this.edge(id, from);
+      // To read, what it asks in words is on the decision, and the expression it checks is noted over it.
+      const note = plain && asksByName(step) ? headSummary(step) : undefined;
+      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: plain ? y : y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width, note } });
+      if (!plain) this.edge(id, from);
     }
-    const bodyY = y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;
+    const bodyY = plain ? y + DECIDE_H + GAP_Y : y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;
     const columnsH = Math.max(...sizes.map((m) => m.h));
     // A try's columns meet before its "finally", which runs after them.
     const meet = after ? `join:${id}:then` : join;
@@ -783,7 +801,7 @@ class Builder {
       for (const e of placed.exits) this.edge(e, join);
     }
     this.depth -= 1;
-    return { entry: id, exits: [join] };
+    return { entry: plain ? from : id, exits: [join] };
   }
 
   /** A loop's body, its decision (see DECIDE_H), its line back and its way out on the frame's bottom edge. */

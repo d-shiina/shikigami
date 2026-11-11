@@ -52,6 +52,11 @@ export function JoinNode({ data }: NodeProps<Node<JoinData>>) {
           />
         </svg>
         <span className="relative truncate text-[12px] font-medium text-ink">{data.question}</span>
+        {data.note && (
+          <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 max-w-[520px] -translate-x-1/2 truncate rounded-md border border-slate-200 bg-sheet px-2 font-mono text-[11px] leading-[18px] whitespace-nowrap text-slate-600">
+            {data.note}
+          </span>
+        )}
         <FlowHandles />
       </div>
     );
@@ -59,7 +64,12 @@ export function JoinNode({ data }: NodeProps<Node<JoinData>>) {
   return (
     <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={`relative ${data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}`}>
       {/* A single line across the frame's edge: drawn through, so it does not break off there. */}
-      {data.through && <span className="absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 bg-[var(--flow-edge)]" />}
+      {data.through && (
+        <svg aria-hidden="true" width={JOIN_SIZE} height={JOIN_SIZE} className="absolute inset-0 overflow-visible">
+          {/* A little past both ends, so no seam shows where it meets the lines. */}
+          <line x1={JOIN_SIZE / 2} x2={JOIN_SIZE / 2} y1={-1} y2={JOIN_SIZE + 1} stroke="var(--flow-edge)" strokeWidth={1.5} />
+        </svg>
+      )}
       <FlowHandles />
     </div>
   );
@@ -143,16 +153,15 @@ export function SlotNode({ id, data }: NodeProps<Node<TailData>>) {
   // An empty block or an empty flow, or the 「＋ ノード追加」 under the last node of a block (or the flow): each adds a node there.
   const focused = useFocus();
   if (READING) {
-    // To read: nothing is added here. The line runs through; an empty block says that it does nothing.
+    // To read: nothing is added here, and an empty block is the line running through it.
     const w = data.tail ? TAIL_W : NODE_W;
     const h = data.tail ? TAIL_SIZE : SLOT_H;
     return (
       <div style={{ width: w, height: h }} className="relative flex items-center justify-center">
         <FlowHandles />
         <svg aria-hidden="true" width={w} height={h} className="absolute inset-0 overflow-visible">
-          <line x1={w / 2} x2={w / 2} y1={0} y2={h} stroke="var(--flow-edge)" strokeWidth={1.5} />
+          <line x1={w / 2} x2={w / 2} y1={-1} y2={h + 1} stroke="var(--flow-edge)" strokeWidth={1.5} />
         </svg>
-        {!data.tail && data.parentId !== null && <span className="relative rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] text-slate-600">{t.flow.nothing}</span>}
       </div>
     );
   }

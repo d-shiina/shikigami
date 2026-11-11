@@ -389,8 +389,11 @@ export function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; 
   return (
     <div style={{ height: HEAD_H - 2 }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
       <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
-      <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
-      {data.step.name && !byName && <span className="min-w-0 shrink truncate text-[12.5px] font-medium text-ink">{data.step.name}</span>}
+      {/* To read, a frame with a name of its own is called by it: the name says what the kind's label would only classify. */}
+      {!(READING && data.step.name) && <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>}
+      {data.step.name && !byName && (
+        <span className={`min-w-0 shrink truncate text-[12.5px] text-ink ${READING ? "font-semibold" : "font-medium"}`}>{data.step.name}</span>
+      )}
       {summary && (
         <span className="min-w-0 shrink truncate rounded bg-slate-100 px-1.5 font-mono text-[11.5px] leading-[20px] text-ink">{summary}</span>
       )}
