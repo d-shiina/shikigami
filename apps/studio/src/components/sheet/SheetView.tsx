@@ -2,27 +2,29 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { CircleCheck, CirclePause, Clock, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
+import { Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
 import { locale, t } from "../../lib/i18n";
-import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene } from "../../lib/manual";
+import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
 import { sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
 import { type Part, paramShown, plain } from "../../lib/sentence";
-import type { Step } from "@spellsheet/schema";
-import { findStep, isActive } from "../../store";
+import type { Flow, Step } from "@spellsheet/schema";
+import { findStep, isActive, trailOf } from "../../store";
+import type { RunState } from "../../store/run";
+import { errorLine } from "../../lib/errorText";
 import { revertBlocker, touchedSteps } from "../../store/history";
 import { actorLabel, describe, formatValue, relativeTime } from "../../lib/changes";
 import { extensionParamTitle } from "../../lib/extensions";
 import { usePendingReview } from "../Timeline";
-import type { HistoryEntry, StepTypeDef } from "@spellsheet/schema";
+import type { HistoryEntry, PublishedState, StepTypeDef, VersionSummary } from "@spellsheet/schema";
 import { menuFor } from "../../lib/contextMenu";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
-import { MaskEditor, ShotFrame, WholeShot, usePictures, useSubflows } from "../ManualView";
+import { ExportDialog, MaskEditor, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "../ManualView";
 import { SheetHeading } from "../SheetHeading";
 
 /** The pictures of the screens and what is done about them. */
@@ -127,7 +129,7 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
 }
 
 /** The last run, and the way to run again: said once, beside the heading. */
-function LastRun({ manifest, running, onRun }: { manifest: ManualManifest | null; running: boolean; onRun: () => void }) {
+function LastRun({ manifest, running, onRun, onExport }: { manifest: ManualManifest | null; running: boolean; onRun: () => void; onExport: () => void }) {
   const w = t.sheetView;
   const at = manifest
     ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -146,6 +148,11 @@ function LastRun({ manifest, running, onRun }: { manifest: ManualManifest | null
       <button type="button" disabled={running} onClick={onRun} className="mt-0.5 inline-flex items-center gap-1 font-medium text-primary hover:underline disabled:opacity-50">
         <Play size={12} strokeWidth={2} aria-hidden="true" />
         {w.run}
+      </button>
+      {/* The sheet as a file to hand to someone: the manual, with its pictures. */}
+      <button type="button" onClick={onExport} className="mt-0.5 ml-4 inline-flex items-center gap-1 text-slate-600 hover:text-ink hover:underline">
+        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+        {t.manual.export}
       </button>
     </div>
   );
@@ -209,6 +216,12 @@ function ChangeNote({ change, step, defs }: { change: Change; step: ManualStep; 
   );
 }
 
+/** How a step of the run came out, after its name. */
+function RunMark({ state }: { state: "succeeded" | "failed" | "paused" }) {
+  const Icon = state === "succeeded" ? Check : state === "failed" ? CircleX : CirclePause;
+  return <Icon size={14} strokeWidth={2} aria-hidden="true" className={`mb-[3px] ml-1.5 inline-block ${state === "succeeded" ? "text-moegi-600" : state === "failed" ? "text-shu-600" : "text-slate-500"}`} />;
+}
+
 /** The changes that wait on these steps, each in the margin. */
 function ChangeNotes({ steps, ctx }: { steps: ManualStep[]; ctx: RowCtx }) {
   return (
@@ -231,15 +244,21 @@ function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; n
   const picked = ctx.picked === step.stepId;
   const onPick = ctx.onPick;
   const own = step.callPath.length === 0 ? ctx.stepOf(step.stepId) : undefined;
+  const state = own ? ctx.run?.steps[step.stepId] : undefined;
+  const error = ctx.run?.pause?.error ?? ctx.run?.failure;
+  const failed = own && state === "failed" && error && (!error.stepId || error.stepId === step.stepId) ? errorLine(error, own) : null;
   return (
-    <li className="py-2.5" onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
+    <li className="scroll-my-24 py-2.5" data-step={own ? step.stepId : undefined} onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
       {notes && <ChangeNotes steps={[step]} ctx={ctx} />}
       <div className="grid grid-cols-[28px_minmax(0,1fr)]">
       <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{step.number}</span>
       <div className="min-w-0">
         <button type="button" onClick={() => onPick(step)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
-          <span className={picked ? "flow-chart-on" : ""}>{step.text}</span>
+          {/* The step the run is on is under the highlighter, as the one picked is. */}
+          <span className={picked || state === "running" ? "flow-chart-on" : ""}>{step.text}</span>
+          {state && state !== "running" && state !== "skipped" && <RunMark state={state} />}
         </button>
+        {failed && <p className="mt-0.5 text-[13px] leading-[1.7] text-shu-600">{failed}</p>}
         {step.how && plain(step.how) !== step.text && (
           <p className="mt-0.5 text-[14px] leading-[1.8] text-slate-700">
             <Words parts={step.how} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} />
@@ -332,6 +351,8 @@ type RowCtx = {
   /** The flow's own step (not one of a called flow). */
   stepOf: (id: string) => Step | undefined;
   onValue: (stepId: string, key: string, value: string | number) => void;
+  /** The run of this flow that is going, or the last one of the flow as it is now. */
+  run: RunState | null;
   /** What waits to be looked at, by step. */
   changes: ReadonlyMap<string, Change[]>;
   defs: ReadonlyMap<string, StepTypeDef>;
@@ -434,6 +455,40 @@ function ChapterView({ chapter, ctx }: { chapter: Chapter; ctx: RowCtx }) {
   );
 }
 
+/** The sheet written out as a manual: read as the manual reads it (what is switched off left out), with the version it is of. */
+function Export({
+  flow,
+  defs,
+  manifest,
+  subflows,
+  masks,
+  drafts,
+  when,
+  onClose,
+}: {
+  flow: Flow;
+  defs: ReadonlyMap<string, StepTypeDef>;
+  manifest: ManualManifest | null;
+  subflows: ReadonlyMap<string, Flow>;
+  masks: Record<string, Mask>;
+  drafts: Drafts;
+  when: string[];
+  onClose: () => void;
+}) {
+  const [published, setPublished] = useState<PublishedState | null>(null);
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  useEffect(() => {
+    let live = true;
+    void api.publishedState(flow.id).then((p) => live && setPublished(p)).catch(() => {});
+    void api.listVersions(flow.id).then((v) => live && setVersions(v)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [flow.id]);
+  const doc = useMemo(() => buildManual(flow, defs, manifest, subflows, masks, drafts), [flow, defs, manifest, subflows, masks, drafts]);
+  return <ExportDialog doc={doc} flowId={flow.id} made={madeLine(manifest)} shotAt={shotLine(manifest, doc)} edition={editionOf(published, versions, day)} when={when} masks={masks} onClose={onClose} />;
+}
+
 /** The paper every way of reading the flow lies on: its outline, its corners, and the flow's name at its top. */
 const PAPER = "rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]";
 
@@ -456,7 +511,9 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [masking, setMasking] = useState<ManualShot | null>(null);
   const [whole, setWhole] = useState<ManualShot | null>(null);
+  const [exporting, setExporting] = useState(false);
   const pending = usePendingReview();
+  const run = useStudio(trailOf);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
   const subflows = useSubflows(flow);
@@ -489,6 +546,13 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
   const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts, { stopped: true }) : null), [flow, defs, manifest, subflows, masks, drafts]);
+  // The step the run is on is kept in sight.
+  const follow = useStudio((s) => s.followRun);
+  const live = run && isActive(run) && follow ? run : null;
+  const at = live ? [...live.starts].reverse().find((x) => live.steps[x.stepId] === "running" || live.steps[x.stepId] === "paused")?.stepId : undefined;
+  useEffect(() => {
+    if (at) desk.current?.querySelector(`[data-step="${at}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [at]);
   const changes = useMemo(() => {
     const map = new Map<string, Change[]>();
     for (const entry of pending) {
@@ -505,6 +569,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
     picked: selection?.kind === "step" ? selection.stepId : null,
     changes,
     defs,
+    run,
     stepOf: (id) => findStep(flow.steps ?? [], id) ?? undefined,
     onValue: (stepId, key, value) => void updateStep(stepId, { params: { [key]: value } }),
     onStop: (stepId, stop) => void updateStep(stepId, { disabled: stop }),
@@ -554,7 +619,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
             <div className={MARGIN}>
               {!chart && (
                 <Aside>
-                  <LastRun manifest={manifest} running={running} onRun={() => void startRun()} />
+                  <LastRun manifest={manifest} running={running} onRun={() => void startRun()} onExport={() => setExporting(true)} />
                 </Aside>
               )}
               <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{doc.title}</h1>
@@ -603,6 +668,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
           }}
         />
       )}
+      {exporting && <Export flow={flow} defs={defs} manifest={manifest} subflows={subflows} masks={masks} drafts={drafts} when={when} onClose={() => setExporting(false)} />}
       {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
     </div>
   );

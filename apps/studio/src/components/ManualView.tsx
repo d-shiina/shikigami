@@ -88,12 +88,12 @@ export function madeLine(manifest: ManualManifest | null): string | null {
 }
 
 /** A day as the cover and the revision history say it (2026/11/09). */
-function day(iso: string): string {
+export function day(iso: string): string {
   return new Date(iso).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
 /** Where the screens came from, short: 「11月9日 09:20 の実行」. */
-function shotLine(manifest: ManualManifest | null, doc: ManualDoc): string {
+export function shotLine(manifest: ManualManifest | null, doc: ManualDoc): string {
   if (manifest) {
     const when = new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
       month: "short",
@@ -1084,7 +1084,7 @@ export function MaskEditor({
   );
 }
 
-function ExportDialog({
+export function ExportDialog({
   doc,
   flowId,
   made,
