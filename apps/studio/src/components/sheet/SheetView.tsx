@@ -2,13 +2,13 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, History, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
 import { locale, t } from "../../lib/i18n";
 import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
-import { sceneMarks } from "../../lib/manualExport";
+import { type SceneMark, sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
 import { brief, type Part, paramShown, plain } from "../../lib/sentence";
 import type { Flow, Step } from "@spellsheet/schema";
@@ -159,7 +159,7 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
 
 /** The last run, and the way to run again: said once, beside the heading. */
 /** `blocked`: why the flow cannot be run now (it is running, has errors, or the AI is still making it), as on the bar's run button. */
-function LastRun({ manifest, blocked, empty, onRun, onExport }: { manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void }) {
+function LastRun({ manifest, blocked, empty, onRun, onExport, onHistory }: { manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void; onHistory?: () => void }) {
   const w = t.sheetView;
   const at = manifest
     ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -184,6 +184,13 @@ function LastRun({ manifest, blocked, empty, onRun, onExport }: { manifest: Manu
         <Download size={12} strokeWidth={1.75} aria-hidden="true" />
         {t.manual.export}
       </button>
+      {/* Every run of this flow, wherever it was started: its results and logs. */}
+      {onHistory && (
+        <button type="button" onClick={onHistory} className="mt-0.5 flex items-center gap-1 text-slate-600 hover:text-ink hover:underline">
+          <History size={12} strokeWidth={1.75} aria-hidden="true" />
+          {t.result.history}
+        </button>
+      )}
     </div>
   );
 }
@@ -359,8 +366,8 @@ function Figure({ scene, pictures }: { scene: Scene; pictures: Pictures }) {
         role="button"
         tabIndex={0}
         title={t.manual.whole}
-        onClick={() => pictures.onWhole(shot)}
-        onKeyDown={(e) => e.key === "Enter" && pictures.onWhole(shot)}
+        onClick={() => pictures.onWhole(shot, sceneMarks(scene))}
+        onKeyDown={(e) => e.key === "Enter" && pictures.onWhole(shot, sceneMarks(scene))}
         className="cursor-zoom-in overflow-hidden rounded-[4px] border border-slate-200"
       >
         <ShotFrame shot={shot} marks={sceneMarks(scene)} ctx={pictures} />
@@ -591,7 +598,7 @@ function Export({
 let revealed = 0;
 
 /** `onSheet`: asked from the chart, to read a step where its settings open (the sheet). */
-export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?: () => void }) {
+export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart"; onSheet?: () => void; onHistory?: () => void }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const startRun = useStudio((s) => s.startRun);
@@ -611,7 +618,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   const [drafts, setDrafts] = useState<Drafts>({});
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [masking, setMasking] = useState<ManualShot | null>(null);
-  const [whole, setWhole] = useState<ManualShot | null>(null);
+  const [whole, setWhole] = useState<{ shot: ManualShot; marks: SceneMark[] } | null>(null);
   const [exporting, setExporting] = useState(false);
   const pending = usePendingReview();
   const run = useStudio(trailOf);
@@ -704,7 +711,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
   }, [pending]);
   if (!flow || !doc) return null;
 
-  const pictures: Pictures = { urls, want, masks, onWhole: setWhole, onMask: setMasking };
+  const pictures: Pictures = { urls, want, masks, onWhole: (shot, marks) => setWhole({ shot, marks }), onMask: setMasking };
   const ctx: RowCtx = {
     pictures,
     picked: selection?.kind === "step" ? selection.stepId : null,
@@ -772,7 +779,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
             <div className={MARGIN}>
               {!chart && (
                 <Aside>
-                  <LastRun manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} />
+                  <LastRun manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
                 </Aside>
               )}
               <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{doc.title}</h1>
@@ -830,7 +837,7 @@ export function SheetView({ mode, onSheet }: { mode: "sheet" | "chart"; onSheet?
         />
       )}
       {exporting && <Export flow={flow} defs={defs} manifest={manifest} subflows={subflows} masks={masks} drafts={drafts} when={when} onClose={() => setExporting(false)} />}
-      {whole && <WholeShot shot={whole} url={urls[whole.file]} mask={masks[whole.key]} onClose={() => setWhole(null)} />}
+      {whole && <WholeShot shot={whole.shot} marks={whole.marks} url={urls[whole.shot.file]} mask={masks[whole.shot.key]} onClose={() => setWhole(null)} />}
     </div>
   );
 }

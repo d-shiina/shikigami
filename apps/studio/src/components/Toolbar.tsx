@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, Variable } from "lucide-react";
+import { ArrowLeft, CircleCheck, CircleDashed, ClipboardCheck, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, Variable } from "lucide-react";
 import { openMenu } from "../lib/contextMenu";
 import { FlowSwitch } from "./FlowSwitch";
 
@@ -86,15 +86,25 @@ export function FlowTitle() {
       {/* Where it was opened from, as Linear's header starts with the team: back there in one click. */}
       <button
         type="button"
-        onClick={() => setPlace(place === "review" ? "review" : "library")}
+        onClick={() => setPlace("library")}
         className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink @max-[760px]/title:hidden"
       >
-        {place === "review" ? t.awaitingReview : t.flows}
+        {t.flows}
       </button>
       <span className="shrink-0 text-[13px] text-slate-300 @max-[760px]/title:hidden" aria-hidden="true">
         /
       </span>
       <FlowSwitch />
+      {/* On the review desk: said beside the flow's name, with the way back to the flow's own sheet next to it. */}
+      {place === "review" && (
+        <>
+          <span className="shrink-0 rounded-md bg-shu-50 px-1.5 py-0.5 text-[11.5px] font-medium text-shu-600">{t.awaitingReview}</span>
+          <button type="button" onClick={() => setPlace("flows")} className={`${CHIP} text-slate-600 hover:bg-slate-100 hover:text-ink`}>
+            <ArrowLeft size={13} strokeWidth={1.75} aria-hidden="true" />
+            {t.toolbar.backToSheet}
+          </button>
+        </>
+      )}
       {/* What unattended runs execute; published from the history's versions. */}
       <button
         type="button"

@@ -47,6 +47,7 @@ import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
+import { useAgentPlace } from "./lib/agentPlace";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
@@ -193,6 +194,7 @@ function Editor({
   grip: Grip;
 }) {
   const hasFlow = useStudio((s) => s.flow !== null);
+  const place = useStudio((s) => s.place);
   const projectOpen = useProject((s) => s.panelOpen);
   return (
     <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
@@ -206,7 +208,7 @@ function Editor({
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
-            <SheetView mode={view === "chart" ? "chart" : "sheet"} onSheet={() => onView("story")} />
+            <SheetView mode={view === "chart" ? "chart" : "sheet"} onSheet={() => onView("story")} onHistory={place === "flows" ? () => onView("result") : undefined} />
           )}
           {/* The flow's files lie on the desk left of the paper, opened from the menu and closed from themselves. */}
           {!report && view !== "variables" && hasFlow && projectOpen && (
@@ -345,6 +347,7 @@ function Shell() {
   const place = useStudio((s) => s.place);
   const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const agentOpen = useAgent((s) => s.open);
+  const agentPlace = useAgentPlace();
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
   const openName = useStudio((s) => s.flow?.name ?? "");
@@ -372,7 +375,7 @@ function Shell() {
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
   const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
-  const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
+  const shown = { agent: agentOpen && agentPlace === "right", right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
@@ -471,14 +474,16 @@ function Shell() {
             <HumanBanner />
             <Banner />
             {work}
+            {/* Asking the AI is under the work in every place (it makes new flows too): on the desk where a paper lies on one. */}
+            {agentPlace === "below" && <AgentPane desk={(place === "flows" && ((hasFlow && view !== "result" && view !== "variables") || drafting)) || place === "review" || place === "inventory"} />}
           </div>
-          {/* The AI's chat floats on the window's ground beside the work: it is not part of any
-              place (it makes new flows too), so it is not in the work's frame. Kept mounted while
-              closed, so an unsent draft survives (it draws nothing then). */}
-          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
-            <AgentPane width={fit.agent} />
-            {fit.agent > 0 && grip("agent")}
-          </div>
+          {/* Chosen in the settings: the AI's conversation in a column of its own beside the work. */}
+          {agentPlace === "right" && fit.agent > 0 && (
+            <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+              <AgentPane desk={false} width={fit.agent} />
+              {grip("agent")}
+            </div>
+          )}
         </div>
       </div>
       {dialogs}

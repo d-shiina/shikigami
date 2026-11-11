@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { ArrowUpRight, Check, ChevronDown, Clock, Download, ListChecks, Loader2, Plus, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Clock, Download, ListChecks, Loader2, Plus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
@@ -17,7 +17,15 @@ import { useInbox } from "./ReviewDesk";
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 const chatTitle = (c: Chat) => c.title || t.agent.untitled;
 
-export function AgentPane({ width }: { width: number }) {
+/**
+ * Asking the AI, under the sheet: one field at the foot of the work, with what
+ * the AI is doing (or asking) on a line over it. The whole conversation opens
+ * upward from the field and closes again. In the settings it can be put in a column on the
+ * right instead (`width` given): then the conversation is always in view while it is open.
+ * `desk`: the work above is a paper on the desk, so the field floats on the desk too.
+ */
+export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
+  const column = width !== undefined;
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
@@ -33,22 +41,35 @@ export function AgentPane({ width }: { width: number }) {
   const setDraft = useAgent((s) => s.setDraft);
   const getChats = useAgentApi().getState;
   const draft = chat.draft;
-  const setDraftOf = (id: string, change: (now: string) => string) =>
-    setDraft(id, change(getChats().chats.find((c) => c.id === id)?.draft ?? ""));
+  const setDraftOf = (id: string, change: (now: string) => string) => setDraft(id, change(getChats().chats.find((c) => c.id === id)?.draft ?? ""));
   const end = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   const { items } = chat;
   const busy = isBusy(chat);
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.
-    void end.current?.scrollIntoView({ block: "end" });
-  }, [items, chat.id]);
+    if (open) void end.current?.scrollIntoView({ block: "end" });
+  }, [items, chat.id, open]);
+  // The field is one line until more is written, then as high as its words (up to a few lines).
+  useEffect(() => {
+    const box = field.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 132)}px`;
+  }, [draft, chat.id]);
   const available = info?.available === true;
-  if (!open) return null;
   // The conversation may be about another flow than the one in the editor.
   const here = flow !== null && chat.flowId === flow.id;
   const stepId = here && selection?.kind === "step" ? selection.stepId : null;
   const submit = async (answer?: string) => {
-    const ref = chat.flowId ? { id: chat.flowId, name: here ? flow.name : chat.title, stepId, empty: here && (flow.steps ?? []).length === 0 } : null;
+    const ref = chat.flowId
+      ? {
+          id: chat.flowId,
+          name: here ? flow.name : chat.title,
+          stepId,
+          empty: here && (flow.steps ?? []).length === 0,
+        }
+      : null;
     const context = chat.flowId ? `${ref!.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
     const id = chat.id;
     // A pressed answer leaves what the person was writing alone.
@@ -63,115 +84,162 @@ export function AgentPane({ width }: { width: number }) {
   };
   // Only the last reply's card can still be answered, and not while the AI works.
   const canChoose = !busy && !blockedElsewhere && available;
+  const last = items.at(-1);
+  // A question the AI is waiting on is answered right here, without opening the conversation.
+  const asking = canChoose && last?.role === "ai" && last.parts.some((p) => p.kind === "choice") ? last : null;
+  const needsSetup = info !== null && (!available || (info.usesApiKey && !info.hasApiKey));
+  const said = lastWords(chat);
+  const CARD = "rounded-[8px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]";
+  // Closed, the column draws nothing (what was being written is kept with the conversation).
+  if (column && (!open || width === 0)) return null;
   return (
-    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col bg-sheet">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-3 pl-2">
-        <ChatSwitcher chat={chat} />
-        <button
-          type="button"
-          onClick={() => newChat(chat.flowId ? { id: chat.flowId, name: chat.title } : null)}
-          disabled={items.length === 0 && !chat.sessionId}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
-          title={t.agent.newChat}
-          aria-label={t.agent.newChat}
-        >
-          <Plus size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
-          aria-label={t.close}
-        >
-          <X size={15} />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {info && !available && (
-          <>
-            {info.installable ? (
-              <SetupCard />
-            ) : (
-              <div className="rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+    <div
+      className={column ? "flex h-full shrink-0 flex-col bg-sheet" : `shrink-0 px-5 pt-1 pb-3 ${desk ? "flow-chart" : "bg-sheet"}`}
+      style={column ? { width } : undefined}
+      data-agent-dock
+    >
+      <div className={column ? "flex min-h-0 flex-1 flex-col" : "mx-auto flex w-full max-w-[760px] flex-col gap-2"}>
+        {open ? (
+          <div className={column ? "flex min-h-0 flex-1 flex-col" : `flex max-h-[min(58vh,560px)] min-h-0 flex-col ${CARD}`}>
+            <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-2 pl-2">
+              <ChatSwitcher chat={chat} />
+              <button
+                type="button"
+                onClick={() => newChat(chat.flowId ? { id: chat.flowId, name: chat.title } : null)}
+                disabled={items.length === 0 && !chat.sessionId}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+                title={t.agent.newChat}
+                aria-label={t.agent.newChat}
+              >
+                <Plus size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
+                title={`${t.agent.closeTalk}（Ctrl+J）`}
+                aria-label={t.agent.closeTalk}
+              >
+                {column ? <X size={15} /> : <ChevronDown size={15} />}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+              {info && !available && (
+                <>
+                  {info.installable ? (
+                    <SetupCard />
+                  ) : (
+                    <div className="rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+                  )}
+                </>
+              )}
+              {info?.usesApiKey && !info.hasApiKey && <ApiKeyBox />}
+              {items.length === 0 && available && !(info.usesApiKey && !info.hasApiKey) && (
+                <p className="py-6 text-center text-[12px] text-slate-500">{chat.sessionId ? t.agent.continued : t.agent.noTalk}</p>
+              )}
+              {items.map((item, i) => (
+                <Item key={item.id} item={item} onChoose={canChoose && i === items.length - 1 ? (answer) => void submit(answer) : null} />
+              ))}
+              {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
+              <LoginBox name={info?.name ?? "AI"} />
+              {info?.hasApiKey && <ApiKeyBox />}
+              <div ref={end} />
+            </div>
+          </div>
+        ) : asking ? (
+          <div className={`max-h-[40vh] overflow-y-auto px-4 py-3 ${CARD}`}>
+            <Item item={asking} onChoose={(answer) => void submit(answer)} />
+          </div>
+        ) : null}
+        {needsSetup && !open ? (
+          // Nothing can be asked yet: one line that leads to setting the AI up, instead of a field that cannot be written in.
+          <div className={`${CARD} flex items-center gap-3 px-4 py-2.5 text-[12.5px] text-slate-600`}>
+            <span className="min-w-0 flex-1 truncate">{t.agent.needsSetup}</span>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="h-7 shrink-0 rounded-[6px] bg-primary px-3 text-[12px] font-medium text-on-primary hover:bg-primary-hover"
+            >
+              {t.agent.setUp}
+            </button>
+          </div>
+        ) : (
+          <div className={`${CARD} ${column ? "m-3 mt-0" : ""} px-3 pt-2 pb-2 focus-within:shadow-[0_0_0_1px_var(--color-primary),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}>
+            {/* What the field is about, and what the AI last said or is doing: pressed, the conversation opens. */}
+            {!open && !asking && (busy || said) && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                title={`${t.agent.openTalk}（Ctrl+J）`}
+                className="mb-1 flex w-full min-w-0 items-center gap-1.5 text-left text-[11.5px] text-slate-500 hover:text-ink"
+              >
+                {busy && <Loader2 size={12} className="shrink-0 animate-spin text-primary" aria-hidden="true" />}
+                <span className="min-w-0 truncate">{busy ? `${t.agent.chatWorking}${said ? `：${said}` : ""}` : said}</span>
+                <ChevronUp size={13} className="ml-auto shrink-0" aria-hidden="true" />
+              </button>
             )}
-          </>
-        )}
-        {info?.usesApiKey && !info.hasApiKey && <ApiKeyBox />}
-        {items.length === 0 && available && !(info.usesApiKey && !info.hasApiKey) && (
-          <div className="grid h-full place-items-center">
-            <div className="flex flex-col items-center gap-2">
-              <img src="/mark.png" alt="" className="h-10 w-10 opacity-15 grayscale" />
-              {chat.sessionId && <div className="text-[11.5px] text-slate-500">{t.agent.continued}</div>}
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={field}
+                data-agent-input
+                value={draft}
+                onChange={(e) => setDraftOf(chat.id, () => e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    void submit();
+                  }
+                }}
+                rows={1}
+                disabled={!available}
+                aria-label={chat.flowId ? t.agent.askEdit : t.agent.askNew}
+                placeholder={!available ? t.agent.needsSetup : chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
+                className="min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[13.5px] leading-[1.5] text-ink outline-none placeholder:text-slate-400 disabled:text-slate-400"
+              />
+              {chat.turnId && (
+                <button
+                  type="button"
+                  onClick={() => void stop(chat.id)}
+                  className="flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-slate-300 px-2.5 text-[12px] text-slate-600 hover:bg-slate-100"
+                >
+                  <Square size={11} aria-hidden="true" />
+                  {t.stop}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={!available || blockedElsewhere || draft.trim() === ""}
+                onClick={() => void submit()}
+                title={blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : `${t.agent.send}（${t.agent.sendHint}）`}
+                aria-label={t.agent.send}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                <ArrowUp size={15} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="mt-1 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
+              {chat.flowId === null ? (
+                <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
+              ) : here ? (
+                <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{flow.name}</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void openFlow(chat.flowId!)}
+                  title={t.agent.openFlow}
+                  className="flex min-w-0 items-center gap-0.5 rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
+                >
+                  <span className="truncate">{chat.title}</span>
+                  <ArrowUpRight size={12} className="shrink-0" aria-hidden="true" />
+                </button>
+              )}
+              {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
+              <span className="ml-auto shrink-0 truncate">{blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}</span>
             </div>
           </div>
         )}
-        {items.map((item, i) => (
-          <Item key={item.id} item={item} onChoose={canChoose && i === items.length - 1 ? (answer) => void submit(answer) : null} />
-        ))}
-        {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
-        <LoginBox name={info?.name ?? "AI"} />
-        {info?.hasApiKey && <ApiKeyBox />}
-        <div ref={end} />
       </div>
-      <div className="border-t border-slate-200 p-3">
-        <div className="relative mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
-          {chat.flowId === null ? (
-            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
-          ) : here ? (
-            <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{flow.name}</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void openFlow(chat.flowId!)}
-              title={t.agent.openFlow}
-              className="flex min-w-0 items-center gap-0.5 rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
-            >
-              <span className="truncate">{chat.title}</span>
-              <ArrowUpRight size={12} className="shrink-0" aria-hidden="true" />
-            </button>
-          )}
-          {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
-        </div>
-        <textarea
-          data-agent-input
-          value={draft}
-          onChange={(e) => setDraftOf(chat.id, () => e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          rows={3}
-          disabled={!available}
-          placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
-          className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary disabled:bg-slate-100"
-        />
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.noteHint : undefined}>
-            {blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}
-          </span>
-          {chat.turnId && (
-            <button
-              type="button"
-              onClick={() => void stop(chat.id)}
-              className="ml-auto h-8 shrink-0 rounded-lg border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
-            >
-              {t.stop}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={!available || blockedElsewhere || draft.trim() === ""}
-            onClick={() => void submit()}
-            title={busy ? t.agent.noteHint : undefined}
-            className={`${chat.turnId ? "" : "ml-auto "}h-8 shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400`}
-          >
-            {t.agent.send}
-          </button>
-        </div>
-      </div>
-    </aside>
+    </div>
   );
 }
 

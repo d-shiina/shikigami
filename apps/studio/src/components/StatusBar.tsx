@@ -3,6 +3,7 @@
 // flow's run (its title bar) and the selected node's place (the inspector).
 // The window has no status bar: the app's menu at its top left holds the
 // theme, language and version (ShellBar).
+import { type AgentPlace, setAgentPlace, useAgentPlace } from "../lib/agentPlace";
 import type { Step } from "@spellsheet/schema";
 import { type ReactNode, useMemo, useState } from "react";
 import { useStudio } from "../context";
@@ -160,6 +161,24 @@ export function ThemeSwitch({ labeled = false }: { labeled?: boolean }) {
         >
           {icon}
           {labeled && label()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Where asking the AI sits: under the work, or in a column on the right. */
+export function AgentPlaceSwitch() {
+  const place = useAgentPlace();
+  const places: [AgentPlace, string][] = [
+    ["below", t.agent.placeBelow],
+    ["right", t.agent.placeRight],
+  ];
+  return (
+    <div className={switchFrame(true)} role="radiogroup" aria-label={t.agent.place}>
+      {places.map(([key, label]) => (
+        <button key={key} type="button" role="radio" aria-checked={place === key} onClick={() => setAgentPlace(key)} className={switchButton(place === key, true)}>
+          {label}
         </button>
       ))}
     </div>

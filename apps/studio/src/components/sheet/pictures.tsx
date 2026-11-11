@@ -15,7 +15,7 @@ export type Pictures = {
   urls: Record<string, string>;
   want: (file: string) => void;
   masks: Record<string, Mask>;
-  onWhole: (shot: ManualShot) => void;
+  onWhole: (shot: ManualShot, marks: SceneMark[]) => void;
   onMask: (shot: ManualShot) => void;
 };
 
@@ -122,6 +122,31 @@ function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Re
   );
 }
 
+/** The frame around what each step touches, with the step's number on its corner. */
+function Marks({ marks, crop, k }: { marks: SceneMark[]; crop: Rect; k: number }) {
+  return (
+    <>
+      {marks.map((m, i) => (
+        <span
+          key={m.number ?? `wait-${i}`}
+          title={m.number === null ? t.manual.waitsHere : undefined}
+          className={`absolute rounded-[4px] border-2 ${
+            m.number === null ? "border-dashed border-slate-600" : "border-primary shadow-[0_0_0_3px_rgb(10_111_168/0.2)]"
+          }`}
+          style={{ left: (m.rect.x - crop.x) * k - 3, top: (m.rect.y - crop.y) * k - 3, width: m.rect.width * k + 6, height: m.rect.height * k + 6 }}
+        >
+          <i
+            style={{ left: Math.max(-8, 4 - (m.rect.x - crop.x) * k) }}
+            className={`absolute -top-[8px] grid size-[14px] place-items-center rounded-full text-[9.5px] font-bold not-italic shadow-[0_0_0_1.5px_white] ${m.number === null ? "bg-slate-600 text-white" : "bg-primary text-on-primary"}`}
+          >
+            {m.number ?? <Clock size={9} />}
+          </i>
+        </span>
+      ))}
+    </>
+  );
+}
+
 /**
  * A picture in the sheet's margin, cut to what its steps touch, with their
  * numbers on the corners of what they touch (beside it, a number would cover
@@ -156,23 +181,7 @@ export function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: Scene
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
           <MaskBoxes boxes={mask?.boxes ?? []} regions={blurRegions(shot.regions, operated(marks))} crop={crop} k={k} />
-          {marks.map((m, i) => (
-            <span
-              key={m.number ?? `wait-${i}`}
-              title={m.number === null ? t.manual.waitsHere : undefined}
-              className={`absolute rounded-[4px] border-2 ${
-                m.number === null ? "border-dashed border-slate-600" : "border-primary shadow-[0_0_0_3px_rgb(10_111_168/0.2)]"
-              }`}
-              style={{ left: (m.rect.x - crop.x) * k - 3, top: (m.rect.y - crop.y) * k - 3, width: m.rect.width * k + 6, height: m.rect.height * k + 6 }}
-            >
-              <i
-                style={{ left: Math.max(-8, 4 - (m.rect.x - crop.x) * k) }}
-                className={`absolute -top-[8px] grid size-[14px] place-items-center rounded-full text-[9.5px] font-bold not-italic shadow-[0_0_0_1.5px_white] ${m.number === null ? "bg-slate-600 text-white" : "bg-primary text-on-primary"}`}
-              >
-                {m.number ?? <Clock size={9} />}
-              </i>
-            </span>
-          ))}
+          <Marks marks={marks} crop={crop} k={k} />
         </>
       )}
     </div>
@@ -204,13 +213,15 @@ function useFit(shot: ManualShot, maxWidth: number, maxHeight: number): number {
   return Math.min(1, maxWidth / shot.width, maxHeight / shot.height);
 }
 
-export function WholeShot({ shot, url, mask, onClose }: { shot: ManualShot; url: string | undefined; mask: Mask | undefined; onClose: () => void }) {
+/** The whole picture, large: with the same frames and numbers as in the margin, so the steps can still be found on it. */
+export function WholeShot({ shot, marks, url, mask, onClose }: { shot: ManualShot; marks: SceneMark[]; url: string | undefined; mask: Mask | undefined; onClose: () => void }) {
   const k = useFit(shot, window.innerWidth * 0.9, window.innerHeight * 0.85);
   return (
     <Overlay onClose={onClose} label={t.manual.whole}>
       <div className="relative" style={{ width: shot.width * k, height: shot.height * k }}>
         {url && <img src={url} alt="" className="absolute inset-0 h-full w-full" />}
-        <MaskBoxes boxes={mask?.boxes ?? []} regions={shot.regions} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+        <MaskBoxes boxes={mask?.boxes ?? []} regions={blurRegions(shot.regions, operated(marks))} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
+        <Marks marks={marks} crop={{ x: 0, y: 0, width: shot.width, height: shot.height }} k={k} />
       </div>
     </Overlay>
   );

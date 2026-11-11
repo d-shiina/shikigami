@@ -722,6 +722,17 @@ export const ja = {
     reload: "再読み込み",
   },
   agent: {
+    setUp: "設定する",
+    place: "AI への依頼の場所",
+    placeHint: "「紙の下」は入力欄が画面の下に出て、会話はそこから上に開きます。「右」は会話が右の列に出ます。",
+    placeBelow: "紙の下",
+    placeRight: "右",
+    closeTalk: "会話を閉じる",
+    openTalk: "会話を開く",
+    noTalk: "まだ会話はありません。下の欄から AI に頼めます。",
+    needsSetup: "使う AI の設定が必要です",
+    askEdit: "AI に修正を依頼",
+    askNew: "AI に新しいフローを依頼",
     reportReady: "変更の確認ができます",
     openReport: "確認のレポートを開く",
     tools: {
@@ -2320,6 +2331,7 @@ export const ja = {
     openSettings: "設定を開く",
   },
   toolbar: {
+    backToSheet: "シートに戻る",
     aiBusy: "AI がこのフローを作成・変更している途中です。終わってから実行できます",
     unset: (n: number) => `未設定 ${n} 件`,
     fillUnset: "未設定の欄を埋めると実行できます",
