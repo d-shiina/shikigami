@@ -119,3 +119,40 @@ describe("file and folder dialogs", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("a window opened while the other has a dialog open", () => {
+  it("listens before it asks, and an older answer does not undo a newer close", async () => {
+    vi.resetModules();
+    const order: string[] = [];
+    let emit!: (open: boolean) => void;
+    let answer!: (open: boolean) => void;
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(async (_: string, handler: (e: { payload: boolean }) => void) => {
+        order.push("listen");
+        emit = (open) => handler({ payload: open });
+        return () => {};
+      }),
+    }));
+    vi.doMock("@tauri-apps/api/core", () => ({
+      invoke: (cmd: string) => {
+        order.push(cmd);
+        return new Promise((resolve) => (answer = resolve));
+      },
+    }));
+    (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    try {
+      const fresh = await import("./picker");
+      const { result } = await import("@testing-library/react").then(({ renderHook }) => renderHook(() => fresh.usePickerOpen()));
+      await act(async () => {});
+      expect(order).toEqual(["listen", "picker_open"]);
+      // The dialog closes while the question is on its way; the answer said "open".
+      act(() => emit(false));
+      await act(async () => answer(true));
+      expect(result.current).toBe(false);
+    } finally {
+      delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@tauri-apps/api/core");
+    }
+  });
+});

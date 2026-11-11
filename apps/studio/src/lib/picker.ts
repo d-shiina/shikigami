@@ -33,18 +33,25 @@ function subscribe(listener: () => void) {
 function follow() {
   if (listening || !("__TAURI_INTERNALS__" in globalThis)) return;
   listening = true;
+  // Events seen so far: a snapshot asked before one of them is older than it.
+  let seen = 0;
   listen<boolean>("picker-open", (e) => {
+    seen++;
     anywhere = e.payload === true;
     notify();
-  }).catch(() => {});
-  // A window opened while a dialog is open.
-  invoke<boolean>("picker_open").then(
-    (open) => {
-      anywhere = open === true;
-      notify();
-    },
-    () => {},
-  );
+  })
+    // Only once listening: a dialog closing between the snapshot and the
+    // listener would otherwise leave every 「参照…」 off for good.
+    .then(() => {
+      const before = seen;
+      // A window opened while a dialog is open.
+      return invoke<boolean>("picker_open").then((open) => {
+        if (seen !== before) return;
+        anywhere = open === true;
+        notify();
+      });
+    })
+    .catch(() => {});
 }
 
 /**
