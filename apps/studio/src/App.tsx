@@ -477,7 +477,7 @@ function Shell() {
             {/* Asking the AI is under the work in every place (it makes new flows too): on the desk where a paper lies on one. */}
             {agentPlace === "below" && <AgentPane desk={(place === "flows" && ((hasFlow && view !== "result" && view !== "variables") || drafting)) || place === "review" || place === "inventory"} />}
           </div>
-          {/* Chosen in the settings: the AI's conversation in a column of its own beside the work. */}
+          {/* Moved there by the person: the AI's conversation in a column of its own beside the work. */}
           {agentPlace === "right" && fit.agent > 0 && (
             <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
               <AgentPane desk={false} width={fit.agent} />

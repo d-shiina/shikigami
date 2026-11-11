@@ -34,5 +34,5 @@ description: SpellSheet の画面とこのマニュアルで使う言葉。
 | `.spx` | フローを人に渡すための 1 つのファイル |
 | プラグイン | 後から追加する機能（クラウドストレージとのやり取り、AI-OCR・社内システム・SaaS のノードなど） |
 | MCP | AI ツールが SpellSheet を操作するための、つなぎ方の決まり（Model Context Protocol） |
-| AI チャット | Writer の下の入力欄と、そこから上に開く AI との会話（<kbd>Ctrl</kbd>+<kbd>J</kbd>）。設定で右の列にも変えられます |
+| AI チャット | Writer の下の入力欄と、そこから上に開く AI との会話（<kbd>Ctrl</kbd>+<kbd>J</kbd>）。「右に移す」で右の列にも移せます |
 | 要対応 | AI には見えないため、人が Writer ですること（画面から選ぶ、ログイン情報の登録など） |

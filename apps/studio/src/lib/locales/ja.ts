@@ -723,10 +723,8 @@ export const ja = {
   },
   agent: {
     setUp: "設定する",
-    place: "AI への依頼の場所",
-    placeHint: "「紙の下」は入力欄が画面の下に出て、会話はそこから上に開きます。「右」は会話が右の列に出ます。",
-    placeBelow: "紙の下",
-    placeRight: "右",
+    moveRight: "右に移す",
+    moveBelow: "下に移す",
     closeTalk: "会話を閉じる",
     openTalk: "会話を開く",
     noTalk: "まだ会話はありません。下の欄から AI に頼めます。",

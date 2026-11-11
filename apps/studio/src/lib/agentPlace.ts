@@ -1,5 +1,5 @@
 // Where asking the AI sits: under the work (the field under the paper) or in a column on the right.
-// A remembered preference of this PC, chosen in the settings.
+// A remembered preference of this PC, changed on the spot from the field or the conversation's header.
 import { useSyncExternalStore } from "react";
 
 export type AgentPlace = "below" | "right";

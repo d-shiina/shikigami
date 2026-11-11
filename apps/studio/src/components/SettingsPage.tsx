@@ -14,7 +14,7 @@ import { AboutSection, McpSetupRow } from "./AppMenu";
 import { DistributionSettings } from "./Distribution";
 import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
-import { AgentPlaceSwitch, LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
+import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
 
 const IDS = ["workspace", "display", "run", "policy", "agent", "about"] as const;
 type SectionId = (typeof IDS)[number];
@@ -46,11 +46,6 @@ function DisplaySection() {
       <SettingsRow label={t.bar.theme}>
         <div className="flex">
           <ThemeSwitch labeled />
-        </div>
-      </SettingsRow>
-      <SettingsRow label={t.agent.place} hint={t.agent.placeHint}>
-        <div className="flex">
-          <AgentPlaceSwitch />
         </div>
       </SettingsRow>
     </SettingsGroup>

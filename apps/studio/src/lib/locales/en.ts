@@ -723,10 +723,8 @@ export const en: Dict = {
   },
   agent: {
     setUp: "Set up",
-    place: "Where to ask the AI",
-    placeHint: "Under the sheet: the field is at the foot and the conversation opens upward from it. Right: the conversation is in a column on the right.",
-    placeBelow: "Under the sheet",
-    placeRight: "Right",
+    moveRight: "Move to the right",
+    moveBelow: "Move under the work",
     closeTalk: "Close the conversation",
     openTalk: "Open the conversation",
     noTalk: "No conversation yet. Ask the AI in the field below.",

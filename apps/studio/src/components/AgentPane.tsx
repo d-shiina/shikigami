@@ -1,7 +1,8 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Clock, Download, ListChecks, Loader2, Plus, Square, X } from "lucide-react";
+import { setAgentPlace } from "../lib/agentPlace";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Clock, Download, ListChecks, Loader2, PanelBottom, PanelRight, Plus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
@@ -20,7 +21,7 @@ const chatTitle = (c: Chat) => c.title || t.agent.untitled;
 /**
  * Asking the AI, under the sheet: one field at the foot of the work, with what
  * the AI is doing (or asking) on a line over it. The whole conversation opens
- * upward from the field and closes again. In the settings it can be put in a column on the
+ * upward from the field and closes again. From its header it can be moved into a column on the
  * right instead (`width` given): then the conversation is always in view while it is open.
  * `desk`: the work above is a paper on the desk, so the field floats on the desk too.
  */
@@ -112,6 +113,16 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
                 aria-label={t.agent.newChat}
               >
                 <Plus size={15} />
+              </button>
+              {/* Moved on the spot, as an editor's side panel is: under the work, or into a column on the right. */}
+              <button
+                type="button"
+                onClick={() => setAgentPlace(column ? "below" : "right")}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
+                title={column ? t.agent.moveBelow : t.agent.moveRight}
+                aria-label={column ? t.agent.moveBelow : t.agent.moveRight}
+              >
+                {column ? <PanelBottom size={15} /> : <PanelRight size={15} />}
               </button>
               <button
                 type="button"
@@ -235,6 +246,20 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
               )}
               {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
               <span className="ml-auto shrink-0 truncate">{blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}</span>
+              {!column && !open && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgentPlace("right");
+                    setOpen(true);
+                  }}
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
+                  title={t.agent.moveRight}
+                  aria-label={t.agent.moveRight}
+                >
+                  <PanelRight size={13} />
+                </button>
+              )}
             </div>
           </div>
         )}
