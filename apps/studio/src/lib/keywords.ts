@@ -243,3 +243,16 @@ function plainExpr(value: unknown): string {
 
 /** To read: an if with a name asks by its name in its decision, so its head shows the expression instead of the name. */
 export const asksByName = (step: Step): boolean => READING && step.type === "control.if" && !!(step.name ?? "").trim();
+
+/** To read, beside a guard (flow/layout.ts ifShape): where the flow goes when it leaves the line there. */
+export function guardOutcome(stop: Step): string {
+  const ja = locale === "ja";
+  if (stop.type === "control.continue") return ja ? "次の回へ進む" : "On to the next round";
+  if (stop.type === "control.break") return ja ? "繰り返しを抜ける" : "Leave the loop";
+  return ja ? "失敗として終える" : "Stop as failed";
+}
+
+/** To read, in the head of an if with one side empty: "はい のときだけ". */
+export function onlyWhen(): { before: string; after: string } {
+  return locale === "ja" ? { before: "", after: "のときだけ" } : { before: "only when", after: "" };
+}

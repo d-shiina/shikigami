@@ -10,7 +10,7 @@ import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } fr
 import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";
 import { READING } from "../lib/reading";
-import { asksByName } from "../lib/keywords";
+import { asksByName, guardOutcome } from "../lib/keywords";
 import { NODE_HEAD_H, nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -118,11 +118,46 @@ const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
  */
 const circles = (step: Step): boolean => CIRCLING.has(step.type) && !(READING && !CHECKS_AFTER.has(step.type));
 /** To read, an if or a switch is its decision alone: no head over it and no frame round it. */
-const bare = (step: Step): boolean => READING && asksUnderHead(step);
+const bare = (step: Step): boolean => READING && decides(step);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
 const STOPPING: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 /** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
 const ends = (step: Step | undefined): boolean => !!step && STOPPING.has(step.type) && !step.disabled;
+
+/**
+ * How an if is drawn to read (lib/reading.ts). The work itself stays on one
+ * straight line, and only a real choice between two pieces of work parts it:
+ * - "guard": one side only stops (out of the loop, on to its next round, or
+ *   failed). The question sits on the line with that way out beside it, and
+ *   the other side is simply what follows on the line.
+ * - "when": one side is empty. The other is a panel on the line, named by the
+ *   question and the answer it runs for.
+ * - "fork": both sides do work: the decision, and a column for each.
+ */
+export type IfShape = { kind: "fork" } | { kind: "when"; block: string } | { kind: "guard"; block: string; stop: Step; rest: string };
+export function ifShape(step: Step): IfShape | null {
+  if (!READING || step.type !== IF) return null;
+  const yes = step.blocks?.then ?? [];
+  const no = step.blocks?.else ?? [];
+  const stops = (l: Step[]) => l.length === 1 && ends(l[0]);
+  if (stops(yes)) return { kind: "guard", block: "then", stop: yes[0]!, rest: "else" };
+  if (stops(no)) return { kind: "guard", block: "else", stop: no[0]!, rest: "then" };
+  if (yes.length > 0 && no.length === 0) return { kind: "when", block: "then" };
+  if (no.length > 0 && yes.length === 0) return { kind: "when", block: "else" };
+  return { kind: "fork" };
+}
+/** Whether a step asks in a decision of its own under its head (an if read as a "when" panel asks in its head). */
+const decides = (step: Step): boolean => asksUnderHead(step) && ifShape(step)?.kind !== "when";
+/** Beside a guard's question: the line to its way out, the answer on it, and the way out itself. */
+const GUARD_ARM = 16 + 8 + 16;
+/** A guard: its question on the line, as wide either side as the way out to its right needs. */
+function guardSize(step: Step, shape: IfShape & { kind: "guard" }): { w: number; h: number; width: number; answer: string; outcome: string } {
+  const width = decideWidth(branchQuestion(step), 2 * NODE_W - 20);
+  const answer = laneLabel(step, shape.block, "");
+  const outcome = guardOutcome(shape.stop);
+  const arm = GUARD_ARM + textWidth(answer, 11.5) + 16 + 10 + 14 + 6 + textWidth(outcome, 12) + 10;
+  return { w: Math.max(NODE_W, Math.ceil(width + 2 * arm)), h: DECIDE_H, width, answer, outcome };
+}
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /** Beside the blocks of a step: room for its frame to sit inside the frame of a step around it. */
 const BLOCK_ROOM = 16;
@@ -173,8 +208,8 @@ export type JoinNodeData = {
   through?: boolean;
   /** A loop's decision (see DECIDE_H): what it asks. */
   question?: string;
-  /** To read: the expression a decision checks, noted over it when the decision says it in words. */
-  note?: string;
+  /** To read: a guard (see ifShape): the answer that leaves the line here, and where it goes. */
+  guard?: { answer: string; outcome: string; type: string };
   /** A loop's decision: how wide it is (see decideWidth). */
   width?: number;
   /** A loop's decision that comes after its block (a wait's), not before. */
@@ -354,6 +389,11 @@ function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
   }
   const fanOut = FAN_OUT_BLOCKS[step.type];
   const optional = OPTIONAL_BLOCKS[step.type];
+  // To read, an if with one side empty is the other side alone.
+  const shape = ifShape(step);
+  if (shape?.kind === "when") return result.filter((l) => l.name === shape.block).map((l) => ({ ...l, label: "", tail: false }));
+  // To read, nothing is added: a block ends at its last node.
+  if (READING) for (const lane of result) lane.tail = false;
   // Nothing runs after a break, continue or fail: no "+" to add at the end of its block.
   for (const lane of result) if (ends(lane.steps.at(-1))) lane.tail = false;
   return result.flatMap((lane) =>
@@ -404,6 +444,13 @@ function textWidth(s: string, px: number): number {
   return w;
 }
 function headWidth(step: Step, defs: Defs): number {
+  const shape = ifShape(step);
+  if (shape?.kind === "when") {
+    // The answer on the line, the question before it and "のときだけ" after (see FrameHead): as wide either side as the longer.
+    const side = Math.max(12 + textWidth(branchQuestion(step), 12) + 22 + 6, 6 + 80 + 12);
+    const w = 2 * (side + (textWidth(laneLabel(step, shape.block, ""), 11.5) + 18) / 2);
+    return Math.ceil(Math.min(w, HEAD_MAX));
+  }
   const name = step.name ?? "";
   // An if or a switch asks in the decision under its head, not in the head.
   const summary = asksUnderHead(step) && !asksByName(step) ? "" : headSummary(step);
@@ -478,6 +525,14 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
     const { w, h } = readTryParts(ls, defs, extra, collapsed);
     return { w, h };
   }
+  const shape = ifShape(step);
+  if (shape?.kind === "guard") {
+    const g = guardSize(step, shape);
+    const rest = step.blocks?.[shape.rest] ?? [];
+    if (rest.length === 0) return { w: g.w, h: g.h };
+    const m = measureList(rest, defs, extra, collapsed);
+    return { w: Math.max(g.w, m.w), h: g.h + GAP_Y + m.h };
+  }
   const { columns, after } = frameParts(step, ls);
   const ms = columns.map((l) => {
     const m = measureList(l.steps, defs, extra, collapsed, l.tail);
@@ -495,7 +550,7 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
   const h = bare(step)
     ? DECIDE_H + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : !circling
-    ? own.h + (asksUnderHead(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
+    ? own.h + (decides(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : CHECKS_AFTER.has(step.type)
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
       : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM + FOOT_H;
@@ -678,6 +733,23 @@ class Builder {
     }
 
     if (READING && step.type === TRY) return this.readTry(id, y, cx, ls);
+    const shape = ifShape(step);
+    if (shape?.kind === "guard") {
+      const g = guardSize(step, shape);
+      const decide = `join:${id}:decide`;
+      this.nodes.push({
+        id: decide,
+        type: "join",
+        position: { x: cx - g.width / 2, y },
+        data: { kind: "join", parentId: id, shown: false, question: branchQuestion(step), width: g.width, guard: { answer: g.answer, outcome: g.outcome, type: shape.stop.type } },
+      });
+      const rest = step.blocks?.[shape.rest] ?? [];
+      if (rest.length === 0) return { entry: decide, exits: [decide] };
+      const m = measureList(rest, this.defs, this.extra, this.collapsed);
+      const placed = this.list(rest, y + g.h + GAP_Y, cx - m.w / 2, m.w, id, shape.rest, "");
+      this.edge(decide, placed.entry);
+      return { entry: decide, exits: placed.exits };
+    }
 
     const { columns, after } = frameParts(step, ls);
     const sizes = columns.map((l) => {
@@ -717,15 +789,13 @@ class Builder {
     const join = `join:${id}`;
     if (isLoop) return this.loop(step, id, y, cx, left, right, own.h, columns[0]!, sizes[0] ?? SLOT, joinY);
     // An if or a switch asks its question in a decision under its head, and its columns leave from there.
-    const asks = asksUnderHead(step);
+    const asks = decides(step);
     const from = asks ? `join:${id}:decide` : id;
     if (asks) {
       const question = branchQuestion(step);
       // To read, the whole question shows: an if has two columns under it to be as wide as.
       const width = decideWidth(question, READING ? 2 * NODE_W - 20 : undefined);
-      // To read, what it asks in words is on the decision, and the expression it checks is noted over it.
-      const note = plain && asksByName(step) ? headSummary(step) : undefined;
-      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: plain ? y : y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width, note } });
+      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: plain ? y : y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
       if (!plain) this.edge(id, from);
     }
     const bodyY = plain ? y + DECIDE_H + GAP_Y : y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;

@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useStudio } from "../../context";
-import { CASE_H, HEAD_H, NODE_W, type StepNodeData } from "../../flow/layout";
-import { asksByName, headSummary } from "../../lib/keywords";
+import { CASE_H, HEAD_H, NODE_W, ifShape, type StepNodeData } from "../../flow/layout";
+import { asksByName, branchQuestion, headSummary, laneLabel, onlyWhen } from "../../lib/keywords";
 import { listToText } from "../../lib/listText";
 import { nodeIcon } from "../../lib/nodeIcons";
 import { t } from "../../lib/i18n";
@@ -386,6 +386,29 @@ export function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; 
   const summary = branch && !head.collapsed && !byName ? "" : headSummary(data.step);
   const editable = !data.readOnly;
   const Fold = head.collapsed ? ChevronRight : ChevronDown;
+  const shape = head.collapsed ? null : ifShape(data.step);
+  if (shape?.kind === "when") {
+    // To read, an if with one side empty: its panel is named by the question and the answer it runs for.
+    const words = onlyWhen();
+    return (
+      // The answer sits on the line itself, as a fork's do: the question before it, "のときだけ" after.
+      <div
+        style={{ height: HEAD_H - 2, width: 2 * head.lineX }}
+        className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 text-[12px]"
+        title={plain(sentence(data.step, data.def))}
+      >
+        <span className="flex min-w-0 items-center justify-end gap-1.5 pl-3">
+          {words.before && <span className="shrink-0 whitespace-nowrap text-slate-600">{words.before}</span>}
+          <span className="flow-answer min-w-0 truncate rounded-full border px-2.5 leading-[22px] font-medium text-ink">{branchQuestion(data.step)}</span>
+        </span>
+        <span className="flow-answer rounded-md border px-2 text-[11.5px] leading-[20px] font-medium text-ink">{laneLabel(data.step, shape.block, "")}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {words.after && <span className="shrink-0 whitespace-nowrap text-slate-600">{words.after}</span>}
+          <NodeStatus data={data} />
+        </span>
+      </div>
+    );
+  }
   return (
     <div style={{ height: HEAD_H - 2 }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
       <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />

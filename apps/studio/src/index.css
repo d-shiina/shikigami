@@ -440,6 +440,8 @@ textarea,
   --flow-read-panel-line: rgb(20 30 50 / 0.1);
   --flow-read-card-line: #c3cad4;
   --flow-read-edge: #6f7a89;
+  --flow-read-stack-line: #d3d8df;
+  --flow-read-when-line: #9aa3af;
 }
 :root[data-theme="dark"] {
   --flow-read-ground: #0c0d0f;
@@ -447,6 +449,8 @@ textarea,
   --flow-read-panel-line: rgb(255 255 255 / 0.09);
   --flow-read-card-line: #3d434c;
   --flow-read-edge: #8a94a1;
+  --flow-read-stack-line: #2c3037;
+  --flow-read-when-line: #5a626d;
 }
 .flow-reading.canvas-bg {
   --xy-background-color: var(--flow-read-ground);
@@ -472,6 +476,20 @@ textarea,
   border-color: var(--flow-read-panel-line);
   border-radius: 14px;
   background-color: var(--flow-read-panel);
+}
+/* What repeats is a stack of sheets: the same work, once for each. */
+.flow-reading .flow-frame-loop {
+  box-shadow:
+    4px 4px 0 -1px var(--flow-read-ground),
+    4px 4px 0 0 var(--flow-read-stack-line),
+    8px 8px 0 -1px var(--flow-read-ground),
+    8px 8px 0 0 var(--flow-read-stack-line);
+}
+/* What runs only for one answer is outlined, not filled: it may not happen. */
+.flow-reading .flow-frame-if {
+  border-style: dashed;
+  border-color: var(--flow-read-when-line);
+  background-color: transparent;
 }
 /* A loop's foot: a hairline across the panel and the words that it ends here. */
 .flow-reading .flow-foot {
