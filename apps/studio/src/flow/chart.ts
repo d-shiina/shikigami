@@ -22,6 +22,11 @@
 //   stand beside each other in it), and they meet at a bar again, since what
 //   follows waits for them all.
 //
+// - Under a step's name stand the things the system does there that the
+//   sheet's sentences leave out (lib/systemFacts.ts): where it connects, the
+//   files it reads and writes, the secret it uses, how long it waits, and the
+//   values it takes from and gives to other steps.
+//
 // Pure geometry: what each row says is the component's (components/chart).
 import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { groupOf, isAppGroup } from "../lib/palette";
@@ -116,7 +121,11 @@ export function appOf(step: Step, defs: Defs): string | null {
 
 const blocksOf = (step: Step): [string, Step[]][] => Object.entries(step.blocks ?? {});
 
-export function layoutChart(steps: Step[], defs: Defs): Chart {
+/** A line of what the system does, under a row's name. */
+export const FACT_H = 17;
+
+/** `facts`: how many lines of what the system does stand under a step's name (components/chart). */
+export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => number = () => 0): Chart {
   // The columns: each app, in the order the flow first touches it.
   const keys: string[] = [];
   let fails = false;
@@ -308,7 +317,8 @@ export function layoutChart(steps: Step[], defs: Defs): Chart {
       const app = failing ? null : appOf(step, defs);
       if (app) lane = keys.indexOf(app);
       lanes[lane]!.steps.push(step);
-      put({ kind: "step", step, lane, off: 0, y, h: app || failing ? TILE_H : TAG_H, quiet: !app && !failing });
+      const under = facts(step) * FACT_H;
+      put({ kind: "step", step, lane, off: 0, y, h: (app || failing ? TILE_H : TAG_H) + (under > 0 ? under + 3 : 0), quiet: !app && !failing });
     }
   };
   walk(steps);

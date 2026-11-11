@@ -3,12 +3,20 @@
 // each column, a mark on it for each step and the step's name beside it.
 import type { Step } from "@spellsheet/schema";
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   CircleX,
   Columns2,
+  FileInput,
+  FileOutput,
+  Globe,
+  KeyRound,
   LogOut,
   Repeat,
+  RotateCw,
   Split,
   StepForward,
+  Timer,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +27,7 @@ import {
   type Band,
   CROSS,
   type Defs,
+  FACT_H,
   FAIL_LANE,
   layoutChart,
   NEST,
@@ -26,6 +35,7 @@ import {
   TILE_W,
 } from "../../flow/chart";
 import { chartWords, guardOutcome } from "../../lib/keywords";
+import { type Fact, systemFacts } from "../../lib/systemFacts";
 import { groupIcon } from "../../lib/nodeIcons";
 import { groupLabel } from "../../lib/palette";
 import { plain, sentence } from "../../lib/sentence";
@@ -55,6 +65,55 @@ const mid = (row: Row) =>
 /** What a step is called on the chart: the name it was given, else what it does in a sentence. */
 const title = (step: Step, defs: Defs): string =>
   (step.name ?? "").trim() || plain(sentence(step, defs.get(step.type)));
+
+const FACT_ICON: Record<Fact["kind"], LucideIcon> = {
+  connect: Globe,
+  read: FileInput,
+  write: FileOutput,
+  secret: KeyRound,
+  wait: Timer,
+  retry: RotateCw,
+  take: ArrowDownToLine,
+  give: ArrowUpFromLine,
+};
+
+/** One thing the system does at a step: what kind, then the value, on a quiet line under the step's name. */
+function FactLine({ fact, numbers, indent }: { fact: Fact; numbers?: ReadonlyMap<string, number>; indent: number }) {
+  const words = chartWords();
+  const Icon = FACT_ICON[fact.kind];
+  const at = (ids: string[]) =>
+    [...new Set(ids.map((id) => numbers?.get(id)).filter((n): n is number => n !== undefined))].sort((a, b) => a - b).join("・");
+  const value = ((): string => {
+    switch (fact.kind) {
+      case "connect":
+        return fact.host;
+      case "read":
+      case "write":
+        return fact.path;
+      case "secret":
+        return fact.name;
+      case "wait":
+        return words.upTo(fact.seconds);
+      case "retry":
+        return words.attempts(fact.attempts);
+      case "take": {
+        const from = fact.from === null ? words.atStart : at([fact.from]) && words.fromStep(at([fact.from]));
+        return from ? `${fact.variable}（${from}）` : fact.variable;
+      }
+      case "give": {
+        const to = [at(fact.to) && words.toSteps(at(fact.to)), fact.out && words.flowOutput].filter(Boolean).join("、");
+        return to ? `${fact.variable}（${to}）` : fact.variable;
+      }
+    }
+  })();
+  return (
+    <span className="flex items-center gap-1 text-[11.5px] leading-none text-slate-500" style={{ height: FACT_H, paddingLeft: indent }} title={`${words.facts[fact.kind]} ${value}`}>
+      <Icon size={11} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-400" />
+      <span className="shrink-0 text-slate-400">{words.facts[fact.kind]}</span>
+      <span className="truncate">{value}</span>
+    </span>
+  );
+}
 
 /** What an if asks: its name as a question, else its condition. */
 function question(step: Step, defs: Defs): string {
@@ -111,10 +170,9 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
     () => new Map(stepTypes.map((d) => [d.type, d] as const)),
     [stepTypes],
   );
-  const chart = useMemo(
-    () => layoutChart(flow?.steps ?? [], defs),
-    [flow, defs],
-  );
+  // What the system does at each step, said under its row.
+  const facts = useMemo(() => (flow ? systemFacts(flow, defs) : new Map<string, Fact[]>()), [flow, defs]);
+  const chart = useMemo(() => layoutChart(flow?.steps ?? [], defs, (step) => facts.get(step.id ?? "")?.length ?? 0), [flow, defs, facts]);
   if (!flow) return null;
   const words = chartWords();
 
@@ -294,6 +352,8 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
             y={top + row.y}
             picked={picked}
             number={numbers ? (numbers.get(row.step.id ?? "") ?? null) : undefined}
+            facts={facts.get(row.step.id ?? "")}
+            numbers={numbers}
             state={row.step.id ? run?.steps[row.step.id] : undefined}
             select={(stepId) => {
               goTo(stepId);
@@ -316,9 +376,14 @@ function RowView({
   number,
   state,
   select,
+  facts,
+  numbers,
 }: {
   /** The step's number on the sheet; null where the sheet gives it none (the words still line up). */
   number?: number | null;
+  /** What the system does at the step, under its name. */
+  facts?: Fact[];
+  numbers?: ReadonlyMap<string, number>;
   state?: string;
   row: Exclude<Row, { kind: "bar" }>;
   defs: Defs;
@@ -342,26 +407,23 @@ function RowView({
   const base = "absolute z-10 flex items-center text-left";
 
   if (row.kind === "step") {
+    const first = row.h - (facts?.length ? facts.length * FACT_H + 3 : 0);
     return (
-      <button
-        type="button"
-        title={tip}
-        onClick={pick}
-        style={at}
-        className={base}
-      >
-        <span className="flex w-4 shrink-0 justify-center">
-          <span
-            className={`rounded-full ${state === "failed" ? "size-[9px] bg-shu-500" : state === "succeeded" ? "size-[7px] bg-moegi-600" : row.quiet ? "size-[7px] border-[1.5px] border-slate-400 bg-sheet" : "size-[7px] bg-slate-500"}`}
-          />
+      <button type="button" title={tip} onClick={pick} style={at} className="absolute z-10 block text-left">
+        <span className="flex items-center" style={{ height: first }}>
+          <span className="flex w-4 shrink-0 justify-center">
+            <span
+              className={`rounded-full ${state === "failed" ? "size-[9px] bg-shu-500" : state === "succeeded" ? "size-[7px] bg-moegi-600" : row.quiet ? "size-[7px] border-[1.5px] border-slate-400 bg-sheet" : "size-[7px] bg-slate-500"}`}
+            />
+          </span>
+          <span style={{ marginLeft: WORDS - 8 }} className={`truncate ${row.quiet ? "text-[12.5px] text-slate-500" : "text-[13.5px] font-medium text-ink"}`}>
+            {number !== undefined && <span className="mr-1.5 inline-block w-[18px] text-[11.5px] font-normal text-slate-400 tabular-nums">{number}</span>}
+            <span className={on}>{title(row.step, defs)}</span>
+          </span>
         </span>
-        <span
-          style={{ marginLeft: WORDS - 8 }}
-          className={`truncate ${row.quiet ? "text-[12.5px] text-slate-500" : "text-[13.5px] font-medium text-ink"}`}
-        >
-          {number !== undefined && <span className="mr-1.5 inline-block w-[18px] text-[11.5px] font-normal text-slate-400 tabular-nums">{number}</span>}
-          <span className={on}>{title(row.step, defs)}</span>
-        </span>
+        {facts?.map((fact, i) => (
+          <FactLine key={i} fact={fact} numbers={numbers} indent={8 + WORDS + (number !== undefined ? 24 : 0)} />
+        ))}
       </button>
     );
   }
