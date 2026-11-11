@@ -2,7 +2,7 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Sparkles, Split, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -88,13 +88,25 @@ function Value({ icon: Icon, children }: { icon?: LucideIcon; children: React.Re
 }
 
 /** What the flow takes in, gives back, runs on and logs in with: only the rows it has something to say on. */
+/** What a part of the sheet does, step by step, in the steps' own names. */
+function texts(items: ManualItem[]): string[] {
+  return items.flatMap((item) =>
+    item.kind === "scene" ? item.steps.map((s) => s.text) : item.kind === "action" ? [item.step.text] : item.kind === "quiet" ? item.texts : item.kind === "stopped" ? [] : texts(item.items),
+  );
+}
+
 function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
   const w = t.sheetView;
+  const failure = doc.chapters.filter((c) => c.role === "failure").flatMap((c) => texts(c.items));
   const rows: { icon: LucideIcon; label: string; values: string[]; plain: string[]; mark?: LucideIcon }[] = [
     { icon: FileInput, label: w.input, values: doc.uses.inputFiles, plain: doc.inputs },
+    { icon: FileText, label: t.project.shelves.templates ?? "", values: doc.uses.templates, plain: [] },
+    { icon: Settings2, label: t.project.shelves.config ?? "", values: doc.uses.config, plain: [] },
     { icon: FileOutput, label: w.output, values: doc.uses.outputFiles, plain: doc.outputs },
     { icon: Clock, label: w.schedule, values: when, plain: [] },
     { icon: KeyRound, label: w.secrets, values: doc.uses.logins, plain: [], mark: KeyRound },
+    // What is done when the work fails is a part of the sheet (its last pages): said here in a line.
+    { icon: TriangleAlert, label: w.onFailure, values: [], plain: failure },
   ].filter((r) => r.values.length + r.plain.length > 0);
   if (rows.length === 0) return null;
   return (
@@ -621,6 +633,18 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
     // Only when asked: not again as the step is opened and closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reveal?.seq, ready, mode]);
+  const numbers = useMemo(() => {
+    const map = new Map<string, number>();
+    const walk = (items: ManualItem[]) => {
+      for (const i of items) {
+        if (i.kind === "scene") for (const x of i.steps) if (x.callPath.length === 0) map.set(x.stepId, x.number);
+        if (i.kind === "action" && i.step.callPath.length === 0) map.set(i.step.stepId, i.step.number);
+        if ("items" in i) walk(i.items);
+      }
+    };
+    for (const c of doc?.chapters ?? []) walk(c.items);
+    return map;
+  }, [doc]);
   const changes = useMemo(() => {
     const map = new Map<string, Change[]>();
     for (const entry of pending) {
@@ -701,7 +725,7 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
             </div>
           </header>
           {chart ? (
-            <ChartBody />
+            <ChartBody numbers={numbers} run={run} />
           ) : (
             <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
               <div className={MARGIN}>

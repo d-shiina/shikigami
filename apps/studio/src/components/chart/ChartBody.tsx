@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useStudio } from "../../context";
+import type { RunState } from "../../store/run";
 import {
   type Band,
   CROSS,
@@ -96,7 +97,11 @@ const BAND_ICON: Partial<Record<Band["kind"], LucideIcon>> = {
  * The chart itself, as wide and as high as it is: what lies under a sheet's
  * heading when the sheet is read as a chart.
  */
-export function ChartBody() {
+/**
+ * `numbers`: each step's number on the sheet, so a row here and a line there are found from one another.
+ * `run`: the run that is going, or the last one: how far it got is said on the rows.
+ */
+export function ChartBody({ numbers, run }: { numbers?: ReadonlyMap<string, number>; run?: RunState | null }) {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
@@ -287,6 +292,8 @@ export function ChartBody() {
             x={lineX(row)}
             y={top + row.y}
             picked={picked}
+            number={numbers ? (numbers.get(row.step.id ?? "") ?? null) : undefined}
+            state={row.step.id ? run?.steps[row.step.id] : undefined}
             select={(stepId) => select({ kind: "step", stepId })}
           />
         ),
@@ -302,8 +309,13 @@ function RowView({
   x,
   y,
   picked,
+  number,
+  state,
   select,
 }: {
+  /** The step's number on the sheet; null where the sheet gives it none (the words still line up). */
+  number?: number | null;
+  state?: string;
   row: Exclude<Row, { kind: "bar" }>;
   defs: Defs;
   x: number;
@@ -313,7 +325,8 @@ function RowView({
 }) {
   const words = chartWords();
   const tip = plain(sentence(row.step, defs.get(row.step.type)));
-  const on = picked !== null && picked === row.step.id ? "flow-chart-on" : "";
+  // The step the run is on is under the highlighter, as the one picked is.
+  const on = (picked !== null && picked === row.step.id) || state === "running" ? "flow-chart-on" : "";
   const pick = () => row.step.id && select(row.step.id);
   // The mark is centred on the line; the words start WORDS past it.
   const at = {
@@ -335,14 +348,15 @@ function RowView({
       >
         <span className="flex w-4 shrink-0 justify-center">
           <span
-            className={`rounded-full ${row.quiet ? "size-[7px] border-[1.5px] border-slate-400 bg-sheet" : "size-[7px] bg-slate-500"}`}
+            className={`rounded-full ${state === "failed" ? "size-[9px] bg-shu-500" : state === "succeeded" ? "size-[7px] bg-moegi-600" : row.quiet ? "size-[7px] border-[1.5px] border-slate-400 bg-sheet" : "size-[7px] bg-slate-500"}`}
           />
         </span>
         <span
           style={{ marginLeft: WORDS - 8 }}
-          className={`truncate ${on} ${row.quiet ? "text-[12.5px] text-slate-500" : "text-[13.5px] font-medium text-ink"}`}
+          className={`truncate ${row.quiet ? "text-[12.5px] text-slate-500" : "text-[13.5px] font-medium text-ink"}`}
         >
-          {title(row.step, defs)}
+          {number !== undefined && <span className="mr-1.5 inline-block w-[18px] text-[11.5px] font-normal text-slate-400 tabular-nums">{number}</span>}
+          <span className={on}>{title(row.step, defs)}</span>
         </span>
       </button>
     );

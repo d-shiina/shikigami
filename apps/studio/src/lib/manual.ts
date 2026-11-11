@@ -498,10 +498,13 @@ export type Uses = {
   inputFiles: string[];
   /** Files it writes or changes. */
   outputFiles: string[];
+  /** Files it starts from (the flow's templates/ folder) and reads its settings from (config/). */
+  templates: string[];
+  config: string[];
 };
 
 function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>, defs: ReadonlyMap<string, StepTypeDef>): Uses {
-  const found: Uses = { apps: [], logins: [], inputFiles: [], outputFiles: [] };
+  const found: Uses = { apps: [], logins: [], inputFiles: [], outputFiles: [], templates: [], config: [] };
   const add = (list: string[], text: string) => {
     if (text && !list.includes(text)) list.push(text);
   };
@@ -533,7 +536,10 @@ function uses(flow: Flow, subflows: ReadonlyMap<string, Flow>, defs: ReadonlyMap
         if (value && /\.(xlsx|xlsm|xls|csv|docx|doc|pdf|txt)$/i.test(value) && (adapter === "excel" || adapter === "word" || adapter === "file" || adapter === "pdf")) {
           // A node that only reads (risk "safe") takes the file in; any other writes or changes it.
           const reads = defs.get(step.type)?.risk === "safe";
-          add(reads ? found.inputFiles : found.outputFiles, value.split(/[\\/]/).pop() ?? value);
+          // Where the file lies in the flow's folder says what it is for, before what the node does with it.
+          const folder = value.replace(/^\.[\\/]/, "").split(/[\\/]/)[0]?.toLowerCase();
+          const list = folder === "templates" ? found.templates : folder === "config" ? found.config : reads ? found.inputFiles : found.outputFiles;
+          add(list, value.split(/[\\/]/).pop() ?? value);
         }
       }
       if (adapter === "mail") add(found.apps, t.manual.usesMail);

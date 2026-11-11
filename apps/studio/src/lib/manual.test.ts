@@ -93,8 +93,19 @@ describe("the 手順書 of a flow", () => {
     expect(find(doc.chapters[0]?.items ?? [], "quiet")[0]?.texts).toEqual(["開始"]);
   });
 
+  it("names a file by the folder of the flow it lies in: templates and settings apart from what is taken in", () => {
+    const step = (id: string, type: string, path: string) => ({ id, type, params: { path } });
+    const made = buildManual(
+      { ...flow, steps: [step("a", "excel.readRows", "templates/請求書.xlsx"), step("b", "excel.readRows", "config/得意先.xlsx"), step("c", "excel.readRows", "input/注文.xlsx")] } as Flow,
+      new Map([...defs].map(([k, d]) => [k, { ...d, risk: "safe" } as StepTypeDef])),
+      null,
+      new Map(),
+    );
+    expect(made.uses).toMatchObject({ templates: ["請求書.xlsx"], config: ["得意先.xlsx"], inputFiles: ["注文.xlsx"] });
+  });
+
   it("lists what the flow uses, takes and produces in words", () => {
-    expect(doc.uses).toEqual({ apps: ["ブラウザ"], logins: ["デモ受注システム"], inputFiles: [], outputFiles: [] });
+    expect(doc.uses).toEqual({ apps: ["ブラウザ"], logins: ["デモ受注システム"], inputFiles: [], outputFiles: [], templates: [], config: [] });
     expect(overviewRows(doc, []).map((r) => r.label)).toEqual(["利用アプリケーション", "ログイン情報", "入力項目", "出力項目", "実行方法"]);
     expect(doc.inputs).toEqual(["デモサイトの URL"]);
     expect(doc.outputs).toEqual(["出荷した注文番号", "出荷した金額の合計（円）", "在庫切れの商品"]);

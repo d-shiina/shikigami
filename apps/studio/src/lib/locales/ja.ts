@@ -2112,6 +2112,7 @@ export const ja = {
   flowCreated: "フローを作成",
   flowDeleted: "フローを削除",
   sheetView: {
+    onFailure: "失敗したとき",
     waiting: (n: number) => `確認待ちの変更 ${n} 件`,
     was: "：変更前は ",
     nothing: "なし",
