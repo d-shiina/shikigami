@@ -638,6 +638,21 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
     revealed = reveal.seq;
     row?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [reveal, doc, mode]);
+  // The chapter being read: the last one whose heading has passed the top of the desk.
+  const [reading, setReading] = useState(1);
+  useEffect(() => {
+    const el = desk.current;
+    if (!el || mode !== "sheet") return;
+    const see = () => {
+      const top = el.getBoundingClientRect().top + 140;
+      let at = 1;
+      for (const h of el.querySelectorAll<HTMLElement>("[data-chapter]")) if (h.getBoundingClientRect().top <= top) at = Number(h.dataset.chapter);
+      setReading(at);
+    };
+    see();
+    el.addEventListener("scroll", see, { passive: true });
+    return () => el.removeEventListener("scroll", see);
+  }, [doc, mode]);
   const numbers = useMemo(() => {
     const map = new Map<string, number>();
     const walk = (items: ManualItem[]) => {
@@ -694,24 +709,30 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
     <div ref={desk} className="flow-chart absolute inset-0 overflow-auto px-5 py-7" data-sheet={mode}>
       <div className="mx-auto flex w-fit max-w-full items-start gap-6">
         {!chart && doc.chapters.length > 1 && (
-          <nav className="sticky top-0 hidden w-[168px] shrink-0 pt-11 text-[12.5px] leading-[1.5] text-slate-500 @[76rem]:block">
-            <ol className="space-y-2.5">
-              {doc.chapters.map((c) => (
-                <li key={c.number}>
-                  <button
-                    type="button"
-                    onClick={() => desk.current?.querySelector(`[data-chapter="${c.number}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    className="grid w-full grid-cols-[18px_minmax(0,1fr)] text-left hover:text-ink"
-                  >
-                    <span className="text-slate-400 tabular-nums">{c.number}</span>
-                    <span>
-                      {c.title}
-                      {/* Something in it waits to be looked at. */}
-                      {stepIds(c.items).some((id) => changes.has(id)) && <span aria-hidden="true" className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle" />}
-                    </span>
-                  </button>
-                </li>
-              ))}
+          <nav className="sticky top-0 hidden w-[176px] shrink-0 pt-11 text-[12.5px] leading-[1.5] @[76rem]:block">
+            {/* The chapters down a ruled line, as the paper rules its own head: the one being read is in ink, with the line under it drawn dark. */}
+            <p className="mb-3 border-b border-slate-300 pb-2 text-[11.5px] font-medium tracking-[0.08em] text-slate-500">{t.manual.contents}</p>
+            <ol className="border-l border-slate-300">
+              {doc.chapters.map((c) => {
+                const here = c.number === reading;
+                return (
+                  <li key={c.number}>
+                    <button
+                      type="button"
+                      aria-current={here ? "true" : undefined}
+                      onClick={() => desk.current?.querySelector(`[data-chapter="${c.number}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      className={`-ml-px grid w-full grid-cols-[20px_minmax(0,1fr)] border-l-2 py-[5px] pl-3 text-left ${here ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
+                    >
+                      <span className={`tabular-nums ${here ? "" : "text-slate-400"}`}>{c.role ? "" : c.number}</span>
+                      <span>
+                        {c.title}
+                        {/* Something in it waits to be looked at. */}
+                        {stepIds(c.items).some((id) => changes.has(id)) && <span aria-hidden="true" className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle" />}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
           </nav>
         )}
