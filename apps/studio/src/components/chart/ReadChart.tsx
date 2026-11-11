@@ -171,7 +171,7 @@ export function ReadChart() {
     <div className="flow-chart absolute inset-0 overflow-auto px-5 py-7">
       {/* The same paper as the sheet, under the same heading: only what is under the heading differs. */}
       <div
-        className="mx-auto w-fit rounded-[14px] bg-sheet shadow-[0_1px_2px_rgb(16_24_40/0.05),0_12px_32px_-8px_rgb(16_24_40/0.1)]"
+        className="mx-auto w-fit rounded-[3px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_1px_2px_rgb(16_24_40/0.07),0_10px_24px_-12px_rgb(16_24_40/0.16)]"
         style={{ minWidth: Math.min(width, 720) }}
       >
         <header style={{ padding: `${PAD + 4}px ${PAD}px 0`, maxWidth: width }}>
