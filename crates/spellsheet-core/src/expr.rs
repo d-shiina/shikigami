@@ -888,7 +888,10 @@ mod tests {
         let eval = |src: &str| evaluate(src, &scope).unwrap_or_else(|e| panic!("{src}: {e}"));
         assert_eq!(eval("合計金額 >= 100000"), json!(true));
         assert_eq!(eval("請求書.金額 * 2"), json!(10000));
-        assert_eq!(eval("sum(map(filter(注文一覧, 行 => 行.状態 == '未出荷'), 行 => 行.金額))"), json!(100));
+        assert_eq!(
+            eval("sum(map(filter(注文一覧, 行 => 行.状態 == '未出荷'), 行 => 行.金額))"),
+            json!(100)
+        );
         assert_eq!(eval("第2四半期_売上 + 1"), json!(8));
         assert!(crate::registry::is_identifier("注文一覧"));
         assert!(crate::registry::is_identifier("第2四半期_売上"));
