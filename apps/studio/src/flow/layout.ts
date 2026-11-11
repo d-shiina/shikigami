@@ -245,7 +245,7 @@ export type LayoutEdge = {
   /** One of the ways out of a branch's decision: its place among them, which light in turn (only one is taken). */
   alt?: { i: number; n: number };
   /** Into a try's "失敗したとき": the line its ticks join, and where each tick leaves a step of "実行" (see CATCH_DROP). */
-  bracket?: { x: number; ticks: { x: number; y: number }[] };
+  bracket?: { x: number; ticks: { x: number; y: number }[]; span?: { top: number; bottom: number } };
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -433,10 +433,40 @@ function frameParts(step: Step, ls: Lane[]): { columns: Lane[]; after: Lane | nu
   return { columns: after ? ls.filter((l) => l !== after) : ls, after };
 }
 
+/** To read: between the bracket down the side of a try's steps and its "失敗したとき". */
+const BRACKET_GAP = 56;
+/** To read: where the line leaves that bracket, under its top. */
+export const BRACKET_OUT = 20;
+
+/**
+ * A try as it is read (lib/reading.ts): not a frame. Its steps stay on the
+ * line they are on, since they are the work itself; "最後に必ず" follows on
+ * the same line, since it always runs; and "失敗したとき" stands to their
+ * right, reached from a bracket down the side of the steps it covers.
+ */
+function readTryParts(ls: Lane[], defs: Defs, extra: Extra, collapsed: Collapsed) {
+  const size = (l: Lane | undefined) => (l && l.steps.length > 0 ? measureList(l.steps, defs, extra, collapsed) : null);
+  const attempt = ls.find((l) => l.name === "try");
+  const caught = ls.find((l) => l.name === "catch");
+  const after = ls.find((l) => l.name === "finally");
+  const ts = attempt ? measureList(attempt.steps, defs, extra, collapsed) : SLOT;
+  const cs = size(caught);
+  const as = size(after);
+  const side = cs ? FAIL_X + BRACKET_GAP + cs.w : 0;
+  const columnsH = Math.max(ts.h, cs ? CATCH_DROP + cs.h : 0);
+  const w = Math.max(ts.w, as?.w ?? 0) + 2 * side;
+  const h = columnsH + JOIN_GAP + JOIN_SIZE + (as ? GAP_Y + as.h + JOIN_GAP + JOIN_SIZE : 0);
+  return { attempt, caught: cs ? caught : undefined, after: as ? after : undefined, ts, cs, as, columnsH, w, h };
+}
+
 function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Size {
   const ls = lanes(step, defs, collapsed);
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
+  if (READING && step.type === TRY) {
+    const { w, h } = readTryParts(ls, defs, extra, collapsed);
+    return { w, h };
+  }
   const { columns, after } = frameParts(step, ls);
   const ms = columns.map((l) => {
     const m = measureList(l.steps, defs, extra, collapsed, l.tail);
@@ -499,6 +529,48 @@ class Builder {
   }
 
   /** Places a list centred in [x, x + span); returns its entry node id and the ids that flow into the next step. */
+  private readTry(id: string, y: number, cx: number, ls: Lane[]): { entry: string; exits: string[] } {
+    const r = readTryParts(ls, this.defs, this.extra, this.collapsed);
+    const before = this.nodes.length;
+    const tried = this.list(r.attempt?.steps ?? [], y, cx - r.ts.w / 2, r.ts.w, id, "try", "");
+    const meet = `join:${id}:then`;
+    const meetY = y + r.columnsH + JOIN_GAP;
+    this.nodes.push({ id: meet, type: "join", position: { x: cx - JOIN_SIZE / 2, y: meetY }, data: { kind: "join", parentId: id, shown: false, through: true } });
+    for (const e of tried.exits) this.edge(e, meet);
+    const endsIn = (lane: Lane | undefined, exits: string[]) => {
+      for (const e of exits) this.edge(e, meet);
+      const last = lane?.steps.at(-1);
+      if (r.after && ends(last) && last?.id) {
+        this.edge(last.id, meet, undefined, undefined, undefined, { thenFinally: true });
+        const node = this.nodes.find((n) => n.id === last.id);
+        if (node?.data.kind === "step") node.data.thenFinally = true;
+      }
+    };
+    endsIn(r.attempt, []);
+    if (r.caught && r.cs) {
+      // Clear of the widest thing among the steps: the frame of a loop reaches further right than a node.
+      const rights = this.nodes.slice(before).flatMap((n) => {
+        if (n.data.kind !== "step" || n.data.parentId !== id) return [];
+        return [n.position.x + (n.data.head ? n.data.head.width : NODE_W)];
+      });
+      const railX = Math.max(cx + r.ts.w / 2, ...rights) + FAIL_X;
+      const fail = `join:${id}:fail`;
+      const caught = this.list(r.caught.steps, y + CATCH_DROP, railX + BRACKET_GAP, r.cs.w, id, "catch", r.caught.label);
+      this.nodes.push({ id: fail, type: "join", position: { x: railX - JOIN_SIZE / 2, y: y + BRACKET_OUT - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: caught.entry } });
+      this.edge(fail, caught.entry, r.caught.label || undefined, undefined, undefined, { failure: true, bracket: { x: railX, ticks: [], span: { top: y, bottom: y + r.ts.h } } });
+      endsIn(r.caught, caught.exits);
+      const joined = this.nodes.find((n) => n.id === meet);
+      if (joined?.data.kind === "join" && caught.exits.length > 0) joined.data = { ...joined.data, shown: true, through: false };
+    }
+    if (!r.after || !r.as) return { entry: tried.entry, exits: [meet] };
+    const always = this.list(r.after.steps, meetY + JOIN_SIZE + GAP_Y, cx - r.as.w / 2, r.as.w, id, "finally", r.after.label);
+    this.edge(meet, always.entry, r.after.label || undefined);
+    const join = `join:${id}`;
+    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: y + r.h - JOIN_SIZE }, data: { kind: "join", parentId: id, shown: false, through: true } });
+    for (const e of always.exits) this.edge(e, join);
+    return { entry: tried.entry, exits: [join] };
+  }
+
   list(
     steps: Step[],
     y: number,
@@ -591,6 +663,8 @@ class Builder {
       });
       return { entry: id, exits: [id] };
     }
+
+    if (READING && step.type === TRY) return this.readTry(id, y, cx, ls);
 
     const { columns, after } = frameParts(step, ls);
     const sizes = columns.map((l) => {

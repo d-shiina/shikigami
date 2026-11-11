@@ -80,7 +80,7 @@ export type BlockEdgeData = {
   /** The step picked in the chart: pointing at or picking a loop moves its line back. */
   selectedId?: string | null;
   /** Into a try's "失敗したとき": where its failures come from (see FAIL_X). */
-  bracket?: { x: number; ticks: { x: number; y: number }[] };
+  bracket?: { x: number; ticks: { x: number; y: number }[]; span?: { top: number; bottom: number } };
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -267,14 +267,21 @@ export function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targe
   if (edge.bracket) {
     // A try's way into "失敗したとき": from the side of each step of "実行"
     // (any of them can fail), down their right, and from the top across into it.
-    const { x: bx, ticks } = edge.bracket;
-    const top = ticks[0]?.y ?? sourceY;
+    const { x: bx, ticks, span } = edge.bracket;
+    const top = span ? sourceY : (ticks[0]?.y ?? sourceY);
     const bottom = ticks.at(-1)?.y ?? top;
-    const parts = [
-      ...ticks.map((t) => `M ${t.x} ${t.y} H ${bx}`),
-      bottom > top ? `M ${bx} ${bottom} V ${top}` : "",
-      `M ${bx} ${top} H ${targetX - r} Q ${targetX} ${top} ${targetX} ${top + r} V ${targetY}`,
-    ];
+    // To read: one bracket down the side of the steps it covers, and one line out of it.
+    const cap = 12;
+    const parts = span
+      ? [
+          `M ${bx - cap} ${span.top} H ${bx - r} Q ${bx} ${span.top} ${bx} ${span.top + r} V ${span.bottom - r} Q ${bx} ${span.bottom} ${bx - r} ${span.bottom} H ${bx - cap}`,
+          `M ${bx} ${top} H ${targetX - r} Q ${targetX} ${top} ${targetX} ${top + r} V ${targetY}`,
+        ]
+      : [
+          ...ticks.map((t) => `M ${t.x} ${t.y} H ${bx}`),
+          bottom > top ? `M ${bx} ${bottom} V ${top}` : "",
+          `M ${bx} ${top} H ${targetX - r} Q ${targetX} ${top} ${targetX} ${top + r} V ${targetY}`,
+        ];
     const failStyle = { ...style, strokeDasharray: "5 4" };
     return (
       <>
