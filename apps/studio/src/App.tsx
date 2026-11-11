@@ -328,7 +328,7 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (revealed === lastRevealed.current) return;
     lastRevealed.current = revealed;
-    if (view === "result") onView("flow");
+    if (view === "result") onView("story");
   }, [revealed, view, onView]);
   const result = view === "result";
   return (
@@ -352,7 +352,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   const hasFlow = useStudio((s) => s.flow !== null);
   const view = useReviewView((s) => s.view);
   const setView = useReviewView((s) => s.setView);
-  const reading = view === "report" ? "flow" : view;
+  const reading = view === "report" ? "story" : view;
   // A link to a node (a change, an effect, a promise's error step, a log line) or a followed run
   // reveals it on the chart: from the report, that means switching to the chart to show it.
   const revealed = useStudio((s) => s.reveal?.seq ?? 0);
@@ -360,7 +360,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (revealed === lastRevealed.current) return;
     lastRevealed.current = revealed;
-    if (useReviewView.getState().view === "report") setView("flow");
+    if (useReviewView.getState().view === "report") setView("story");
   }, [revealed, setView]);
   // Ctrl+F searches the flow: from the report, that means switching to the chart where it shows.
   const searched = useStudio((s) => s.searchAsked);
@@ -368,7 +368,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   useEffect(() => {
     if (searched === lastSearched.current) return;
     lastSearched.current = searched;
-    if (useReviewView.getState().view === "report") setView("flow");
+    if (useReviewView.getState().view === "report") setView("story");
   }, [searched, setView]);
   return (
     <Editor

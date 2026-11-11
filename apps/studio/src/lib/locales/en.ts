@@ -1749,7 +1749,7 @@ export const en: Dict = {
     emptyHint: "Run the flow and its result stays here",
     loading: "Loading",
     missing: "This run's record is not found (it may have been deleted after the keeping period)",
-    toChart: "Back to the flow chart",
+    toChart: "Back to the sheet",
     again: "Run again",
     openOutput: "Open the output folder",
     origin: {

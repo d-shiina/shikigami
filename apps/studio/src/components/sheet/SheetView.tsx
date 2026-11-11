@@ -611,6 +611,16 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   useEffect(() => {
     if (at) desk.current?.querySelector(`[data-step="${at}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [at]);
+  // A link to a step (a log line, a result, a variable's use) brings it into sight, opened.
+  const reveal = useStudio((s) => s.reveal);
+  const ready = doc !== null;
+  useEffect(() => {
+    if (!reveal || !ready || mode !== "sheet") return;
+    const s = selection?.kind === "step" ? selection.stepId : null;
+    if (s === reveal.stepId) desk.current?.querySelector(`[data-step="${reveal.stepId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Only when asked: not again as the step is opened and closed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.seq, ready, mode]);
   const changes = useMemo(() => {
     const map = new Map<string, Change[]>();
     for (const entry of pending) {

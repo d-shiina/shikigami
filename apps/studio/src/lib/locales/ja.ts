@@ -1748,7 +1748,7 @@ export const ja = {
     emptyHint: "フローを実行すると、ここに結果が残ります",
     loading: "読み込み中",
     missing: "この実行の記録は見つかりません（保存期間を過ぎて削除された可能性があります）",
-    toChart: "フロー図に戻る",
+    toChart: "シートに戻る",
     again: "もう一度実行",
     openOutput: "出力フォルダーを開く",
     origin: {
