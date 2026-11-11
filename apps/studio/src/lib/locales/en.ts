@@ -2161,6 +2161,11 @@ export const en: Dict = {
   flowCreated: "Created the flow",
   flowDeleted: "Deleted the flow",
   sheetView: {
+    stopped: "Switched off",
+    start: "Switch on",
+    addBelow: "Add a step below",
+    stop: "Switch this step off",
+    change: "Press to change",
     input: "Input",
     output: "Output",
     schedule: "Schedule",

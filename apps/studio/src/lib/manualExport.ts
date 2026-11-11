@@ -222,6 +222,8 @@ function leaf(item: Leaf, pictures: Pictures): string {
     }
     case "action":
       return `<ol class="steps">${step(item.step)}</ol>${logins([item.step])}`;
+    case "stopped":
+      return "";
     case "quiet":
       return `<p class="quiet"><b>${esc(t.manual.quiet)}</b>　${item.texts.map(esc).join("・")}</p>`;
   }

@@ -663,6 +663,7 @@ function NodeView({ node, ctx }: { node: PageNode; ctx: Ctx }) {
           <Logins steps={[item.step]} />
         </div>
       );
+    if (item.kind === "stopped") return null;
     return (
       <div className="my-2.5 flex items-start gap-2 text-[12.5px] leading-[1.7] text-slate-500">
         <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-slate-100">

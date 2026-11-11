@@ -1,7 +1,7 @@
 import type { StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { setLocale } from "./i18n";
-import { plain, readable, sentence, targetText, typeTitle } from "./sentence";
+import { paramShown, plain, readable, sentence, targetText, typeTitle } from "./sentence";
 
 describe("sentence", () => {
   it("reads known step types as Japanese", () => {
@@ -101,5 +101,18 @@ describe("referencedVariables", () => {
     const ja = new Set(["請求金額", "宛名"]);
     expect(referencedVariables("請求金額 * 1.1", ja)).toEqual(["請求金額"]);
     expect(referencedVariables("{{ 宛名 }} 様", ja)).toEqual(["宛名"]);
+  });
+});
+
+describe("a value changed where it is read", () => {
+  const step = (params: Record<string, unknown>) => ({ id: "s", type: "browser.select", params }) as never;
+  it("finds the param a chip shows when it is written out in full", () => {
+    expect(paramShown(step({ target: { label: "状態" }, value: "未出荷" }), "未出荷")).toBe("value");
+    expect(paramShown(step({ timeoutMs: 3000 }), "3000")).toBe("timeoutMs");
+  });
+  it("leaves alone what is worked out, and what two params both show", () => {
+    expect(paramShown(step({ value: "{{ order.state }}" }), "order.state")).toBeNull();
+    expect(paramShown(step({ from: "a.xlsx", to: "a.xlsx" }), "a.xlsx")).toBeNull();
+    expect(paramShown(step({ value: "未出荷" }), "出荷済み")).toBeNull();
   });
 });

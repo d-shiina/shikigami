@@ -2,7 +2,7 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { CircleCheck, Clock, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Repeat, Split } from "lucide-react";
+import { CircleCheck, CirclePause, Clock, EyeOff, FileInput, FileOutput, KeyRound, type LucideIcon, Play, Plus, Repeat, Split, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -10,9 +10,13 @@ import { locale, t } from "../../lib/i18n";
 import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene } from "../../lib/manual";
 import { sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
-import { type Part, plain } from "../../lib/sentence";
-import { isActive } from "../../store";
+import { type Part, paramShown, plain } from "../../lib/sentence";
+import type { Step } from "@spellsheet/schema";
+import { findStep, isActive } from "../../store";
+import { menuFor } from "../../lib/contextMenu";
+import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
+import { StepInspector } from "../inspector/StepInspector";
 import { MaskEditor, ShotFrame, WholeShot, usePictures, useSubflows } from "../ManualView";
 import { SheetHeading } from "../SheetHeading";
 
@@ -25,19 +29,53 @@ type Pictures = {
   onMask: (shot: ManualShot) => void;
 };
 
-/** A sentence with the values it names set apart, as on a form. */
-function Words({ parts }: { parts: Part[] }) {
+const CHIP = "mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink";
+
+/** A value in a sentence that is written out in full: pressed, it is changed where it stands. */
+function Entry({ shown, value, onChange }: { shown: string; value: string | number; onChange: (next: string | number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  if (draft === null) {
+    return (
+      <button type="button" title={t.sheetView.change} onClick={() => setDraft(String(value))} className={`${CHIP} cursor-text hover:border-slate-400`}>
+        {shown}
+      </button>
+    );
+  }
+  const done = (keep: boolean) => {
+    const next = typeof value === "number" ? Number(draft) : draft;
+    if (keep && draft.trim() !== "" && next !== value && !(typeof next === "number" && Number.isNaN(next))) onChange(next);
+    setDraft(null);
+  };
+  return (
+    <input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => done(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") done(true);
+        if (e.key === "Escape") done(false);
+      }}
+      style={{ width: `calc(${Math.max(4, [...draft].reduce((n, c) => n + (c.charCodeAt(0) > 0xff ? 2 : 1.1), 0))}ch + 16px)` }}
+      className={`${CHIP} max-w-full border-primary! leading-[1.45] outline-none`}
+    />
+  );
+}
+
+/** A sentence with the values it names set apart, as on a form. With `step`, the ones written out in full can be changed in place. */
+function Words({ parts, step, onValue }: { parts: Part[]; step?: Step; onValue?: (key: string, value: string | number) => void }) {
   return (
     <>
-      {parts.map((p, i) =>
-        "text" in p ? (
-          <span key={i}>{p.text}</span>
-        ) : (
-          <span key={i} className="mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink">
+      {parts.map((p, i) => {
+        if ("text" in p) return <span key={i}>{p.text}</span>;
+        const key = step && onValue ? paramShown(step, p.code) : null;
+        if (key && step && onValue) return <Entry key={i} shown={p.code} value={step.params?.[key] as string | number} onChange={(v) => onValue(key, v)} />;
+        return (
+          <span key={i} className={CHIP}>
             {p.code}
           </span>
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
@@ -108,9 +146,12 @@ function LastRun({ manifest, running, onRun }: { manifest: ManualManifest | null
   );
 }
 
-function StepRow({ step, picked, onPick }: { step: ManualStep; picked: boolean; onPick: (step: ManualStep) => void }) {
+function StepRow({ step, ctx }: { step: ManualStep; ctx: RowCtx }) {
+  const picked = ctx.picked === step.stepId;
+  const onPick = ctx.onPick;
+  const own = step.callPath.length === 0 ? ctx.stepOf(step.stepId) : undefined;
   return (
-    <li className="grid grid-cols-[28px_minmax(0,1fr)] py-2.5">
+    <li className="grid grid-cols-[28px_minmax(0,1fr)] py-2.5" onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
       <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{step.number}</span>
       <div className="min-w-0">
         <button type="button" onClick={() => onPick(step)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
@@ -118,10 +159,31 @@ function StepRow({ step, picked, onPick }: { step: ManualStep; picked: boolean; 
         </button>
         {step.how && plain(step.how) !== step.text && (
           <p className="mt-0.5 text-[14px] leading-[1.8] text-slate-700">
-            <Words parts={step.how} />
+            <Words parts={step.how} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} />
           </p>
         )}
         {step.note && <p className="mt-1 text-[12.5px] leading-[1.7] text-slate-500">{step.note}</p>}
+        {/* One level deeper: everything the step is set to, where it is said. A step of a called flow is changed in that flow. */}
+        {picked && step.callPath.length === 0 && (
+          <div className="mt-2.5 mb-1 border-y border-slate-200">
+            <StepInspector />
+            {/* What is done to the step as a whole, after what it is set to. More is on the right button. */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-200 px-4 py-2.5 text-[12.5px] text-slate-600">
+              <button type="button" onClick={ctx.onAdd} className="inline-flex items-center gap-1 hover:text-ink">
+                <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                {t.sheetView.addBelow}
+              </button>
+              <button type="button" onClick={() => ctx.onStop(step.stepId, true)} className="inline-flex items-center gap-1 hover:text-ink">
+                <CirclePause size={13} strokeWidth={1.75} aria-hidden="true" />
+                {t.sheetView.stop}
+              </button>
+              <button type="button" onClick={ctx.onRemove} className="inline-flex items-center gap-1 hover:text-shu-600">
+                <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+                {t.delete}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </li>
   );
@@ -179,7 +241,21 @@ function Aside({ children }: { children: React.ReactNode }) {
   return <div className="mb-3 @[52rem]/paper:clear-right @[52rem]/paper:float-right @[52rem]/paper:mt-2.5 @[52rem]/paper:-mr-[298px] @[52rem]/paper:w-[250px]">{children}</div>;
 }
 
-type RowCtx = { pictures: Pictures; picked: string | null; onPick: (step: ManualStep) => void };
+type RowCtx = {
+  pictures: Pictures;
+  picked: string | null;
+  onPick: (step: ManualStep) => void;
+  /** The flow's own step (not one of a called flow). */
+  stepOf: (id: string) => Step | undefined;
+  onValue: (stepId: string, key: string, value: string | number) => void;
+  /** Switches a step off, or on again. */
+  onStop: (stepId: string, stop: boolean) => void;
+  /** A new step under the picked one, and the picked one taken out. */
+  onAdd: () => void;
+  onRemove: () => void;
+  /** The right button on a step: everything else that is done to it. */
+  menu: (stepId: string) => React.MouseEventHandler;
+};
 
 function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
   if (item.kind === "scene") {
@@ -203,7 +279,7 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
                 ))}
               {s && (
                 <ol>
-                  <StepRow step={s} picked={ctx.picked === s.stepId} onPick={ctx.onPick} />
+                  <StepRow step={s} ctx={ctx} />
                 </ol>
               )}
             </li>
@@ -215,8 +291,19 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
   if (item.kind === "action") {
     return (
       <ol>
-        <StepRow step={item.step} picked={ctx.picked === item.step.stepId} onPick={ctx.onPick} />
+        <StepRow step={item.step} ctx={ctx} />
       </ol>
+    );
+  }
+  if (item.kind === "stopped") {
+    return (
+      <p className="flex flex-wrap items-baseline gap-x-3 py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-400" onContextMenu={ctx.menu(item.stepId)}>
+        <span className="line-through">{item.text}</span>
+        <span>{t.sheetView.stopped}</span>
+        <button type="button" onClick={() => ctx.onStop(item.stepId, false)} className="font-medium text-primary hover:underline">
+          {t.sheetView.start}
+        </button>
+      </p>
     );
   }
   if (item.kind === "quiet") return <p className="py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-500">{item.texts.join(t.sheetView.and)}</p>;
@@ -267,6 +354,10 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   const stepTypes = useStudio((s) => s.stepTypes);
   const startRun = useStudio((s) => s.startRun);
   const select = useStudio((s) => s.select);
+  const updateStep = useStudio((s) => s.updateStep);
+  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
+  const removeSelected = useStudio((s) => s.removeSelected);
+  const stepMenu = useStepMenu();
   const selection = useStudio((s) => s.selection);
   const running = useStudio((s) => isActive(s.run));
   const testing = useStudio((s) => s.stepTest?.running ?? false);
@@ -306,14 +397,27 @@ export function SheetView({ mode }: { mode: "sheet" | "chart" }) {
   }, [flowId, running, testing, revision]);
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
-  const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts) : null), [flow, defs, manifest, subflows, masks, drafts]);
+  const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts, { stopped: true }) : null), [flow, defs, manifest, subflows, masks, drafts]);
   if (!flow || !doc) return null;
 
   const pictures: Pictures = { urls, want, masks, onWhole: setWhole, onMask: setMasking };
   const ctx: RowCtx = {
     pictures,
     picked: selection?.kind === "step" ? selection.stepId : null,
-    onPick: (step) => select({ kind: "step", stepId: step.stepId }),
+    stepOf: (id) => findStep(flow.steps ?? [], id) ?? undefined,
+    onValue: (stepId, key, value) => void updateStep(stepId, { params: { [key]: value } }),
+    onStop: (stepId, stop) => void updateStep(stepId, { disabled: stop }),
+    onAdd: () => setPaletteOpen(true),
+    onRemove: () => void removeSelected(),
+    menu: (stepId) =>
+      menuFor(() => {
+        const step = findStep(flow.steps ?? [], stepId);
+        if (!step) return [];
+        select({ kind: "step", stepId });
+        return stepMenu(step, { owner: flow.id });
+      }),
+    // Pressed again, the step folds back.
+    onPick: (step) => select(selection?.kind === "step" && selection.stepId === step.stepId ? null : { kind: "step", stepId: step.stepId }),
   };
   const when = schedules.map((s) => describeWhen(s.when));
   const chart = mode === "chart";

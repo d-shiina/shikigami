@@ -2161,6 +2161,11 @@ export const ja = {
   flowCreated: "フローを作成",
   flowDeleted: "フローを削除",
   sheetView: {
+    stopped: "止めています",
+    start: "動かす",
+    addBelow: "下に手順を追加",
+    stop: "この手順を止める",
+    change: "押して書き換える",
     input: "入力",
     output: "出力",
     schedule: "自動実行",

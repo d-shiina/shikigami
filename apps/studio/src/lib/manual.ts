@@ -92,6 +92,8 @@ export type ManualItem =
   | Scene
   | { kind: "action"; step: ManualStep }
   | { kind: "quiet"; texts: string[] }
+  /** A step that is switched off (only with `stopped`, see buildManual). */
+  | { kind: "stopped"; stepId: string; text: string }
   | { kind: "branch"; label: string; taken: boolean | null; items: ManualItem[] }
   | { kind: "loop"; label: string; times: number | null; items: ManualItem[] }
   | { kind: "group"; label: string; items: ManualItem[] };
@@ -195,6 +197,7 @@ type Ctx = {
   next: { n: number };
   missing: { n: number };
   depth: number;
+  stopped: boolean;
 };
 
 const count = (ctx: Ctx, key: string): number | null => (ctx.counts ? (ctx.counts[key] ?? 0) : null);
@@ -271,7 +274,12 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
   const out: ManualItem[] = [];
   const last = () => out.at(-1);
   for (const step of steps) {
-    if (step.disabled || !step.id) continue;
+    if (!step.id) continue;
+    if (step.disabled) {
+      // Said in its place only where it can be started again (the sheet), and only of the flow's own steps.
+      if (ctx.stopped && callPath.length === 0) out.push({ kind: "stopped", stepId: step.id, text: label(step, ctx) });
+      continue;
+    }
     const key = keyOf(callPath, step.id);
     const moment = screenMoment(step.type);
     if (moment) {
@@ -404,7 +412,7 @@ const onlyQuiet = (steps: Step[]) => steps.every((s) => QUIET.has(s.type) || s.d
 const STRUCTURE = new Set([IF, SWITCH, TRY, FOR_EACH, REPEAT, WHILE, GROUP, CALL]);
 
 /** Splits the top level into chapters: structured nodes each, plain runs together. */
-function chapterParts(steps: Step[]): { steps: Step[]; parallel: boolean }[] {
+function chapterParts(steps: Step[], stopped = false): { steps: Step[]; parallel: boolean }[] {
   const parts: { steps: Step[]; parallel: boolean }[] = [];
   let run: Step[] = [];
   const flush = () => {
@@ -412,7 +420,10 @@ function chapterParts(steps: Step[]): { steps: Step[]; parallel: boolean }[] {
     run = [];
   };
   for (const step of steps) {
-    if (step.disabled) continue;
+    if (step.disabled) {
+      if (stopped) run.push(step);
+      continue;
+    }
     if (step.type === PARALLEL) {
       flush();
       const branches = Object.values(step.blocks ?? {}).flat().filter((b) => !b.disabled);
@@ -462,7 +473,7 @@ function countScreens(list: ManualItem[]): { screens: number; loops: boolean } {
 }
 
 function chapterTitle(steps: Step[], ctx: Ctx): string {
-  const main = steps.find((s) => !QUIET.has(s.type)) ?? steps[0];
+  const main = steps.find((s) => !QUIET.has(s.type) && !s.disabled) ?? steps[0];
   return main ? label(main, ctx) : "";
 }
 
@@ -555,6 +566,8 @@ export function buildManual(
   subflows: ReadonlyMap<string, Flow> = new Map(),
   masks: Readonly<Record<string, Mask>> = {},
   drafts: Drafts = {},
+  /** `stopped`: steps that are switched off are said in their place (to switch them on again there), not left out. */
+  options: { stopped?: boolean } = {},
 ): ManualDoc {
   const shots = new Map((manifest?.shots ?? []).filter((s) => !masks[s.key]?.hidden).map((s) => [s.key, s] as const));
   // A picture the person left out still counts as taken.
@@ -571,13 +584,14 @@ export function buildManual(
     words: varWords(flow.variables ?? []),
     missing,
     depth: 0,
+    stopped: options.stopped ?? false,
   };
   // A flow that is one try round all its work reads as that work: what it
   // does on failure and at the end is said after it, not as a frame round it.
-  const top = (flow.steps ?? []).filter((s) => !s.disabled);
-  const loud = top.filter((s) => !QUIET.has(s.type));
+  const top = (flow.steps ?? []).filter((s) => !s.disabled || base.stopped);
+  const loud = top.filter((s) => !QUIET.has(s.type) && !s.disabled);
   const guard = loud.length === 1 && loud[0]?.type === TRY ? loud[0] : null;
-  const parts = chapterParts(guard ? top.flatMap((s) => (s === guard ? (s.blocks?.try ?? []) : [s])) : top);
+  const parts = chapterParts(guard ? top.flatMap((s) => (s === guard ? (s.blocks?.try ?? []) : [s])) : top, base.stopped);
   // Steps are numbered through the whole sheet, so a number names one step.
   const next = { n: 0 };
   const chapters: Chapter[] = [];
@@ -746,7 +760,7 @@ function stepHeight(step: ManualStep): number {
 function blockHeight(block: PageBlock, pictures: boolean): number {
   if (block.kind === "label") return HEIGHT.label;
   const item = block.item;
-  if (item.kind === "quiet") return HEIGHT.quiet;
+  if (item.kind === "quiet" || item.kind === "stopped") return HEIGHT.quiet;
   if (item.kind === "action") return stepHeight(item.step) + (item.step.login ? HEIGHT.note : 0);
   let h = HEIGHT.caption + HEIGHT.gap;
   if (pictures && item.shot) {

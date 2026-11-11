@@ -48,6 +48,22 @@ export function readable(expr: string): string {
   return WORDS[locale].reduce((text, [pattern, words]) => text.replace(pattern, words), expr);
 }
 
+/**
+ * The param of `step` a value shown in its sentence is: the one that reads
+ * exactly as the chip does, when there is only one. So a value written out
+ * in full (an address, a file, a choice) can be changed where it is read; a
+ * value worked out from others is not one of these.
+ */
+export function paramShown(step: Step, shown: string): string | null {
+  const keys = Object.entries(step.params ?? {}).flatMap(([key, value]) => {
+    if (typeof value !== "string" && typeof value !== "number") return [];
+    if (typeof value === "string" && value.includes("{{")) return [];
+    const part = code(value);
+    return "code" in part && part.code === shown ? [key] : [];
+  });
+  return keys.length === 1 ? keys[0]! : null;
+}
+
 function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: locale === "ja" ? "（未設定）" : "(not set)" };
   if (secretName(value)) return { code: t.manual.usesLogin(secretName(value) ?? "") };
