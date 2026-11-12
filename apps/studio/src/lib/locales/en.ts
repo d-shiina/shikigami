@@ -822,6 +822,9 @@ export const en: Dict = {
         antigravity: "Google's AI. It runs on your Google account, free ones included (the free allowance is set per week and Google may change it). It took over from Gemini CLI.",
       },
       notInstalled: "not installed",
+      recommendedTag: " (recommended)",
+      installedTag: " · on this PC",
+      unsure: "Not sure? Take the recommended Claude Code. If your company decides which AI may be used, take that one. To try it without paying, take Antigravity (free with a Google account).",
       install: (name: string) => `Install ${name}`,
       retry: "Try again",
       installing: "Starting the installer…",
@@ -2345,6 +2348,7 @@ export const en: Dict = {
     follow: "Follow",
     fixErrors: "Fix the validation errors to run",
     stepRun: "Step",
+    short: { settings: "Settings", history: "History", files: "Files", handOff: "Hand off" },
   },
   preview: {
     missing: "Not found",

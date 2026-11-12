@@ -822,6 +822,9 @@ export const ja = {
         antigravity: "Google の AI です。あなたの Google アカウントで動き、無料のアカウントでも使えます（無料の回数は週ごとに決まっていて、Google が変えることがあります）。Gemini CLI の後継です。",
       },
       notInstalled: "未インストール",
+      recommendedTag: "（おすすめ）",
+      installedTag: "・この PC にあります",
+      unsure: "迷ったら、おすすめの Claude Code を選んでください。会社で使ってよい AI が決まっているときは、それを選びます。お金をかけずに試すときは Antigravity（Google アカウントで無料）を選びます。",
       install: (name: string) => `${name} をインストールする`,
       retry: "もう一度",
       installing: "インストールを始めています…",
@@ -2345,6 +2348,7 @@ export const ja = {
     follow: "追従",
     fixErrors: "検証エラーを直すと実行できます",
     stepRun: "ステップ実行",
+    short: { settings: "設定", history: "履歴", files: "ファイル", handOff: "渡す" },
   },
   preview: {
     missing: "見つかりません",

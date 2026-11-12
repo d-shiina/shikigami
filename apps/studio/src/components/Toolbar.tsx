@@ -84,7 +84,7 @@ export function FlowTitle() {
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       {/* Where it was opened from, as Linear's header starts with the team: back there in one click. */}
       <button
         type="button"
@@ -121,7 +121,7 @@ export function FlowTitle() {
         }`}
       >
         {published ? <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" /> : <CircleDashed size={13} strokeWidth={1.75} aria-hidden="true" />}
-        <span className="@max-[920px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
+        <span className="@max-[1080px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
       </button>
       {/* Said only when there is something to do about it. */}
       {(errors > 0 || todos > 0 || unset > 0) && (
@@ -131,7 +131,7 @@ export function FlowTitle() {
           className={`${CHIP} font-medium ${
             errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos || unset ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
           }`}
-          title={t.toolbar.issuesTitle}
+          title={[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.issuesTitle}
         >
           {errors ? (
             <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
@@ -140,12 +140,14 @@ export function FlowTitle() {
           ) : (
             <CheckIcon />
           )}
-          <span className="@max-[920px]/title:hidden">
+          <span className="@max-[1080px]/title:hidden">
             {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
           </span>
+          {/* Narrow: the count stays, the words go to the tooltip. */}
+          <span className="hidden tabular-nums @max-[1080px]/title:inline">{errors + unset + todos}</span>
         </button>
       )}
-      <span className="flex h-6 shrink-0 items-center rounded-md text-[12px] text-slate-500 @max-[920px]/title:hidden">
+      <span className="flex h-6 shrink-0 items-center rounded-md text-[12px] text-slate-500 @max-[1080px]/title:hidden">
         <RunStatus />
       </span>
     </div>
@@ -181,11 +183,11 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
     <div className="flex shrink-0 items-center gap-2">
       <ViewSwitch view={view} onChange={onView} />
       {/* A narrow bar (the AI's column open beside a small window) keeps the tools in the menu instead. */}
-      <div className="flex items-center @max-[760px]/title:hidden">
+      <div className="flex items-center @max-[1000px]/title:hidden">
         <Tools busy={aiBusy} />
         <More canRun={errors === 0 && !running && !aiBusy && !noSteps && !todoBlocked} busy={aiBusy} />
       </div>
-      <div className="hidden items-center @max-[760px]/title:flex">
+      <div className="hidden items-center @max-[1000px]/title:flex">
         <More canRun={errors === 0 && !running && !aiBusy && !noSteps && !todoBlocked} busy={aiBusy} tools />
       </div>
       <span className="mx-1 h-5 w-px bg-slate-200" />
@@ -248,7 +250,7 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
  * What belongs to the flow besides its steps, each one press away: its settings, how it got
  * here, its files, and handing it to someone. Icons, named on hover, so the bar stays short.
  */
-type Tool = { label: string; icon: LucideIcon; run: () => void; disabled?: boolean };
+type Tool = { label: string; short?: string; icon: LucideIcon; run: () => void; disabled?: boolean };
 
 function useTools(busy: boolean): Tool[] {
   const flow = useStudio((s) => s.flow);
@@ -258,10 +260,10 @@ function useTools(busy: boolean): Tool[] {
   const setFiles = useProjectMaybe((p) => p.setPanelOpen, null);
   if (!flow) return [];
   return [
-    { label: t.shell.flowSettings, icon: Settings2, run: showFlowProps },
-    { label: t.revision, icon: History, run: () => setHistoryOpen(true) },
-    ...(setFiles ? [{ label: t.project.toggleTitle, icon: Files, run: () => setFiles(true) }] : []),
-    { label: t.handOff.open, icon: Send, run: () => void openHandOff(flow.id), disabled: busy },
+    { label: t.shell.flowSettings, short: t.toolbar.short.settings, icon: Settings2, run: showFlowProps },
+    { label: t.revision, short: t.toolbar.short.history, icon: History, run: () => setHistoryOpen(true) },
+    ...(setFiles ? [{ label: t.project.toggleTitle, short: t.toolbar.short.files, icon: Files, run: () => setFiles(true) }] : []),
+    { label: t.handOff.open, short: t.toolbar.short.handOff, icon: Send, run: () => void openHandOff(flow.id), disabled: busy },
   ];
 }
 
@@ -270,7 +272,7 @@ function Tools({ busy }: { busy: boolean }) {
   if (tools.length === 0) return null;
   return (
     <>
-      {tools.map(({ label, icon: Icon, run, disabled }) => (
+      {tools.map(({ label, short, icon: Icon, run, disabled }) => (
         <button
           key={label}
           type="button"
@@ -278,9 +280,11 @@ function Tools({ busy }: { busy: boolean }) {
           aria-label={label}
           disabled={disabled}
           onClick={run}
-          className="grid h-7 w-7 place-items-center rounded-md text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+          className="flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[12.5px] text-slate-600 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
         >
           <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+          {/* Wide enough: the words beside the picture, so nothing has to be hovered to be known. */}
+          {short && <span className="hidden @min-[1240px]/title:inline">{short}</span>}
         </button>
       ))}
     </>
