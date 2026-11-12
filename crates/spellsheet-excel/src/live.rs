@@ -1203,11 +1203,10 @@ pub fn run_excel_only(
     }
     let path = crate::string(params, "path")?;
     if !Path::new(&path).is_file() {
-        return Err(StepError::permanent(
-            "FILE_NOT_FOUND",
-            format!("{path} does not exist"),
-        )
-        .with_details(json!({ "path": path })));
+        return Err(
+            StepError::permanent("FILE_NOT_FOUND", format!("{path} does not exist"))
+                .with_details(json!({ "path": path })),
+        );
     }
     let read_only = matches!(kind, Kind::ExportPdf | Kind::SaveAs);
     if !read_only && book::open_in_excel(Path::new(&path)) {

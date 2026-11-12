@@ -37,11 +37,10 @@ pub fn export(
         return Err(StepError::invalid_params("'to' must end with .pdf"));
     }
     if !source.is_file() {
-        return Err(StepError::permanent(
-            "FILE_NOT_FOUND",
-            format!("{path} does not exist"),
-        )
-        .with_details(json!({ "path": path })));
+        return Err(
+            StepError::permanent("FILE_NOT_FOUND", format!("{path} does not exist"))
+                .with_details(json!({ "path": path })),
+        );
     }
     let overwrite = params.get("overwrite").and_then(Value::as_bool) == Some(true);
     if !overwrite && Path::new(&to).exists() {
