@@ -1,11 +1,12 @@
-// What a person still has to do before the open flow can run (a file to put
-// in its folder, a login to register, a part to pick). The bar's run button,
+// What a person still has to do before the open flow can run (a login to
+// register, a part to pick; a missing file is only pointed out). The bar's run button,
 // the sheet's 「実行する」 and F5 all read it, so none of them starts a run
 // that can only fail on the first missing thing.
 import { useEffect } from "react";
 import { create } from "zustand";
 import { t } from "./i18n";
-import type { Todo } from "./todos";
+import { useStudio } from "../context";
+import { blocksRun, liveStepIds, type Todo } from "./todos";
 import { useTodos } from "./useTodos";
 
 export const useRunGate = create<{ flowId: string | null; todo: string | null }>(() => ({ flowId: null, todo: null }));
@@ -26,7 +27,10 @@ export function todoBlock(flowId: string | null | undefined): string | null {
 /** Keeps the gate current for the open flow; mounted once with the flow's bar. */
 export function useRunGateSync(flowId: string | null | undefined): string | null {
   const todos = useTodos();
-  const first = todos[0] ? todoText(todos[0]) : null;
+  const steps = useStudio((s) => s.flow?.steps);
+  const live = liveStepIds(steps ?? []);
+  const blocking = todos.find((todo) => blocksRun(todo, live));
+  const first = blocking ? todoText(blocking) : null;
   useEffect(() => {
     useRunGate.setState({ flowId: flowId ?? null, todo: first });
   }, [flowId, first]);

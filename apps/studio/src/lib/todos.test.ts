@@ -1,6 +1,6 @@
 import type { Flow, StepTypeDef, ValidationReport } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
-import { authorIssues, fixText, isUnset, personTodos, todosByStep } from "./todos";
+import { authorIssues, blocksRun, liveStepIds, fixText, isUnset, personTodos, todosByStep } from "./todos";
 
 const defs = new Map<string, StepTypeDef>([["excel.readRows", { type: "excel.readRows", pathParams: ["path"] } as unknown as StepTypeDef]]);
 
@@ -87,5 +87,21 @@ describe("isUnset", () => {
   });
   it("keeps a required item inside a list as an error", () => {
     expect(isUnset(issue("/steps/0/params/by/0"))).toBe(false);
+  });
+});
+
+describe("what stops a run before it starts", () => {
+  const steps = [
+    { id: "a", type: "x", params: {} },
+    { id: "b", type: "x", params: {}, disabled: true, blocks: { body: [{ id: "c", type: "x", params: {} }] } },
+  ] as never;
+  const live = liveStepIds(steps);
+  it("is a login or a part that a step the run reaches needs", () => {
+    expect([...live]).toEqual(["a"]);
+    expect(blocksRun({ kind: "secret", name: "s", fields: ["password"], steps: ["a"] }, live)).toBe(true);
+    expect(blocksRun({ kind: "secret", name: "s", fields: ["password"], steps: ["b", "c"] }, live)).toBe(false);
+  });
+  it("is never a missing file, which a step may write or check for", () => {
+    expect(blocksRun({ kind: "file", path: "config/settings.json", steps: ["a"] }, live)).toBe(false);
   });
 });
