@@ -2,8 +2,8 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@spellsheet/schema";
-import { CalendarClock, ChevronDown, ClipboardList, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
-import { openAsk, useAgentApi } from "../agent";
+import { CalendarClock, ChevronDown, CircleAlert, ClipboardList, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
+import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { DistributionNotice, useDistributionCheck } from "./Distribution";
@@ -94,13 +94,22 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
   const agentStore = useAgentApi();
   const setPlace = useStudio((s) => s.setPlace);
   // Not sure what to automate: the AI asks about the work, and its sheet fills in beside the chat.
+  const available = useAgent((a) => a.info?.available === true);
+  const [needsAi, setNeedsAi] = useState(false);
   const onConsult = () => {
+    if (!available) {
+      // Nothing to talk to yet: show where to set the AI up instead of a sheet that never fills.
+      openAsk(agentStore, { fresh: null, draft: "" });
+      setNeedsAi(true);
+      return;
+    }
     setPlace("inventory");
     void consult(agentStore);
   };
   const [text, setText] = useState("");
   const ask = () => {
     const request = text.trim();
+    if (!available) setNeedsAi(true);
     openAsk(agentStore, { fresh: null, draft: request });
     const a = agentStore.getState();
     // Not set up yet: the pane shows how, and the request waits in its box.
@@ -145,6 +154,12 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
           </button>
           <span className="text-[12px] text-slate-500">{t.firstSteps.withAiBody}</span>
         </div>
+        {needsAi && !available && (
+          <p role="status" className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            <CircleAlert size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {t.firstSteps.setUpFirst}
+          </p>
+        )}
       </form>
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-paper px-3 py-2.5">
         <ClipboardList size={16} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />
