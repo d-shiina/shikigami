@@ -59,6 +59,32 @@ describe("the run window's form", () => {
     });
   });
 
+  it("offers a file picker for a text input that a step opens as a file", () => {
+    const flow = makeFlow({
+      variables: [
+        { name: "受注一覧", type: "string", direction: "input" },
+        { name: "保存先", type: "string", direction: "input" },
+        { name: "宛名", type: "string", direction: "input" },
+      ],
+      steps: [
+        {
+          id: "s1",
+          type: "control.forEach",
+          params: {},
+          blocks: { body: [{ id: "s2", type: "excel.readRows", params: { path: "{{ 受注一覧 }}" } }] },
+        },
+        { id: "s3", type: "file.makeFolder", params: { folder: "{{保存先}}" } },
+        { id: "s4", type: "excel.readRows", params: { path: "C:/{{ 宛名 }}.xlsx" } },
+      ],
+    } as Partial<Flow>);
+    const defs = new Map([
+      ["excel.readRows", { type: "excel.readRows", pathParams: ["path"] }],
+      ["file.makeFolder", { type: "file.makeFolder", pathParams: ["folder"] }],
+    ]) as never;
+    expect(fieldsOf(flow, defs).map((f) => f.kind)).toEqual(["file", "folder", "text"]);
+    expect(fieldsOf(flow).map((f) => f.kind)).toEqual(["text", "text", "text"]);
+  });
+
   it("turns what was typed into the inputs, by type", () => {
     const fields = fieldsOf(invoices);
     const values = { ...initialValues(fields), month: "2026-10", threshold: "120,000", mail: true, names: "東京\n大阪\n", password: "x" };
@@ -84,7 +110,7 @@ describe("the run window's form", () => {
 
   it("shows results in the person's way", () => {
     expect(formatValue(3842500)).toBe("3,842,500");
-    expect(formatValue(true)).toBe("TRUE");
+    expect(formatValue(true)).toBe("はい");
     expect(formatValue([1, 2])).toBe("2 件");
     setLocale("en", false);
     expect(formatValue([1])).toBe("1 item");

@@ -14,6 +14,14 @@ import { t } from "../lib/i18n";
 import { plain, sentence } from "../lib/sentence";
 import { findStep } from "../store";
 import { type RunnerApi, type RunnerItem, runnerApi } from "./api";
+
+/** When the flow was published, as the person reads a date: 2026/11/12 10:30. */
+const publishedText = (at: string) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime())
+    ? at
+    : d.toLocaleString(t.runner.numberLocale, { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
 import { FieldRow } from "./FieldRow";
 import { collect, fieldsOf, formatValue, initialValues, isOutput, labelOf, type Values } from "./form";
 import { progress, type TopState } from "./progress";
@@ -144,10 +152,17 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   // Per flow and version: the list is read again after each run, and
   // that must not wipe what the person typed (「もう一度」 runs with it).
   const formKey = item ? `${item.flow.id}@${item.version}` : "";
-  const fields = useMemo(() => (item ? fieldsOf(item.flow) : []), [formKey]);
+  const defMap = useMemo(() => new Map(defs.map((d) => [d.type, d])), [defs]);
+  // Read again once the step types arrive: a file path input gets its picker.
+  const fields = useMemo(() => (item ? fieldsOf(item.flow, defMap) : []), [formKey, defMap]);
+  const shownKey = useRef("");
   useEffect(() => {
-    setValues(initialValues(fields));
-    setErrors({});
+    const fresh = initialValues(fields);
+    // Only the step types arrived: keep what was already typed.
+    const same = shownKey.current === formKey;
+    shownKey.current = formKey;
+    setValues((old) => (same ? { ...fresh, ...old } : fresh));
+    if (!same) setErrors({});
   }, [fields]);
 
   const mine = run?.runId ? events.filter((e) => e.runId === run.runId) : [];
@@ -275,7 +290,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                 <h1 className="text-[16px] font-bold">{item.flow.name}</h1>
                 {!run && item.flow.description && <p className="mt-1 text-[12.5px] leading-relaxed whitespace-pre-line text-slate-600">{item.flow.description}</p>}
                 <div className="mt-1.5 text-[11.5px] text-slate-500">
-                  {run ? (finished ? t.runner.duration(seconds) : t.runner.elapsed(t.runner.duration(seconds))) : t.runner.version(item.version)}
+                  {run ? (finished ? t.runner.duration(seconds) : t.runner.elapsed(t.runner.duration(seconds))) : t.runner.version(publishedText(item.publishedAt))}
                 </div>
               </div>
 
@@ -343,7 +358,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
               {problem && <div className="mx-5 mb-2 rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12.5px] text-shu-600">{problem}</div>}
 
               <footer className="flex shrink-0 items-center gap-2.5 border-t border-slate-200 bg-sheet px-5 py-2.5">
-                <span className="flex-1 text-[12px] text-slate-500">{!run ? t.runner.runNote(item.version) : running ? t.runner.stopNote : ""}</span>
+                <span className="flex-1 text-[12px] text-slate-500">{!run ? t.runner.runNote(publishedText(item.publishedAt)) : running ? t.runner.stopNote : ""}</span>
                 {!run && (
                   <button type="submit" form="runner-form" className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
                     <Play size={14} strokeWidth={2} aria-hidden="true" />
@@ -424,7 +439,7 @@ function Result({
               onClick={() => {
                 const lines = [
                   item.flow.name,
-                  t.runner.version(item.version),
+                  t.runner.version(publishedText(item.publishedAt)),
                   ...(stepText ? [t.runner.stoppedAt(stepText)] : []),
                   explained.what,
                   `${error.code}: ${error.message}`,
