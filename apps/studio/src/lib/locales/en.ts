@@ -722,11 +722,7 @@ export const en: Dict = {
     reload: "Reload",
   },
   agent: {
-    setUp: "Set up",
-    moveRight: "Move to the right",
-    moveBelow: "Move under the work",
     closeTalk: "Close the conversation",
-    openTalk: "Open the conversation",
     noTalk: "No conversation yet. Ask the AI in the field below.",
     needsSetup: "An AI needs to be set up first",
     askEdit: "Ask the AI to change this flow",

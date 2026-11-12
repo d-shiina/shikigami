@@ -722,11 +722,7 @@ export const ja = {
     reload: "再読み込み",
   },
   agent: {
-    setUp: "設定する",
-    moveRight: "右に移す",
-    moveBelow: "下に移す",
     closeTalk: "会話を閉じる",
-    openTalk: "会話を開く",
     noTalk: "まだ会話はありません。下の欄から AI に頼めます。",
     needsSetup: "使う AI の設定が必要です",
     askEdit: "AI に修正を依頼",

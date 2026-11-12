@@ -176,6 +176,25 @@ type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "upd
 /** Messages kept per conversation across restarts. */
 const KEEP_ITEMS = 60;
 
+const OPEN_KEY = "spellsheet.studio.agentOpen";
+
+/** The column is open from the first start, and afterwards as the person left it. */
+function wasOpen(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(OPEN_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function keepOpen(open: boolean) {
+  try {
+    globalThis.localStorage?.setItem(OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // Only a remembered preference.
+  }
+}
+
 function load(): Saved[] {
   try {
     const raw = globalThis.localStorage?.getItem(CHATS_KEY);
@@ -319,6 +338,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       const reply = (c: Chat, change: Partial<Extract<ChatItem, { role: "ai" }>>) =>
         c.items.map((i) => (i.id === id && i.role === "ai" ? { ...i, ...change } : i));
       set({ open: true });
+      keepOpen(true);
       update(chatId, (c) => ({
         ...c,
         sending: true,
@@ -402,7 +422,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
     const first = blank(null);
     return {
       info: null,
-      open: false,
+      open: wasOpen(),
       chats: [first, ...restored],
       current: first.id,
       login: { phase: "idle" },
@@ -423,6 +443,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
 
       setOpen(open) {
         set({ open });
+        keepOpen(open);
         if (open) show(get().current);
       },
 
