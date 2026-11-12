@@ -172,6 +172,12 @@ export const en: Dict = {
   },
   secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets and pick it in the input node",
   flows: "Flows",
+  backToFlows: "Back to the list of flows",
+  reviewEmpty: {
+    pick: "Choose a flow to review from the list on the left",
+    none: "No flows are waiting for review",
+    hint: "Flows the AI makes or changes appear here. Check them and publish them, and they can be used in Runner and in automatic runs",
+  },
   newFlow: "New flow",
   newFlowPrompt: "Flow name",
   defaultFlowName: "New flow",

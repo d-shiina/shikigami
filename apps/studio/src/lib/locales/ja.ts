@@ -172,6 +172,12 @@ export const ja = {
   },
   secretNoDefault: "機密の変数には既定値を書けません。パスワードは「シークレット」に登録して、入力ノードで選びます",
   flows: "フロー",
+  backToFlows: "フローの一覧に戻る",
+  reviewEmpty: {
+    pick: "左の一覧から確認するフローを選んでください",
+    none: "確認を待っているフローはありません",
+    hint: "AI がフローを作ったり直したりすると、ここに並びます。中身を確かめて確定すると、Runner や自動実行で使えるようになります",
+  },
   newFlow: "新規作成",
   newFlowPrompt: "フロー名",
   defaultFlowName: "新しいフロー",

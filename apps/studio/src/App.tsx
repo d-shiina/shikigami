@@ -36,7 +36,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { DraftingFlow } from "./components/DraftingFlow";
 import { FlowsPage } from "./components/FlowsPage";
 import { HandOffDialog, OpenedFiles, ReceiveSheet } from "./components/HandOff";
-import { AiButton, Brand, SearchBar, Waiting } from "./components/ShellBar";
+import { AiButton, Brand, SearchBar, useWaiting, Waiting } from "./components/ShellBar";
 import { SheetView } from "./components/sheet/SheetView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
@@ -44,7 +44,7 @@ import { WindowControls } from "./components/WindowControls";
 import type { View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
-import { Hand } from "lucide-react";
+import { Hand, Inbox } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
@@ -302,6 +302,20 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   );
 }
 
+/** The review desk with no flow open: what the place is for, instead of a blank page. */
+function ReviewEmpty() {
+  const { inbox } = useWaiting();
+  return (
+    <div className="flex h-full items-center justify-center bg-paper p-8">
+      <div className="max-w-sm text-center">
+        <Inbox size={28} strokeWidth={1.5} className="mx-auto text-slate-400" aria-hidden="true" />
+        <p className="mt-2 text-[14px] font-semibold text-ink">{inbox.length > 0 ? t.reviewEmpty.pick : t.reviewEmpty.none}</p>
+        <p className="mt-1 text-[12.5px] text-slate-500">{t.reviewEmpty.hint}</p>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The review desk: what waits, and the open flow's AI change as a report on
  * one sheet of paper. The chart, procedure and variables are one switch away,
@@ -334,7 +348,7 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
       view={reading}
       onView={setView}
       list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
-      report={view === "report" && hasFlow ? <ReviewReport /> : undefined}
+      report={!hasFlow ? <ReviewEmpty /> : view === "report" ? <ReviewReport /> : undefined}
       foot={hasFlow ? <ReviewFoot report={view === "report"} /> : undefined}
       rightWidth={sizes.right}
       grip={grip}

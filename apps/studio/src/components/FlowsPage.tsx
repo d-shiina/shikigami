@@ -468,7 +468,8 @@ export function FlowsPage() {
         {/* Making one, the filled button, is at the end; finding and narrowing are on the left. */}
         <div className="mb-3 flex items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <SearchBox value={query} onChange={setQuery} placeholder={l.searchFlows} hits={rows.length} />
+          {/* Nothing to search yet: the page leads with making the first flow. */}
+          {(summaries.length > 0 || query) && <SearchBox value={query} onChange={setQuery} placeholder={l.searchFlows} hits={rows.length} />}
           {summaries.length > 0 && (
             <>
               <FacetFilter

@@ -3,6 +3,8 @@
 // flow's run (its title bar) and the selected node's place (the inspector).
 // The window has no status bar: the app's menu at its top left holds the
 // theme, language and version (ShellBar).
+import { invoke } from "@tauri-apps/api/core";
+import { FolderOpen } from "lucide-react";
 import type { Step } from "@spellsheet/schema";
 import { type ReactNode, useMemo, useState } from "react";
 import { useStudio } from "../context";
@@ -37,13 +39,27 @@ export function WorkspaceSection() {
         }
       >
         <SettingsRow label={t.workspaceFolder} hint={t.workspaceFolderHint} htmlFor="settings-workspace-path">
-          <input
-            id="settings-workspace-path"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder={t.workspacePath}
-            className={`${settingsInput} font-mono text-[12px]`}
-          />
+          <div className="flex gap-1.5">
+            <input
+              id="settings-workspace-path"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder={t.workspacePath}
+              className={`${settingsInput} min-w-0 flex-1 font-mono text-[12px]`}
+            />
+            <button
+              type="button"
+              onClick={() =>
+                void invoke<string | null>("runner_pick", { kind: "folder", start: path.trim() || null })
+                  .then((picked) => picked && setPath(picked))
+                  .catch(() => undefined)
+              }
+              className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+            >
+              <FolderOpen size={13} strokeWidth={1.75} aria-hidden="true" />
+              {t.runner.browse}
+            </button>
+          </div>
         </SettingsRow>
         <SettingsRow label={t.workspaceShared}>
           <label className="flex items-center gap-2 text-slate-700">
