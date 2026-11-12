@@ -1,9 +1,21 @@
 import type { StepTypeDef } from "@spellsheet/schema";
 import { describe, expect, it } from "vitest";
 import { setLocale } from "./i18n";
-import { paramShown, plain, readable, sentence, targetText, typeTitle } from "./sentence";
+import { paramShown, plain, readable, sentence, targetText, typeTitle, withoutSaveAs } from "./sentence";
 
 describe("sentence", () => {
+  it("says dates and errors as an office would", () => {
+    expect(readable("formatDate(today(), 'yyyy-MM-dd')")).toBe("今日の日付");
+    expect(readable("err.message")).toBe("エラーの内容");
+    expect(plain(sentence({ type: "browser.screenshot", params: { path: "output/画面_{{ formatDate(today(), 'yyyyMMdd') }}.png" } }, undefined))).toBe("画面を output/画面_今日の日付.png に保存する");
+  });
+
+  it("leaves the name a result is kept under off the sheet's sentence", () => {
+    const parts = sentence({ type: "browser.getTable", params: { target: { role: "table", name: "受注一覧" } }, saveAs: "注文一覧" }, undefined);
+    expect(plain(parts)).toBe("「受注一覧」表を表として読む（→ 注文一覧）");
+    expect(plain(withoutSaveAs(parts))).toBe("「受注一覧」表を表として読む");
+  });
+
   it("reads known step types as Japanese", () => {
     expect(plain(sentence({ type: "control.if", params: { condition: "a > 1" } }, undefined))).toBe("もし a > 1 なら");
     expect(
