@@ -41,9 +41,10 @@ function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: Rev
     ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
     ["story", t.viewStory],
     ["chart", t.viewChart],
-    ["variables", t.vars.table.view],
     // The runs of the flow as it is kept; on the review desk the AI's own trial run is in the report.
     ...(place === "flows" ? [["result", t.result.view] as [ReviewView, string]] : []),
+    // Last: the person running the flow seldom needs the values behind it.
+    ["variables", t.vars.table.view],
   ];
   return (
     <div className="flex h-7 items-center rounded-lg bg-slate-100 p-0.5 text-[12px]" role="radiogroup">
