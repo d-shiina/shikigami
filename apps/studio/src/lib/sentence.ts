@@ -24,6 +24,12 @@ const SYMBOLS: [RegExp, string][] = [
 ];
 const WORDS: Record<"ja" | "en", [RegExp, string][]> = {
   ja: [
+    // Dates and what went wrong, as an office would say them (the flow keeps the expression).
+    [/\bformatDate\(today\(\),\s*(['"])[^'"]*\1\)/g, "今日の日付"],
+    [/\bformatDate\(now\(\),\s*(['"])[^'"]*\1\)/g, "今の日時"],
+    [/\btoday\(\)/g, "今日"],
+    [/\bnow\(\)/g, "今の日時"],
+    [/\b(?:err|error|e)\.message\b/g, "エラーの内容"],
     [fn("len"), "$1の件数"],
     [fn("sum"), "$1の合計"],
     [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "gu"), "$1が空でない"],
@@ -33,6 +39,11 @@ const WORDS: Record<"ja" | "en", [RegExp, string][]> = {
     ...SYMBOLS,
   ],
   en: [
+    [/\bformatDate\(today\(\),\s*(['"])[^'"]*\1\)/g, "today's date"],
+    [/\bformatDate\(now\(\),\s*(['"])[^'"]*\1\)/g, "the time now"],
+    [/\btoday\(\)/g, "today"],
+    [/\bnow\(\)/g, "the time now"],
+    [/\b(?:err|error|e)\.message\b/g, "what went wrong"],
     [fn("len"), "count of $1"],
     [fn("sum"), "sum of $1"],
     [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "gu"), "$1 is not empty"],
@@ -67,7 +78,8 @@ export function paramShown(step: Step, shown: string): string | null {
 function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: locale === "ja" ? "（未設定）" : "(not set)" };
   if (secretName(value)) return { code: t.manual.usesLogin(secretName(value) ?? "") };
-  return { code: typeof value === "string" ? readable(value) : JSON.stringify(value) };
+  // Words with worked-out parts in them (a file named by the day) read as the words: the braces are the flow's own writing.
+  return { code: typeof value === "string" ? readable(value).replace(/\{\{\s*(.*?)\s*\}\}/g, "$1") : JSON.stringify(value) };
 }
 
 /** The name of a registered secret a value refers to (`{ "secret": "受注システム", "field": … }`). */
@@ -508,6 +520,18 @@ function isTargetElement(target: unknown): boolean {
 function saveAs(step: Step): Part[] {
   if (!step.saveAs) return [];
   return locale === "ja" ? [w("（→ "), code(step.saveAs), w("）")] : [w(" (→ "), code(step.saveAs), w(")")];
+}
+
+/** The type reads as a sentence of its own (not as its label followed by its settings). */
+export const hasSentence = (type: string) => type in BUILDERS;
+
+/** A sentence as the sheet says it: without the name the result is kept under (「（→ rows）」), which is the flow's own bookkeeping. */
+export function withoutSaveAs(parts: Part[]): Part[] {
+  const n = parts.length;
+  const open = parts[n - 3];
+  const close = parts[n - 1];
+  if (n >= 3 && open && close && "text" in open && "text" in close && /\(→ $|（→ $/.test(open.text) && /^[)）]$/.test(close.text)) return parts.slice(0, -3);
+  return parts;
 }
 
 export function sentence(step: Step, def: StepTypeDef | undefined): Part[] {

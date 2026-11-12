@@ -2,15 +2,15 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, History, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, ArrowRight, Download, EyeOff, FileSpreadsheet, FileText, Globe, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
 import { locale, t } from "../../lib/i18n";
-import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
+import { buildManual, type Rect, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
 import { type SceneMark, sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
-import { brief, type Part, paramShown, plain } from "../../lib/sentence";
+import { brief, hasSentence, type Part, paramShown, plain, withoutSaveAs } from "../../lib/sentence";
 import type { Flow, Step } from "@spellsheet/schema";
 import { findStep, isActive, trailOf } from "../../store";
 import type { RunState } from "../../store/run";
@@ -27,16 +27,21 @@ import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
 import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
+import { Stripe } from "../Masthead";
 import { PAPER } from "./paper";
 
-const CHIP = "mx-0.5 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink";
+// A value in a sentence: the words of the sentence, set apart by a dotted line under them (boxes made the sheet read as a form).
+const CHIP = "mx-px border-b border-dotted border-[var(--sheet-value-line)] font-medium text-ink";
 
 /** A value in a sentence that is written out in full: pressed, it is changed where it stands. */
 function Entry({ shown, value, onChange }: { shown: string; value: string | number; onChange: (next: string | number) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   if (draft === null) {
     return (
-      <button type="button" title={t.sheetView.change} onClick={() => setDraft(String(value))} className={`${CHIP} cursor-text leading-[1.45] hover:border-slate-400`}>
+      <button type="button" title={t.sheetView.change} onClick={(e) => {
+        e.stopPropagation();
+        setDraft(String(value));
+      }} className={`${CHIP} cursor-text hover:border-solid hover:border-primary`}>
         {shown}
       </button>
     );
@@ -49,6 +54,7 @@ function Entry({ shown, value, onChange }: { shown: string; value: string | numb
   return (
     <input
       autoFocus
+      onClick={(e) => e.stopPropagation()}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => done(true)}
@@ -57,7 +63,7 @@ function Entry({ shown, value, onChange }: { shown: string; value: string | numb
         if (e.key === "Escape") done(false);
       }}
       style={{ width: `calc(${Math.max(4, [...draft].reduce((n, c) => n + (c.charCodeAt(0) > 0xff ? 2 : 1.1), 0))}ch + 16px)` }}
-      className={`${CHIP} max-w-full border-primary! leading-[1.45] outline-none`}
+      className="mx-0.5 max-w-full rounded-[4px] border border-primary bg-paper px-1.5 py-px text-[14px] leading-[1.45] text-ink outline-none"
     />
   );
 }
@@ -71,18 +77,17 @@ function Words({ parts, step, onValue, onOpen }: { parts: Part[]; step?: Step; o
         // A page of HTML or a long script is not read in a sentence: its first words, and the rest in the step's settings.
         const cut = brief(p.code);
         if (cut) {
-          const words = (
-            <>
-              {cut.text}…<span className="ml-1.5 text-[12px] text-slate-500">{t.sheetView.chars(cut.length)}</span>
-            </>
-          );
+          // What it works out to is said in the step's note (the AI writes one); the expression itself is in the step's settings.
           return onOpen ? (
-            <button key={i} type="button" title={t.sheetView.openLong} onClick={onOpen} className={`${CHIP} leading-[1.45] hover:border-slate-400`}>
-              {words}
+            <button key={i} type="button" title={t.sheetView.openLong} onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }} className={`${CHIP} hover:border-solid hover:border-primary`}>
+              {t.sheetView.worked}
             </button>
           ) : (
             <span key={i} className={CHIP}>
-              {words}
+              {t.sheetView.worked}
             </span>
           );
         }
@@ -104,16 +109,6 @@ function short(value: string): string {
   return cut ? `${cut.text}… ${t.sheetView.chars(cut.length)}` : value;
 }
 
-function Value({ icon: Icon, children }: { icon?: LucideIcon; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-[4px] border border-slate-200 bg-paper px-1.5 py-px text-[13px] text-ink">
-      {Icon && <Icon size={12} strokeWidth={1.75} aria-hidden="true" className="text-slate-500" />}
-      {children}
-    </span>
-  );
-}
-
-/** What the flow takes in, gives back, runs on and logs in with: only the rows it has something to say on. */
 /** What a part of the sheet does, step by step, in the steps' own names. */
 function texts(items: ManualItem[]): string[] {
   return items.flatMap((item) =>
@@ -121,72 +116,161 @@ function texts(items: ManualItem[]): string[] {
   );
 }
 
-function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
-  const w = t.sheetView;
-  const failure = doc.chapters.filter((c) => c.role === "failure").flatMap((c) => texts(c.items));
-  const rows: { icon: LucideIcon; label: string; values: string[]; plain: string[]; mark?: LucideIcon }[] = [
-    { icon: FileInput, label: w.input, values: doc.uses.inputFiles, plain: doc.inputs },
-    { icon: FileText, label: t.project.shelves.templates ?? "", values: doc.uses.templates, plain: [] },
-    { icon: Settings2, label: t.project.shelves.config ?? "", values: doc.uses.config, plain: [] },
-    { icon: FileOutput, label: w.output, values: doc.uses.outputFiles, plain: doc.outputs },
-    { icon: Clock, label: w.schedule, values: when, plain: [] },
-    { icon: KeyRound, label: w.secrets, values: doc.uses.logins, plain: [], mark: KeyRound },
-    // What is done when the work fails is a part of the sheet (its last pages): said here in a line.
-    { icon: TriangleAlert, label: w.onFailure, values: [], plain: failure },
-  ].filter((r) => r.values.length + r.plain.length > 0);
-  if (rows.length === 0) return null;
+/** The numbered operations in these items. */
+const countSteps = (items: ManualItem[]): number =>
+  items.reduce((n, i) => n + (i.kind === "scene" ? i.steps.length : i.kind === "action" ? 1 : "items" in i ? countSteps(i.items) : 0), 0);
+
+/** A file, a site or a value the flow takes in or gives back, as a small card. */
+function Thing({ name, kind, out = false }: { name: string; kind: "file" | "site" | "value"; out?: boolean }) {
+  const Icon = kind === "site" ? Globe : /\.(xlsx?|xlsm|csv)$/i.test(name) ? FileSpreadsheet : FileText;
+  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
   return (
-    <dl className="mt-6 grid grid-cols-[124px_minmax(0,1fr)] gap-x-4 gap-y-3 border-y border-slate-200 py-5 text-[14px]">
-      {rows.map((r) => (
-        <div key={r.label} className="contents">
-          <dt className="flex items-center gap-2 self-start pt-px text-slate-500">
-            <r.icon size={14} strokeWidth={1.75} aria-hidden="true" />
-            {r.label}
-          </dt>
-          <dd className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-ink">
-            {r.values.map((v) => (
-              <Value key={v} icon={r.mark}>
-                {v}
-              </Value>
-            ))}
-            {r.plain.length > 0 && <span>{r.plain.join(t.sheetView.and)}</span>}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <li className={`flex min-w-0 items-center gap-2.5 rounded-[4px] border bg-sheet px-2.5 py-2 ${out ? "border-[var(--color-role-output)] shadow-[inset_3px_0_0_var(--color-role-output)]" : "border-slate-300"}`}>
+      {kind !== "value" && <Icon size={18} strokeWidth={1.5} aria-hidden="true" className={`shrink-0 ${Icon === FileSpreadsheet ? "text-moegi-600" : "text-slate-500"}`} />}
+      <span className="min-w-0">
+        <b className="block text-[13.5px] leading-[1.4] font-semibold break-words text-ink">{slash >= 0 ? name.slice(slash + 1) : name}</b>
+        {slash >= 0 && <small className="block text-[11.5px] leading-[1.4] text-slate-500">{t.sheetView.inFolder(name.slice(0, slash))}</small>}
+      </span>
+    </li>
   );
 }
 
-/** The last run, and the way to run again: said once, beside the heading. */
-/** `blocked`: why the flow cannot be run now (it is running, has errors, or the AI is still making it), as on the bar's run button. */
-function LastRun({ manifest, blocked, empty, onRun, onExport, onHistory }: { manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void; onHistory?: () => void }) {
+/**
+ * The head of the sheet, as a company's procedure document has one: what it is
+ * and its particulars in a ruled table, what goes in and what comes out with the
+ * work between them, then what else it runs on. Only what the flow has is drawn.
+ */
+/** `short`: over the chart, which draws what the flow works with itself: only what it is and its particulars. */
+function Head({ doc, when, edition, manifest, actions, short = false }: { doc: ManualDoc; when: string[]; edition: { label: string; updated: string | null }; manifest: ManualManifest | null; actions: React.ReactNode; short?: boolean }) {
   const w = t.sheetView;
-  const at = manifest
-    ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : null;
-  return (
-    <div className="text-[12.5px] leading-[1.7] text-slate-500">
-      {at ? (
-        <p className="flex items-center gap-1.5">
-          <CircleCheck size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
-          <b className="font-semibold text-ink">{w.lastRun}</b>
-          <span className="tabular-nums">{at}</span>
-        </p>
+  const failure = doc.chapters.filter((c) => c.role === "failure").flatMap((c) => texts(c.items));
+  const work = doc.chapters.filter((c) => !c.role);
+  const steps = doc.chapters.reduce((n, c) => n + countSteps(c.items), 0);
+  const ranAt = manifest ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+  const particulars: [string, React.ReactNode][] = [
+    [w.edition, edition.label],
+    ...(edition.updated ? ([[w.updated, edition.updated]] as [string, React.ReactNode][]) : []),
+    [w.stepCount, steps],
+    [
+      w.lastRun,
+      ranAt ? (
+        <span className="inline-flex items-center gap-1.5">
+          <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
+          <span className="tabular-nums">{ranAt}</span>
+        </span>
       ) : (
-        <p>{w.noRun}</p>
+        w.notRun
+      ),
+    ],
+  ];
+  const ins = [...doc.uses.inputFiles.map((name) => ({ name, kind: "file" as const })), ...doc.uses.apps.map((name) => ({ name, kind: "site" as const })), ...doc.inputs.map((name) => ({ name, kind: "value" as const }))];
+  const outs = [...doc.uses.outputFiles.map((name) => ({ name, kind: "file" as const })), ...doc.outputs.map((name) => ({ name, kind: "value" as const }))];
+  const also = [
+    { label: t.project.shelves.templates ?? "", text: doc.uses.templates.join(w.and) },
+    { label: t.project.shelves.config ?? "", text: doc.uses.config.join(w.and) },
+    { label: w.secrets, text: doc.uses.logins.join(w.and) },
+    { label: w.schedule, text: when.join(w.and) },
+    { label: w.onFailure, text: failure.join(w.and) },
+  ].filter((r) => r.text !== "");
+  const CAP = "mb-2 text-[11.5px] font-semibold tracking-[0.06em] text-slate-600";
+  const arrow = <ArrowRight size={22} strokeWidth={1.5} aria-hidden="true" className="mx-auto hidden shrink-0 text-slate-400 @[52rem]/paper:block" />;
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-5">
+        <div className="min-w-0 flex-1 basis-[320px]">
+          <p className="mb-1.5 text-[12px] font-bold tracking-[0.14em] text-[var(--manual-navy)]">{w.kind}</p>
+          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.01em] text-balance text-ink">{doc.title}</h1>
+          {doc.description && <p className="mt-2 text-[14.5px] leading-relaxed text-slate-600">{doc.description}</p>}
+        </div>
+        <div className="shrink-0">
+          <table className="border-collapse text-[12.5px]">
+            <tbody>
+              {particulars.map(([label, value]) => (
+                <tr key={label}>
+                  <th className="border border-slate-300 bg-paper px-3 py-1.5 text-left font-normal whitespace-nowrap text-slate-600">{label}</th>
+                  <td className="border border-slate-300 px-3 py-1.5 text-ink">{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {actions}
+        </div>
+      </div>
+      {!short && (ins.length > 0 || outs.length > 0) && work.length > 0 && (
+        <div className="mt-6 grid gap-x-4 gap-y-4 rounded-[4px] border border-slate-200 bg-paper px-5 py-4 @[52rem]/paper:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)_auto_minmax(0,1fr)] @[52rem]/paper:items-center">
+          <div>
+            <p className={CAP}>{w.input}</p>
+            {ins.length > 0 ? (
+              <ul className="space-y-1.5">
+                {ins.map((x) => (
+                  <Thing key={`${x.kind}:${x.name}`} {...x} />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-slate-500">{w.nothing}</p>
+            )}
+          </div>
+          {arrow}
+          <div>
+            <p className={CAP}>{w.does}</p>
+            <ol className="space-y-1.5 text-[13.5px] leading-[1.5] text-ink">
+              {work.slice(0, 5).map((c) => (
+                <li key={c.number} className="grid grid-cols-[22px_minmax(0,1fr)] items-baseline">
+                  <span className="grid size-[17px] place-items-center self-center rounded-full bg-[var(--manual-navy)] text-[10.5px] font-bold text-sheet tabular-nums">{c.number}</span>
+                  {c.title}
+                </li>
+              ))}
+              {work.length > 5 && <li className="pl-[22px] text-[12.5px] text-slate-500">{w.more(work.length - 5)}</li>}
+            </ol>
+          </div>
+          {arrow}
+          <div>
+            <p className={CAP}>{w.output}</p>
+            {outs.length > 0 ? (
+              <ul className="space-y-1.5">
+                {outs.map((x) => (
+                  <Thing key={`${x.kind}:${x.name}`} {...x} out />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-slate-500">{w.nothing}</p>
+            )}
+          </div>
+        </div>
       )}
-      <button type="button" disabled={blocked !== null} title={blocked || undefined} onClick={onRun} className="mt-0.5 inline-flex items-center gap-1 font-medium text-primary enabled:hover:underline disabled:text-slate-400">
+      {!short && also.length > 0 && (
+        <dl className="mt-3 grid grid-cols-1 overflow-hidden rounded-[4px] border border-slate-200 text-[13px] @[52rem]/paper:grid-flow-col @[52rem]/paper:auto-cols-fr @[52rem]/paper:grid-cols-none">
+          {also.map((r) => (
+            <div key={r.label} className="border-t border-slate-200 px-4 py-2.5 first:border-t-0 @[52rem]/paper:border-t-0 @[52rem]/paper:border-l @[52rem]/paper:first:border-l-0">
+              <dt className="mb-0.5 text-[11.5px] font-semibold tracking-[0.04em] text-slate-600">{r.label}</dt>
+              <dd className="leading-[1.6] break-words text-ink">{r.text}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </>
+  );
+}
+
+/** The ways on from the sheet's particulars: run it, write it out as a manual, read its past runs. */
+/** `blocked`: why the flow cannot be run now (it is running, has errors, or the AI is still making it), as on the bar's run button. */
+function LastRun({ blocked, empty, onRun, onExport, onHistory }: { blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void; onHistory?: () => void }) {
+  const w = t.sheetView;
+  const link = "inline-flex items-center gap-1 text-slate-600 enabled:hover:text-ink enabled:hover:underline disabled:text-slate-400";
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] leading-[1.7]">
+      <button type="button" disabled={blocked !== null} title={blocked || undefined} onClick={onRun} className="inline-flex items-center gap-1 font-medium text-primary enabled:hover:underline disabled:text-slate-400">
         <Play size={12} strokeWidth={2} aria-hidden="true" />
         {w.run}
       </button>
       {/* The sheet as a file to hand to someone: the manual, with its pictures. */}
-      <button type="button" disabled={empty} title={empty ? t.sheetView.noSteps : undefined} onClick={onExport} className="mt-0.5 ml-4 inline-flex items-center gap-1 text-slate-600 enabled:hover:text-ink enabled:hover:underline disabled:text-slate-400">
+      <button type="button" disabled={empty} title={empty ? t.sheetView.noSteps : undefined} onClick={onExport} className={link}>
         <Download size={12} strokeWidth={1.75} aria-hidden="true" />
         {t.manual.export}
       </button>
       {/* Every run of this flow, wherever it was started: its results and logs. */}
       {onHistory && (
-        <button type="button" onClick={onHistory} className="mt-0.5 flex items-center gap-1 text-slate-600 hover:text-ink hover:underline">
+        <button type="button" onClick={onHistory} className={link}>
           <History size={12} strokeWidth={1.75} aria-hidden="true" />
           {t.result.history}
         </button>
@@ -261,23 +345,6 @@ function RunMark({ state }: { state: "succeeded" | "failed" | "paused" }) {
   return <Icon size={14} strokeWidth={2} aria-hidden="true" className={`mb-[3px] ml-1.5 inline-block ${state === "succeeded" ? "text-moegi-600" : state === "failed" ? "text-shu-600" : "text-slate-500"}`} />;
 }
 
-/** The changes that wait on these steps, each in the margin. */
-function ChangeNotes({ steps, ctx }: { steps: ManualStep[]; ctx: RowCtx }) {
-  return (
-    <>
-      {steps.flatMap((step) =>
-        step.callPath.length > 0
-          ? []
-          : (ctx.changes.get(step.stepId) ?? []).map((c) => (
-              <Aside key={`${step.key}:${c.entry.revision}`}>
-                <ChangeNote change={c} step={step} defs={ctx.defs} />
-              </Aside>
-            )),
-      )}
-    </>
-  );
-}
-
 /** One level deeper: everything the picked step is set to, where it is said, then what is done to the step as a whole. More is on the right button. */
 function Details({ stepId, ctx }: { stepId: string; ctx: RowCtx }) {
   const act = "inline-flex items-center gap-1 hover:text-ink";
@@ -320,91 +387,104 @@ function AddHere({ parentId, block, ctx, first = false }: { parentId: string | n
   );
 }
 
-/** `notes`: false on a screen's steps, whose changes are said together before the screen's picture. */
-function StepRow({ step, ctx, notes = true }: { step: ManualStep; ctx: RowCtx; notes?: boolean }) {
+/** The room a step's picture takes beside its words, and the gap between the two. */
+const PICTURE = "@[52rem]/paper:grid-cols-[28px_minmax(0,1fr)_320px]";
+
+/**
+ * A step's picture: cut close round what the step touches, so the place is read at the size of the margin
+ * (a screen's whole width in 320px shows nothing). A wide thing (a table) keeps the width it has.
+ */
+function closeCrop(shot: ManualShot, mark: Rect): Rect {
+  const width = Math.min(shot.width, Math.max(560, mark.width + 120));
+  const height = Math.min(shot.height, Math.max(width * 0.5, mark.height + 90));
+  const fit = (centre: number, size: number, max: number) => Math.round(Math.max(0, Math.min(max - size, centre - size / 2)));
+  return { x: fit(mark.x + mark.width / 2, width, shot.width), y: fit(mark.y + mark.height / 2, height, shot.height), width: Math.round(width), height: Math.round(height) };
+}
+
+/**
+ * One step: its number, what is done in one sentence, and beside it the place on the screen it is done at.
+ * `scene`: the screen the step is on (its picture is cut to what this step touches).
+ */
+function StepRow({ step, ctx, scene }: { step: ManualStep; ctx: RowCtx; scene?: Scene }) {
   const picked = ctx.picked === step.stepId;
   const onPick = ctx.onPick;
   const own = step.callPath.length === 0 ? ctx.stepOf(step.stepId) : undefined;
   const state = own ? ctx.run?.steps[step.stepId] : undefined;
   const error = ctx.run?.pause?.error ?? ctx.run?.failure;
   const failed = own && state === "failed" && error && (!error.stepId || error.stepId === step.stepId) ? errorLine(error, own) : null;
+  // Said as a sentence where the kind of step reads as one; a kind that would read as its settings in a row is said by the name it was given.
+  const type = own?.type ?? "";
+  const said = step.how && (hasSentence(type) || !own) ? withoutSaveAs(step.how) : null;
+  const changes = step.callPath.length > 0 ? [] : (ctx.changes.get(step.stepId) ?? []);
+  // The picture: where this step is done, or the whole screen for the first step of a screen none of whose steps has a place on it.
+  const shot = scene?.shot ?? null;
+  const wholeScreen = shot && !step.mark && scene!.steps[0] === step && scene!.steps.every((x) => !x.mark);
+  const marks: SceneMark[] = step.mark ? [{ number: step.number, rect: step.mark, operates: step.operates }] : [];
+  const pictured = shot && (step.mark || wholeScreen);
   return (
-    <li className="scroll-my-24 py-2.5" data-step={own ? step.stepId : undefined} onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
-      {notes && <ChangeNotes steps={[step]} ctx={ctx} />}
-      <div className="grid grid-cols-[28px_minmax(0,1fr)]">
-      <span className="pt-[3px] text-[12px] text-slate-400 tabular-nums">{step.number}</span>
-      <div className="min-w-0">
-        <button type="button" onClick={() => onPick(step.stepId)} className={`text-left text-[15px] leading-[1.6] text-ink ${step.how ? "font-semibold" : ""}`}>
-          {/* The step the run is on is under the highlighter, as the one picked is. */}
-          <span className={picked || state === "running" ? "flow-chart-on" : ""}>{step.text}</span>
-          {state && state !== "running" && state !== "skipped" && <RunMark state={state} />}
-        </button>
-        {failed && <p className="mt-0.5 text-[13px] leading-[1.7] text-shu-600">{failed}</p>}
-        {step.how && plain(step.how) !== step.text && (
-          <p className="mt-0.5 text-[14px] leading-[1.8] text-slate-700">
-            <Words parts={step.how} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} onOpen={() => (picked ? undefined : onPick(step.stepId))} />
+    <li className="scroll-my-24 border-t border-slate-100 py-3 first:border-t-0 @[52rem]/paper:-mr-[344px]" data-step={own ? step.stepId : undefined} onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
+      <div className={`grid grid-cols-[28px_minmax(0,1fr)] gap-y-2.5 ${PICTURE}`}>
+        <span className="pt-[4px] text-[12.5px] text-slate-400 tabular-nums">{step.number}</span>
+        <div className="min-w-0 @[52rem]/paper:pr-6">
+          {/* The sentence opens the step; a value in it is changed where it stands. */}
+          <p
+            role="button"
+            tabIndex={0}
+            title={said && plain(said) !== step.text ? step.text : undefined}
+            onClick={() => onPick(step.stepId)}
+            onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onPick(step.stepId)}
+            className="cursor-pointer text-[15.5px] leading-[1.75] text-ink"
+          >
+            {/* The step the run is on is under the highlighter, as the one picked is. */}
+            <span className={picked || state === "running" ? "flow-chart-on" : ""}>
+              {said ? <Words parts={said} step={own} onValue={(key, value) => ctx.onValue(step.stepId, key, value)} onOpen={() => (picked ? undefined : onPick(step.stepId))} /> : step.text}
+            </span>
+            {state && state !== "running" && state !== "skipped" && <RunMark state={state} />}
           </p>
+          {failed && <p className="mt-0.5 text-[13px] leading-[1.7] text-shu-600">{failed}</p>}
+          {step.note && <p className="mt-1 text-[13px] leading-[1.7] text-slate-600">{step.note}</p>}
+          {/* One level deeper: everything the step is set to, where it is said. A step of a called flow is changed in that flow. */}
+          {picked && step.callPath.length === 0 && <Details stepId={step.stepId} ctx={ctx} />}
+        </div>
+        {(pictured || changes.length > 0) && (
+          <div className="col-span-2 space-y-2.5 pl-7 @[52rem]/paper:col-span-1 @[52rem]/paper:pl-0">
+            {changes.map((c) => (
+              <ChangeNote key={c.entry.revision} change={c} step={step} defs={ctx.defs} />
+            ))}
+            {pictured && <StepFigure scene={scene!} shot={shot} marks={marks} pictures={ctx.pictures} />}
+          </div>
         )}
-        {step.note && <p className="mt-1 text-[12.5px] leading-[1.7] text-slate-500">{step.note}</p>}
-        {/* One level deeper: everything the step is set to, where it is said. A step of a called flow is changed in that flow. */}
-        {picked && step.callPath.length === 0 && <Details stepId={step.stepId} ctx={ctx} />}
-      </div>
       </div>
     </li>
   );
 }
 
-/** A screen's picture in the margin, with what it is under it. */
-function Figure({ scene, pictures }: { scene: Scene; pictures: Pictures }) {
-  const shot = scene.shot;
-  if (!shot) return null;
+/** Where a step is done, cut out of its screen: the whole screen opens from it, and what must not be shown is hidden from it. */
+function StepFigure({ scene, shot, marks, pictures }: { scene: Scene; shot: ManualShot; marks: SceneMark[]; pictures: Pictures }) {
   const mask = pictures.masks[shot.key];
+  const whole = () => pictures.onWhole(shot, sceneMarks(scene));
   return (
-    <figure className="group/fig">
-      {/* The whole picture opens from the picture itself: there is no room on it for a button. */}
-      <div
-        role="button"
-        tabIndex={0}
-        title={t.manual.whole}
-        onClick={() => pictures.onWhole(shot, sceneMarks(scene))}
-        onKeyDown={(e) => e.key === "Enter" && pictures.onWhole(shot, sceneMarks(scene))}
-        className="cursor-zoom-in overflow-hidden rounded-[4px] border border-slate-200"
-      >
-        <ShotFrame shot={shot} marks={sceneMarks(scene)} ctx={pictures} />
+    <figure className="group/fig relative">
+      <div role="button" tabIndex={0} title={`${t.manual.screenOf(scene.title, scene.app === "desktop")}${shot.draft ? `（${t.manual.draft}）` : ""}：${t.manual.whole}`} onClick={whole} onKeyDown={(e) => e.key === "Enter" && whole()} className="cursor-zoom-in overflow-hidden rounded-[3px] border border-slate-300">
+        <ShotFrame shot={shot} marks={marks} ctx={pictures} crop={marks[0] ? closeCrop(shot, marks[0].rect) : undefined} bare />
       </div>
-      <figcaption className="mt-1.5 flex items-start gap-2 text-[12px] leading-[1.5] text-slate-500">
-        <span className="min-w-0 flex-1">
-          {t.manual.screenOf(scene.title, scene.app === "desktop")}
-          {shot.draft && `（${t.manual.draft}）`}
-          {maskStale(mask, shot) && <span className="block text-shu-600">{t.manual.maskStale}</span>}
-        </span>
-        <button
-          type="button"
-          title={t.manual.hideTitle}
-          onClick={() => pictures.onMask(shot)}
-          className="inline-flex shrink-0 items-center gap-1 text-slate-500 opacity-0 group-focus-within/fig:opacity-100 group-hover/fig:opacity-100 hover:text-ink"
-        >
-          <EyeOff size={12} strokeWidth={1.75} aria-hidden="true" />
-          {t.manual.hide}
-          {mask && mask.boxes.length > 0 ? ` ${mask.boxes.length}` : ""}
-        </button>
-      </figcaption>
+      {maskStale(mask, shot) && <p className="mt-1 text-[12px] leading-[1.5] text-shu-600">{t.manual.maskStale}</p>}
+      <button
+        type="button"
+        title={t.manual.hideTitle}
+        onClick={() => pictures.onMask(shot)}
+        className="absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-[4px] bg-sheet px-1.5 py-0.5 text-[11.5px] text-slate-600 opacity-0 shadow-[0_0_0_1px_var(--color-slate-300)] group-focus-within/fig:opacity-100 group-hover/fig:opacity-100 hover:text-ink"
+      >
+        <EyeOff size={12} strokeWidth={1.75} aria-hidden="true" />
+        {t.manual.hide}
+        {mask && mask.boxes.length > 0 ? ` ${mask.boxes.length}` : ""}
+      </button>
     </figure>
   );
 }
 
 /** The width of the margin beside the words, and the room between the two. */
-const MARGIN = "@[52rem]/paper:mr-[298px]";
-
-/**
- * What goes with the words, in the margin beside them: hung from where it is
- * said, and stacked down the margin when the words beside it are short, so a
- * tall picture never pushes the next step down. On a narrow paper it lies
- * between the lines instead.
- */
-function Aside({ children }: { children: React.ReactNode }) {
-  return <div className="mb-3 @[52rem]/paper:clear-right @[52rem]/paper:float-right @[52rem]/paper:mt-2.5 @[52rem]/paper:-mr-[298px] @[52rem]/paper:w-[250px]">{children}</div>;
-}
+const MARGIN = "@[52rem]/paper:mr-[344px]";
 
 type RowCtx = {
   pictures: Pictures;
@@ -434,33 +514,21 @@ type RowCtx = {
 function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
   if (item.kind === "scene") {
     return (
-      <>
-        <ChangeNotes steps={item.steps} ctx={ctx} />
-        {item.shot && (
-          <Aside>
-            <Figure scene={item} pictures={ctx.pictures} />
-          </Aside>
-        )}
-        <ol>
-          {[...item.steps, null].map((s, i) => (
-            <li key={s?.key ?? "end"} className="contents">
-              {item.waits
-                .filter((x) => x.at === i)
-                .map((x, k) => (
-                  <p key={k} className="flex items-start gap-1.5 py-1 pl-7 text-[12.5px] leading-[1.7] text-slate-500">
-                    <Clock size={12} strokeWidth={1.75} aria-hidden="true" className="mt-[5px] shrink-0" />
-                    {x.text}
-                  </p>
-                ))}
-              {s && (
-                <ol>
-                  <StepRow step={s} ctx={ctx} notes={false} />
-                </ol>
-              )}
-            </li>
-          ))}
-        </ol>
-      </>
+      <ol>
+        {[...item.steps, null].map((st, i) => (
+          <Fragment key={st?.key ?? "end"}>
+            {/* What the flow waits for or looks at on the screen: said in place, not numbered. */}
+            {item.waits
+              .filter((x) => x.at === i)
+              .map((x, k) => (
+                <li key={k} className="py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-600">
+                  {x.text}
+                </li>
+              ))}
+            {st && <StepRow step={st} ctx={ctx} scene={item} />}
+          </Fragment>
+        ))}
+      </ol>
     );
   }
   if (item.kind === "action") {
@@ -486,7 +554,7 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
     const open = item.ids.find((id) => id && id === ctx.picked);
     return (
       <div className="py-1.5 pl-7">
-        <p className="text-[13px] leading-[1.7] text-slate-500">
+        <p className="text-[13px] leading-[1.7] text-slate-600">
           {item.texts.map((text, i) => {
             const id = item.ids[i];
             return (
@@ -508,15 +576,14 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
     );
   }
   // What repeats, what runs only sometimes and what belongs together: a rule down the side, named at its top.
-  const Icon = item.kind === "loop" ? Repeat : item.kind === "branch" ? Split : null;
   // The step the part is of opens from its name, on the part that comes first (not again on 「そうでないとき」).
   const head = item.of && (!item.block || !["else", "catch", "finally"].includes(item.block)) ? item.of : null;
-  const more = item.kind === "loop" && item.times !== null ? t.manual.loopTimes(item.times) : item.kind === "branch" && item.taken !== null ? (item.taken ? t.manual.took : t.manual.notTaken) : null;
+  // Only what the last run did there: that it did not come this way is not something to read on every line.
+  const more = item.kind === "loop" && item.times ? t.manual.loopTimes(item.times) : item.kind === "branch" && item.taken ? t.manual.took : null;
   return (
     <div className={`my-2 ml-[5px] border-l-2 pl-[21px] ${item.kind === "loop" ? "border-[var(--manual-loop-line)]" : "border-slate-200"}`}>
       {(item.label || more) && (
-        <p className="flex flex-wrap items-center gap-x-2 py-1.5 text-[13px] text-slate-600">
-          {Icon && <Icon size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-500" />}
+        <p className="flex flex-wrap items-baseline gap-x-2 py-1.5 text-[13.5px] text-slate-700">
           {head ? (
             <button type="button" data-step={head} onClick={() => ctx.onPick(head)} onContextMenu={ctx.menu(head)} className="text-left font-medium hover:text-ink">
               <span className={head === ctx.picked ? "flow-chart-on text-ink" : ""}>{item.label}</span>
@@ -528,7 +595,7 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
         </p>
       )}
       {head && head === ctx.picked && <Details stepId={head} ctx={ctx} />}
-      <div className={item.kind === "branch" && item.taken === false ? "opacity-70" : ""}>
+      <div>
         {item.items.map((c, i) => (
           <Item key={i} item={c} ctx={ctx} />
         ))}
@@ -547,7 +614,7 @@ function ChapterView({ chapter, ctx }: { chapter: Chapter; ctx: RowCtx }) {
     <section data-chapter={chapter.number} className="mt-10 scroll-mt-6">
       {/* Named by a step of the flow, the heading opens that step as its name would lower down. */}
       <h2 className="mb-2" data-step={of} onClick={of ? () => ctx.onPick(of) : undefined} onContextMenu={of ? ctx.menu(of) : undefined} style={of ? { cursor: "pointer" } : undefined}>
-        <SheetHeading n={chapter.role ? undefined : chapter.number} size="chapter" aside={whole?.kind === "loop" && whole.times !== null ? t.manual.loopTimes(whole.times) : undefined}>
+        <SheetHeading n={chapter.role ? undefined : chapter.number} size="chapter" aside={whole?.kind === "loop" && whole.times ? t.manual.loopTimes(whole.times) : undefined}>
           {chapter.title}
         </SheetHeading>
       </h2>
@@ -613,6 +680,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const testing = useStudio((s) => s.stepTest?.running ?? false);
   const errors = useStudio((s) => s.validation?.issues.some((i) => i.severity === "error") ?? false);
   const revision = useStudio((s) => s.flow?.revision);
+  const published = useStudio((s) => s.published);
   const [manifest, setManifest] = useState<ManualManifest | null>(null);
   const [masks, setMasks] = useState<Record<string, Mask>>({});
   const [drafts, setDrafts] = useState<Drafts>({});
@@ -747,17 +815,20 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
       <div className="mx-auto flex w-fit max-w-full items-start gap-6">
         {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
         <article className={`${PAPER} ${chart ? "w-fit min-w-[min(980px,calc(100cqw-40px))]" : "@container/paper w-[980px] max-w-full min-w-0"}`}>
-          <header className={`flow-root px-10 pt-11 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]`}>
-            <div className={MARGIN}>
-              {!chart && (
-                <Aside>
-                  <LastRun manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
-                </Aside>
-              )}
-              <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{doc.title}</h1>
-              {doc.description && <p className="mt-2 text-[14px] leading-relaxed text-slate-600">{doc.description}</p>}
-              <Facts doc={doc} when={when} />
-            </div>
+          <header className="relative px-10 pt-12 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
+            <Stripe className="top-0 h-[4px]" />
+            <Head
+              doc={doc}
+              when={when}
+              edition={editionOf(published, [], day)}
+              manifest={manifest}
+              short={chart}
+              actions={
+                chart ? null : (
+                  <LastRun blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
+                )
+              }
+            />
           </header>
           {chart ? (
             noSteps ? (

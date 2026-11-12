@@ -123,7 +123,7 @@ function MaskBoxes({ boxes, regions, crop, k }: { boxes: MaskBox[]; regions?: Re
 }
 
 /** The frame around what each step touches, with the step's number on its corner. */
-function Marks({ marks, crop, k }: { marks: SceneMark[]; crop: Rect; k: number }) {
+function Marks({ marks, crop, k, bare = false }: { marks: SceneMark[]; crop: Rect; k: number; bare?: boolean }) {
   return (
     <>
       {marks.map((m, i) => (
@@ -135,12 +135,12 @@ function Marks({ marks, crop, k }: { marks: SceneMark[]; crop: Rect; k: number }
           }`}
           style={{ left: (m.rect.x - crop.x) * k - 3, top: (m.rect.y - crop.y) * k - 3, width: m.rect.width * k + 6, height: m.rect.height * k + 6 }}
         >
-          <i
+          {!bare && <i
             style={{ left: Math.max(-8, 4 - (m.rect.x - crop.x) * k) }}
             className={`absolute -top-[8px] grid size-[14px] place-items-center rounded-full text-[9.5px] font-bold not-italic shadow-[0_0_0_1.5px_white] ${m.number === null ? "bg-slate-600 text-white" : "bg-primary text-on-primary"}`}
           >
             {m.number ?? <Clock size={9} />}
-          </i>
+          </i>}
         </span>
       ))}
     </>
@@ -152,7 +152,8 @@ function Marks({ marks, crop, k }: { marks: SceneMark[]; crop: Rect; k: number }
  * numbers on the corners of what they touch (beside it, a number would cover
  * the next field or fall off the picture's edge).
  */
-export function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[]; ctx: Pick<Pictures, "urls" | "want" | "masks"> }) {
+/** `bare`: the picture is of one step, so the frame needs no number on it. */
+export function ShotFrame({ shot, marks, ctx, bare = false, crop: cut }: { shot: ManualShot; marks: SceneMark[]; ctx: Pick<Pictures, "urls" | "want" | "masks">; bare?: boolean; crop?: Rect }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -166,7 +167,7 @@ export function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: Scene
     setWidth(el.clientWidth);
     return () => observer.disconnect();
   }, []);
-  const crop = cropOf(shot.width, shot.height, marks.map((m) => m.rect));
+  const crop = cut ?? cropOf(shot.width, shot.height, marks.map((m) => m.rect));
   const k = width > 0 ? width / crop.width : 0;
   const url = ctx.urls[shot.file];
   const mask = ctx.masks[shot.key];
@@ -181,7 +182,7 @@ export function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: Scene
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
           <MaskBoxes boxes={mask?.boxes ?? []} regions={blurRegions(shot.regions, operated(marks))} crop={crop} k={k} />
-          <Marks marks={marks} crop={crop} k={k} />
+          <Marks marks={marks} crop={crop} k={k} bare={bare} />
         </>
       )}
     </div>
