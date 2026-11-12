@@ -1,5 +1,6 @@
 import type { Flow, StepTypeDef, ValidationIssue } from "@spellsheet/schema";
-import { Check, FolderOpen, KeyRound, MousePointerClick, Sparkles } from "lucide-react";
+import { useContext } from "react";
+import { Check, FileInput, KeyRound, MousePointerClick, Sparkles } from "lucide-react";
 import { flowBusy, openAsk, useAgentApiMaybe, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
 import { stepLabel, t } from "../lib/i18n";
@@ -7,8 +8,9 @@ import { issueText } from "../lib/issueText";
 import { writtenAt } from "../lib/problemText";
 import { authorIssues, fixText, PERSON_CODES, type Todo, todoTitle } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
-import { useProjectMaybe } from "../project";
+import { ProjectContext } from "../project";
 import { findStep } from "../store";
+import { putIntoFlow } from "./FilePlaces";
 
 /**
  * The flow's checks, in the order a person deals with them: what only they
@@ -44,8 +46,8 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
   const place = useStudio((s) => s.place);
   const setPlace = useStudio((s) => s.setPlace);
   const openSecretForm = useStudio((s) => s.openSecretForm);
-  const openFolder = useProjectMaybe((s) => s.open, null);
-  const setPanelOpen = useProjectMaybe((s) => s.setPanelOpen, null);
+  const flowId = useStudio((s) => s.flow?.id);
+  const project = useContext(ProjectContext);
   const act = (todo: Todo) => {
     onAct?.();
     if (todo.kind === "pick") {
@@ -54,10 +56,8 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
       select({ kind: "part", name: todo.part });
     }
     else if (todo.kind === "secret") openSecretForm({ name: todo.name, sites: [], fields: todo.fields });
-    else {
-      setPanelOpen?.(true);
-      void openFolder?.(todo.path.split("/")[0] ?? "");
-    }
+    // The file is copied into the flow's folder under the name the flow reads.
+    else if (project && flowId) void putIntoFlow(project, flowId, todo.path);
   };
   return (
     <section aria-labelledby="todos-title" className="bg-amber-50/60">
@@ -70,7 +70,7 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
       </div>
       <ul className="pb-1.5">
         {todos.map((todo) => {
-          const Icon = todo.kind === "pick" ? MousePointerClick : todo.kind === "secret" ? KeyRound : FolderOpen;
+          const Icon = todo.kind === "pick" ? MousePointerClick : todo.kind === "secret" ? KeyRound : FileInput;
           const action = todo.kind === "pick" ? t.todos.pickAction : todo.kind === "secret" ? t.todos.secretAction : t.todos.fileAction;
           const help = todo.kind === "pick" ? (todo.image ? t.todos.snipHelp : t.todos.pickHelp) : todo.kind === "secret" ? t.todos.secretHelp : t.todos.fileHelp;
           return (
