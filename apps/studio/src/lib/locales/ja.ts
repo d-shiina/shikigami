@@ -383,7 +383,7 @@ export const ja = {
     string: "文字",
     number: "数値",
     boolean: "はい／いいえ",
-    object: "1 件分のデータ",
+    object: "1 行分",
     array: "一覧",
     any: "決めない",
   },
@@ -817,7 +817,7 @@ export const ja = {
     installFailed: "インストールできませんでした",
     setup: {
       title: "AI を使う準備",
-      lead: "AI にフローを作ってもらうには、AI をこの PC に入れてサインインします。ターミナルは要りません。",
+      lead: "AI にフローを作ってもらうには、AI をこの PC に入れてサインインします。",
       which: "使う AI",
       note: {
         claudeCode: "Anthropic の AI です。あなたの Claude アカウントで動き、料金もそのアカウントにかかります。",

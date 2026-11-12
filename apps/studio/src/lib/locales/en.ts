@@ -817,7 +817,7 @@ export const en: Dict = {
     installFailed: "Could not install",
     setup: {
       title: "Set up the AI",
-      lead: "To have the AI build flows, install it on this PC and sign in. No terminal needed.",
+      lead: "To have the AI build flows, install it on this PC and sign in.",
       which: "AI to use",
       note: {
         claudeCode: "Anthropic's AI. It runs on your Claude account and bills that account.",
