@@ -18,7 +18,7 @@ uuid.workspace = true
 aes-gcm = "0.10.3"
 base64 = "0.22.1"
 getrandom = "0.3.4"
-hmac = "0.12.1"
+hmac = "0.13.0"
 sha1 = "0.10.6"
 
 [target.'cfg(windows)'.dependencies]
