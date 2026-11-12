@@ -33,7 +33,7 @@ describe("writerAsk", () => {
       title: "「経費精算」がエラーで一時停止しました",
       body: "「送信を押す」で止まっています。Writer で続け方を選んでください",
     });
-    expect(writerAsk({ ...base, run: pause("breakpoint", 9) })?.title).toBe("「経費精算」がブレークポイントで一時停止しました");
+    expect(writerAsk({ ...base, run: pause("breakpoint", 9) })?.title).toBe("「経費精算」が指定した位置で一時停止しました");
     expect(writerAsk({ ...base, run: pause("step") })).toBeNull();
     expect(writerAsk({ ...base, run: pause("requested") })).toBeNull();
   });

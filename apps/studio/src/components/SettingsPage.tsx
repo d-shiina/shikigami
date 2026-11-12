@@ -3,7 +3,7 @@
 // is about, or becomes a new section here (and in SECTIONS), never a button
 // elsewhere. Laid out like Windows 11 / VS Code settings: the sections are
 // listed on the left, the settings fill the width on the right, one row each.
-import { Bot, FolderOpen, Info, type LucideIcon, Monitor, Play, ShieldCheck } from "lucide-react";
+import { Bot, ChevronDown, FolderOpen, Info, type LucideIcon, Monitor, Play, ShieldCheck } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgent } from "../agent";
 import { type BandSettings, loadBandSettings, saveBandSettings } from "../lib/bandSettings";
@@ -85,6 +85,8 @@ function RunSection() {
 function AgentSection() {
   const info = useAgent((s) => s.info);
   const setOpen = useAgent((s) => s.setOpen);
+  // For people who use the AI outside SpellSheet too: folded away by default.
+  const [more, setMore] = useState(false);
   return (
     <SettingsGroup>
       <SettingsRow label={t.shell.agentPick} hint={t.shell.agentPickHint} htmlFor="settings-agent">
@@ -107,14 +109,25 @@ function AgentSection() {
           <ApiKeyBox inSettings />
         </SettingsRow>
       )}
-      {info?.command && (
+      <SettingsRow label={t.shell.agentMore} hint={t.shell.agentMoreHint}>
+        <button
+          type="button"
+          aria-expanded={more}
+          onClick={() => setMore(!more)}
+          className="flex h-7 items-center gap-1 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+        >
+          <ChevronDown size={13} className={more ? "rotate-180" : ""} aria-hidden />
+          {more ? t.shell.agentMoreHide : t.shell.agentMoreShow}
+        </button>
+      </SettingsRow>
+      {more && info?.command && (
         <SettingsRow label={t.shell.agentCommand}>
           <code className="block truncate font-mono text-[12px] text-slate-600" title={info.command}>
             {info.command}
           </code>
         </SettingsRow>
       )}
-      <McpSetupRow />
+      {more && <McpSetupRow />}
     </SettingsGroup>
   );
 }
