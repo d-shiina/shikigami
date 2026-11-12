@@ -745,34 +745,6 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   return (
     <div ref={desk} className="flow-chart absolute inset-0 overflow-auto px-5 py-7" data-sheet={mode}>
       <div className="mx-auto flex w-fit max-w-full items-start gap-6">
-        {!chart && doc.chapters.length > 1 && (
-          <nav className="sticky top-0 hidden w-[176px] shrink-0 pt-11 text-[12.5px] leading-[1.5] @[76rem]:block">
-            {/* The chapters down a ruled line, as the paper rules its own head: the one being read is in ink, with the line under it drawn dark. */}
-            <p className="mb-3 border-b border-slate-300 pb-2 text-[11.5px] font-medium tracking-[0.08em] text-slate-500">{t.manual.contents}</p>
-            <ol className="border-l border-slate-300">
-              {doc.chapters.map((c) => {
-                const here = c.number === reading;
-                return (
-                  <li key={c.number}>
-                    <button
-                      type="button"
-                      aria-current={here ? "true" : undefined}
-                      onClick={() => desk.current?.querySelector(`[data-chapter="${c.number}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      className={`-ml-px grid w-full grid-cols-[20px_minmax(0,1fr)] border-l-2 py-[5px] pl-3 text-left ${here ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
-                    >
-                      <span className={`tabular-nums ${here ? "" : "text-slate-400"}`}>{c.role ? "" : c.number}</span>
-                      <span>
-                        {c.title}
-                        {/* Something in it waits to be looked at. */}
-                        {stepIds(c.items).some((id) => changes.has(id)) && <span aria-hidden="true" className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle" />}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </nav>
-        )}
         {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
         <article className={`${PAPER} ${chart ? "w-fit min-w-[min(980px,calc(100cqw-40px))]" : "@container/paper w-[980px] max-w-full min-w-0"}`}>
           <header className={`flow-root px-10 pt-11 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]`}>
@@ -804,6 +776,35 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
             </div>
           )}
         </article>
+        {/* The chapters stand on the right of the paper: the left of the work is where the AI is asked. */}
+        {!chart && doc.chapters.length > 1 && (
+          <nav className="sticky top-0 hidden w-[176px] shrink-0 pt-11 text-[12.5px] leading-[1.5] @[76rem]:block">
+            {/* The chapters down a ruled line, as the paper rules its own head: the one being read is in ink, with the line under it drawn dark. */}
+            <p className="mb-3 border-b border-slate-300 pb-2 text-[11.5px] font-medium tracking-[0.08em] text-slate-500">{t.manual.contents}</p>
+            <ol className="border-l border-slate-300">
+              {doc.chapters.map((c) => {
+                const here = c.number === reading;
+                return (
+                  <li key={c.number}>
+                    <button
+                      type="button"
+                      aria-current={here ? "true" : undefined}
+                      onClick={() => desk.current?.querySelector(`[data-chapter="${c.number}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      className={`-ml-px grid w-full grid-cols-[20px_minmax(0,1fr)] border-l-2 py-[5px] pl-3 text-left ${here ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
+                    >
+                      <span className={`tabular-nums ${here ? "" : "text-slate-400"}`}>{c.role ? "" : c.number}</span>
+                      <span>
+                        {c.title}
+                        {/* Something in it waits to be looked at. */}
+                        {stepIds(c.items).some((id) => changes.has(id)) && <span aria-hidden="true" className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle" />}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
       </div>
       {/* What waits to be looked at, counted once at the foot of the desk; on the review desk its own foot says it. */}
       {place === "flows" && pending.length > 0 && (

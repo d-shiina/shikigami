@@ -1,8 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code, Codex, Antigravity, Gemini CLI, GitHub Copilot or Cursor) with SpellSheet's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { setAgentPlace, useAgentPlace, type AgentPlace } from "../lib/agentPlace";
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Clock, Download, ListChecks, Loader2, PanelBottom, PanelLeft, PanelRight, Plus, Square, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, Clock, Download, ListChecks, Loader2, Plus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { type AgentChoice, type AgentKind, type InstallStep, agent } from "../lib/api";
@@ -19,23 +18,10 @@ const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[na
 const chatTitle = (c: Chat) => c.title || t.agent.untitled;
 
 /**
- * Asking the AI, under the sheet: one field at the foot of the work, with what
- * the AI is doing (or asking) on a line over it. The whole conversation opens
- * upward from the field, over the work (the paper keeps its room), and closes again. From its header it can be moved into a column on the
- * left or the right instead (`width` given): then the conversation is always in view while it is open.
- * `desk`: the work above is a paper on the desk, so the field floats on the desk too.
+ * Asking the AI: a column of its own on the left of the work, the conversation above and the field at its foot
+ * (asked on the left, looked at on the paper to the right). Its place is fixed; Ctrl+J and the window bar's button close and open it.
  */
-const MOVES: { to: AgentPlace; Icon: typeof PanelLeft; label: () => string }[] = [
-  { to: "left", Icon: PanelLeft, label: () => t.agent.moveLeft },
-  { to: "below", Icon: PanelBottom, label: () => t.agent.moveBelow },
-  { to: "right", Icon: PanelRight, label: () => t.agent.moveRight },
-];
-
-export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
-  const column = width !== undefined;
-  const placed = useAgentPlace();
-  // The places it is not in now, each a button that moves it there.
-  const moves = MOVES.filter((m) => m.to !== placed);
+export function AgentPane({ width }: { width: number }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
@@ -94,23 +80,13 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
   };
   // Only the last reply's card can still be answered, and not while the AI works.
   const canChoose = !busy && !blockedElsewhere && available;
-  const last = items.at(-1);
-  // A question the AI is waiting on is answered right here, without opening the conversation.
-  const asking = canChoose && last?.role === "ai" && last.parts.some((p) => p.kind === "choice") ? last : null;
-  const needsSetup = info !== null && (!available || (info.usesApiKey && !info.hasApiKey));
-  const said = lastWords(chat);
   const CARD = "rounded-[8px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]";
   // Closed, the column draws nothing (what was being written is kept with the conversation).
-  if (column && (!open || width === 0)) return null;
+  if (!open || width === 0) return null;
   return (
-    <div
-      className={column ? "flex h-full shrink-0 flex-col bg-sheet" : `relative z-30 shrink-0 px-5 pt-1 pb-3 ${desk ? "flow-chart" : "bg-sheet"}`}
-      style={column ? { width } : undefined}
-      data-agent-dock
-    >
-      <div className={column ? "flex min-h-0 flex-1 flex-col" : "relative mx-auto w-full max-w-[760px]"}>
-        {open ? (
-          <div className={column ? "flex min-h-0 flex-1 flex-col" : `absolute inset-x-0 bottom-full mb-2 flex max-h-[min(58vh,560px)] min-h-0 flex-col ${CARD}`}>
+    <div className="flex h-full shrink-0 flex-col bg-sheet" style={{ width }} data-agent-dock>
+      <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 pr-2 pl-2">
               <ChatSwitcher chat={chat} />
               <button
@@ -123,19 +99,6 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
               >
                 <Plus size={15} />
               </button>
-              {/* Moved on the spot, as an editor's side panel is: under the work, or into a column on the left or the right. */}
-              {moves.map(({ to, Icon, label }) => (
-                <button
-                  key={to}
-                  type="button"
-                  onClick={() => setAgentPlace(to)}
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
-                  title={label()}
-                  aria-label={label()}
-                >
-                  <Icon size={15} />
-                </button>
-              ))}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -143,7 +106,7 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
                 title={`${t.agent.closeTalk}（Ctrl+J）`}
                 aria-label={t.agent.closeTalk}
               >
-                {column ? <X size={15} /> : <ChevronDown size={15} />}
+                <X size={15} />
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -169,38 +132,7 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
               <div ref={end} />
             </div>
           </div>
-        ) : asking ? (
-          <div className={`absolute inset-x-0 bottom-full mb-2 max-h-[40vh] overflow-y-auto px-4 py-3 ${CARD}`}>
-            <Item item={asking} onChoose={(answer) => void submit(answer)} />
-          </div>
-        ) : null}
-        {needsSetup && !open ? (
-          // Nothing can be asked yet: one line that leads to setting the AI up, instead of a field that cannot be written in.
-          <div className={`${CARD} flex items-center gap-3 px-4 py-2.5 text-[12.5px] text-slate-600`}>
-            <span className="min-w-0 flex-1 truncate">{t.agent.needsSetup}</span>
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="h-7 shrink-0 rounded-[6px] bg-primary px-3 text-[12px] font-medium text-on-primary hover:bg-primary-hover"
-            >
-              {t.agent.setUp}
-            </button>
-          </div>
-        ) : (
-          <div className={`${CARD} ${column ? "m-3 mt-0" : ""} px-3 pt-2 pb-2 focus-within:shadow-[0_0_0_1px_var(--color-primary),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}>
-            {/* What the field is about, and what the AI last said or is doing: pressed, the conversation opens. */}
-            {!open && !asking && (busy || said) && (
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                title={`${t.agent.openTalk}（Ctrl+J）`}
-                className="mb-1 flex w-full min-w-0 items-center gap-1.5 text-left text-[11.5px] text-slate-500 hover:text-ink"
-              >
-                {busy && <Loader2 size={12} className="shrink-0 animate-spin text-primary" aria-hidden="true" />}
-                <span className="min-w-0 truncate">{busy ? `${t.agent.chatWorking}${said ? `：${said}` : ""}` : said}</span>
-                <ChevronUp size={13} className="ml-auto shrink-0" aria-hidden="true" />
-              </button>
-            )}
+          <div className={`${CARD} m-3 mt-0 px-3 pt-2 pb-2 focus-within:shadow-[0_0_0_1px_var(--color-primary),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}>
             <div className="flex items-end gap-2">
               <textarea
                 ref={field}
@@ -258,26 +190,8 @@ export function AgentPane({ desk, width }: { desk: boolean; width?: number }) {
               )}
               {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
               <span className="ml-auto shrink-0 truncate">{blockedElsewhere ? t.agent.busyElsewhere : busy ? t.agent.noteHint : t.agent.sendHint}</span>
-              {!column &&
-                !open &&
-                moves.map(({ to, Icon, label }) => (
-                  <button
-                    key={to}
-                    type="button"
-                    onClick={() => {
-                      setAgentPlace(to);
-                      setOpen(true);
-                    }}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
-                    title={label()}
-                    aria-label={label()}
-                  >
-                    <Icon size={13} />
-                  </button>
-                ))}
             </div>
           </div>
-        )}
       </div>
     </div>
   );

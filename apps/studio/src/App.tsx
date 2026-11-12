@@ -47,7 +47,6 @@ import { Hand } from "lucide-react";
 import { useAttention, writerAsk } from "./lib/attention";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
-import { useAgentPlace } from "./lib/agentPlace";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { askedForFlow, draftingOver, lastAdded, mayDraft, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
@@ -347,7 +346,6 @@ function Shell() {
   const place = useStudio((s) => s.place);
   const [view, setView] = useRemembered<View>(VIEW_KEY, "story", (raw) => (raw === "chart" || raw === "variables" || raw === "result" ? raw : "story"));
   const agentOpen = useAgent((s) => s.open);
-  const agentPlace = useAgentPlace();
   const focusAgent = useAgent((s) => s.focus);
   const openId = useStudio((s) => s.flow?.id ?? null);
   const openName = useStudio((s) => s.flow?.name ?? "");
@@ -375,7 +373,7 @@ function Shell() {
   const reviewView = useReviewView((s) => s.view);
   const shownView = place === "review" ? reviewView : view;
   const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
-  const shown = { agent: agentOpen && agentPlace !== "below", right: editing && hasFlow && rightOpen, inbox: place === "review" };
+  const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, shown, sizes);
   // A panel can grow only into the chart's room above its minimum.
@@ -384,7 +382,7 @@ function Shell() {
     const size = panel === "agent" ? fit.agent : sizes[panel];
     return (
       <Resizer
-        edge={panel === "right" || (panel === "agent" && agentPlace === "right") ? "left" : "right"}
+        edge={panel === "right" ? "left" : "right"}
         size={size}
         min={min}
         max={Math.max(size, Math.min(max, size + fit.chart - CHART_MIN))}
@@ -393,10 +391,10 @@ function Shell() {
       />
     );
   };
-  // Moved there by the person: the AI's conversation in a column of its own beside the work, on either side.
+  // Asking the AI: a column of its own on the left of the work (asked on the left, looked at on the right).
   const agentColumn = fit.agent > 0 && (
     <div className="relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-      <AgentPane desk={false} width={fit.agent} />
+      <AgentPane width={fit.agent} />
       {grip("agent")}
     </div>
   );
@@ -475,17 +473,14 @@ function Shell() {
       </div>
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 gap-1.5 px-1.5 pb-1.5">
-          {agentPlace === "left" && agentColumn}
+          {agentColumn}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
             <Attention />
             <HumanBanner />
             <Banner />
             {work}
-            {/* Asking the AI is under the work in every place (it makes new flows too): on the desk where a paper lies on one. */}
-            {agentPlace === "below" && <AgentPane desk={(place === "flows" && ((hasFlow && view !== "result" && view !== "variables") || drafting)) || place === "review" || place === "inventory"} />}
           </div>
-          {agentPlace === "right" && agentColumn}
         </div>
       </div>
       {dialogs}
