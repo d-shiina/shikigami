@@ -422,7 +422,7 @@ fn attachment_paths(params: &Value) -> Result<Vec<String>, StepError> {
             "FILE_NOT_FOUND",
             format!("attachment {missing} does not exist"),
         )
-        .with_details(json!({ "hint": "Attach files by their full path, e.g. the `path` a word.fillTemplate step returned." })));
+        .with_details(json!({ "path": missing, "hint": "Attach files by their full path, e.g. the `path` a word.fillTemplate step returned." })));
     }
     Ok(attachments)
 }

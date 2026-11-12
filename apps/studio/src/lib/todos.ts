@@ -32,6 +32,26 @@ function* walk(steps: readonly Step[]): Generator<Step> {
   }
 }
 
+/** The steps a run reaches: not disabled, and not inside a disabled step. */
+export function liveStepIds(steps: readonly Step[], into = new Set<string>()): Set<string> {
+  for (const step of steps) {
+    if (step.disabled) continue;
+    if (step.id) into.add(step.id);
+    for (const block of Object.values(step.blocks ?? {})) liveStepIds(block, into);
+  }
+  return into;
+}
+
+/**
+ * Whether a to-do stops the run before it starts. A file is not: a step's path
+ * may be where it writes, or what it checks for, so a missing one is only
+ * pointed out. Nor is anything only disabled steps need.
+ */
+export function blocksRun(todo: Todo, live: ReadonlySet<string>): boolean {
+  if (todo.kind === "file") return false;
+  return todo.steps.length === 0 || todo.steps.some((id) => live.has(id));
+}
+
 /** Every `{ secret, field }` inside a value. */
 function secretsIn(value: unknown, found: { name: string; field?: string }[]): void {
   if (Array.isArray(value)) {

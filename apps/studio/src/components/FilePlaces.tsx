@@ -29,6 +29,21 @@ interface SyncFolders {
 
 const pick = (kind: "file" | "folder", start: string | null) => invoke<string | null>("runner_pick", { kind, start }).catch(() => null);
 
+type Project = NonNullable<React.ContextType<typeof ProjectContext>>;
+
+/** The person picks a file, and a copy goes where the flow reads it (`path`, in the flow's folder). */
+export async function putIntoFlow(project: Project, flowId: string, path: string) {
+  const from = await pick("file", null);
+  if (!from) return;
+  try {
+    await invoke("copy_into_project_as", { id: flowId, from, path, overwrite: false });
+    project.setState({ notice: t.places.copied(path) });
+  } catch (e) {
+    project.setState({ error: typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e) });
+  }
+  await project.getState().onChanged(flowId);
+}
+
 const syncFolders = () => invoke<SyncFolders>("sync_folders").catch((): SyncFolders => ({ profile: null, folders: [] }));
 
 /** Picks a folder on a file server or in a synced cloud folder; null when cancelled. */
@@ -131,15 +146,7 @@ export function NeededFiles() {
     return find(flow.steps) ?? stepId;
   };
   const put = async (path: string) => {
-    const from = await pick("file", null);
-    if (!from || !project) return;
-    try {
-      await invoke("copy_into_project_as", { id: flow.id, from, path, overwrite: false });
-      project.setState({ notice: t.places.copied(path) });
-    } catch (e) {
-      project.setState({ error: typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e) });
-    }
-    await project.getState().onChanged(flow.id);
+    if (project) await putIntoFlow(project, flow.id, path);
   };
   return (
     <div data-needed-files className="mx-1 mb-1 space-y-1.5">

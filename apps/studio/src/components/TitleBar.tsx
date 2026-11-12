@@ -4,6 +4,7 @@
 // buttons sit above, in the window's bar). The window holds one flow at a time, so the bar that names the
 // window names the flow too, as an editor names its document. Everything
 // left between controls is room to drag the window; double-click maximizes.
+import { ArrowLeft } from "lucide-react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
@@ -83,13 +84,18 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
         (place === "library" ? (
           <span className="truncate text-[13px] font-bold">{page}</span>
         ) : (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <button type="button" onClick={() => setPlace("library")} className="shrink-0 rounded-md px-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+          // A way back, then the page's own name: not "フロー / 設定", which reads as settings inside a flow.
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPlace("library")}
+              title={t.backToFlows}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+            >
+              <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
               {t.flows}
             </button>
-            <span className="shrink-0 text-[13px] text-slate-300" aria-hidden="true">
-              /
-            </span>
+            <span className="h-4 w-px shrink-0 bg-slate-200" aria-hidden="true" />
             <span className="truncate text-[13px] font-bold">{page}</span>
           </div>
         ))

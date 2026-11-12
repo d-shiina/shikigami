@@ -512,6 +512,9 @@ const FALLBACK_CHOICES: AgentChoice[] = [
   { kind: "cursor", name: "Cursor", maker: "Cursor", installed: false, selected: false },
 ];
 
+/** The one to take when unsure: the AI SpellSheet is checked with most. */
+const RECOMMENDED: AgentKind = "claudeCode";
+
 /** Picks which AI Studio uses, marking the ones on this PC. */
 export function AgentPicker({ id, disabled }: { id?: string; disabled?: boolean }) {
   const info = useAgent((s) => s.info);
@@ -536,7 +539,7 @@ export function AgentPicker({ id, disabled }: { id?: string; disabled?: boolean 
         {custom && <option value="command">{info?.name}</option>}
         {list.map((c) => (
           <option key={c.kind} value={c.kind}>
-            {`${c.name}（${c.maker}）${c.installed ? "" : ` ・ ${t.agent.setup.notInstalled}`}`}
+            {`${c.name}${c.kind === RECOMMENDED ? t.agent.setup.recommendedTag : ""}${c.installed ? t.agent.setup.installedTag : ""}`}
           </option>
         ))}
       </select>
@@ -568,6 +571,7 @@ function SetupCard() {
         <AgentPicker disabled={busy} />
       </label>
       <div className="leading-relaxed text-slate-600">{t.agent.setup.note[kind === "command" ? "claudeCode" : kind]}</div>
+      {!busy && install.phase !== "failed" && <div className="text-[11.5px] leading-relaxed text-slate-500">{t.agent.setup.unsure}</div>}
       {busy ? (
         <>
           <div className="flex items-start gap-1.5 text-slate-700" role="status">

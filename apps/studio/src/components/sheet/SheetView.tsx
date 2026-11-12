@@ -2,7 +2,8 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, ArrowRight, Download, EyeOff, FileSpreadsheet, FileText, Globe, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
+import { useRunGate } from "../../lib/runGate";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CircleMinus, CirclePause, CircleX, ArrowRight, Download, EyeOff, FileSpreadsheet, FileText, Globe, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -10,6 +11,7 @@ import { locale, t } from "../../lib/i18n";
 import { buildManual, type Rect, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
 import { type SceneMark, sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
+import type { FlowRun } from "../../lib/runResult";
 import { brief, hasSentence, type Part, paramShown, plain, withoutSaveAs } from "../../lib/sentence";
 import type { Flow, Step } from "@spellsheet/schema";
 import { findStep, isActive, trailOf } from "../../store";
@@ -135,18 +137,48 @@ function Thing({ name, kind, out = false }: { name: string; kind: "file" | "site
   );
 }
 
+/** The flow's last run from anywhere (Writer, Runner, a schedule), read again when one here ends. */
+function useLatestRun(flowId: string | undefined): FlowRun | null {
+  const ended = useStudio((s) => (s.run && s.run.flowId === flowId && !isActive(s.run) ? s.run.runId : null));
+  const [latest, setLatest] = useState<FlowRun | null>(null);
+  useEffect(() => {
+    setLatest(null);
+    if (!flowId) return;
+    let live = true;
+    let tries = 0;
+    const load = () =>
+      api.flowRuns(flowId).then(
+        (list) => {
+          if (!live) return;
+          setLatest(list[0] ?? null);
+          // The record is written just after the run's last event.
+          if (ended && !list.some((r) => r.runId === ended) && ++tries < 10) setTimeout(load, 300);
+        },
+        () => live && setLatest(null),
+      );
+    void load();
+    return () => {
+      live = false;
+    };
+  }, [flowId, ended]);
+  return latest;
+}
+
 /**
  * The head of the sheet, as a company's procedure document has one: what it is
  * and its particulars in a ruled table, what goes in and what comes out with the
  * work between them, then what else it runs on. Only what the flow has is drawn.
  */
 /** `short`: over the chart, which draws what the flow works with itself: only what it is and its particulars. */
-function Head({ doc, when, edition, manifest, actions, short = false }: { doc: ManualDoc; when: string[]; edition: { label: string; updated: string | null }; manifest: ManualManifest | null; actions: React.ReactNode; short?: boolean }) {
+function Head({ doc, when, edition, manifest, latest, actions, short = false }: { doc: ManualDoc; when: string[]; edition: { label: string; updated: string | null }; manifest: ManualManifest | null; latest: FlowRun | null; actions: React.ReactNode; short?: boolean }) {
   const w = t.sheetView;
   const failure = doc.chapters.filter((c) => c.role === "failure").flatMap((c) => texts(c.items));
   const work = doc.chapters.filter((c) => !c.role);
   const steps = doc.chapters.reduce((n, c) => n + countSteps(c.items), 0);
-  const ranAt = manifest ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+  // The last run from anywhere (Writer, Runner, a schedule), failed ones too; else the run the pictures came from.
+  const ranWhen = latest?.startedAt ?? manifest?.startedAt ?? null;
+  const ranAt = ranWhen ? new Date(ranWhen).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+  const ranStatus = latest?.status ?? (manifest ? "succeeded" : null);
   const particulars: [string, React.ReactNode][] = [
     [w.edition, edition.label],
     ...(edition.updated ? ([[w.updated, edition.updated]] as [string, React.ReactNode][]) : []),
@@ -155,8 +187,15 @@ function Head({ doc, when, edition, manifest, actions, short = false }: { doc: M
       w.lastRun,
       ranAt ? (
         <span className="inline-flex items-center gap-1.5">
-          <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
+          {ranStatus === "failed" ? (
+            <CircleX size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-shu-600" />
+          ) : ranStatus === "succeeded" ? (
+            <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
+          ) : (
+            <CircleMinus size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-400" />
+          )}
           <span className="tabular-nums">{ranAt}</span>
+          {ranStatus && ranStatus !== "succeeded" && <span className={ranStatus === "failed" ? "text-shu-600" : "text-slate-500"}>{t.result.status[ranStatus] ?? ""}</span>}
         </span>
       ) : (
         w.notRun
@@ -709,9 +748,11 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
   const aiBusy = useFlowBusy();
+  const todo = useRunGate((g) => (g.flowId === flow?.id ? g.todo : null));
   const subflows = useSubflows(flow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
+  const latest = useLatestRun(flowId);
   const desk = useRef<HTMLDivElement>(null);
 
   // Read again when the flow changes (a changed step loses its old picture),
@@ -838,10 +879,11 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
               when={when}
               edition={editionOf(published, [], day)}
               manifest={manifest}
+              latest={latest}
               short={chart}
               actions={
                 chart ? null : (
-                  <LastRun blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
+                  <LastRun blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : todo ? t.todos.runFirst(todo) : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
                 )
               }
             />

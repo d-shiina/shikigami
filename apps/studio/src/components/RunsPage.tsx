@@ -578,6 +578,11 @@ export function RunsPage() {
     return () => clearInterval(timer);
   }, [load, poll]);
   const saved = (next: ScheduleList) => {
+    // The first schedule: start the automatic runs too, or it would sit there and never run.
+    const first = (list?.schedules.length ?? 0) === 0 && next.schedules.some((s) => s.enabled);
+    if (first && status === null) {
+      api.startAgent().then(setStatus, () => setStatus(null));
+    }
     setList(next);
     setEditing(null);
     // The agent reads the file within a second; then the next times show.

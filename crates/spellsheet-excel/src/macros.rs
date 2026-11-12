@@ -52,7 +52,7 @@ pub fn request(params: &Value) -> Result<MacroRequest, StepError> {
             "FILE_NOT_FOUND",
             format!("{} does not exist", request.path),
         )
-        .with_details(json!({ "hint": "Give the full path of the workbook that holds the macro (usually .xlsm)." })));
+        .with_details(json!({ "path": request.path, "hint": "Give the full path of the workbook that holds the macro (usually .xlsm)." })));
     }
     if request.save && crate::book::open_in_excel(path) {
         return Err(crate::book::in_use(path));

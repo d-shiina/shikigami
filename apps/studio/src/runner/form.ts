@@ -1,7 +1,7 @@
 // The run window's form, made from a flow's input variables, so the
 // author (person or AI) writes nothing for it: the label is the variable's
 // description, the type picks the field, the default fills it in.
-import type { Flow, Step, VariableDef } from "@spellsheet/schema";
+import type { Flow, Step, StepTypeDef, VariableDef } from "@spellsheet/schema";
 import { t } from "../lib/i18n";
 
 export type FieldKind = "text" | "password" | "number" | "checkbox" | "lines" | "json" | "file" | "folder" | "date" | "month" | "select";
@@ -57,9 +57,38 @@ export function labelOf(v: VariableDef): string {
   return (v.description ?? "").split("\n")[0]?.trim() || v.name;
 }
 
-export function fieldsOf(flow: Flow): Field[] {
+/** Every step of the flow, blocks included. */
+function* allSteps(steps: readonly Step[]): Generator<Step> {
+  for (const step of steps) {
+    yield step;
+    for (const block of Object.values(step.blocks ?? {})) yield* allSteps(block);
+  }
+}
+
+/**
+ * A plain text input that a step uses whole as a file or folder path
+ * (`{{ 受注一覧 }}` in an Excel step's file): a file field with its picker,
+ * even when the flow did not mark the variable's format.
+ */
+function pathKind(flow: Flow, v: VariableDef, defs: ReadonlyMap<string, StepTypeDef>): FieldKind | null {
+  const whole = new RegExp(`^\\{\\{\\s*${v.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\}\\}$`);
+  for (const step of allSteps(flow.steps ?? [])) {
+    for (const key of defs.get(step.type)?.pathParams ?? []) {
+      const value = (step.params as Record<string, unknown> | undefined)?.[key];
+      if (typeof value !== "string" || !whole.test(value.trim())) continue;
+      const given = typeof v.default === "string" ? v.default : "";
+      const named = given.split(/[\\/]/).pop() ?? "";
+      if (/\.[A-Za-z0-9]{1,5}$/.test(named)) return "file";
+      return /folder|dir/i.test(key) ? "folder" : "file";
+    }
+  }
+  return null;
+}
+
+export function fieldsOf(flow: Flow, defs?: ReadonlyMap<string, StepTypeDef>): Field[] {
   return (flow.variables ?? []).filter(isInput).map((v) => {
-    const kind = kindOf(v);
+    const plain = kindOf(v);
+    const kind = plain === "text" && defs ? (pathKind(flow, v, defs) ?? plain) : plain;
     const required = v.default === undefined;
     if (kind === "select") {
       const choices = v.choices ?? [];
