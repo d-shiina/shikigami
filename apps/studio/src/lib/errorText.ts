@@ -4,6 +4,7 @@
 import type { Step } from "@spellsheet/schema";
 import { FAIL } from "./stepTypes";
 import { locale, t } from "./i18n";
+import { shownPath } from "./flowPath";
 import { targetText } from "./sentence";
 
 /** What an entry gets to word the error with. */
@@ -84,7 +85,7 @@ function context(details: Record<string, unknown>, step: Step | null | undefined
     target: Object.keys(target).length > 0 ? targetText(target) : "",
     window: plainString(win.title) || plainString(win.process) || plainString(win.className),
     ocrText: plainString(record(target.ocr).text),
-    path: str("path") || plainString(params.path) || plainString(params.file),
+    path: shownPath(str("path") || plainString(params.path) || plainString(params.file)),
     secret: str("secret") || secretIn(params),
     q: (text) => (!text ? "" : ja ? `「${text}」` : `"${text}"`),
   };

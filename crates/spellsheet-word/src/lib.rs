@@ -194,7 +194,7 @@ fn io_error(path: &Path, e: &std::io::Error) -> StepError {
             "FILE_NOT_FOUND",
             format!("{}: {e}", path.display()),
         )
-        .with_details(json!({ "hint": "Check the path (use the full path). The folder of a new document must exist." })),
+        .with_details(json!({ "path": path.display().to_string(), "hint": "Check the path (use the full path). The folder of a new document must exist." })),
         std::io::ErrorKind::PermissionDenied => in_use(path),
         // Windows reports a file locked by Word as a sharing violation (32).
         _ if matches!(e.raw_os_error(), Some(32 | 33)) => in_use(path),
@@ -207,7 +207,7 @@ fn in_use(path: &Path) -> StepError {
         "FILE_IN_USE",
         format!("{} is open in another program (probably Word)", path.display()),
     )
-    .with_details(json!({ "hint": "Close the document in Word and run again. The step is retried when it has a retry policy." }))
+    .with_details(json!({ "path": path.display().to_string(), "hint": "Close the document in Word and run again. The step is retried when it has a retry policy." }))
 }
 
 fn unreadable(path: &Path, e: impl std::fmt::Display) -> StepError {

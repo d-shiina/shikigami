@@ -2,7 +2,8 @@
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
-import { ArrowDown, ArrowUp, Check, CircleCheck, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, History, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
+import { useRunGate } from "../../lib/runGate";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CircleMinus, CirclePause, CircleX, Clock, Download, EyeOff, FileInput, FileOutput, FileText, History, KeyRound, type LucideIcon, Play, Plus, Repeat, Settings2, Sparkles, Split, Trash2, TriangleAlert } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -10,6 +11,7 @@ import { locale, t } from "../../lib/i18n";
 import { buildManual, type Chapter, type Drafts, type ManualDoc, type ManualItem, type ManualManifest, type ManualShot, type ManualStep, type Mask, maskStale, type Scene, editionOf } from "../../lib/manual";
 import { type SceneMark, sceneMarks } from "../../lib/manualExport";
 import { describeWhen } from "../../lib/schedule";
+import type { FlowRun } from "../../lib/runResult";
 import { brief, type Part, paramShown, plain } from "../../lib/sentence";
 import type { Flow, Step } from "@spellsheet/schema";
 import { findStep, isActive, trailOf } from "../../store";
@@ -159,18 +161,47 @@ function Facts({ doc, when }: { doc: ManualDoc; when: string[] }) {
 
 /** The last run, and the way to run again: said once, beside the heading. */
 /** `blocked`: why the flow cannot be run now (it is running, has errors, or the AI is still making it), as on the bar's run button. */
-function LastRun({ manifest, blocked, empty, onRun, onExport, onHistory }: { manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void; onHistory?: () => void }) {
+function LastRun({ flowId, manifest, blocked, empty, onRun, onExport, onHistory }: { flowId: string | undefined; manifest: ManualManifest | null; blocked: string | null; empty: boolean; onRun: () => void; onExport: () => void; onHistory?: () => void }) {
   const w = t.sheetView;
-  const at = manifest
-    ? new Date(manifest.startedAt).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : null;
+  // The last run from anywhere (Writer, Runner, a schedule), read again when one here ends.
+  const ended = useStudio((s) => (s.run && s.run.flowId === flowId && !isActive(s.run) ? s.run.runId : null));
+  const [latest, setLatest] = useState<FlowRun | null>(null);
+  useEffect(() => {
+    if (!flowId) return;
+    let live = true;
+    let tries = 0;
+    const load = () =>
+      api.flowRuns(flowId).then(
+        (list) => {
+          if (!live) return;
+          setLatest(list[0] ?? null);
+          // The record is written just after the run's last event.
+          if (ended && !list.some((r) => r.runId === ended) && ++tries < 10) setTimeout(load, 300);
+        },
+        () => live && setLatest(null),
+      );
+    void load();
+    return () => {
+      live = false;
+    };
+  }, [flowId, ended]);
+  const when = latest?.startedAt ?? manifest?.startedAt ?? null;
+  const at = when ? new Date(when).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+  const status = latest?.status ?? (manifest ? "succeeded" : null);
   return (
     <div className="text-[12.5px] leading-[1.7] text-slate-500">
       {at ? (
         <p className="flex items-center gap-1.5">
-          <CircleCheck size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
+          {status === "failed" ? (
+            <CircleX size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-shu-600" />
+          ) : status === "succeeded" ? (
+            <CircleCheck size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-moegi-600" />
+          ) : (
+            <CircleMinus size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-slate-400" />
+          )}
           <b className="font-semibold text-ink">{w.lastRun}</b>
           <span className="tabular-nums">{at}</span>
+          {status && <span className={status === "failed" ? "text-shu-600" : ""}>{t.result.status[status] ?? ""}</span>}
         </p>
       ) : (
         <p>{w.noRun}</p>
@@ -625,6 +656,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
   const aiBusy = useFlowBusy();
+  const todo = useRunGate((g) => (g.flowId === flow?.id ? g.todo : null));
   const subflows = useSubflows(flow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
@@ -751,7 +783,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
             <div className={MARGIN}>
               {!chart && (
                 <Aside>
-                  <LastRun manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
+                  <LastRun flowId={flowId} manifest={manifest} blocked={running ? "" : aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors ? t.todos.runBlocked : todo ? t.todos.runFirst(todo) : null} empty={noSteps} onRun={() => void startRun()} onExport={() => setExporting(true)} onHistory={onHistory} />
                 </Aside>
               )}
               <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{doc.title}</h1>

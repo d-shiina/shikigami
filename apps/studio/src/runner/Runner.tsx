@@ -2,7 +2,7 @@
 // in the form made from its inputs, run it, and see what came out. Nothing
 // here edits a flow; that stays in Studio.
 import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@spellsheet/schema";
-import { Check, Circle, FileText, FolderOpen, Hand, Loader2, Play, Search, Square, X } from "lucide-react";
+import { Check, Circle, Copy, FileText, FolderOpen, Hand, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HoverPreview } from "../components/HoverPreview";
 import { WindowControls } from "../components/WindowControls";
@@ -335,6 +335,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                     files={files}
                     onOpen={(path) => void backend.open(item.flow.id, path).catch((e) => setProblem(message(e)))}
                     failedStep={finished.error?.stepId ? findStep(item.flow.steps ?? [], finished.error.stepId) : null}
+                    stepName={(step) => text(step)}
                   />
                 </div>
               )}
@@ -389,6 +390,7 @@ function Result({
   files,
   onOpen,
   failedStep,
+  stepName,
 }: {
   item: RunnerItem;
   status: string;
@@ -397,10 +399,13 @@ function Result({
   files: ProjectFile[];
   onOpen: (path: string) => void;
   failedStep: ReturnType<typeof findStep>;
+  stepName: (step: NonNullable<ReturnType<typeof findStep>>) => string;
 }) {
   const good = status === "succeeded";
   const outputs = (item.flow.variables ?? []).filter(isOutput);
   const explained = error ? explainError(error, failedStep) : null;
+  const stepText = failedStep ? stepName(failedStep) : "";
+  const [copied, setCopied] = useState(false);
   return (
     <div className={`rounded-lg border-l-4 bg-sheet px-4 py-3 shadow-sheet ${good ? "border-moegi-500" : status === "failed" ? "border-shu-500" : "border-slate-400"}`}>
       <div className="flex items-center gap-2 text-[14px] font-bold">
@@ -409,12 +414,30 @@ function Result({
       </div>
       {explained && error && (
         <div className="mt-2 space-y-1 text-[13px]">
-          <div className="flex items-start gap-2">
-            <span className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[11.5px] font-bold text-shu-600">{error.code}</span>
-            <span className="font-semibold">{explained.what}</span>
-          </div>
+          {stepText && <div className="text-slate-600">{t.runner.stoppedAt(stepText)}</div>}
+          <div className="font-semibold">{explained.what}</div>
           {explained.todo && <div className="text-slate-600">{explained.todo}</div>}
-          <div className="text-[12px] text-slate-500">{t.runner.tellAuthor}</div>
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-[12px] text-slate-500">
+            <span>{t.runner.tellAuthor}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const lines = [
+                  item.flow.name,
+                  t.runner.version(item.version),
+                  ...(stepText ? [t.runner.stoppedAt(stepText)] : []),
+                  explained.what,
+                  `${error.code}: ${error.message}`,
+                  new Date().toLocaleString(t.runner.numberLocale),
+                ];
+                void navigator.clipboard.writeText(lines.join("\n")).then(() => setCopied(true), () => {});
+              }}
+              className="flex items-center gap-1 font-semibold text-brand-600 hover:underline"
+            >
+              <Copy size={12} strokeWidth={1.75} aria-hidden="true" />
+              {copied ? t.copied : t.runner.copyForAuthor}
+            </button>
+          </div>
         </div>
       )}
       {good && outputs.length > 0 && report && (

@@ -1351,6 +1351,7 @@ export const en: Dict = {
       "There is no a ? b : c. For a default use coalesce(value, 'default'); to do different things by a condition use a control.if node",
     ],
     runBlocked: "Finish the to-dos to run",
+    runFirst: (todo: string) => `Run it after this: ${todo}`,
   },
   parts: {
     shelf: "Parts",
@@ -1846,6 +1847,9 @@ export const en: Dict = {
     askTitle: (agent: string) => `Ask ${agent} to fix it, with the error, the screen and the variables`,
     setUpTitle: "Set up the AI for the AI chat to ask it for a fix",
     askFix: (agent: string) => `Ask ${agent} to fix`,
+    askFailedTitle: (agent: string) => `Ask ${agent} to fix it, with the error and the node's settings. Run it again once it is fixed`,
+    failed: "Stopped on an error",
+    putFile: "Choose the file to put here",
     retryTitle: "Run this node again and continue (variables kept)",
     resumeFixed: "Resume with fix",
     retry: "Retry",
@@ -2035,7 +2039,9 @@ export const en: Dict = {
     again: "Run again",
     back: "Back to inputs",
     close: "Close",
-    tellAuthor: "If this keeps happening, give the error code above to the flow's author",
+    tellAuthor: "If it does not go away, send this to the person who made the flow",
+    copyForAuthor: "Copy what to send",
+    stoppedAt: (step: string) => `Stopped at "${step}"`,
     yes: "TRUE",
     no: "FALSE",
     items: (n: number) => `${n} item${n === 1 ? "" : "s"}`,
@@ -2130,7 +2136,7 @@ export const en: Dict = {
     secrets: "Secrets",
     and: ", ",
     lastRun: "Last run",
-    noRun: "Not run yet. Run it and the screens it works on line up here.",
+    noRun: "Not run yet.",
     run: "Run",
   },
   manual: {
@@ -2460,6 +2466,12 @@ export const en: Dict = {
     named: (kind: string, name: string) => `${kind} "${name}"`,
     intro: (name: string, id: string, step: string, stepId: string, type: string) =>
       `Running the flow "${name}" (${id}) in Writer failed at the node ${step} (stepId: ${stepId}, type: ${type}). The run is paused there.`,
+    introFailed: (name: string, id: string, step: string, stepId: string, type: string) =>
+      `Running the flow "${name}" (${id}) in Writer failed${step ? ` at the node ${step} (stepId: ${stepId}, type: ${type})` : ""}. The run has ended.`,
+    rulesFailed: [
+      "Find the cause and fix this flow with update_step and the like. Adding nodes is fine if needed.",
+      "After a person reviews the fix, they run the flow again. When the cause is something a person has to provide (a missing file, for example), do not change the flow: say briefly what to provide.",
+    ],
     error: "Error",
     details: "Details",
     failedStep: "Failed node",

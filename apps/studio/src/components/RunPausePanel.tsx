@@ -2,12 +2,15 @@
 // stopped), the screen and the variables at that point, and what to do next:
 // ask the AI to fix it, retry, skip, step, or end the run. Also tells about
 // a run that ended in failure instead of letting it end quietly.
-import { Play, Sparkles } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { FileInput, Play, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { explainError } from "../lib/errorText";
-import { fixRequest } from "../lib/fixRequest";
+import { failureRequest, fixRequest } from "../lib/fixRequest";
+import { inFlowFolder } from "../lib/flowPath";
+import { useRunGate } from "../lib/runGate";
 import { plain, sentence } from "../lib/sentence";
 import { diveChain, errorPlace, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
@@ -176,6 +179,7 @@ export function RunPausePanel() {
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
   const [told, setTold] = useState<string | null>(null);
+  const todo = useRunGate((g) => (g.flowId === flow?.id ? g.todo : null));
 
   if (!run || !flow || (run.flowId && run.flowId !== flow.id)) return null;
   const pause = run.status === "paused" ? run.pause : null;
@@ -206,13 +210,15 @@ export function RunPausePanel() {
   const changed = pause !== null && flow.revision !== pause.revision;
 
   const askAi = async () => {
-    if (!pause) return;
+    if (!pause && !failure) return;
     setAsking(true);
     try {
-      const text = fixRequest({ flow: owner, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
+      const text = pause
+        ? fixRequest({ flow: owner, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes })
+        : failureRequest({ flow: owner, runId: run.runId, error: { ...failure!, stepId: stepId ?? failure!.stepId }, defs: stepTypes });
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
-        const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: pause.stepId }, `${owner.name} ・ ${t.pause.fixContext}`);
+        const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: stepId ?? null }, `${owner.name} ・ ${t.pause.fixContext}`);
         setTold(sent ? t.pause.asked(agentName) : t.pause.notSent(agentName));
       } else {
         // No AI to ask yet: the AI pane shows how to set one up.
@@ -223,6 +229,21 @@ export function RunPausePanel() {
       setTold(t.pause.askFailed(e instanceof Error ? e.message : String(e)));
     } finally {
       setAsking(false);
+    }
+  };
+
+  // A file the flow reads is not in its folder: the person picks it and it is copied there.
+  const missingFile =
+    failure && failure.code === "FILE_NOT_FOUND" ? inFlowFolder(String((failure.details as { path?: unknown } | null)?.path ?? "")) : null;
+  const putFile = async () => {
+    if (!missingFile || !owner.id) return;
+    const from = await invoke<string | null>("runner_pick", { kind: "file", start: null }).catch(() => null);
+    if (!from) return;
+    try {
+      await invoke("copy_into_project_as", { id: owner.id, from, path: missingFile, overwrite: false });
+      setTold(t.places.copied(missingFile));
+    } catch (e) {
+      setTold(typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
     }
   };
 
@@ -240,7 +261,7 @@ export function RunPausePanel() {
         <span
           className={`flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-white ${onError ? "bg-shu-500" : "bg-mizu-500"}`}
         >
-          {pause ? (onError ? t.pause.onError : pause.reason === "breakpoint" ? t.pause.breakpoint : t.status.paused) : t.agent.failed}
+          {pause ? (onError ? t.pause.onError : pause.reason === "breakpoint" ? t.pause.breakpoint : t.status.paused) : t.pause.failed}
         </span>
         {stepLabel && (
           <button
@@ -312,7 +333,22 @@ export function RunPausePanel() {
         )}
         {failure && (
           <>
-            <Button tone="primary" onClick={() => void startRun()} keys="F5">
+            {missingFile && (
+              <Button onClick={() => void putFile()} title={t.places.putTitle(missingFile)}>
+                <FileInput size={14} strokeWidth={1.75} aria-hidden="true" />
+                {t.pause.putFile}
+              </Button>
+            )}
+            <Button
+              tone="ai"
+              onClick={askAi}
+              disabled={asking || (agentAvailable && agentBusy)}
+              title={agentAvailable && agentBusy ? t.pause.agentBusy(agentName) : agentAvailable ? t.pause.askFailedTitle(agentName) : t.pause.setUpTitle}
+            >
+              <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
+              {t.pause.askFix(agentAvailable ? agentName : "AI")}
+            </Button>
+            <Button tone="primary" onClick={() => void startRun()} keys="F5" disabled={!!todo} title={todo ? t.todos.runFirst(todo) : undefined}>
               {t.pause.runAgain}
             </Button>
             <Button onClick={dismissFailure}>{t.close}</Button>
@@ -349,7 +385,7 @@ export function RunPausePanel() {
           )}
         </div>
       )}
-      {told && !unreviewed && pause && (
+      {told && !unreviewed && (
         <div className="mt-2 flex items-center gap-2 text-[12px] text-slate-600">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
           {told}

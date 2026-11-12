@@ -1350,6 +1350,7 @@ export const ja = {
       "a ? b : c はない。空のときの既定値は coalesce(値, '既定')、条件で処理を分けるときは control.if ノード",
     ],
     runBlocked: "対応が必要なところが済むと実行できます",
+    runFirst: (todo: string) => `先に「${todo}」を済ませると実行できます`,
   },
   parts: {
     shelf: "部品",
@@ -1845,6 +1846,9 @@ export const ja = {
     askTitle: (agent: string) => `エラー・一時停止時の画面・変数を添えて ${agent} に修正を依頼します`,
     setUpTitle: "AI チャットで使う AI を設定すると、修正を依頼できます",
     askFix: (agent: string) => `${agent} に修正を依頼`,
+    askFailedTitle: (agent: string) => `エラーの内容とノードの設定を添えて ${agent} に修正を依頼します。直ったら、もう一度実行してください`,
+    failed: "エラーで中断しました",
+    putFile: "ファイルを選んで置く",
     retryTitle: "このノードを再実行して続行します（変数は現在の値のまま）",
     resumeFixed: "修正した内容で再開",
     retry: "再実行",
@@ -2035,7 +2039,9 @@ export const ja = {
     again: "再実行",
     back: "入力に戻る",
     close: "閉じる",
-    tellAuthor: "解決しない場合は、フローの作成者に上のエラーコードを伝えてください",
+    tellAuthor: "直らないときは、フローを作った人に送ってください",
+    copyForAuthor: "送る内容をコピー",
+    stoppedAt: (step: string) => `「${step}」で止まりました`,
     yes: "TRUE",
     no: "FALSE",
     items: (n: number) => `${n} 件`,
@@ -2130,7 +2136,7 @@ export const ja = {
     secrets: "シークレット",
     and: "、",
     lastRun: "前回の実行",
-    noRun: "まだ実行していません。実行すると、操作した画面がここに並びます。",
+    noRun: "まだ実行していません。",
     run: "実行する",
   },
   manual: {
@@ -2460,6 +2466,12 @@ export const ja = {
     named: (kind: string, name: string) => `${kind}「${name}」`,
     intro: (name: string, id: string, step: string, stepId: string, type: string) =>
       `フロー「${name}」（${id}）を Writer で実行したところ、ノード ${step}（stepId: ${stepId}, type: ${type}）でエラーになり、その場で一時停止しています。`,
+    introFailed: (name: string, id: string, step: string, stepId: string, type: string) =>
+      `フロー「${name}」（${id}）を Writer で実行したところ、${step ? `ノード ${step}（stepId: ${stepId}, type: ${type}）で` : ""}エラーになり、実行は終わっています。`,
+    rulesFailed: [
+      "原因を調べて、このフローを update_step などで直してください。必要ならノードを足してもかまいません。",
+      "直したら、人が確認してからもう一度実行します。ファイルが足りないなど、人が用意するものが原因のときは、直さずに何を用意すればよいかを短く答えてください。",
+    ],
     error: "エラー",
     details: "詳細",
     failedStep: "失敗したノード",

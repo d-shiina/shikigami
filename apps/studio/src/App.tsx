@@ -1,3 +1,4 @@
+import { todoBlock } from "./lib/runGate";
 import { DistributionDialog } from "./components/Distribution";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
@@ -530,7 +531,7 @@ function debugKey(e: KeyboardEvent, state: StudioState, aiBusy: boolean) {
   const run = state.run;
   const paused = run?.status === "paused";
   // As the bar's button: a flow the AI is still making is not run by hand.
-  const runnable = state.flow && (state.flow.steps ?? []).length > 0 && !aiBusy && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
+  const runnable = state.flow && (state.flow.steps ?? []).length > 0 && !aiBusy && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error") && !todoBlock(state.flow?.id);
   if (e.key === "F9") {
     if (state.selection?.kind === "step") state.toggleBreakpoint(state.selection.stepId);
   } else if (e.key === "F5") {

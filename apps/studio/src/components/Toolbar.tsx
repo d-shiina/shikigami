@@ -8,6 +8,7 @@ import { useProjectMaybe } from "../project";
 import { t } from "../lib/i18n";
 import type { ReviewView } from "../lib/reviewView";
 import { authorIssues, unsetIssues } from "../lib/todos";
+import { useRunGateSync } from "../lib/runGate";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
 import { useFlowBusy } from "../lib/useFlowBusy";
 import { RunStatus } from "./StatusBar";
@@ -167,6 +168,8 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
 
   // A flow the AI is still making is not run by hand: half of it is not there yet.
   const aiBusy = useFlowBusy();
+  // A file to put in place, a login to register: the run would only stop at the first of them.
+  const todoBlocked = useRunGateSync(flow?.id);
   if (!flow) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
   // Nothing to run yet.
@@ -180,10 +183,10 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
       {/* A narrow bar (the AI's column open beside a small window) keeps the tools in the menu instead. */}
       <div className="flex items-center @max-[760px]/title:hidden">
         <Tools busy={aiBusy} />
-        <More canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} />
+        <More canRun={errors === 0 && !running && !aiBusy && !noSteps && !todoBlocked} busy={aiBusy} />
       </div>
       <div className="hidden items-center @max-[760px]/title:flex">
-        <More canRun={errors === 0 && !running && !aiBusy && !noSteps} busy={aiBusy} tools />
+        <More canRun={errors === 0 && !running && !aiBusy && !noSteps && !todoBlocked} busy={aiBusy} tools />
       </div>
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
@@ -227,8 +230,8 @@ export function FlowActions({ view, onView }: { view: ReviewView; onView: (view:
           <button
             type="button"
             onClick={() => startRun()}
-            disabled={errors > 0 || aiBusy || noSteps}
-            title={aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
+            disabled={errors > 0 || aiBusy || noSteps || !!todoBlocked}
+            title={aiBusy ? t.toolbar.aiBusy : noSteps ? t.sheetView.noSteps : errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : todoBlocked ? todoBlocked : `${t.run} (F5)`}
             className="group flex h-7 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
             <PlayIcon />

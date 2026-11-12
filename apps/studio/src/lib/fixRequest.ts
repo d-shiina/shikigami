@@ -48,3 +48,27 @@ export function fixRequest(input: {
   lines.push(`- ${f.logs(runId)}`);
   return lines.join("\n");
 }
+
+/**
+ * The request when a run ended on an error (not paused): the run is over, so
+ * the AI fixes the flow and the person runs it again.
+ */
+export function failureRequest(input: {
+  flow: Pick<Flow, "id" | "name" | "steps">;
+  runId: string;
+  error: { code: string; message: string; stepId?: string | null; stepType?: string | null; details?: unknown };
+  defs: StepTypeDef[];
+}): string {
+  const { flow, runId, error } = input;
+  const f = t.fix;
+  const step = error.stepId ? findStep(flow.steps ?? [], error.stepId) : null;
+  const type = step?.type ?? error.stepType ?? "";
+  const def = input.defs.find((d) => d.type === type);
+  const kind = type ? stepLabel(type, def?.label) : "";
+  const label = step?.name ? f.named(kind, step.name) : kind;
+  const lines = [f.introFailed(flow.name, flow.id ?? "", label, error.stepId ?? "", type), "", `${f.error}: ${error.code}: ${error.message}`];
+  if (error.details != null) lines.push(`${f.details}: ${cut(JSON.stringify(error.details), 1500)}`);
+  if (step) lines.push("", `${f.failedStep}:`, "```json", JSON.stringify(step.params ?? {}, null, 2), "```");
+  lines.push("", `${f.asks}:`, ...f.rulesFailed.map((rule) => `- ${rule}`), `- ${f.logs(runId)}`);
+  return lines.join("\n");
+}

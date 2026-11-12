@@ -50,7 +50,7 @@ pub fn open(path: &str) -> Result<Workbook, StepError> {
             "FILE_NOT_FOUND",
             format!("{} does not exist", path.display()),
         )
-        .with_details(json!({ "hint": "Check the path (use the full path, e.g. C:\\work\\orders.xlsx). Steps that write create a missing workbook; steps that read do not." })));
+        .with_details(json!({ "path": path.display().to_string(), "hint": "Check the path (use the full path, e.g. C:\\work\\orders.xlsx). Steps that write create a missing workbook; steps that read do not." })));
     }
     umya_spreadsheet::reader::xlsx::read(path).map_err(|e| match e {
         umya_spreadsheet::XlsxError::Io(io) => io_error(path, &io),
@@ -95,7 +95,7 @@ pub fn in_use(path: &Path) -> StepError {
         "FILE_IN_USE",
         format!("{} is open in another program (probably Excel)", path.display()),
     )
-    .with_details(json!({ "hint": "Close the workbook in Excel and run again. The step is retried when it has a retry policy." }))
+    .with_details(json!({ "path": path.display().to_string(), "hint": "Close the workbook in Excel and run again. The step is retried when it has a retry policy." }))
 }
 
 fn io_error(path: &Path, e: &std::io::Error) -> StepError {
@@ -105,7 +105,7 @@ fn io_error(path: &Path, e: &std::io::Error) -> StepError {
             "FILE_NOT_FOUND",
             format!("{}: {e}", path.display()),
         )
-        .with_details(json!({ "hint": "Check that the folder exists; steps create the workbook but not its folder." })),
+        .with_details(json!({ "path": path.display().to_string(), "hint": "Check that the folder exists; steps create the workbook but not its folder." })),
         // Windows reports a file locked by Excel as a sharing violation (32).
         _ if e.raw_os_error() == Some(32) || e.raw_os_error() == Some(33) => in_use(path),
         _ => StepError::new("FILE_ERROR", format!("{}: {e}", path.display())),
