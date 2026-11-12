@@ -520,11 +520,27 @@ function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
             {/* What the flow waits for or looks at on the screen: said in place, not numbered. */}
             {item.waits
               .filter((x) => x.at === i)
-              .map((x, k) => (
-                <li key={k} className="py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-600">
-                  {x.text}
-                </li>
-              ))}
+              .map((x, k) => {
+                // A screen the flow only waits on has no numbered step to carry its picture: the first wait carries it.
+                const shot = item.steps.length === 0 && k === 0 ? item.shot : null;
+                if (!shot) {
+                  return (
+                    <li key={k} className="py-1.5 pl-7 text-[13px] leading-[1.7] text-slate-600">
+                      {x.text}
+                    </li>
+                  );
+                }
+                return (
+                  <li key={k} className="py-1.5 @[52rem]/paper:-mr-[344px]">
+                    <div className={`grid grid-cols-[28px_minmax(0,1fr)] gap-y-2.5 ${PICTURE}`}>
+                      <p className="col-start-2 min-w-0 text-[13px] leading-[1.7] text-slate-600 @[52rem]/paper:pr-6">{x.text}</p>
+                      <div className="col-span-2 pl-7 @[52rem]/paper:col-span-1 @[52rem]/paper:pl-0">
+                        <StepFigure scene={item} shot={shot} marks={x.mark ? [{ number: null, rect: x.mark }] : []} pictures={ctx.pictures} />
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             {st && <StepRow step={st} ctx={ctx} scene={item} />}
           </Fragment>
         ))}
